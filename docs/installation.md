@@ -10,16 +10,41 @@ The toolkit is published to a **private Azure Artifacts feed** and can be instal
 
 ### Step 1 — Create or edit `~/.npmrc`
 
-Add the scope mapping to your **user-level** `.npmrc` (so it applies to every project):
+File location:
+- **Windows**: `%USERPROFILE%\.npmrc` (e.g. `C:\Users\<you>\.npmrc`)
+- **macOS / Linux**: `~/.npmrc`
+
+Add these two lines to your user-level `.npmrc`:
 
 ```ini
 registry=https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/
 always-auth=true
 ```
 
-File location:
-- **Windows**: `%USERPROFILE%\.npmrc` (e.g. `C:\Users\<you>\.npmrc`)
-- **macOS / Linux**: `~/.npmrc`
+After completing Step 2 (auth token), the complete file will look like this:
+
+#### Complete `~/.npmrc` — Windows (token injected by `vsts-npm-auth`)
+
+```ini
+registry=https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/
+always-auth=true
+
+; Auth token injected automatically by vsts-npm-auth — do not edit manually
+//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:_authToken=<TOKEN>
+```
+
+#### Complete `~/.npmrc` — macOS / Linux (PAT-based)
+
+```ini
+registry=https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/
+always-auth=true
+
+//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:username=<your-ado-username>
+//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:_password=<BASE64_PAT>
+//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:email=<your-email>
+```
+
+> Never commit your `.npmrc` with tokens into a git repository.
 
 ### Step 2 — Add an auth token
 
@@ -44,14 +69,7 @@ The token expires every 90 days; re-run the same command to refresh.
    ```bash
    echo -n "<PASTE_PAT_HERE>" | base64
    ```
-4. Append to `~/.npmrc`:
-   ```ini
-   //pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:username=<your-ado-username>
-   //pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:_password=<BASE64_PAT>
-   //pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:email=npm requires email to be set but doesn't use the value
-   ```
-
-> Never commit your `.npmrc` with tokens into a git repository.
+4. Append the auth lines to `~/.npmrc` as shown in the complete example above (macOS/Linux section).
 
 ### Step 3 — Verify
 
