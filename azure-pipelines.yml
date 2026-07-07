@@ -1,0 +1,35 @@
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  NPM_REGISTRY: 'https://pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/'
+
+steps:
+- checkout: self
+
+- task: NodeTool@0
+  inputs:
+    versionSpec: '20.x'
+  displayName: 'Install Node.js'
+
+- script: |
+    cat > .npmrc <<EOF
+    registry=$(NPM_REGISTRY)
+    EOF
+  displayName: 'Create .npmrc skeleton'
+
+- task: NpmAuthenticate@0
+  inputs:
+    workingFile: '.npmrc'
+  displayName: 'Authenticate npm to Azure Artifacts'
+
+- script: npm version "0.1.$(Build.BuildId)" --no-git-tag-version --allow-same-version
+  displayName: 'Set package version from Build.BuildId'
+
+- script: npm publish --userconfig .npmrc
+  displayName: 'Publish package'
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
