@@ -1,4 +1,4 @@
-# @denistomada/swf-ai-toolkit
+# @fincantieri/swf-ai-toolkit
 
 Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
@@ -26,13 +26,13 @@ Two independent pipelines:
 **Local installation** (into the current project):
 
 ```bash
-npx @denistomada/swf-ai-toolkit
+npx @fincantieri/swf-ai-toolkit
 ```
 
 **Global installation** (into `~/.claude/`):
 
 ```bash
-npm install -g @denistomada/swf-ai-toolkit
+npm install -g @fincantieri/swf-ai-toolkit
 swf-ai-toolkit --global
 ```
 
