@@ -1,12 +1,22 @@
 # @denistomada/swf-ai-toolkit
 
-Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery — from requirements to PR.
+Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
 ## What it provides
 
+Two independent pipelines:
+
+### Feature Delivery Pipeline
 - **12 agents** for the full delivery lifecycle (requirements → tech-spec → work breakdown → backend/frontend/testing implementation → architect review)
 - **4 skills** invocable via slash commands (`/install-toolkit`, `/init-agents`, `/implement-feature`, `/define-feature`)
 - **4 commands** for quick day-to-day shortcuts (`/feature-status`, `/check-docs`, `/pr-description`, `/next-task`)
+
+### Assessment & Remediation Pipeline
+- **10 agents** for codebase assessment and targeted remediation (generic assessment, layer audit, concurrency safety, god class decomposition, DI refactoring, domain model refactoring, security hardening, supply chain security, intervention documentation)
+- **1 skill** (`/assess-codebase`) that runs the full assessment pipeline with a human approval gate before any code changes
+- **1 command** (`/assessment-status`) for checking the state of an ongoing assessment
+
+### Shared
 - **4 generic procedures** (code generation, code review, secure coding, testing) that projects can override locally
 
 ## Install
