@@ -1,4 +1,5 @@
 ---
+name: project-manager
 description: "Project Manager — intelligent orchestrator that dynamically plans and dispatches specialized agents based on context. Input: path to feature.md [--force]"
 ---
 

@@ -1,7 +1,6 @@
 ---
+name: developer-testing
 description: "Senior Test Engineer — creates unit/integration tests for implemented features (TEST domain). Input: path to feature.md + task IDs"
-inputs: ["{PREFIX}-Work-Breakdown.md", "{PREFIX}-Tech-Spec.md"]
-outputs: ["Test files as specified in the task"]
 ---
 
 # Testing Agent
@@ -89,6 +88,26 @@ If the expected behavior is ambiguous, **stop and ask the user** via `AskUserQue
 1. Describe the ambiguity (what should the behavior be in this edge case?)
 2. Offer 2–4 concrete options
 3. **Always include**: "Skip this test case for now"
+
+---
+
+## Completion Summary (MANDATORY — return this to the orchestrator)
+
+When all assigned tasks are complete, return a **structured summary** to the orchestrator. Do NOT return raw file contents or test code — the orchestrator does not need them and they waste context.
+
+```
+✅ Testing Summary — {task IDs}
+─────────────────────────────────────────────
+Tasks completed: [list]
+Files created:   [list with path only]
+Files modified:  [list with path only]
+Test result:     ✅ N/N passed / ❌ N failed — [failing test names if any]
+Notes:           [blocking issues, skipped cases, TODO items]
+─────────────────────────────────────────────
+```
+
+- **Never dump test code** into the summary
+- If tests FAILED, include only the failing test names and first error line
 
 ---
 

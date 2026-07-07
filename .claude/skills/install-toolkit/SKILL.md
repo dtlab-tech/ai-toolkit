@@ -1,5 +1,7 @@
 ---
 description: "Install Toolkit — copies all agents, skills, commands, and procedures from this toolkit into a destination project. Usage: /install-toolkit [path-to-destination] [--force] — defaults to current working directory"
+argument-hint: "[path-to-destination] [--force]"
+disable-model-invocation: true
 ---
 
 Spawn the `install-toolkit` agent with the arguments provided by the user:

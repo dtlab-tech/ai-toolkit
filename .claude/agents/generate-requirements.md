@@ -1,7 +1,8 @@
 ---
+name: generate-requirements
 description: "Generates a functional requirements document from a feature description. Input: path to feature.md"
-inputs: ["feature.md"]
-outputs: ["{PREFIX}-Requirements.md"]
+model: haiku
+tools: Read, Glob, Grep, Write
 ---
 
 # Generate Functional Requirements Document

@@ -1,5 +1,7 @@
 ---
 description: "Assess Codebase — starts the full codebase assessment pipeline (parallel assessment → findings consolidation → intervention documents → approval gate → remediation → review → PR). Usage: /assess-codebase [path] [--scope=architecture,security,quality,concurrency,devops] [--force]"
+argument-hint: "[path] [--scope=architecture,security,quality,concurrency,devops] [--force]"
+disable-model-invocation: true
 ---
 
 Spawn the `assessment-manager` agent with the arguments provided by the user:
