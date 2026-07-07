@@ -1,6 +1,6 @@
 # SWF AI Toolkit
 
-A reusable set of AI agents and procedures for software feature delivery — from requirements to PR.
+A reusable set of AI agents and procedures for software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
 > **Need a quick overview of what's available?** See [`docs/reference.md`](docs/reference.md) for the cheatsheet.
 
@@ -55,13 +55,29 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 
 ## Skills (user-invocable, in `.claude/skills/`)
 
+### Feature Delivery
+
 | Skill | Command | Purpose |
 |-------|---------|---------|
 | Install Toolkit | `/install-toolkit` | Copies all agents, skills, commands, and procedures into a destination project (no local toolkit repo needed) |
 | Init AGENTS.md | `/init-agents` | Analyzes a project codebase and generates the AGENTS.md convention file required by all developer agents |
 | Implement Feature | `/implement-feature` | Starts the full feature delivery pipeline: docs → approval → implement → review → PR |
 
+### Assessment & Remediation
+
+| Skill | Command | Purpose |
+|-------|---------|---------|
+| Assess Codebase | `/assess-codebase` | Starts the full assessment pipeline: parallel assessment → intervention docs → approval gate → remediation → review → PR |
+
+### General
+
+| Skill | Command | Purpose |
+|-------|---------|---------|
+| Toolkit Guide | `/help [topic]` | Interactive guide to the toolkit — explains pipelines, agents, and commands; helps you find the right tool for your situation |
+
 ## Commands (slash shortcuts, in `.claude/commands/`)
+
+### Feature Delivery
 
 | Command | Purpose |
 |---------|---------|
@@ -70,7 +86,15 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 | `/pr-description` | Generates a PR description from the current branch commits + linked feature.md |
 | `/next-task [slug]` | Finds the next unblocked task in the work breakdown and suggests the agent to delegate it to |
 
+### Assessment & Remediation
+
+| Command | Purpose |
+|---------|---------|
+| `/assessment-status <prefix>` | Reports presence/state of all assessment artifacts (assessments, interventions, approvals, issues register) |
+
 ## Agents (spawnable subagents, in `.claude/agents/`)
+
+### Feature Delivery
 
 | Agent | subagent_type | Purpose |
 |-------|---------------|---------|
@@ -84,6 +108,22 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 | Frontend Developer | `developer-frontend` | Implements frontend tasks (FE domain) |
 | Testing Agent | `developer-testing` | Creates unit/integration tests (TEST domain) |
 | Review Solution | `review-solution` | Architect-level code review |
+| Project Manager | `project-manager` | Orchestrates the full feature delivery pipeline |
+
+### Assessment & Remediation
+
+| Agent | subagent_type | Purpose |
+|-------|---------------|---------|
+| Assessment Manager | `assessment-manager` | Orchestrates the full assessment + remediation pipeline |
+| Generic Software Assessment | `generic-software-assessment` | Broad quality analysis across architecture, security, testability, observability, DevOps |
+| Intervention Documentation Standard | `intervention-documentation-standard` | Generates structured, self-contained intervention documents from assessment findings |
+| God Class Decomposition | `god-class-decomposition` | Safe incremental decomposition of oversized classes and methods |
+| Domain Model Refactoring | `domain-model-refactoring` | Splits monolithic model files, introduces type hierarchies, aligns domain vocabulary |
+| Layered Architecture Assessment | `layered-architecture-assessment` | Audits layer boundary violations and namespace/package misalignment |
+| Dependency Injection Refactoring | `dependency-injection-refactoring` | Converts static/direct coupling to constructor-injected services |
+| Security Hardening | `security-hardening` | Input validation, parameterised queries, secret management, log sanitisation, TLS |
+| Dependency Supply Chain Security | `dependency-supply-chain-security` | Lock files, integrity verification, unused dependency audit, SCA in CI |
+| Concurrency Safety Assessment | `concurrency-safety-assessment` | Race conditions, shared mutable state, unsafe shutdown patterns |
 
 ## Available procedures (in `docs/procedures/`)
 
