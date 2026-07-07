@@ -1,0 +1,26 @@
+{
+  "name": "@denistomada/swf-ai-toolkit",
+  "version": "0.1.0",
+  "description": "SWF AI Toolkit — reusable agents and procedures",
+  "files": [
+    "docs/",
+    "CLAUDE.md",
+    ".claude",
+    "bin"
+  ],
+  "bin": {
+    "swf-ai-toolkit": "bin/cli.js"
+  },
+  "scripts": {
+    "prepublishOnly": "npm pack --dry-run"
+  },
+  "publishConfig": {
+    "registry": "https://pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://dev.azure.com/denistomada/swf-ai-toolkit/_git/swf-ai-toolkit"
+  },
+  "author": "Denis Tomada",
+  "license": "MIT"
+}
