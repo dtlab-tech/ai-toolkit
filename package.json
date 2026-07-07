@@ -1,5 +1,5 @@
 {
-  "name": "@denistomada/swf-ai-toolkit",
+  "name": "@fincantieri/swf-ai-toolkit",
   "version": "0.1.0",
   "description": "SWF AI Toolkit — reusable agents and procedures",
   "files": [
@@ -18,6 +18,6 @@
     "type": "git",
     "url": "https://dev.azure.com/Fincantieri-Spa/Fincantieri.CommonLibraries/_git/Fincantieri.CommonLibraries.AIToolkit"
   },
-  "author": "Denis Tomada",
+  "author": "Fincantieri Software Factory",
   "license": "MIT"
 }
