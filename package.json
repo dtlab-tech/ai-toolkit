@@ -14,12 +14,9 @@
   "scripts": {
     "prepublishOnly": "npm pack --dry-run"
   },
-  "publishConfig": {
-    "registry": "https://pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/"
-  },
   "repository": {
     "type": "git",
-    "url": "https://dev.azure.com/denistomada/swf-ai-toolkit/_git/swf-ai-toolkit"
+    "url": "https://dev.azure.com/Fincantieri-Spa/Fincantieri.CommonLibraries/_git/Fincantieri.CommonLibraries.AIToolkit"
   },
   "author": "Denis Tomada",
   "license": "MIT"
