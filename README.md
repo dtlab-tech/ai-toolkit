@@ -1,20 +1,46 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# @denistomada/swf-ai-toolkit
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery — from requirements to PR.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## What it provides
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+- **12 agents** for the full delivery lifecycle (requirements → tech-spec → work breakdown → backend/frontend/testing implementation → architect review)
+- **4 skills** invocable via slash commands (`/install-toolkit`, `/init-agents`, `/implement-feature`, `/define-feature`)
+- **4 commands** for quick day-to-day shortcuts (`/feature-status`, `/check-docs`, `/pr-description`, `/next-task`)
+- **4 generic procedures** (code generation, code review, secure coding, testing) that projects can override locally
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Install
+
+> The package is hosted on a private Azure Artifacts feed. See [docs/installation.md](docs/installation.md) for `.npmrc` setup before running the commands below.
+
+**Local installation** (into the current project):
+
+```bash
+npx @denistomada/swf-ai-toolkit
+```
+
+**Global installation** (into `~/.claude/`):
+
+```bash
+npm install -g @denistomada/swf-ai-toolkit
+swf-ai-toolkit --global
+```
+
+Both commands copy agents, skills, procedures, and `CLAUDE.md` into the appropriate location.
+
+## How it works
+
+The toolkit ships **generic agents** that work with any project. Each agent reads project-specific conventions from an `AGENTS.md` file in the consuming project's root. Run `/init-agents` to generate that file for a new project.
+
+Generic procedures live in `docs/procedures/`. Projects can override any of them by placing a file with the same name at their own `docs/procedures/`. Agents check the project first, then fall back to the toolkit.
+
+## Documentation
+
+- [Quick Reference](docs/reference.md) — cheatsheet of every skill, command, agent, and procedure
+- [Installation guide](docs/installation.md) — full `.npmrc` setup and CLI options
+- [`CLAUDE.md`](CLAUDE.md) — agent and skill reference
+- [`docs/procedures/`](docs/procedures/) — reusable workflows
+
+## License
+
+MIT

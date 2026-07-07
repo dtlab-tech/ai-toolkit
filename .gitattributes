@@ -1,0 +1,18 @@
+# Enforce LF on cross-platform text files so scripts run correctly on Linux CI agents.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.js   text eol=lf
+*.cjs  text eol=lf
+*.mjs  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+
+# Binary files: leave untouched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
