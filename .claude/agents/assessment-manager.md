@@ -1,4 +1,5 @@
 ---
+name: assessment-manager
 description: "Assessment Manager — intelligent orchestrator for the codebase assessment pipeline. Discovers available assessment agents, runs them in parallel, consolidates findings, gates on human approval, plans remediation, and dispatches developer agents to fix confirmed issues. Input: path to target codebase (or '.' for current directory) [--scope=<area1,area2>] [--force]"
 ---
 

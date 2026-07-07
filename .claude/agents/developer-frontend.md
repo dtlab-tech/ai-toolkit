@@ -1,7 +1,6 @@
 ---
+name: developer-frontend
 description: "Senior Frontend Developer — implements frontend tasks (FE domain) from the Work Breakdown following project conventions. Input: path to feature.md + task IDs"
-inputs: ["{PREFIX}-Work-Breakdown.md", "{PREFIX}-Tech-Spec.md"]
-outputs: ["Source code files as specified in the task"]
 ---
 
 # Frontend Developer Agent
@@ -75,6 +74,27 @@ If the task description or Tech-Spec is ambiguous about a UI detail, **stop and 
 3. **Always include**: "Leave as TODO comment and move to next task"
 
 Do NOT guess at visual design decisions. Ask first.
+
+---
+
+## Completion Summary (MANDATORY — return this to the orchestrator)
+
+When all assigned tasks are complete, return a **structured summary** to the orchestrator. Do NOT return raw file contents, diffs, or implementation details — the orchestrator does not need them and they waste context.
+
+```
+✅ Frontend Implementation Summary — {task IDs}
+─────────────────────────────────────────────
+Tasks completed: [list]
+Files created:   [list with path only]
+Files modified:  [list with path only]
+Build result:    ✅ PASS / ❌ FAIL — [error summary if failed]
+Notes:           [blocking issues, deferred decisions, TODO items]
+─────────────────────────────────────────────
+```
+
+- **Never dump file contents** into the summary
+- **Never describe implementation details** — paths and build result are sufficient
+- If build FAILED, include the first error message only
 
 ---
 

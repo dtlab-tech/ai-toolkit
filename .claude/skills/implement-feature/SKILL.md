@@ -1,5 +1,7 @@
 ---
 description: "Implement Feature — starts the full feature delivery pipeline (requirements → tech-spec → approval → work breakdown → implementation → review → PR). Usage: /implement-feature <path-to-feature.md> [--force]"
+argument-hint: <path-to-feature.md> [--force]
+disable-model-invocation: true
 ---
 
 Spawn the `project-manager` agent with the arguments provided by the user:

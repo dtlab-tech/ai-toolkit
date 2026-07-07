@@ -1,5 +1,8 @@
 ---
+name: concurrency-safety-assessment
 description: "Concurrency Safety Assessment — identifies race conditions, shared mutable state corruption, and non-deterministic behaviour in concurrent or event-driven systems. Language-agnostic; produces structured findings with severity, evidence, and mitigation patterns. Output: {ASSESS_PREFIX}-Concurrency-Assessment.md"
+tools: Read, Grep, Glob, Bash, Write
+model: haiku
 ---
 
 # Concurrency Safety Assessment

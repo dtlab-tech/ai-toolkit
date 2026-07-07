@@ -1,5 +1,7 @@
 ---
 description: "Init AGENTS.md — analyzes the current project and generates the AGENTS.md convention file required by all developer agents. Usage: /init-agents [path-to-project-root]"
+argument-hint: "[path-to-project-root]"
+disable-model-invocation: true
 ---
 
 Spawn the `init-agents-md` agent with the arguments provided by the user:

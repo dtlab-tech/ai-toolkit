@@ -1,7 +1,8 @@
 ---
+name: validate-feature-docs
 description: "Validates Requirements and Tech-Spec documents against feature.md. Triggers targeted revision of failing documents if gaps are found. Input: path to feature.md"
-inputs: ["feature.md", "{PREFIX}-Requirements.md", "{PREFIX}-Tech-Spec.md"]
-outputs: ["{PREFIX}-Validation-Report.md"]
+model: haiku
+tools: Read, Glob, Grep, Write
 ---
 
 # Validate Feature Docs

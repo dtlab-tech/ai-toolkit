@@ -1,5 +1,8 @@
 ---
+name: layered-architecture-assessment
 description: "Layered Architecture Assessment — audits a codebase for layer boundary violations, missing separation of concerns, and namespace/package misalignment. Produces a violation inventory and a recommended layer model. Language-agnostic; reads AGENTS.md for project conventions. Output: {ASSESS_PREFIX}-Layer-Assessment.md"
+tools: Read, Grep, Glob, Bash, Write
+model: haiku
 ---
 
 # Layered Architecture Assessment

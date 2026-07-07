@@ -1,7 +1,8 @@
 ---
+name: generate-work-breakdown
 description: "Generates a structured work breakdown (User Stories + Tasks) from validated and approved Requirements and Tech-Spec. Input: path to feature.md"
-inputs: ["{PREFIX}-Requirements.md", "{PREFIX}-Tech-Spec.md", "{PREFIX}-Validation-Report.md", "{PREFIX}-Approvals.md"]
-outputs: ["{PREFIX}-Work-Breakdown.md"]
+model: haiku
+tools: Read, Glob, Grep, Write
 ---
 
 # Generate Work Breakdown
