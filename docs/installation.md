@@ -2,48 +2,24 @@
 
 The toolkit is published to a **private Azure Artifacts feed** and can be installed into a single project (local) or made available system-wide (global).
 
+- **Feed**: `swf-ai-toolkit`
+- **Registry**: `https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/`
+- **Package**: `@fincantieri/swf-ai-toolkit`
+
 ## Prerequisites: authenticate to the feed
-
-The package lives at `https://pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/`. Before any `npm` or `npx` command can reach it, your machine needs:
-
-1. **A scope mapping** that tells npm "the `@denistomada` scope lives on this registry".
-2. **An auth token** for that registry.
 
 ### Step 1 — Create or edit `~/.npmrc`
 
 Add the scope mapping to your **user-level** `.npmrc` (so it applies to every project):
 
-```
-@denistomada:registry=https://pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/
+```ini
+registry=https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/
+always-auth=true
 ```
 
 File location:
 - **Windows**: `%USERPROFILE%\.npmrc` (e.g. `C:\Users\<you>\.npmrc`)
 - **macOS / Linux**: `~/.npmrc`
-
-#### Example `~/.npmrc` after setup (Windows — token injected by `vsts-npm-auth`)
-
-```ini
-# Scope mapping: tells npm where to find @denistomada packages
-@denistomada:registry=https://pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/
-
-# Auth token injected automatically by vsts-npm-auth (or manually via PAT)
-//pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/:_authToken=<TOKEN>
-```
-
-#### Example `~/.npmrc` after setup (macOS / Linux — PAT-based)
-
-```ini
-# Scope mapping
-@denistomada:registry=https://pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/
-
-# PAT-based auth (base64-encoded PAT)
-//pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/:username=denistomada
-//pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/:_password=<BASE64_PAT>
-//pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/:email=npm requires email to be set but doesn't use the value
-```
-
-> Never commit your `.npmrc` with tokens into a git repository.
 
 ### Step 2 — Add an auth token
 
@@ -69,19 +45,21 @@ The token expires every 90 days; re-run the same command to refresh.
    echo -n "<PASTE_PAT_HERE>" | base64
    ```
 4. Append to `~/.npmrc`:
+   ```ini
+   //pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:username=<your-ado-username>
+   //pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:_password=<BASE64_PAT>
+   //pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:email=npm requires email to be set but doesn't use the value
    ```
-   //pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/:username=denistomada
-   //pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/:_password=<BASE64_TOKEN>
-   //pkgs.dev.azure.com/denistomada/swf-ai-toolkit/_packaging/swf-ai-toolkit/npm/registry/:email=npm requires email to be set but doesn't use the value
-   ```
+
+> Never commit your `.npmrc` with tokens into a git repository.
 
 ### Step 3 — Verify
 
 ```bash
-npm view @denistomada/swf-ai-toolkit version
+npm view @fincantieri/swf-ai-toolkit version
 ```
 
-If you see a version number, auth works. If you get `401`, re-check the token.
+If you see a version number, auth works. If you get `401`, re-run `vsts-npm-auth` (Windows) or check your PAT (macOS/Linux).
 
 ---
 
@@ -92,19 +70,19 @@ If you see a version number, auth works. If you get `401`, re-check the token.
 Copies `.claude/`, `docs/`, and `CLAUDE.md` into the current directory:
 
 ```bash
-npx @denistomada/swf-ai-toolkit
+npx @fincantieri/swf-ai-toolkit
 ```
 
 Target a different directory:
 
 ```bash
-npx @denistomada/swf-ai-toolkit --local /path/to/project
+npx @fincantieri/swf-ai-toolkit --local /path/to/project
 ```
 
 Overwrite existing files without confirmation:
 
 ```bash
-npx @denistomada/swf-ai-toolkit --local . --force
+npx @fincantieri/swf-ai-toolkit --local . --force
 ```
 
 ### Global installation
@@ -112,7 +90,7 @@ npx @denistomada/swf-ai-toolkit --local . --force
 Merges `.claude/agents`, `.claude/skills`, `docs/`, and `CLAUDE.md` into `~/.claude/`:
 
 ```bash
-npm install -g @denistomada/swf-ai-toolkit
+npm install -g @fincantieri/swf-ai-toolkit
 swf-ai-toolkit --global
 ```
 
