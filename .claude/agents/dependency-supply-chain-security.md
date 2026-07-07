@@ -1,4 +1,5 @@
 ---
+name: dependency-supply-chain-security
 description: "Dependency Supply Chain Security — guides the implementation of dependency integrity controls: trusted package sources, deterministic restore via lock files, unused dependency audit, and SCA integration in CI/CD pipelines. Works with npm, pip, NuGet, Maven, and other package managers; reads AGENTS.md for project stack. Output: remediated configuration files + CI/CD pipeline changes"
 ---
 

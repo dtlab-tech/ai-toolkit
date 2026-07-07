@@ -1,7 +1,8 @@
 ---
+name: generate-tech-spec
 description: "Generates a technical specification document from a feature description and requirements. Input: path to feature.md"
-inputs: ["{PREFIX}-Requirements.md", "feature.md"]
-outputs: ["{PREFIX}-Tech-Spec.md"]
+model: haiku
+tools: Read, Glob, Grep, Write
 ---
 
 # Generate Technical Specification
