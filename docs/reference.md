@@ -6,6 +6,8 @@ Cheatsheet of every skill, command, agent, and procedure shipped with this toolk
 
 ## When do I use what?
 
+### Feature Delivery
+
 | You want to… | Use |
 |---|---|
 | Start a new feature from scratch | Skill `/define-feature` (produces `feature.md`) |
@@ -21,11 +23,29 @@ Cheatsheet of every skill, command, agent, and procedure shipped with this toolk
 | Write tests for a task | Agent `developer-testing` |
 | Get an architect-level code review | Agent `review-solution` |
 
+### Assessment & Remediation
+
+| You want to… | Use |
+|---|---|
+| Audit an existing codebase for quality issues | Skill `/assess-codebase` |
+| Run only specific assessment dimensions | Skill `/assess-codebase --scope=security,architecture` |
+| Check the state of an ongoing assessment | Command `/assessment-status <prefix>` |
+| Decompose a God Class or God Method | Agent `god-class-decomposition` |
+| Convert static coupling to DI | Agent `dependency-injection-refactoring` |
+| Audit layer boundary violations | Agent `layered-architecture-assessment` |
+| Harden security at system boundaries | Agent `security-hardening` |
+| Audit dependency supply chain | Agent `dependency-supply-chain-security` |
+| Check for race conditions and shared state | Agent `concurrency-safety-assessment` |
+| Refactor a monolithic domain model | Agent `domain-model-refactoring` |
+| Generate intervention documents from findings | Agent `intervention-documentation-standard` |
+
 ---
 
 ## Skills (in `.claude/skills/`)
 
 Invoked as `/<name>`. Comprehensive workflows that may chain multiple agents.
+
+### Feature Delivery
 
 | Skill | Purpose | Typical usage |
 |---|---|---|
@@ -34,18 +54,38 @@ Invoked as `/<name>`. Comprehensive workflows that may chain multiple agents.
 | `/install-toolkit` | Copies agents/skills/commands/procedures into a destination project | `/install-toolkit /path/to/dest [--force]` |
 | `/implement-feature` | Full pipeline: requirements → tech-spec → approval → work breakdown → implementation → review → PR | `/implement-feature docs/features/FTR-001-foo/feature.md` |
 
+### Assessment & Remediation
+
+| Skill | Purpose | Typical usage |
+|---|---|---|
+| `/assess-codebase` | Full pipeline: parallel assessment → intervention docs → approval gate → remediation → review → PR | `/assess-codebase [path] [--scope=security,architecture] [--force]` |
+
+### General
+
+| Skill | Purpose | Typical usage |
+|---|---|---|
+| `/help [topic]` | Interactive guide — explains pipelines, agents, commands; helps you find the right tool for your situation | `/help`, `/help assess`, `/help setup`, `/help feature` |
+
 ---
 
 ## Commands (in `.claude/commands/`)
 
 Invoked as `/<name>`. Lightweight shortcuts focused on the current state of the repo. Do **not** spawn long-running workflows.
 
+### Feature Delivery
+
 | Command | Purpose | Args |
 |---|---|---|
-| `/feature-status` | Tabella ✅/⚠️/❌ degli artefatti di una feature + prossimi step | `<feature-slug>` |
-| `/check-docs` | Inconsistenze tra `feature.md`, `requirements.md`, `tech-spec.md`. Solo i gap. | `<feature-slug>` |
-| `/pr-description` | Genera PR description da branch + commit + feature.md collegata | (nessuno) |
-| `/next-task` | Prossimo task non bloccato dal work breakdown + agent suggerito | `[feature-slug]` (opzionale) |
+| `/feature-status` | ✅/⚠️/❌ status table for all feature artifacts + next steps | `<feature-slug>` |
+| `/check-docs` | Inconsistencies between `feature.md`, `requirements.md`, `tech-spec.md` — gaps only | `<feature-slug>` |
+| `/pr-description` | Generates PR description from branch + commits + linked feature.md | (none) |
+| `/next-task` | Next unblocked task from the work breakdown + suggested agent | `[feature-slug]` (optional) |
+
+### Assessment & Remediation
+
+| Command | Purpose | Args |
+|---|---|---|
+| `/assessment-status` | ✅/⚠️/❌ status table for all assessment artifacts (assessments, interventions, approvals, issues) + next steps | `<assessment-prefix>` |
 
 ---
 
@@ -85,6 +125,28 @@ Invoked via the Agent tool with `subagent_type`. Specialised sub-conversations t
 |---|---|
 | `review-solution` | Full review across quality, reuse, architecture, security — reports findings, does NOT auto-fix |
 
+### Assessment pipeline
+
+| `subagent_type` | Input | Output |
+|---|---|---|
+| `assessment-manager` | codebase path | Orchestrates the full assessment + remediation pipeline |
+| `generic-software-assessment` | codebase path + prefix | `{PREFIX}-Generic-Assessment.md` |
+| `layered-architecture-assessment` | codebase path + prefix | `{PREFIX}-Layer-Assessment.md` |
+| `concurrency-safety-assessment` | codebase path + prefix | `{PREFIX}-Concurrency-Assessment.md` |
+| `intervention-documentation-standard` | assessment files + prefix | `{PREFIX}-INT-NNN-*.md` + `Interventions-Index.md` |
+
+### Remediation
+
+| `subagent_type` | What it fixes | Reads |
+|---|---|---|
+| `god-class-decomposition` | Oversized classes and methods | Intervention doc + `AGENTS.md` |
+| `domain-model-refactoring` | Monolithic model files, missing type hierarchies | Intervention doc + `AGENTS.md` |
+| `layered-architecture-assessment` | Layer violation audit (assessment only, no implementation) | `AGENTS.md` |
+| `dependency-injection-refactoring` | Static/direct coupling converted to DI | Intervention doc + `AGENTS.md` |
+| `security-hardening` | Input validation, SQL injection, secrets, log sanitisation, TLS | Intervention doc + `AGENTS.md` |
+| `dependency-supply-chain-security` | Lock files, integrity verification, unused deps, SCA in CI | Intervention doc + `AGENTS.md` |
+| `concurrency-safety-assessment` | Race conditions, shared state audit (assessment only) | `AGENTS.md` |
+
 ---
 
 ## Procedures (in `docs/procedures/`)
@@ -95,7 +157,7 @@ Reusable text procedures referenced by agents. **Override locally** by placing a
 |---|---|
 | `code-generation.md` | All `developer-*` agents |
 | `code-review.md` | `review-solution` |
-| `secure-coding.md` | `developer-backend`, `review-solution` |
+| `secure-coding.md` | `developer-backend`, `review-solution`, `security-hardening` |
 | `testing.md` | `developer-testing` |
 
 ---
@@ -127,6 +189,32 @@ Then delegate manually to the suggested agent, or rerun `/implement-feature` to 
 /pr-description            → markdown ready to paste
 ```
 
+### Flow 4 — Audit an existing codebase
+
+```text
+/assess-codebase .         → runs all assessment agents in parallel
+                           → produces intervention documents
+                           → pauses for human approval of remediation scope
+                           → implements approved interventions
+                           → opens PR
+```
+
+### Flow 5 — Targeted assessment (security only)
+
+```text
+/assess-codebase . --scope=security
+                           → runs only security-related assessment agents
+                           → same approval gate + remediation pipeline
+```
+
+### Flow 6 — Resume an interrupted assessment
+
+```text
+/assessment-status ASSESS-001   → see what's done and what's next
+/assess-codebase . --force      → restart from scratch
+/assess-codebase .              → resume (skips fresh artifacts)
+```
+
 ---
 
 ## File locations
@@ -137,4 +225,6 @@ Then delegate manually to the suggested agent, or rerun `/implement-feature` to 
 | Skills | `<project>/.claude/skills/` | `~/.claude/skills/` |
 | Commands | `<project>/.claude/commands/` | `~/.claude/commands/` |
 | Procedures | `<project>/docs/procedures/` | `~/.claude/docs/procedures/` |
+| Feature docs | `<project>/docs/features/FTR-NNN-slug/` | — |
+| Assessment docs | `<project>/docs/assessments/ASSESS-NNN/` | — |
 | This reference | `<project>/docs/reference.md` | `~/.claude/docs/reference.md` |
