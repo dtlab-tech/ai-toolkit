@@ -49,6 +49,26 @@ async function runInstall(label, mappings, force) {
   }
 }
 
+async function installMattPocock() {
+  const { execSync } = require('child_process');
+  console.log('\nInstalling Matt Pocock skills via: npx skills@latest add mattpocock/skills');
+  try {
+    execSync('npx skills@latest add mattpocock/skills', { stdio: 'inherit' });
+    console.log('Matt Pocock skills installed successfully.');
+  } catch (err) {
+    console.error('Failed to install Matt Pocock skills:', err.message);
+    console.error('You can install them manually with: npx skills@latest add mattpocock/skills');
+  }
+}
+
+async function askMattPocock() {
+  const ok = await askConfirm(
+    '\nDo you want to also install Matt Pocock\'s skills (define-feature, grilling, TDD, etc.)?\n' +
+    'These are powerful companion skills that work great with this toolkit.'
+  );
+  if (ok) await installMattPocock();
+}
+
 async function installLocal(targetDir, force) {
   targetDir = path.resolve(process.cwd(), targetDir || '.');
   console.log('Installing files into', targetDir);
@@ -59,6 +79,7 @@ async function installLocal(targetDir, force) {
   ];
   await runInstall(`in ${targetDir}`, mappings, force);
   console.log('Install complete.');
+  await askMattPocock();
 }
 
 async function installGlobal(force) {
@@ -75,6 +96,7 @@ async function installGlobal(force) {
     ];
     await runInstall('in global Claude folder', mappings, force);
     console.log('Global install into Claude folder complete.');
+    await askMattPocock();
   } catch (err) {
     console.error('Global install failed:', err.message);
     process.exit(1);
