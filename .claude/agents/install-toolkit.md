@@ -100,13 +100,39 @@ After copying, verify:
 
 ---
 
-## Step 5 — Report
+## Step 5 — Matt Pocock Skills (optional)
+
+After copying the toolkit files, ask the user whether to also install Matt Pocock's skills using `AskUserQuestion`:
+
+```
+question: "Do you want to also install Matt Pocock's skills?"
+description: >
+  Matt Pocock's skills package includes powerful companion skills that work
+  great with this toolkit: define-feature (structured feature interview),
+  grilling (stress-test a plan), TDD, prototype, handoff, and more.
+  They install globally into ~/.claude/skills/ via: npx skills@latest add mattpocock/skills
+options:
+  - "Yes — install Matt Pocock's skills now"
+  - "No — skip for now (install manually later with: npx skills@latest add mattpocock/skills)"
+```
+
+If the user selects **Yes**, run:
+```bash
+npx skills@latest add mattpocock/skills
+```
+
+Report the outcome (success or error). If it fails, show the manual install command.
+
+---
+
+## Step 6 — Report
 
 ```
 ✅ Toolkit installed at {destination}
 ──────────────────────────────────────────────────
 Copied:    N files
 Skipped:   N files (already existed — use --force to overwrite)
+Matt Pocock skills: ✅ installed / ⏭ skipped
 ──────────────────────────────────────────────────
 Next steps:
   1. Run /init-agents to generate AGENTS.md for this project
