@@ -67,6 +67,44 @@ function categorize(files) {
   });
 }
 
+// ── version check ─────────────────────────────────────────────────────────────
+
+const TOOLKIT_VERSION = require('../package.json').version;
+const VERSION_FILE    = '.swf-toolkit-version';
+
+function readInstalledVersion(destRoot) {
+  const versionFile = path.join(destRoot, '.claude', VERSION_FILE);
+  if (!fs.existsSync(versionFile)) return null;
+  return fs.readFileSync(versionFile, 'utf8').trim();
+}
+
+function writeInstalledVersion(destRoot) {
+  const versionFile = path.join(destRoot, '.claude', VERSION_FILE);
+  ensureDir(versionFile);
+  fs.writeFileSync(versionFile, TOOLKIT_VERSION, 'utf8');
+}
+
+async function checkVersion(destRoot, force) {
+  const installed = readInstalledVersion(destRoot);
+  if (!installed) return true; // first install, no prompt needed
+
+  if (installed === TOOLKIT_VERSION) {
+    console.log(`\nToolkit v${TOOLKIT_VERSION} is already installed at the target. Nothing to update.`);
+    if (!force) {
+      const ok = await askConfirm('Re-install anyway?');
+      if (!ok) { console.log('Aborted.'); process.exit(0); }
+    }
+    return true;
+  }
+
+  console.log(`\nVersion check:`);
+  console.log(`  Installed : v${installed}`);
+  console.log(`  Available : v${TOOLKIT_VERSION}`);
+  const ok = await askConfirm(`\nProceed and update from v${installed} to v${TOOLKIT_VERSION}?`);
+  if (!ok) { console.log('Aborted. Your current installation was not changed.'); process.exit(0); }
+  return true;
+}
+
 // ── install ───────────────────────────────────────────────────────────────────
 
 async function runInstall(label, mappings, force) {
@@ -152,12 +190,14 @@ async function askMattPocock() {
 async function installLocal(targetDir, force) {
   targetDir = path.resolve(process.cwd(), targetDir || '.');
   console.log('Installing files into', targetDir);
+  await checkVersion(targetDir, force);
   const mappings = [
     { src: path.join(packageRoot, '.claude'),    dest: path.join(targetDir, '.claude') },
     { src: path.join(packageRoot, 'docs'),       dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'),  dest: path.join(targetDir, 'CLAUDE.md') },
   ];
   await runInstall(`in ${targetDir}`, mappings, force);
+  writeInstalledVersion(targetDir);
   console.log('Install complete.');
   await askMattPocock();
 }
@@ -167,6 +207,7 @@ async function installGlobal(force) {
     const homedir = require('os').homedir();
     const target = path.join(homedir, '.claude');
     console.log('Installing into global Claude folder:', target);
+    await checkVersion(target, force);
     const mappings = [
       { src: path.join(packageRoot, '.claude', 'agents'),   dest: path.join(target, 'agents') },
       { src: path.join(packageRoot, '.claude', 'skills'),   dest: path.join(target, 'skills') },
@@ -175,6 +216,7 @@ async function installGlobal(force) {
       { src: path.join(packageRoot, 'CLAUDE.md'),           dest: path.join(target, 'CLAUDE.md') },
     ];
     await runInstall('in global Claude folder', mappings, force);
+    writeInstalledVersion(target);
     console.log('Global install into Claude folder complete.');
     await askMattPocock();
   } catch (err) {
