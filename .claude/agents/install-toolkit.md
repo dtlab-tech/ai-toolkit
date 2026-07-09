@@ -33,14 +33,14 @@ Four source directories to install:
 | Source (toolkit) | Destination | Purpose |
 |------------------|-------------|---------|
 | `.claude/agents/` | `{dest}/.claude/agents/` | All spawnable subagents |
-| `.claude/skills/` | `{dest}/.claude/skills/` | All user-invocable skills (except `install-toolkit.md`) |
+| `.claude/skills/` | `{dest}/.claude/skills/` | All user-invocable skills (except `install-toolkit/`) |
 | `.claude/commands/` | `{dest}/.claude/commands/` | All slash commands |
 | `docs/procedures/` | `{dest}/docs/procedures/` | Generic procedures (only if destination has no override) |
 
-For each file, determine:
-- **COPY** — file does not exist in destination
-- **SKIP** — file already exists in destination (and `--force` was NOT passed)
-- **OVERWRITE** — file already exists in destination AND `--force` was passed
+For each file, compare source content against destination using an MD5/hash check and determine status:
+- **NEW** — file does not exist in destination → copy automatically, no prompt
+- **SAME** — file exists and content is identical → skip silently, no prompt
+- **MODIFIED** — file exists but content differs → show to user, ask per-file
 
 Build and display the plan before executing:
 
@@ -48,37 +48,40 @@ Build and display the plan before executing:
 📦 Install Plan  →  {destination}
 ──────────────────────────────────────────────────
 .claude/agents/
-  ✅ COPY     project-manager.md
-  ✅ COPY     generate-requirements.md
-  ✅ COPY     generate-tech-spec.md
-  ✅ COPY     validate-feature-docs.md
-  ✅ COPY     generate-work-breakdown.md
-  ✅ COPY     developer-backend.md
-  ✅ COPY     developer-frontend.md
-  ✅ COPY     developer-testing.md
-  ✅ COPY     review-solution.md
-  ✅ COPY     init-agents-md.md
+  ✅ NEW       project-manager.md
+  ✅ NEW       generate-requirements.md
+  ⚠️  MODIFIED  developer-backend.md    ← content differs
+  ⏭  SAME      review-solution.md
 
 .claude/skills/
-  ✅ COPY     implement-feature.md
-  ✅ COPY     init-agents.md
-  ⏭  SKIP     my-existing-skill.md  ← already exists
+  ✅ NEW       implement-feature/SKILL.md
+  ⏭  SAME      init-agents/SKILL.md
 
 docs/procedures/
-  ✅ COPY     code-generation.md
-  ⏭  SKIP     code-review.md        ← project override exists
+  ✅ NEW       code-generation.md
+  ⏭  SAME      testing.md
 ──────────────────────────────────────────────────
-Files to copy: N  |  Skipped: N  |  Overwrite: N
+New: N  |  Modified: N  |  Unchanged: N
 ```
 
 ---
 
 ## Step 3 — Execute
 
-For each file marked COPY or OVERWRITE:
+**Phase A — New files** (no prompt needed): copy all NEW files, creating directories as needed.
 
-1. Create the destination directory if it doesn't exist
-2. Copy the file
+**Phase B — Modified files** (per-file prompt):
+
+For each MODIFIED file, show:
+```
+  ⚠️  MODIFIED: .claude/agents/developer-backend.md
+  The toolkit version differs from the one already in your project.
+  Overwrite? (y/N):
+```
+
+Wait for the user's response before moving to the next file. If `--force` was passed, overwrite all modified files without prompting.
+
+**Phase C — Same files**: skip silently (no output for these).
 
 Use shell commands appropriate for the OS. On Windows with bash:
 ```bash
@@ -86,7 +89,7 @@ mkdir -p "{dest_dir}"
 cp "{source_file}" "{dest_file}"
 ```
 
-**Never copy `install-toolkit.md`** from `.claude/skills/` — this skill is toolkit-internal and has no use in a destination project.
+**Never copy the `install-toolkit/` skill directory** — this skill is toolkit-internal and has no use in a destination project.
 
 **For `docs/procedures/`**: copy only files that don't already exist in the destination (regardless of `--force`) — project-specific procedure overrides must never be clobbered.
 
@@ -130,8 +133,10 @@ Report the outcome (success or error). If it fails, show the manual install comm
 ```
 ✅ Toolkit installed at {destination}
 ──────────────────────────────────────────────────
-Copied:    N files
-Skipped:   N files (already existed — use --force to overwrite)
+New files copied:    N
+Modified/overwritten: N
+Modified/kept:        N  (user chose to keep existing version)
+Unchanged (same):    N  (skipped silently)
 Matt Pocock skills: ✅ installed / ⏭ skipped
 ──────────────────────────────────────────────────
 Next steps:
@@ -140,7 +145,7 @@ Next steps:
   3. Run /implement-feature docs/features/FTR-001-*/feature.md
 ```
 
-If any files were skipped, list them explicitly so the user can decide whether to re-run with `--force`.
+If any modified files were kept by the user (not overwritten), list them so they know those files are on an older toolkit version.
 
 ---
 
