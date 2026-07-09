@@ -5,6 +5,39 @@ const crypto = require('crypto');
 const readline = require('readline');
 const packageRoot = path.join(__dirname, '..');
 
+// ── colors ────────────────────────────────────────────────────────────────────
+
+const c = {
+  reset:   '\x1b[0m',
+  bold:    '\x1b[1m',
+  dim:     '\x1b[2m',
+  green:   '\x1b[32m',
+  yellow:  '\x1b[33m',
+  blue:    '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan:    '\x1b[36m',
+  red:     '\x1b[31m',
+  gray:    '\x1b[90m',
+  white:   '\x1b[97m',
+};
+
+const clr = (color, text) => `${c[color]}${text}${c.reset}`;
+const bold = (text)        => `${c.bold}${text}${c.reset}`;
+const dim  = (text)        => `${c.dim}${text}${c.reset}`;
+
+function divider(char = '─', len = 60) {
+  return clr('gray', char.repeat(len));
+}
+
+function banner() {
+  console.log();
+  console.log(clr('cyan', '╔══════════════════════════════════════════════════════════╗'));
+  console.log(clr('cyan', '║') + bold(clr('white', '         SWF AI Toolkit  —  Installer                     ')) + clr('cyan', '║'));
+  console.log(clr('cyan', '║') + clr('gray',  `         @fincantieri/swf-ai-toolkit  v${require('../package.json').version.padEnd(22)}`) + clr('cyan', '║'));
+  console.log(clr('cyan', '╚══════════════════════════════════════════════════════════╝'));
+  console.log();
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function fileHash(filePath) {
@@ -19,7 +52,7 @@ function ensureDir(filePath) {
 function askConfirm(question) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(question + ' (y/N): ', (answer) => {
+    rl.question(`${clr('cyan', '?')} ${question} ${dim('(y/N)')} `, (answer) => {
       rl.close();
       resolve(/^y(es)?$/i.test(answer.trim()));
     });
@@ -28,7 +61,6 @@ function askConfirm(question) {
 
 // ── file enumeration ─────────────────────────────────────────────────────────
 
-/** Recursively expand directory mappings into individual file mappings. */
 function expandMappings(mappings) {
   const files = [];
   for (const { src, dest } of mappings) {
@@ -57,7 +89,6 @@ function walkDir(dir) {
 
 // ── categorize ───────────────────────────────────────────────────────────────
 
-/** Returns { src, dest, status: 'new' | 'same' | 'modified' } for each file. */
 function categorize(files) {
   return files.map(({ src, dest }) => {
     if (!fs.existsSync(dest)) return { src, dest, status: 'new' };
@@ -86,22 +117,31 @@ function writeInstalledVersion(destRoot) {
 
 async function checkVersion(destRoot, force) {
   const installed = readInstalledVersion(destRoot);
-  if (!installed) return true; // first install, no prompt needed
+  if (!installed) return true;
+
+  console.log(divider());
+  console.log(bold('  Version check'));
+  console.log(divider());
 
   if (installed === TOOLKIT_VERSION) {
-    console.log(`\nToolkit v${TOOLKIT_VERSION} is already installed at the target. Nothing to update.`);
+    console.log(`  ${clr('green', '✔')}  Installed : ${clr('green', `v${installed}`)}`);
+    console.log(`  ${clr('blue',  '●')}  Available : ${clr('blue',  `v${TOOLKIT_VERSION}`)}`);
+    console.log(`\n  ${clr('yellow', 'Already up to date.')}`);
     if (!force) {
       const ok = await askConfirm('Re-install anyway?');
-      if (!ok) { console.log('Aborted.'); process.exit(0); }
+      if (!ok) { console.log(`\n  ${clr('gray', 'Aborted. Nothing was changed.')}\n`); process.exit(0); }
     }
     return true;
   }
 
-  console.log(`\nVersion check:`);
-  console.log(`  Installed : v${installed}`);
-  console.log(`  Available : v${TOOLKIT_VERSION}`);
-  const ok = await askConfirm(`\nProceed and update from v${installed} to v${TOOLKIT_VERSION}?`);
-  if (!ok) { console.log('Aborted. Your current installation was not changed.'); process.exit(0); }
+  console.log(`  ${clr('yellow', '◎')}  Installed : ${clr('yellow', `v${installed}`)}`);
+  console.log(`  ${clr('green',  '▲')}  Available : ${clr('green',  `v${TOOLKIT_VERSION}`)}`);
+  console.log();
+  const ok = await askConfirm(`Update toolkit from ${clr('yellow', `v${installed}`)} to ${clr('green', `v${TOOLKIT_VERSION}`)}?`);
+  if (!ok) {
+    console.log(`\n  ${clr('gray', 'Aborted. Your installation was not changed.')}\n`);
+    process.exit(0);
+  }
   return true;
 }
 
@@ -111,102 +151,174 @@ async function runInstall(label, mappings, force) {
   const files    = expandMappings(mappings);
   const entries  = categorize(files);
 
-  const newFiles  = entries.filter(e => e.status === 'new');
-  const modified  = entries.filter(e => e.status === 'modified');
-  const same      = entries.filter(e => e.status === 'same');
+  const newFiles = entries.filter(e => e.status === 'new');
+  const modified = entries.filter(e => e.status === 'modified');
+  const same     = entries.filter(e => e.status === 'same');
 
-  // ── print plan ──
-  console.log(`\n📦 Install plan  →  ${label}`);
-  console.log('─'.repeat(60));
-  for (const e of newFiles)  console.log(`  ✅ NEW       ${path.relative(process.cwd(), e.dest)}`);
-  for (const e of modified)  console.log(`  ⚠️  MODIFIED  ${path.relative(process.cwd(), e.dest)}`);
-  for (const e of same)      console.log(`  ⏭  SAME      ${path.relative(process.cwd(), e.dest)}`);
-  console.log('─'.repeat(60));
-  console.log(`  New: ${newFiles.length}  |  Modified: ${modified.length}  |  Unchanged: ${same.length}\n`);
+  console.log();
+  console.log(`${bold('📦 Install plan')}  ${clr('gray', '→')}  ${clr('cyan', label)}`);
+  console.log(divider());
+  for (const e of newFiles)  console.log(`  ${clr('green',  '✚')} ${clr('green',  'NEW     ')}  ${dim(path.relative(process.cwd(), e.dest))}`);
+  for (const e of modified)  console.log(`  ${clr('yellow', '~')} ${clr('yellow', 'MODIFIED')}  ${path.relative(process.cwd(), e.dest)}`);
+  for (const e of same)      console.log(`  ${clr('gray',   '=')} ${clr('gray',   'SAME    ')}  ${dim(path.relative(process.cwd(), e.dest))}`);
+  console.log(divider());
+  console.log(
+    `  ${clr('green', `✚ New: ${newFiles.length}`)}` +
+    `  ${clr('yellow', `~ Modified: ${modified.length}`)}` +
+    `  ${clr('gray', `= Unchanged: ${same.length}`)}`
+  );
+  console.log();
 
-  // ── copy new files (always) ──
   for (const e of newFiles) {
     ensureDir(e.dest);
     fs.copyFileSync(e.src, e.dest);
   }
 
   if (modified.length === 0) {
-    console.log('No conflicts. All new files copied.');
+    console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
     return;
   }
 
   if (force) {
-    // --force: overwrite all modified without asking
-    console.log('--force passed: overwriting all modified files.');
+    console.log(`  ${clr('yellow', '⚑')}  --force: overwriting all modified files.`);
     for (const e of modified) {
       ensureDir(e.dest);
       fs.copyFileSync(e.src, e.dest);
+      console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
     return;
   }
 
-  // ── per-file prompt for modified files ──
-  console.log('The following files already exist and differ from the toolkit version.');
-  console.log('Decide for each one:\n');
+  console.log(`  ${clr('yellow', 'These files differ from the toolkit version — decide for each:')}\n`);
 
   let overwritten = 0;
   let skipped = 0;
 
   for (const e of modified) {
     const rel = path.relative(process.cwd(), e.dest);
-    const ok = await askConfirm(`  Overwrite  ${rel}?`);
+    const ok = await askConfirm(`  Overwrite  ${clr('yellow', rel)}?`);
     if (ok) {
       ensureDir(e.dest);
       fs.copyFileSync(e.src, e.dest);
+      console.log(`     ${clr('green', '✔')} Overwritten\n`);
       overwritten++;
     } else {
+      console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
       skipped++;
     }
   }
 
-  console.log(`\nDone. Overwritten: ${overwritten}  |  Kept as-is: ${skipped}`);
+  console.log(divider());
+  console.log(
+    `  ${clr('green', `✔ Overwritten: ${overwritten}`)}` +
+    `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
+  );
+}
+
+// ── Matt Pocock skills ───────────────────────────────────────────────────────
+
+function getMattPocockInstalledVersion() {
+  const { execSync } = require('child_process');
+  const homedir = require('os').homedir();
+
+  const versionFile = path.join(homedir, '.claude', 'skills', 'mattpocock', '.version');
+  if (fs.existsSync(versionFile)) return fs.readFileSync(versionFile, 'utf8').trim();
+
+  try {
+    const raw    = execSync('npm list -g mattpocock --json 2>/dev/null', { encoding: 'utf8' });
+    const parsed = JSON.parse(raw);
+    const ver    = parsed?.dependencies?.mattpocock?.version;
+    if (ver) return ver;
+  } catch (_) {}
+
+  return null;
+}
+
+function getMattPocockLatestVersion() {
+  const { execSync } = require('child_process');
+  try {
+    return execSync('npm view mattpocock version 2>/dev/null', { encoding: 'utf8' }).trim();
+  } catch (_) {
+    return null;
+  }
 }
 
 async function installMattPocock() {
   const { execSync } = require('child_process');
-  console.log('\nInstalling Matt Pocock skills via: npx skills@latest add mattpocock/skills');
+  console.log(`\n  ${clr('cyan', '↓')}  Running: ${dim('npx skills@latest add mattpocock/skills')}\n`);
   try {
     execSync('npx skills@latest add mattpocock/skills', { stdio: 'inherit' });
-    console.log('Matt Pocock skills installed successfully.');
+    console.log(`\n  ${clr('green', '✔')}  Matt Pocock skills installed successfully.\n`);
   } catch (err) {
-    console.error('Failed to install Matt Pocock skills:', err.message);
-    console.error('You can install them manually with: npx skills@latest add mattpocock/skills');
+    console.error(`\n  ${clr('red', '✖')}  Install failed: ${err.message}`);
+    console.error(`     Run manually: ${dim('npx skills@latest add mattpocock/skills')}\n`);
   }
 }
 
 async function askMattPocock() {
-  const ok = await askConfirm(
-    '\nDo you want to also install Matt Pocock\'s skills (define-feature, grilling, TDD, etc.)?\n' +
-    'These are powerful companion skills that work great with this toolkit.'
-  );
-  if (ok) await installMattPocock();
+  const installed = getMattPocockInstalledVersion();
+  const latest    = getMattPocockLatestVersion();
+
+  console.log(divider());
+  console.log(bold('  Matt Pocock Skills'));
+  console.log(divider());
+
+  if (!installed) {
+    console.log(`  ${clr('gray', '○')}  Status    : ${clr('gray', 'not installed')}`);
+    if (latest) console.log(`  ${clr('green', '▲')}  Available : ${clr('green', `v${latest}`)}`);
+    console.log(`\n  ${dim('Includes: define-feature, grilling, TDD, prototype, handoff, and more.')}`);
+    console.log();
+    const ok = await askConfirm('Install Matt Pocock\'s skills now?');
+    if (ok) await installMattPocock();
+    else console.log(`\n  ${clr('gray', 'Skipped. Install later with: npx skills@latest add mattpocock/skills')}\n`);
+    return;
+  }
+
+  if (latest && latest !== installed) {
+    console.log(`  ${clr('yellow', '◎')}  Installed : ${clr('yellow', `v${installed}`)}`);
+    console.log(`  ${clr('green',  '▲')}  Available : ${clr('green',  `v${latest}`)}`);
+    console.log();
+    const ok = await askConfirm(`Update Matt Pocock skills from ${clr('yellow', `v${installed}`)} to ${clr('green', `v${latest}`)}?`);
+    if (ok) await installMattPocock();
+    else console.log(`  ${clr('gray', 'Skipped.')}\n`);
+  } else {
+    console.log(`  ${clr('green', '✔')}  Installed : ${clr('green', `v${installed}`)}`);
+    console.log(`  ${clr('green', '✔')}  Already up to date.\n`);
+    const ok = await askConfirm('Re-install anyway?');
+    if (ok) await installMattPocock();
+    else console.log(`  ${clr('gray', 'Skipped.')}\n`);
+  }
 }
 
+// ── entry points ──────────────────────────────────────────────────────────────
+
 async function installLocal(targetDir, force) {
+  banner();
   targetDir = path.resolve(process.cwd(), targetDir || '.');
-  console.log('Installing files into', targetDir);
+  console.log(`  ${clr('cyan', '▸')}  Target: ${bold(targetDir)}\n`);
   await checkVersion(targetDir, force);
   const mappings = [
-    { src: path.join(packageRoot, '.claude'),    dest: path.join(targetDir, '.claude') },
-    { src: path.join(packageRoot, 'docs'),       dest: path.join(targetDir, 'docs') },
-    { src: path.join(packageRoot, 'CLAUDE.md'),  dest: path.join(targetDir, 'CLAUDE.md') },
+    { src: path.join(packageRoot, '.claude'),   dest: path.join(targetDir, '.claude') },
+    { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
+    { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`in ${targetDir}`, mappings, force);
+  await runInstall(`local project`, mappings, force);
   writeInstalledVersion(targetDir);
-  console.log('Install complete.');
+  console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
   await askMattPocock();
+  console.log(divider());
+  console.log(`\n  ${bold('Next steps:')}`);
+  console.log(`  ${clr('cyan', '1.')} Run ${clr('cyan', '/init-agents')} to generate AGENTS.md`);
+  console.log(`  ${clr('cyan', '2.')} Create a feature doc and run ${clr('cyan', '/implement-feature')}`);
+  console.log();
 }
 
 async function installGlobal(force) {
+  banner();
   try {
     const homedir = require('os').homedir();
-    const target = path.join(homedir, '.claude');
-    console.log('Installing into global Claude folder:', target);
+    const target  = path.join(homedir, '.claude');
+    console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
     await checkVersion(target, force);
     const mappings = [
       { src: path.join(packageRoot, '.claude', 'agents'),   dest: path.join(target, 'agents') },
@@ -215,22 +327,33 @@ async function installGlobal(force) {
       { src: path.join(packageRoot, 'docs'),                dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.md'),           dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('in global Claude folder', mappings, force);
+    await runInstall('global Claude folder', mappings, force);
     writeInstalledVersion(target);
-    console.log('Global install into Claude folder complete.');
+    console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     await askMattPocock();
+    console.log(divider());
+    console.log(`\n  ${bold('Next steps:')}`);
+    console.log(`  ${clr('cyan', '1.')} The toolkit is now available in all your projects`);
+    console.log(`  ${clr('cyan', '2.')} Open any project and run ${clr('cyan', '/init-agents')}`);
+    console.log();
   } catch (err) {
-    console.error('Global install failed:', err.message);
+    console.error(`\n  ${clr('red', '✖')}  Global install failed: ${err.message}\n`);
     process.exit(1);
   }
 }
 
 function help() {
-  console.log('Usage:\n  swf-ai-toolkit [--local <dir>] [--force]\n  swf-ai-toolkit --global [--force]');
+  banner();
+  console.log(`  ${bold('Usage:')}`);
+  console.log(`    ${clr('cyan', 'swf-ai-toolkit')}                      Install into current directory`);
+  console.log(`    ${clr('cyan', 'swf-ai-toolkit')} ${clr('yellow', '--local <dir>')}       Install into target directory`);
+  console.log(`    ${clr('cyan', 'swf-ai-toolkit')} ${clr('yellow', '--global')}             Install into ~/.claude (global)`);
+  console.log(`    ${clr('gray',  '                     --force')}       Overwrite all files without prompting`);
+  console.log();
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  const argv  = process.argv.slice(2);
   const force = argv.includes('--force');
 
   if (argv.length === 0 || (argv.length === 1 && argv[0] === '--force')) {
