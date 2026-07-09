@@ -17,12 +17,27 @@ The user provides:
 
 ---
 
-## Step 1 — Validate inputs
+## Step 1 — Validate inputs and check version
 
 1. Determine the **toolkit root**: the current working directory (this agent runs from the toolkit repo).
 2. Verify the toolkit root contains `.claude/agents/` — if not, abort: "Error: must be run from the swf-ai-toolkit directory."
 3. Verify the destination path exists — if not, abort: "Error: destination path not found: {path}"
 4. Check if destination is a git repository (look for `.git/`) — warn if not, but continue.
+5. **Version check**:
+   - Read `package.json` from the toolkit root to get the current version (e.g. `0.2.0`)
+   - Check if `.claude/.swf-toolkit-version` exists in the destination:
+     - **File missing** → first install, no prompt needed, continue
+     - **Same version** → inform the user and ask: "Toolkit v{x} is already installed. Re-install anyway?"
+       - If No: abort cleanly
+     - **Different version** → show both versions and ask:
+       ```
+       Version check:
+         Installed : v{installed}
+         Available : v{current}
+
+       Proceed and update from v{installed} to v{current}?
+       ```
+       - If No: abort cleanly with "Your current installation was not changed."
 
 ---
 
@@ -95,11 +110,16 @@ cp "{source_file}" "{dest_file}"
 
 ---
 
-## Step 4 — Verify
+## Step 4 — Verify and stamp version
 
-After copying, verify:
-- All expected files are present in the destination
-- No files are zero bytes
+After copying:
+1. Verify all expected files are present in the destination
+2. Verify no files are zero bytes
+3. Write the installed version to `.claude/.swf-toolkit-version` in the destination:
+   ```bash
+   echo "{current_version}" > "{dest}/.claude/.swf-toolkit-version"
+   ```
+   This file is read on future installs to show the version comparison prompt.
 
 ---
 
