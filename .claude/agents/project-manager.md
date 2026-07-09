@@ -25,7 +25,18 @@ agent_registry = {
 }
 ```
 
-### 1b. Assess the feature directory
+### 1b. Read Feature Registry
+
+Check if `docs/features/REGISTRY.md` exists in the current working directory.
+
+- **If it exists**: read it in full. Extract all entries (PREFIX, title, keywords, status, summary) and keep them as `registry`.
+- **If it does not exist**: `registry = []` (will be created after the first feature completes).
+
+The registry will be used in Phase 2 to detect related or conflicting features before committing to the plan.
+
+---
+
+### 1c. Assess the feature directory
 
 Given the input `feature.md` path, extract the **feature prefix** from the folder name:
 - Folder: `FTR-001-Gestione-Utenti` → prefix: `FTR-001`
@@ -50,6 +61,40 @@ state = {
 ---
 
 ## Phase 2 — Planning
+
+### 2a. Cross-feature analysis (registry check)
+
+Before building the execution plan, analyse the current `feature.md` against the `registry` loaded in Phase 1b.
+
+For each registry entry, check whether the new feature:
+- **Overlaps** — same domain, same entities, or same user flows as an existing feature
+- **Depends** — explicitly requires something delivered by an existing feature (APIs, models, infrastructure)
+- **Conflicts** — introduces business rules or data models that contradict an existing feature
+
+Produce a **cross-feature report** (shown to the user before execution starts):
+
+```
+📚 Feature Registry — Cross-Feature Analysis
+──────────────────────────────────────────────────
+FTR-001 — User Authentication
+  Relationship: DEPENDENCY — this feature uses the auth middleware introduced by FTR-001.
+  Action: verify FTR-001 is completed before starting implementation.
+
+FTR-003 — User Profile
+  Relationship: OVERLAP — both features modify the User entity.
+  Action: coordinate data model changes to avoid conflicts.
+
+No conflicts detected.
+──────────────────────────────────────────────────
+```
+
+If `registry` is empty (first feature): output "No prior features in registry — no cross-reference needed."
+
+If overlaps or conflicts are found, use `AskUserQuestion` to ask the user how to proceed before continuing.
+
+---
+
+### 2b. Build execution plan
 
 Based on the state map and the agent registry, build an **execution plan**:
 
@@ -117,7 +162,7 @@ Each agent declares (implicitly from its description and template) what inputs i
 3. **Parallelize agents that have no dependency on each other** — run them concurrently using the Agent tool with `run_in_background: true`
 4. **Re-run downstream agents if an upstream agent ran** — a regenerated `requirements.md` always invalidates `tech-spec.md`
 
-### Plan output (show to user before executing)
+### 2c. Plan output (show to user before executing)
 
 Present the plan clearly before any execution:
 
@@ -414,7 +459,58 @@ Read `{PREFIX}-Issues.md` and count OPEN items by severity:
 
 ---
 
-## Phase 8 — Pull Request
+## Phase 8 — Update Feature Registry
+
+After remediation is complete (or skipped), update `docs/features/REGISTRY.md` to record this feature.
+
+### 8a. Compose the registry entry
+
+Extract the following from `feature.md` and the generated documents:
+- **PREFIX** — e.g. `FTR-003`
+- **Title** — the feature title
+- **Keywords** — 5–8 keywords covering domain, entities, and user flows (derive from requirements doc)
+- **Status** — `in-progress` (set during initial planning) or `completed` (set when PR is created)
+- **Summary** — max 4–5 lines: what the feature does, what it introduces, what other features should know about it
+
+Format:
+
+```markdown
+## {PREFIX} — {Title}
+**Keywords:** keyword1, keyword2, keyword3, ...
+**Status:** completed
+**Summary:** {4–5 line summary. What was built, which entities/endpoints were introduced,
+which shared infrastructure was added (e.g. auth middleware, base components), and any
+constraints or decisions that affect future features.}
+→ [Detail]({PREFIX}-{slug}/feature.md)
+```
+
+### 8b. Write or update the file
+
+- If `docs/features/REGISTRY.md` **does not exist**: create it with a header and the new entry:
+
+```markdown
+# Feature Registry
+
+This file is maintained automatically by the Project Manager.
+Each entry summarises a feature for cross-reference by future features.
+
+---
+
+{entry}
+```
+
+- If it **already exists**: append the new entry at the end (after the last `---` separator). Do not modify existing entries unless correcting a `Status` from `in-progress` to `completed`.
+
+### 8c. Rules
+
+- **Max 5 lines for Summary** — brevity is the point; agents reading the registry must process it fast
+- **Keywords must be specific** — avoid generic words like "feature", "user", "data"; prefer domain terms
+- **Never delete existing entries** — the registry is append-only (only Status updates are allowed on existing entries)
+- **Update Status to `completed`** when the PR is successfully created in Phase 9
+
+---
+
+## Phase 9 — Pull Request
 
 After remediation is complete (or skipped if no issues), propose a Pull Request to merge the feature branch into `main`.
 
@@ -462,7 +558,7 @@ After remediation is complete (or skipped if no issues), propose a Pull Request 
 
 ---
 
-## Phase 9 — Summary
+## Phase 10 — Summary
 
 After all phases complete, report:
 
@@ -491,6 +587,9 @@ Pull Request:
   🔗 {PR URL}
   Branch: feature/{PREFIX}-{slug} → main
 ─────────────────────────────────────────────────────
+Feature Registry:
+  ✅ docs/features/REGISTRY.md updated — entry added for {PREFIX}
+─────────────────────────────────────────────────────
 ```
 
 ---
@@ -509,6 +608,8 @@ The Project Manager is designed to be extended. To add a new agent to the pipeli
 
 ## Guidelines
 
+- **Always read `docs/features/REGISTRY.md`** at the start — cross-reference before planning, block on conflicts, note dependencies
+- **Always update `docs/features/REGISTRY.md`** after PR creation — append the new entry, never delete existing ones
 - **NEVER implement on `main`** — always create a dedicated feature branch before any code change
 - **PR at the end** — only after all implementation + remediation is done, propose a PR to merge into main
 - **Never push to `main` directly** — always go through PR; do NOT auto-merge
