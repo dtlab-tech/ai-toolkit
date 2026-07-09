@@ -1,25 +1,19 @@
 #!/usr/bin/env node
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const readline = require('readline');
 const packageRoot = path.join(__dirname, '..');
 
-function copyRecursive(src, dest) {
-  if (!fs.existsSync(src)) return;
-  const stat = fs.statSync(src);
-  if (stat.isDirectory()) {
-    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-    for (const item of fs.readdirSync(src)) {
-      copyRecursive(path.join(src, item), path.join(dest, item));
-    }
-  } else {
-    if (!fs.existsSync(path.dirname(dest))) fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
-  }
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function fileHash(filePath) {
+  return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
 }
 
-function listPotentialConflicts(mappings) {
-  return mappings.filter(({ dest }) => fs.existsSync(dest)).map(({ dest }) => dest);
+function ensureDir(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
 function askConfirm(question) {
@@ -32,21 +26,107 @@ function askConfirm(question) {
   });
 }
 
-async function runInstall(label, mappings, force) {
-  const conflicts = listPotentialConflicts(mappings);
-  if (conflicts.length && !force) {
-    console.log(`Found existing files that would be overwritten ${label}:`);
-    for (const c of conflicts) console.log('  ', c);
-    const ok = await askConfirm('Proceed and overwrite these files?');
-    if (!ok) {
-      console.log('Aborted by user. No files were changed.');
-      process.exit(0);
-    }
-  }
+// ── file enumeration ─────────────────────────────────────────────────────────
+
+/** Recursively expand directory mappings into individual file mappings. */
+function expandMappings(mappings) {
+  const files = [];
   for (const { src, dest } of mappings) {
     if (!fs.existsSync(src)) continue;
-    copyRecursive(src, dest);
+    if (fs.statSync(src).isDirectory()) {
+      for (const entry of walkDir(src)) {
+        const rel = path.relative(src, entry);
+        files.push({ src: entry, dest: path.join(dest, rel) });
+      }
+    } else {
+      files.push({ src, dest });
+    }
   }
+  return files;
+}
+
+function walkDir(dir) {
+  const results = [];
+  for (const item of fs.readdirSync(dir)) {
+    const full = path.join(dir, item);
+    if (fs.statSync(full).isDirectory()) results.push(...walkDir(full));
+    else results.push(full);
+  }
+  return results;
+}
+
+// ── categorize ───────────────────────────────────────────────────────────────
+
+/** Returns { src, dest, status: 'new' | 'same' | 'modified' } for each file. */
+function categorize(files) {
+  return files.map(({ src, dest }) => {
+    if (!fs.existsSync(dest)) return { src, dest, status: 'new' };
+    return fileHash(src) === fileHash(dest)
+      ? { src, dest, status: 'same' }
+      : { src, dest, status: 'modified' };
+  });
+}
+
+// ── install ───────────────────────────────────────────────────────────────────
+
+async function runInstall(label, mappings, force) {
+  const files    = expandMappings(mappings);
+  const entries  = categorize(files);
+
+  const newFiles  = entries.filter(e => e.status === 'new');
+  const modified  = entries.filter(e => e.status === 'modified');
+  const same      = entries.filter(e => e.status === 'same');
+
+  // ── print plan ──
+  console.log(`\n📦 Install plan  →  ${label}`);
+  console.log('─'.repeat(60));
+  for (const e of newFiles)  console.log(`  ✅ NEW       ${path.relative(process.cwd(), e.dest)}`);
+  for (const e of modified)  console.log(`  ⚠️  MODIFIED  ${path.relative(process.cwd(), e.dest)}`);
+  for (const e of same)      console.log(`  ⏭  SAME      ${path.relative(process.cwd(), e.dest)}`);
+  console.log('─'.repeat(60));
+  console.log(`  New: ${newFiles.length}  |  Modified: ${modified.length}  |  Unchanged: ${same.length}\n`);
+
+  // ── copy new files (always) ──
+  for (const e of newFiles) {
+    ensureDir(e.dest);
+    fs.copyFileSync(e.src, e.dest);
+  }
+
+  if (modified.length === 0) {
+    console.log('No conflicts. All new files copied.');
+    return;
+  }
+
+  if (force) {
+    // --force: overwrite all modified without asking
+    console.log('--force passed: overwriting all modified files.');
+    for (const e of modified) {
+      ensureDir(e.dest);
+      fs.copyFileSync(e.src, e.dest);
+    }
+    return;
+  }
+
+  // ── per-file prompt for modified files ──
+  console.log('The following files already exist and differ from the toolkit version.');
+  console.log('Decide for each one:\n');
+
+  let overwritten = 0;
+  let skipped = 0;
+
+  for (const e of modified) {
+    const rel = path.relative(process.cwd(), e.dest);
+    const ok = await askConfirm(`  Overwrite  ${rel}?`);
+    if (ok) {
+      ensureDir(e.dest);
+      fs.copyFileSync(e.src, e.dest);
+      overwritten++;
+    } else {
+      skipped++;
+    }
+  }
+
+  console.log(`\nDone. Overwritten: ${overwritten}  |  Kept as-is: ${skipped}`);
 }
 
 async function installMattPocock() {
