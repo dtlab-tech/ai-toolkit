@@ -297,12 +297,56 @@ After docs approval is granted, execute `generate-work-breakdown`. Then present 
 - Verify output: `{PREFIX}-Work-Breakdown.md` must exist and be non-empty
 - Log execution in process log
 
-### 5b. Work Breakdown Approval
+### 5b. Write Effort Estimate
 
-Present the Work Breakdown to the user with key metrics:
+Before presenting the approval gate, compute the following from `{PREFIX}-Work-Breakdown.md` and write them to `{PREFIX}-Effort-Estimate.md` in the same directory:
+
+```markdown
+# Effort Estimate — {PREFIX} — {Feature Title}
+
+| Metric | Value |
+|--------|-------|
+| User Stories | N (US-01 ÷ US-NN) |
+| Total tasks | N (DB:N, BE:N, FE:N, INFRA:N, TEST:N) |
+| Implementation phases | N |
+| Human estimate | ~Nh (sequential, no parallelism) |
+| Agent estimate | ~Nh Nmin (parallel dispatch, critical path only) |
+
+## Domain breakdown
+
+| Domain | Tasks | Notes |
+|--------|-------|-------|
+| DB | N | ... |
+| BE | N | ... |
+| FE | N | ... |
+| INFRA | N | ... |
+| TEST | N | ... |
+
+## Implementation phases
+
+| Phase | Tasks | Parallelism |
+|-------|-------|-------------|
+| Phase 1 — {name} | N tasks | N agents in parallel |
+| Phase 2 — {name} | N tasks | N agents in parallel |
+| ... | | |
+
+## Notes
+
+Any assumptions made for the estimates (e.g. average task duration, agent concurrency limits).
+```
+
+**Estimation rules:**
+- Human estimate: sum of all task durations assuming sequential execution (use task complexity: simple=2h, medium=4h, complex=8h)
+- Agent estimate: critical path duration assuming parallel dispatch within each phase (max task duration per phase, summed across phases)
+
+After writing the file, log it in the process log.
+
+### 5c. Work Breakdown Approval
+
+Present the Work Breakdown to the user with a brief summary (reference the estimate file for details):
 - Total User Stories and tasks
 - Implementation phases count
-- Critical path duration (human + agent estimates)
+- Human vs agent estimate (one line each)
 - Domain distribution
 
 Use `AskUserQuestion` with options:
@@ -315,9 +359,10 @@ Record in `{PREFIX}-Approvals.md`:
 | {PREFIX}-Work-Breakdown.md | ✅ Approved | User | {date} | {N} tasks, {N} phases |
 ```
 
-### 5c. Rules
+### 5d. Rules
 
 - **Never skip WB approval** — implementation cannot start without explicit sign-off
+- **Always write `{PREFIX}-Effort-Estimate.md`** before presenting the approval gate — the estimate lives in the file, not in chat
 - **If the post-approval agent fails**, report the failure but do NOT revoke the docs approval
 - **Log the WB approval outcome** in the process log
 
@@ -558,7 +603,58 @@ After remediation is complete (or skipped if no issues), propose a Pull Request 
 
 ---
 
-## Phase 10 — Summary
+## Phase 10 — Actuals & Summary
+
+### 10a. Compute actuals from process log
+
+Read `{PREFIX}-process-log.txt` in full. For each pair of `Agent START` / `Agent DONE` lines, compute the elapsed time. Aggregate by task, User Story, phase, and total.
+
+Then append an **Actuals** section to `{PREFIX}-Effort-Estimate.md`:
+
+```markdown
+---
+
+## Actuals vs Estimate
+
+| Metric | Estimated | Actual | Delta |
+|--------|-----------|--------|-------|
+| Total wall-clock (agent) | ~Xh Ymin | Xh Ymin | ±Zmin |
+| Phase 1 — {name} | ~Xmin | Xmin | ±Zmin |
+| Phase 2 — {name} | ~Xmin | Xmin | ±Zmin |
+| ... | | | |
+
+## Task-level actuals
+
+| Task ID | Domain | Agent estimate | Actual | Delta |
+|---------|--------|---------------|--------|-------|
+| INFRA-T01 | INFRA | ~Xmin | Ymin | ±Zmin |
+| US-01-T01 | BE | ~Xmin | Ymin | ±Zmin |
+| ... | | | | |
+
+## Estimation accuracy
+
+| Category | Estimated tasks | Avg delta | Trend |
+|----------|----------------|-----------|-------|
+| DB | N | ±Xmin | over/under/on-target |
+| BE | N | ±Xmin | over/under/on-target |
+| FE | N | ±Xmin | over/under/on-target |
+| INFRA | N | ±Xmin | over/under/on-target |
+| TEST | N | ±Xmin | over/under/on-target |
+
+## Notes
+
+Free-text observations: which tasks took longer than expected and why
+(e.g. "US-02-T03 took 2× longer — tech-spec was ambiguous on the validation rules").
+```
+
+**Rules:**
+- Round times to the nearest minute
+- Delta sign: negative = faster than estimated, positive = slower
+- "Trend" column: over-target if avg delta > +15%, under-target if < -15%, otherwise on-target
+- If a task was reworked (review cycle), include total time across all attempts
+- If the process log has gaps (agent crashed, resumed run), note the gap and exclude that task from accuracy stats rather than inventing data
+
+### 10b. Report summary
 
 After all phases complete, report:
 
@@ -572,6 +668,7 @@ Feature: {PREFIX} — {Feature Title}
 ✅ validate-feature-docs     → {PREFIX}-Validation-Report.md
 ✅ approval (docs)           → {PREFIX}-Approvals.md
 ✅ generate-work-breakdown   → {PREFIX}-Work-Breakdown.md
+✅ effort estimate           → {PREFIX}-Effort-Estimate.md (estimate + actuals)
 ✅ approval (WB)             → {PREFIX}-Approvals.md (updated)
 ─────────────────────────────────────────────────────
 Implementation Results:
