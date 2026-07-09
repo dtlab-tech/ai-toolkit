@@ -16,7 +16,8 @@ The user provides the path to a `feature.md` file. Read it in full before procee
 ## Process
 
 1. **Read** the feature document completely
-2. **Identify** all functional areas described
+2. **Read** `docs/features/REGISTRY.md` if it exists — scan entries for features that share keywords, entities, or actors with this feature. Note relevant relationships in Section 8 (Dependencies & Assumptions) of the output document. If no registry exists or no relevant features are found, skip silently.
+3. **Identify** all functional areas described
 3. **Extract** actors, use cases, business rules, acceptance criteria
 4. **Organize** into a structured requirements document
 5. **Write** the output to a requirements file in the same directory as the input feature file

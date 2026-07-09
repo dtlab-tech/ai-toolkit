@@ -34,7 +34,8 @@ The tech spec MUST use the project's actual stack and patterns. Do not assume an
 
 1. **Read** the feature document completely
 2. **Read** `{PREFIX}-Requirements.md` if it exists (for traceability)
-3. **Explore** the existing codebase areas affected (models, controllers/handlers, pages, services)
+3. **Read** `docs/features/REGISTRY.md` if it exists — identify features that touch the same entities, endpoints, or services as this feature. Note architectural dependencies and integration points in Section 5 (External Integrations) or Section 12 (Risks & Mitigations) of the output document. If a prior feature introduced shared infrastructure this feature reuses (e.g. auth middleware, base service, shared DTO), reference it explicitly.
+4. **Explore** the existing codebase areas affected (models, controllers/handlers, pages, services)
 4. **Design** the technical solution aligned with existing patterns from AGENTS.md
 5. **Write** the output to a tech-spec file in the same directory as the input feature file
 
