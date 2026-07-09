@@ -232,6 +232,11 @@ Execute the plan following these rules:
 - **After each agent completes**: verify the expected output file exists and is non-empty; if not, report the failure and decide whether to continue or abort downstream agents
 - **Context passing**: each downstream agent receives the paths to all upstream outputs so it can read them for traceability
 - **Log every event** to the process log as it happens (agent start, completion, errors)
+- **Token tracking**: after each agent completes, extract the `subagent_tokens` and `duration_ms` values from the `<usage>` block in the tool result. Log them in the process log:
+  ```
+  [2026-07-09T10:03:41] Agent DONE: developer-backend (US-01-T01) — tokens: 18432, duration: 4m 12s
+  ```
+  Accumulate all values in an internal token ledger for use in Phase 10.
 
 ### Failure handling
 
@@ -297,9 +302,11 @@ After docs approval is granted, execute `generate-work-breakdown`. Then present 
 - Verify output: `{PREFIX}-Work-Breakdown.md` must exist and be non-empty
 - Log execution in process log
 
-### 5b. Write Effort Estimate
+### 5b. Write Effort Estimate and Token Estimate
 
-Before presenting the approval gate, compute the following from `{PREFIX}-Work-Breakdown.md` and write them to `{PREFIX}-Effort-Estimate.md` in the same directory:
+Before presenting the approval gate, compute the following from `{PREFIX}-Work-Breakdown.md`.
+
+**Write `{PREFIX}-Effort-Estimate.md`:**
 
 ```markdown
 # Effort Estimate — {PREFIX} — {Feature Title}
@@ -335,9 +342,72 @@ Before presenting the approval gate, compute the following from `{PREFIX}-Work-B
 Any assumptions made for the estimates (e.g. average task duration, agent concurrency limits).
 ```
 
-**Estimation rules:**
+**Estimation rules (effort):**
 - Human estimate: sum of all task durations assuming sequential execution (use task complexity: simple=2h, medium=4h, complex=8h)
 - Agent estimate: critical path duration assuming parallel dispatch within each phase (max task duration per phase, summed across phases)
+
+After writing the file, log it in the process log.
+
+---
+
+**Write `{PREFIX}-Token-Estimate.md`** in the same directory:
+
+```markdown
+# Token Estimate — {PREFIX} — {Feature Title}
+
+> Estimates are computed before execution based on expected input/output sizes.
+> Actual values are filled in by the Project Manager and `/implement-feature` skill after completion.
+
+## Estimation model
+
+| Parameter | Value |
+|-----------|-------|
+| Avg chars per token | 4 |
+| Agent system prompt weight (haiku agents) | ~2,000 tokens |
+| Agent system prompt weight (sonnet agents) | ~3,000 tokens |
+| Base overhead per agent call (context, tools) | ~5,000 tokens |
+
+## Agent token estimates
+
+| Agent | Model | Est. input tokens | Est. output tokens | Est. total |
+|-------|-------|------------------|--------------------|-----------|
+| generate-requirements | haiku | N | N | N |
+| generate-tech-spec | haiku | N | N | N |
+| validate-feature-docs | haiku | N | N | N |
+| generate-work-breakdown | haiku | N | N | N |
+| developer-backend (×N) | sonnet | N | N | N |
+| developer-frontend (×N) | sonnet | N | N | N |
+| developer-testing (×N) | sonnet | N | N | N |
+| review-solution (×N) | sonnet | N | N | N |
+| project-manager (orchestrator) | sonnet | N | N | N |
+
+## Phase subtotals (estimated)
+
+| Phase | Agents | Est. tokens |
+|-------|--------|------------|
+| Phase 1 — {name} | N | N |
+| Phase 2 — {name} | N | N |
+| ... | | |
+
+## Grand total (estimated)
+
+| Metric | Value |
+|--------|-------|
+| Total estimated tokens | N |
+| Estimated cost (indicative) | see model pricing |
+
+## Notes
+
+Estimation assumptions (e.g. expected document sizes, number of rework cycles assumed).
+```
+
+**Estimation rules (tokens):**
+- Input tokens per agent = system prompt weight + sum of all files it will read (file size in bytes ÷ 4) + base overhead
+- Output tokens per agent = expected output document size in bytes ÷ 4
+- For developer agents: estimate input based on tech-spec section size + work breakdown task size + relevant codebase files; estimate output based on number of tasks × average file size
+- For review agents: input = all files modified in the US scope; output = ~1,500 tokens (fixed review report size)
+- For the orchestrator (project-manager): estimate = sum of all child agent result sizes (as input) + process log writes (as output) + base overhead
+- Rework cycles: add 1 extra developer + 1 review invocation per US as contingency (assume 30% rework probability)
 
 After writing the file, log it in the process log.
 
@@ -603,9 +673,71 @@ After remediation is complete (or skipped if no issues), propose a Pull Request 
 
 ---
 
-## Phase 10 — Actuals & Summary
+## Phase 10 — Write Token Estimate actuals (child agents)
 
-### 10a. Compute actuals from process log
+Before computing the final summary, **append** the actuals section to `{PREFIX}-Token-Estimate.md` using the token ledger accumulated throughout execution.
+
+```markdown
+---
+
+## Actuals vs Estimate
+
+> All actual values sourced from the `<usage>` block of each Agent tool call.
+> The orchestrator row (project-manager itself) is appended by `/implement-feature` after this agent completes.
+
+### Agent breakdown
+
+| Agent | Task / Scope | Model | Est. tokens | Actual tokens | Delta | Duration |
+|-------|-------------|-------|------------|---------------|-------|----------|
+| generate-requirements | {PREFIX} | haiku | N | N | ±N | Xmin |
+| generate-tech-spec | {PREFIX} | haiku | N | N | ±N | Xmin |
+| validate-feature-docs | {PREFIX} | haiku | N | N | ±N | Xmin |
+| generate-work-breakdown | {PREFIX} | haiku | N | N | ±N | Xmin |
+| developer-backend | US-01-T01, T02 | sonnet | N | N | ±N | Xmin |
+| developer-frontend | US-01-T03 | sonnet | N | N | ±N | Xmin |
+| developer-testing | US-01-T04 | sonnet | N | N | ±N | Xmin |
+| review-solution | US-01 | sonnet | N | N | ±N | Xmin |
+| ... | | | | | | |
+
+### Phase subtotals
+
+| Phase | Est. tokens | Actual tokens | Delta | Duration |
+|-------|------------|---------------|-------|----------|
+| Phase 1 — {name} | N | N | ±N | Xmin |
+| Phase 2 — {name} | N | N | ±N | Xmin |
+| ... | | | | |
+
+### Estimation accuracy by agent type
+
+| Agent type | Invocations | Avg est. | Avg actual | Avg delta | Trend |
+|-----------|------------|---------|-----------|-----------|-------|
+| haiku agents | N | N | N | ±N | over/under/on-target |
+| sonnet agents | N | N | N | ±N | over/under/on-target |
+
+### Subtotal (child agents only)
+
+| Metric | Estimated | Actual |
+|--------|-----------|--------|
+| Total tokens | N | N |
+| Total duration | Xh Ymin | Xh Ymin |
+
+*(The orchestrator row and grand total are appended by `/implement-feature` after this agent completes.)*
+```
+
+**Rules:**
+- One row per agent invocation — if re-invoked for rework, add a separate row with "(rework)" suffix
+- Delta sign: negative = fewer tokens than estimated, positive = more
+- Trend: over-target if avg delta > +20%, under-target if < -20%, otherwise on-target
+- Duration: convert `duration_ms` from the `<usage>` block to minutes/seconds
+- Model: read from the agent's frontmatter (`model` field), default to `sonnet` if not set
+- If a `<usage>` block was missing for an agent, write `N/A` and exclude from accuracy stats
+- Log the file update in the process log
+
+---
+
+## Phase 11 — Actuals & Summary
+
+### 11a. Compute actuals from process log
 
 Read `{PREFIX}-process-log.txt` in full. For each pair of `Agent START` / `Agent DONE` lines, compute the elapsed time. Aggregate by task, User Story, phase, and total.
 
@@ -654,7 +786,7 @@ Free-text observations: which tasks took longer than expected and why
 - If a task was reworked (review cycle), include total time across all attempts
 - If the process log has gaps (agent crashed, resumed run), note the gap and exclude that task from accuracy stats rather than inventing data
 
-### 10b. Report summary
+### 11b. Report summary
 
 After all phases complete, report:
 
@@ -669,6 +801,7 @@ Feature: {PREFIX} — {Feature Title}
 ✅ approval (docs)           → {PREFIX}-Approvals.md
 ✅ generate-work-breakdown   → {PREFIX}-Work-Breakdown.md
 ✅ effort estimate           → {PREFIX}-Effort-Estimate.md (estimate + actuals)
+✅ token estimate            → {PREFIX}-Token-Estimate.md (estimate + child actuals; orchestrator row added by skill)
 ✅ approval (WB)             → {PREFIX}-Approvals.md (updated)
 ─────────────────────────────────────────────────────
 Implementation Results:
@@ -705,6 +838,7 @@ The Project Manager is designed to be extended. To add a new agent to the pipeli
 
 ## Guidelines
 
+- **Track tokens for every subagent** — read `<usage>` block after each Agent tool call, accumulate in ledger, append actuals to `{PREFIX}-Token-Estimate.md` in Phase 10
 - **Always read `docs/features/REGISTRY.md`** at the start — cross-reference before planning, block on conflicts, note dependencies
 - **Always update `docs/features/REGISTRY.md`** after PR creation — append the new entry, never delete existing ones
 - **NEVER implement on `main`** — always create a dedicated feature branch before any code change
