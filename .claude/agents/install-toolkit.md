@@ -123,28 +123,47 @@ After copying:
 
 ---
 
-## Step 5 — Matt Pocock Skills (optional)
+## Step 5 — Matt Pocock Skills (version check + optional install/update)
 
-After copying the toolkit files, ask the user whether to also install Matt Pocock's skills using `AskUserQuestion`:
+After copying the toolkit files, check the state of Matt Pocock's skills:
 
-```
-question: "Do you want to also install Matt Pocock's skills?"
-description: >
-  Matt Pocock's skills package includes powerful companion skills that work
-  great with this toolkit: define-feature (structured feature interview),
-  grilling (stress-test a plan), TDD, prototype, handoff, and more.
-  They install globally into ~/.claude/skills/ via: npx skills@latest add mattpocock/skills
-options:
-  - "Yes — install Matt Pocock's skills now"
-  - "No — skip for now (install manually later with: npx skills@latest add mattpocock/skills)"
-```
+1. **Detect installed version**: check if `~/.claude/skills/mattpocock/.version` exists and read it. If not found, try `npm list -g mattpocock --json` to get the cached version. If neither works, assume not installed.
 
-If the user selects **Yes**, run:
-```bash
-npx skills@latest add mattpocock/skills
-```
+2. **Detect latest available version**: run `npm view mattpocock version` to get the current version on npm. If offline or unavailable, skip the version comparison.
 
-Report the outcome (success or error). If it fails, show the manual install command.
+3. **Present the appropriate prompt** using `AskUserQuestion`:
+
+   **Not installed:**
+   ```
+   question: "Matt Pocock's skills are not installed. Install them now?"
+   description: "Includes define-feature, grilling, TDD, prototype, handoff, and more.
+                 Installs globally via: npx skills@latest add mattpocock/skills"
+   options:
+     - "Yes — install now"
+     - "No — skip (install manually later)"
+   ```
+
+   **Installed, update available (installed=vX, latest=vY):**
+   ```
+   question: "Matt Pocock skills v{installed} is installed. Update to v{latest}?"
+   options:
+     - "Yes — update now"
+     - "No — keep current version"
+   ```
+
+   **Already up to date:**
+   ```
+   question: "Matt Pocock skills v{installed} is already up to date. Re-install?"
+   options:
+     - "Yes — re-install"
+     - "No — skip"
+   ```
+
+4. If the user selects **Yes** (install or update), run:
+   ```bash
+   npx skills@latest add mattpocock/skills
+   ```
+   Report the outcome. If it fails, show the manual install command.
 
 ---
 
@@ -157,7 +176,7 @@ New files copied:    N
 Modified/overwritten: N
 Modified/kept:        N  (user chose to keep existing version)
 Unchanged (same):    N  (skipped silently)
-Matt Pocock skills: ✅ installed / ⏭ skipped
+Matt Pocock skills: ✅ installed v{X} / ⬆️ updated v{old}→v{new} / ⏭ skipped / ✅ already up to date v{X}
 ──────────────────────────────────────────────────
 Next steps:
   1. Run /init-agents to generate AGENTS.md for this project
