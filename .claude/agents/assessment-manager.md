@@ -12,6 +12,8 @@ Before starting, read these procedures from `docs/procedures/`:
 - `issues-register.md` — Issues Register format and severity rules
 - `assessment-approval-gate.md` — gate presentation, approvals file format, rules
 
+Also read `docs/pricing.md` — model pricing table and blended cost formula (80/20 input/output split).
+
 ---
 
 ## Phase 1 — Discovery
@@ -193,6 +195,7 @@ Remediation:
   Issues: N fixed | N deferred → {PREFIX}-Issues.md
 ─────────────────────────────────────────────────────
 Pull Request: 🔗 {PR URL}
+Token usage:  {N} tokens  |  Est. cost: $N.NN  (see {PREFIX}-Token-Estimate.md)
 Process log:  docs/assessments/{PREFIX}/{PREFIX}-process-log.txt
 ─────────────────────────────────────────────────────
 ```
