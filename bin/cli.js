@@ -217,30 +217,14 @@ async function runInstall(label, mappings, force) {
 
 // ── Matt Pocock skills ───────────────────────────────────────────────────────
 
-function getMattPocockInstalledVersion() {
-  const { execSync } = require('child_process');
+function isMattPocockInstalled() {
   const homedir = require('os').homedir();
-
-  const versionFile = path.join(homedir, '.claude', 'skills', 'mattpocock', '.version');
-  if (fs.existsSync(versionFile)) return fs.readFileSync(versionFile, 'utf8').trim();
-
-  try {
-    const raw    = execSync('npm list -g mattpocock --json 2>/dev/null', { encoding: 'utf8' });
-    const parsed = JSON.parse(raw);
-    const ver    = parsed?.dependencies?.mattpocock?.version;
-    if (ver) return ver;
-  } catch (_) {}
-
-  return null;
-}
-
-function getMattPocockLatestVersion() {
-  const { execSync } = require('child_process');
-  try {
-    return execSync('npm view mattpocock version 2>/dev/null', { encoding: 'utf8' }).trim();
-  } catch (_) {
-    return null;
-  }
+  // Skills are installed as files on disk — check for the canonical define-feature skill
+  const pathsToCheck = [
+    path.join(homedir, '.claude', 'skills', 'define-feature', 'SKILL.md'),
+    path.join(process.cwd(), '.claude', 'skills', 'define-feature', 'SKILL.md'),
+  ];
+  return pathsToCheck.some(p => fs.existsSync(p));
 }
 
 async function installMattPocock() {
@@ -256,38 +240,26 @@ async function installMattPocock() {
 }
 
 async function askMattPocock() {
-  const installed = getMattPocockInstalledVersion();
-  const latest    = getMattPocockLatestVersion();
+  const installed = isMattPocockInstalled();
 
   console.log(divider());
   console.log(bold('  Matt Pocock Skills'));
   console.log(divider());
+  console.log(`  ${dim('Includes: define-feature, grilling, TDD, prototype, handoff, and more.')}`);
+  console.log();
 
   if (!installed) {
-    console.log(`  ${clr('gray', '○')}  Status    : ${clr('gray', 'not installed')}`);
-    if (latest) console.log(`  ${clr('green', '▲')}  Available : ${clr('green', `v${latest}`)}`);
-    console.log(`\n  ${dim('Includes: define-feature, grilling, TDD, prototype, handoff, and more.')}`);
-    console.log();
+    console.log(`  ${clr('gray', '○')}  Status : ${clr('gray', 'not installed')}\n`);
     const ok = await askConfirm('Install Matt Pocock\'s skills now?');
     if (ok) await installMattPocock();
     else console.log(`\n  ${clr('gray', 'Skipped. Install later with: npx skills@latest add mattpocock/skills')}\n`);
     return;
   }
 
-  if (latest && latest !== installed) {
-    console.log(`  ${clr('yellow', '◎')}  Installed : ${clr('yellow', `v${installed}`)}`);
-    console.log(`  ${clr('green',  '▲')}  Available : ${clr('green',  `v${latest}`)}`);
-    console.log();
-    const ok = await askConfirm(`Update Matt Pocock skills from ${clr('yellow', `v${installed}`)} to ${clr('green', `v${latest}`)}?`);
-    if (ok) await installMattPocock();
-    else console.log(`  ${clr('gray', 'Skipped.')}\n`);
-  } else {
-    console.log(`  ${clr('green', '✔')}  Installed : ${clr('green', `v${installed}`)}`);
-    console.log(`  ${clr('green', '✔')}  Already up to date.\n`);
-    const ok = await askConfirm('Re-install anyway?');
-    if (ok) await installMattPocock();
-    else console.log(`  ${clr('gray', 'Skipped.')}\n`);
-  }
+  console.log(`  ${clr('green', '✔')}  Status : ${clr('green', 'installed')}\n`);
+  const ok = await askConfirm('Re-install / update Matt Pocock skills?');
+  if (ok) await installMattPocock();
+  else console.log(`  ${clr('gray', 'Skipped.')}\n`);
 }
 
 // ── entry points ──────────────────────────────────────────────────────────────
