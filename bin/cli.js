@@ -219,10 +219,10 @@ async function runInstall(label, mappings, force) {
 
 function isMattPocockInstalled() {
   const homedir = require('os').homedir();
-  // Skills are installed as files on disk — check for the canonical define-feature skill
+  // 'grilling' is a skill exclusive to Matt Pocock's package — not included in this toolkit
   const pathsToCheck = [
-    path.join(homedir, '.claude', 'skills', 'define-feature', 'SKILL.md'),
-    path.join(process.cwd(), '.claude', 'skills', 'define-feature', 'SKILL.md'),
+    path.join(homedir, '.claude', 'skills', 'grilling', 'SKILL.md'),
+    path.join(process.cwd(), '.claude', 'skills', 'grilling', 'SKILL.md'),
   ];
   return pathsToCheck.some(p => fs.existsSync(p));
 }
