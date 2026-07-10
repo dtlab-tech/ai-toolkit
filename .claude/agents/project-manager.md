@@ -15,6 +15,8 @@ Before starting, read these procedures from `docs/procedures/`:
 - `effort-estimation.md` — Effort-Estimate.md format and estimation coefficients
 - `token-estimation.md` — Token-Estimate.md format, estimation model, actuals rules
 
+Also read `docs/pricing.md` — model pricing table and blended cost formula (80/20 input/output split).
+
 ---
 
 ## Phase 1 — Discovery
@@ -278,6 +280,7 @@ Implementation:
 Remediation: Issues found: N | Fixed: N | Deferred: N
 Pull Request: 🔗 {PR URL}  (feature/{PREFIX}-{slug} → develop)
 Feature Registry: ✅ REGISTRY.md updated
+Token usage:  {N} tokens total  |  Est. cost: $N.NN  (see {PREFIX}-Token-Estimate.md)
 ─────────────────────────────────────────────────────
 ```
 
