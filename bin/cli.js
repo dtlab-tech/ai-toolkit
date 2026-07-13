@@ -33,7 +33,7 @@ function banner() {
   console.log();
   console.log(clr('cyan', '╔══════════════════════════════════════════════════════════╗'));
   console.log(clr('cyan', '║') + bold(clr('white', '         SWF AI Toolkit  —  Installer                     ')) + clr('cyan', '║'));
-  console.log(clr('cyan', '║') + clr('gray',  `         @fincantieri/swf-ai-toolkit  v${require('../package.json').version.padEnd(22)}`) + clr('cyan', '║'));
+  console.log(clr('cyan', '║') + clr('gray',  `         @dtlabs/swf-ai-toolkit  v${require('../package.json').version.padEnd(22)}`) + clr('cyan', '║'));
   console.log(clr('cyan', '╚══════════════════════════════════════════════════════════╝'));
   console.log();
 }

@@ -1,83 +1,11 @@
 # Installation
 
-The toolkit is published to a **private Azure Artifacts feed** and can be installed into a single project (local) or made available system-wide (global).
+The toolkit is published to the **public npm registry** under the `@dtlabs` organization.
 
-- **Feed**: `swf-ai-toolkit`
-- **Registry**: `https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/`
-- **Package**: `@fincantieri/swf-ai-toolkit`
+- **Package**: `@dtlabs/swf-ai-toolkit`
+- **Registry**: `https://registry.npmjs.org/`
 
-## Prerequisites: authenticate to the feed
-
-### Step 1 — Create or edit `~/.npmrc`
-
-File location:
-- **Windows**: `%USERPROFILE%\.npmrc` (e.g. `C:\Users\<you>\.npmrc`)
-- **macOS / Linux**: `~/.npmrc`
-
-Add these two lines to your user-level `.npmrc`:
-
-```ini
-registry=https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/
-always-auth=true
-```
-
-After completing Step 2 (auth token), the complete file will look like this:
-
-#### Complete `~/.npmrc` — Windows (token injected by `vsts-npm-auth`)
-
-```ini
-registry=https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/
-always-auth=true
-
-; Auth token injected automatically by vsts-npm-auth — do not edit manually
-//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:_authToken=<TOKEN>
-```
-
-#### Complete `~/.npmrc` — macOS / Linux (PAT-based)
-
-```ini
-registry=https://pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/
-always-auth=true
-
-//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:username=<your-ado-username>
-//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:_password=<BASE64_PAT>
-//pkgs.dev.azure.com/Fincantieri-Spa/_packaging/swf-ai-toolkit/npm/registry/:email=<your-email>
-```
-
-> Never commit your `.npmrc` with tokens into a git repository.
-
-### Step 2 — Add an auth token
-
-#### Option A — Windows (easiest)
-
-Install and run `vsts-npm-auth` once. It opens a browser, logs you into Azure DevOps, and writes the token into `~/.npmrc` automatically.
-
-```bash
-npm install -g vsts-npm-auth
-vsts-npm-auth -config %USERPROFILE%\.npmrc
-```
-
-The token expires every 90 days; re-run the same command to refresh.
-
-#### Option B — macOS / Linux (Personal Access Token)
-
-`vsts-npm-auth` is Windows-only. On other OSes generate a PAT manually:
-
-1. Azure DevOps → top-right user icon → **Personal access tokens** → **+ New Token**
-2. Scopes: **Packaging → Read & write**
-3. Copy the token, then base64-encode it:
-   ```bash
-   echo -n "<PASTE_PAT_HERE>" | base64
-   ```
-4. Append the auth lines to `~/.npmrc` as shown in the complete example above (macOS/Linux section).
-
-### Step 3 — Verify
-
-```bash
-npm view @fincantieri/swf-ai-toolkit version
-```
-
-If you see a version number, auth works. If you get `401`, re-run `vsts-npm-auth` (Windows) or check your PAT (macOS/Linux).
+No authentication setup required — it is a public package.
 
 ---
 
@@ -88,19 +16,19 @@ If you see a version number, auth works. If you get `401`, re-run `vsts-npm-auth
 Copies `.claude/`, `docs/`, and `CLAUDE.md` into the current directory:
 
 ```bash
-npx @fincantieri/swf-ai-toolkit
+npx @dtlabs/swf-ai-toolkit
 ```
 
 Target a different directory:
 
 ```bash
-npx @fincantieri/swf-ai-toolkit --local /path/to/project
+npx @dtlabs/swf-ai-toolkit --local /path/to/project
 ```
 
 Overwrite existing files without confirmation:
 
 ```bash
-npx @fincantieri/swf-ai-toolkit --local . --force
+npx @dtlabs/swf-ai-toolkit --local . --force
 ```
 
 ### Global installation
@@ -108,7 +36,7 @@ npx @fincantieri/swf-ai-toolkit --local . --force
 Merges `.claude/agents`, `.claude/skills`, `docs/`, and `CLAUDE.md` into `~/.claude/`:
 
 ```bash
-npm install -g @fincantieri/swf-ai-toolkit
+npm install -g @dtlabs/swf-ai-toolkit
 swf-ai-toolkit --global
 ```
 
@@ -132,3 +60,21 @@ swf-ai-toolkit --global --force
 | Global | `CLAUDE.md` | `~/.claude/CLAUDE.md` |
 
 > The asymmetry is intentional: locally you mirror the package layout, globally you merge into Claude Code's standard folder structure.
+
+---
+
+## Verify installation
+
+```bash
+npm view @dtlabs/swf-ai-toolkit version
+```
+
+---
+
+## Publishing a new version
+
+```bash
+npm login                        # authenticate with your npmjs.com account
+npm version patch                # bump version (patch / minor / major)
+npm publish --access public      # --access public is required for scoped packages
+```
