@@ -33,7 +33,7 @@ function banner() {
   console.log();
   console.log(clr('cyan', '╔══════════════════════════════════════════════════════════╗'));
   console.log(clr('cyan', '║') + bold(clr('white', '         SWF AI Toolkit  —  Installer                     ')) + clr('cyan', '║'));
-  console.log(clr('cyan', '║') + clr('gray',  `         @dtlabs/swf-ai-toolkit  v${require('../package.json').version.padEnd(22)}`) + clr('cyan', '║'));
+  console.log(clr('cyan', '║') + clr('gray',  `         @dtlabs/ai-toolkit  v${require('../package.json').version.padEnd(22)}`) + clr('cyan', '║'));
   console.log(clr('cyan', '╚══════════════════════════════════════════════════════════╝'));
   console.log();
 }
@@ -317,9 +317,9 @@ async function installGlobal(force) {
 function help() {
   banner();
   console.log(`  ${bold('Usage:')}`);
-  console.log(`    ${clr('cyan', 'swf-ai-toolkit')}                      Install into current directory`);
-  console.log(`    ${clr('cyan', 'swf-ai-toolkit')} ${clr('yellow', '--local <dir>')}       Install into target directory`);
-  console.log(`    ${clr('cyan', 'swf-ai-toolkit')} ${clr('yellow', '--global')}             Install into ~/.claude (global)`);
+  console.log(`    ${clr('cyan', 'ai-toolkit')}                      Install into current directory`);
+  console.log(`    ${clr('cyan', 'ai-toolkit')} ${clr('yellow', '--local <dir>')}       Install into target directory`);
+  console.log(`    ${clr('cyan', 'ai-toolkit')} ${clr('yellow', '--global')}             Install into ~/.claude (global)`);
   console.log(`    ${clr('gray',  '                     --force')}       Overwrite all files without prompting`);
   console.log();
 }
