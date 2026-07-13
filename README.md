@@ -1,4 +1,4 @@
-# @fincantieri/swf-ai-toolkit
+# @dtlabs/swf-ai-toolkit
 
 Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
@@ -21,18 +21,16 @@ Two independent pipelines:
 
 ## Install
 
-> The package is hosted on a private Azure Artifacts feed. See [docs/installation.md](docs/installation.md) for `.npmrc` setup before running the commands below.
-
 **Local installation** (into the current project):
 
 ```bash
-npx @fincantieri/swf-ai-toolkit
+npx @dtlabs/swf-ai-toolkit
 ```
 
 **Global installation** (into `~/.claude/`):
 
 ```bash
-npm install -g @fincantieri/swf-ai-toolkit
+npm install -g @dtlabs/swf-ai-toolkit
 swf-ai-toolkit --global
 ```
 
