@@ -202,7 +202,7 @@ The SWF AI Toolkit gives any software project an AI-driven workflow for two comp
    ```
    /install-toolkit /path/to/project
    ```
-   Or globally: `npm install -g @dtlabs/swf-ai-toolkit && swf-ai-toolkit --global`
+   Or globally: `npm install -g @dtlabs/ai-toolkit && ai-toolkit --global`
 
 2. **Generate `AGENTS.md`** — the conventions file all agents read:
    ```

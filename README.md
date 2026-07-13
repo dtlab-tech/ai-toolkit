@@ -1,4 +1,4 @@
-# @dtlabs/swf-ai-toolkit
+# @dtlabs/ai-toolkit — SWF AI Toolkit
 
 Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
@@ -24,14 +24,14 @@ Two independent pipelines:
 **Local installation** (into the current project):
 
 ```bash
-npx @dtlabs/swf-ai-toolkit
+npx @dtlabs/ai-toolkit
 ```
 
 **Global installation** (into `~/.claude/`):
 
 ```bash
-npm install -g @dtlabs/swf-ai-toolkit
-swf-ai-toolkit --global
+npm install -g @dtlabs/ai-toolkit
+ai-toolkit --global
 ```
 
 Both commands copy agents, skills, procedures, and `CLAUDE.md` into the appropriate location.
