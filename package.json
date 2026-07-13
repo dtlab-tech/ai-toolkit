@@ -1,7 +1,7 @@
 {
-  "name": "@dtlabs/swf-ai-toolkit",
+  "name": "@dtlabs/ai-toolkit",
   "version": "0.1.0",
-  "description": "SWF AI Toolkit — reusable agents and procedures",
+  "description": "AI Toolkit — reusable agents and procedures for developers to build AI-powered applications.",
   "files": [
     "docs/",
     "CLAUDE.md",
@@ -9,7 +9,7 @@
     "bin"
   ],
   "bin": {
-    "swf-ai-toolkit": "bin/cli.js"
+    "ai-toolkit": "bin/cli.js"
   },
   "scripts": {
     "prepublishOnly": "npm pack --dry-run"

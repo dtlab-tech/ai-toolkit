@@ -2,7 +2,7 @@
 
 The toolkit is published to the **public npm registry** under the `@dtlabs` organization.
 
-- **Package**: `@dtlabs/swf-ai-toolkit`
+- **Package**: `@dtlabs/ai-toolkit`
 - **Registry**: `https://registry.npmjs.org/`
 
 No authentication setup required — it is a public package.
@@ -16,19 +16,19 @@ No authentication setup required — it is a public package.
 Copies `.claude/`, `docs/`, and `CLAUDE.md` into the current directory:
 
 ```bash
-npx @dtlabs/swf-ai-toolkit
+npx @dtlabs/ai-toolkit
 ```
 
 Target a different directory:
 
 ```bash
-npx @dtlabs/swf-ai-toolkit --local /path/to/project
+npx @dtlabs/ai-toolkit --local /path/to/project
 ```
 
 Overwrite existing files without confirmation:
 
 ```bash
-npx @dtlabs/swf-ai-toolkit --local . --force
+npx @dtlabs/ai-toolkit --local . --force
 ```
 
 ### Global installation
@@ -36,14 +36,14 @@ npx @dtlabs/swf-ai-toolkit --local . --force
 Merges `.claude/agents`, `.claude/skills`, `docs/`, and `CLAUDE.md` into `~/.claude/`:
 
 ```bash
-npm install -g @dtlabs/swf-ai-toolkit
-swf-ai-toolkit --global
+npm install -g @dtlabs/ai-toolkit
+ai-toolkit --global
 ```
 
 Force overwrite:
 
 ```bash
-swf-ai-toolkit --global --force
+ai-toolkit --global --force
 ```
 
 ### What gets copied where
@@ -66,7 +66,7 @@ swf-ai-toolkit --global --force
 ## Verify installation
 
 ```bash
-npm view @dtlabs/swf-ai-toolkit version
+npm view @dtlabs/ai-toolkit version
 ```
 
 ---

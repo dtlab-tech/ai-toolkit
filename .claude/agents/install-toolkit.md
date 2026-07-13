@@ -1,6 +1,6 @@
 ---
 name: install-toolkit
-description: "Installs the swf-ai-toolkit into a destination project by copying agents, skills, commands, and procedures. Input: [path-to-destination] [--force] — defaults to current working directory"
+description: "Installs the ai-toolkit into a destination project by copying agents, skills, commands, and procedures. Input: [path-to-destination] [--force] — defaults to current working directory"
 ---
 
 # Install Toolkit
@@ -20,7 +20,7 @@ The user provides:
 ## Step 1 — Validate inputs and check version
 
 1. Determine the **toolkit root**: the current working directory (this agent runs from the toolkit repo).
-2. Verify the toolkit root contains `.claude/agents/` — if not, abort: "Error: must be run from the swf-ai-toolkit directory."
+2. Verify the toolkit root contains `.claude/agents/` — if not, abort: "Error: must be run from the ai-toolkit directory."
 3. Verify the destination path exists — if not, abort: "Error: destination path not found: {path}"
 4. Check if destination is a git repository (look for `.git/`) — warn if not, but continue.
 5. **Version check**:
