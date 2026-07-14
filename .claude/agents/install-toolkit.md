@@ -25,7 +25,7 @@ The user provides:
 4. Check if destination is a git repository (look for `.git/`) — warn if not, but continue.
 5. **Version check**:
    - Read `package.json` from the toolkit root to get the current version (e.g. `0.2.0`)
-   - Check if `.claude/.swf-toolkit-version` exists in the destination:
+   - Check if `.claude/.ai-toolkit-version` exists in the destination:
      - **File missing** → first install, no prompt needed, continue
      - **Same version** → inform the user and ask: "Toolkit v{x} is already installed. Re-install anyway?"
        - If No: abort cleanly
@@ -115,9 +115,9 @@ cp "{source_file}" "{dest_file}"
 After copying:
 1. Verify all expected files are present in the destination
 2. Verify no files are zero bytes
-3. Write the installed version to `.claude/.swf-toolkit-version` in the destination:
+3. Write the installed version to `.claude/.ai-toolkit-version` in the destination:
    ```bash
-   echo "{current_version}" > "{dest}/.claude/.swf-toolkit-version"
+   echo "{current_version}" > "{dest}/.claude/.ai-toolkit-version"
    ```
    This file is read on future installs to show the version comparison prompt.
 

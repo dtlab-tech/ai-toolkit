@@ -32,7 +32,7 @@ function divider(char = '─', len = 60) {
 function banner() {
   console.log();
   console.log(clr('cyan', '╔══════════════════════════════════════════════════════════╗'));
-  console.log(clr('cyan', '║') + bold(clr('white', '         SWF AI Toolkit  —  Installer                     ')) + clr('cyan', '║'));
+  console.log(clr('cyan', '║') + bold(clr('white', '            AI Toolkit  —  Installer                      ')) + clr('cyan', '║'));
   console.log(clr('cyan', '║') + clr('gray',  `         @dtlabs/ai-toolkit  v${require('../package.json').version.padEnd(22)}`) + clr('cyan', '║'));
   console.log(clr('cyan', '╚══════════════════════════════════════════════════════════╝'));
   console.log();
@@ -101,7 +101,7 @@ function categorize(files) {
 // ── version check ─────────────────────────────────────────────────────────────
 
 const TOOLKIT_VERSION = require('../package.json').version;
-const VERSION_FILE    = '.swf-toolkit-version';
+const VERSION_FILE    = '.ai-toolkit-version';
 
 function readInstalledVersion(destRoot) {
   const versionFile = path.join(destRoot, '.claude', VERSION_FILE);

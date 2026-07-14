@@ -1,4 +1,4 @@
-# SWF AI Toolkit
+# AI Toolkit
 
 A reusable set of AI agents and procedures for software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
@@ -30,7 +30,7 @@ Add this toolkit to your Claude Code `settings.json`:
 {
   "permissions": {
     "additionalDirectories": [
-      "c:\\ws\\swf-ai-toolkit\\.claude"
+      "c:\\path\\to\\ai-toolkit\\.claude"
     ]
   }
 }
