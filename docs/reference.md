@@ -64,7 +64,7 @@ Invoked as `/<name>`. Comprehensive workflows that may chain multiple agents.
 
 | Skill | Purpose | Typical usage |
 |---|---|---|
-| `/help [topic]` | Interactive guide — explains pipelines, agents, commands; helps you find the right tool for your situation | `/help`, `/help assess`, `/help setup`, `/help feature` |
+| `/hi-gaia [topic]` | **Gaia** — your toolkit assistant. Explains pipelines, agents, commands; helps you find the right tool for your situation | `/hi-gaia`, `/hi-gaia assess`, `/hi-gaia setup`, `/hi-gaia feature` |
 
 ---
 
