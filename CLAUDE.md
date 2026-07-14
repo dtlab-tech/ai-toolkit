@@ -72,7 +72,7 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| Toolkit Guide | `/help [topic]` | Interactive guide to the toolkit — explains pipelines, agents, and commands; helps you find the right tool for your situation |
+| Gaia | `/hi-gaia [topic]` | Your toolkit assistant — introduces herself, explains pipelines, agents, and commands; helps you find the right tool for your situation |
 
 ## Commands (slash shortcuts, in `.claude/commands/`)
 
