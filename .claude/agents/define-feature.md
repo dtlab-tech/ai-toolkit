@@ -94,7 +94,7 @@ Follow-up:
 Follow-up:
 - "Is this feature accessible to all users or only specific roles?"
 - "Are there read-only vs write vs admin distinctions?"
-- "Does the Store API already handle the relevant roles, or do new ones need to be defined?"
+- "Does the existing API already handle the relevant roles, or do new ones need to be defined?"
 
 ### Round 7 — Success criteria
 
