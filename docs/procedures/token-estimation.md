@@ -10,6 +10,7 @@ Write `{PREFIX}-Token-Estimate.md` in the feature directory after Work Breakdown
 | Agent system prompt weight — haiku | ~2,000 tokens |
 | Agent system prompt weight — sonnet | ~3,000 tokens |
 | Base overhead per agent call | ~5,000 tokens |
+| Input/output split | 80% / 20% |
 
 ## Cost estimation
 
@@ -98,10 +99,10 @@ The 80/20 input/output split is defined in `docs/pricing.md` — update there if
 
 ## Estimation accuracy by agent type
 
-| Agent type | Invocations | Avg est. tokens | Avg actual tokens | Avg delta | Trend |
-|-----------|------------|----------------|------------------|-----------|-------|
-| haiku agents | N | N | N | ±N | over/under/on-target |
-| sonnet agents | N | N | N | ±N | over/under/on-target |
+| Model | Count | Avg est. tokens | Avg actual tokens | Avg delta | Trend |
+|-------|-------|----------------|------------------|-----------|-------|
+| haiku | N | N | N | ±N | ↑/↓/→ |
+| sonnet | N | N | N | ±N | ↑/↓/→ |
 
 ## Grand Total
 
@@ -117,7 +118,38 @@ The 80/20 input/output split is defined in `docs/pricing.md` — update there if
 - One row per invocation — rework invocations get a "(rework)" suffix
 - Delta (tokens): negative = fewer tokens than estimated, positive = more
 - Cost: computed with blended formula from `docs/pricing.md`; use 4 decimal places for per-agent rows, 2 decimal places for totals
-- Trend: over-target if avg delta > +20%, under-target if < -20%, otherwise on-target
+- Trend: "↑" if avg delta > +5% of avg est, "↓" if avg delta < -5% of avg est, otherwise "→"
 - Duration: convert `duration_ms` to minutes/seconds
 - Model: read from agent frontmatter, default to `sonnet` if not set
 - Missing `<usage>` block → write `N/A`, exclude from accuracy stats and cost totals
+
+## Assessment pipeline usage
+
+The `assessment-manager` agent reads this procedure at Phase 3 start before dispatching assessment agents, in the same way that `project-manager` reads it before dispatching implementation agents. If this file is missing, the assessment pipeline halts with an error — this is the only non-graceful failure mode in the pipeline.
+
+### Assessment agent input size estimates
+
+All assessment agents and the `intervention-documentation-standard` agent run on **sonnet** — use the `$0.005400/1k tokens` blended rate from `docs/pricing.md`.
+
+Apply the standard formula with the code input sizes below:
+
+```
+est_tokens = base_overhead + system_prompt_weight + (input_size_chars / 4)
+           = 5,000        + 3,000 (sonnet)        + (input_size_chars / 4)
+```
+
+| Agent | Approx. input size | Input tokens (chars ÷ 4) | Est. total tokens |
+|-------|--------------------|--------------------------|-------------------|
+| generic-software-assessment | ~80,000 chars of code | ~20,000 | ~28,000 |
+| layered-architecture-assessment | ~50,000 chars of code | ~12,500 | ~20,500 |
+| concurrency-safety-assessment | ~40,000 chars of code | ~10,000 | ~18,000 |
+| other assessment agents | ~30,000 chars of code | ~7,500 | ~15,500 |
+| intervention-documentation-standard | ~30,000 chars of assessment findings | ~7,500 | ~15,500 |
+
+### Remediation agents
+
+Remediation agents receive an intervention document (~20,000 chars, ~5,000 tokens for the doc portion) plus relevant code sections. Use the intervention doc portion as the base input estimate and add code section tokens using the standard formula. Typical total range: 13,000–25,000 tokens depending on intervention scope.
+
+### Orchestrator (assessment-manager)
+
+Estimate as the sum of all child agent result sizes (as input) plus process log writes (as output), following the same orchestrator rule as `project-manager`. Use **80,000 tokens** as a conservative baseline for a full pipeline run (assessment + intervention documentation + remediation phases combined).
