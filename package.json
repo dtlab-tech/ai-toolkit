@@ -5,6 +5,7 @@
   "files": [
     "docs/",
     "CLAUDE.md",
+    "CHANGELOG.md",
     ".claude",
     "bin"
   ],
