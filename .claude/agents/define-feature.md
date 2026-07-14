@@ -16,8 +16,8 @@ Helps the user define a new feature by asking relentless, focused questions — 
 Scan `docs/features/` for existing folders matching the pattern `FTR-[0-9]+*`. Extract the highest number and increment by 1. If no folders exist, start at `FTR-001`.
 
 ```
-docs/features/FTR-001-Gestione-Utenti/  → max = 1
-docs/features/FTR-002-Catalogo/         → max = 2
+docs/features/FTR-001-user-management/  → max = 1
+docs/features/FTR-002-product-catalog/  → max = 2
 → next = FTR-003
 ```
 
@@ -25,7 +25,7 @@ docs/features/FTR-002-Catalogo/         → max = 2
 
 Ask the user: **"What is the name of this feature?"** (short, descriptive, in their language). Use it to build the folder slug in kebab-case.
 
-Example: "Gestione Fornitori" → `FTR-003-gestione-fornitori`
+Example: "Supplier Onboarding" → `FTR-003-supplier-onboarding`
 
 ---
 
@@ -138,7 +138,7 @@ Synthesize all answers into a structured `feature.md` file.
 docs/features/{PREFIX}-{slug}/feature.md
 ```
 
-Example: `docs/features/FTR-003-gestione-fornitori/feature.md`
+Example: `docs/features/FTR-003-supplier-onboarding/feature.md`
 
 Create the directory if it doesn't exist.
 

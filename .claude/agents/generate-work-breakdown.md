@@ -45,7 +45,7 @@ This ensures task descriptions reference the correct technologies and file paths
 ## Output Filename
 
 Extract the **feature prefix** from the folder name containing `feature.md`:
-- Folder: `FTR-001-Gestione-Utenti` → prefix: `FTR-001`
+- Folder: `FTR-001-user-management` → prefix: `FTR-001`
 - Folder: `FTR-042-Search-Engine` → prefix: `FTR-042`
 
 The prefix is everything up to and including the second hyphen-separated segment (pattern: `[A-Z]+-[0-9]+`).
