@@ -59,6 +59,7 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 |-------|---------|---------|
 | Install Toolkit | `/install-toolkit` | Copies all agents, skills, commands, and procedures into a destination project (no local toolkit repo needed) |
 | Init AGENTS.md | `/init-agents` | Analyzes a project codebase and generates the AGENTS.md convention file required by all developer agents |
+| Define Feature | `/define-feature` | Interviews you to define a new feature and writes `feature.md` — required input for `/implement-feature` |
 | Implement Feature | `/implement-feature` | Starts the full feature delivery pipeline: docs → approval → implement → review → PR |
 
 ### Assessment & Remediation
@@ -98,6 +99,7 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 |-------|---------------|---------|
 | Install Toolkit | `install-toolkit` | Copies toolkit files into a destination project |
 | Init AGENTS.md | `init-agents-md` | Analyzes codebase and generates AGENTS.md |
+| Define Feature | `define-feature` | Interviews the user and writes `feature.md` in `docs/features/FTR-XXX-slug/` |
 | Generate Requirements | `generate-requirements` | Produces functional requirements from feature.md |
 | Generate Tech-Spec | `generate-tech-spec` | Produces technical specification from feature + requirements |
 | Validate Docs | `validate-feature-docs` | Cross-validates requirements + tech-spec against feature.md |
