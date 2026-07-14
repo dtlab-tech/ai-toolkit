@@ -14,8 +14,6 @@ Install it with:
 npx skills@latest add mattpocock/skills
 ```
 
-Then run `/setup-matt-pocock-skills` in your agent to complete the setup.
-
 > **Tip:** Install Matt's skills globally (`~/.claude/skills/`) so they are available in every project without repeating the setup.
 
 ## How it works
