@@ -33,7 +33,7 @@ npx @dtlabs/ai-toolkit --local . --force
 
 ### Global installation
 
-Merges `.claude/agents`, `.claude/skills`, `docs/`, and `CLAUDE.md` into `~/.claude/`:
+Merges `.claude/agents`, `.claude/skills`, `.claude/commands`, `docs/`, and `CLAUDE.md` into `~/.claude/`:
 
 ```bash
 npm install -g @dtlabs/ai-toolkit
@@ -67,14 +67,4 @@ ai-toolkit --global --force
 
 ```bash
 npm view @dtlabs/ai-toolkit version
-```
-
----
-
-## Publishing a new version
-
-```bash
-npm login                        # authenticate with your npmjs.com account
-npm version patch                # bump version (patch / minor / major)
-npm publish --access public      # --access public is required for scoped packages
 ```
