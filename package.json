@@ -1,6 +1,6 @@
 {
   "name": "@dtlabs/ai-toolkit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI Toolkit — reusable agents and procedures for developers to build AI-powered applications.",
   "files": [
     "docs/",
