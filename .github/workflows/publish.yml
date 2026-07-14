@@ -35,6 +35,7 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           git add package.json
           git commit -m "chore: bump version to ${VERSION} [skip ci]"
+          git pull --rebase origin main
           git push
 
       - name: Publish to npm
