@@ -13,7 +13,7 @@ A QA agent that cross-references `feature.md` against `{PREFIX}-Requirements.md`
 
 ## Phase 1 — Load Documents
 
-1. Extract the prefix from the folder name (`FTR-001-Gestione-Utenti` → `FTR-001`)
+1. Extract the prefix from the folder name (`FTR-001-user-management` → `FTR-001`)
 2. Read all three documents fully:
    - `feature.md` — source of truth
    - `{PREFIX}-Requirements.md`
