@@ -128,7 +128,7 @@ Check in order: README.md, CI config, `Makefile`, `package.json` scripts, `*.csp
 ## Step 6 — Hard Constraints Discovery
 
 Look for documented constraints in:
-- `CLAUDE.md`, `dqms_Code_Best_Practice.md`, `SAST_DAST_Best_Practice.md`, or similar files
+- `CLAUDE.md`, or any coding guidelines / best-practice files in the repo root or `docs/`
 - Any coding guidelines or architecture decision records (`docs/adr/`)
 - Comments in key files that indicate "never do X"
 

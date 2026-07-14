@@ -1,4 +1,4 @@
-# @dtlabs/ai-toolkit — SWF AI Toolkit
+# @dtlabs/ai-toolkit — AI Toolkit
 
 Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 

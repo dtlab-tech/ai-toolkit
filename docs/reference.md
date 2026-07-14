@@ -1,4 +1,4 @@
-# SWF AI Toolkit — Quick Reference
+# AI Toolkit — Quick Reference
 
 Cheatsheet of every skill, command, agent, and procedure shipped with this toolkit. For the full integration guide see [`CLAUDE.md`](../CLAUDE.md). For installation see [`installation.md`](installation.md).
 
