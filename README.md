@@ -2,13 +2,36 @@
 
 Reusable Claude Code agents, skills, commands, and procedures for end-to-end software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
+## Meet Gaia — your toolkit assistant
+
+Once installed, the best way to get started is to say hi:
+
+```
+/hi-gaia
+```
+
+**Gaia** is the toolkit's built-in assistant. She introduces herself, scans your workspace to understand the context (is the project already set up? are there features in progress?), and guides you toward the right tool for your situation.
+
+You can also ask her about specific topics directly:
+
+```
+/hi-gaia feature       → how to build a new feature end-to-end
+/hi-gaia assess        → how to audit and improve an existing codebase
+/hi-gaia setup         → how to onboard a new project
+/hi-gaia agents        → full catalog of available agents and skills
+```
+
+If you're ever unsure which command or agent to use, Gaia is the right starting point. She won't run anything — she helps you understand the toolkit and decide what to do next.
+
+---
+
 ## What it provides
 
 Two independent pipelines:
 
 ### Feature Delivery Pipeline
 - **12 agents** for the full delivery lifecycle (requirements → tech-spec → work breakdown → backend/frontend/testing implementation → architect review)
-- **4 skills** invocable via slash commands (`/install-toolkit`, `/init-agents`, `/implement-feature`, `/define-feature`)
+- **5 skills** invocable via slash commands (`/install-toolkit`, `/init-agents`, `/implement-feature`, `/define-feature`, `/hi-gaia`)
 - **4 commands** for quick day-to-day shortcuts (`/feature-status`, `/check-docs`, `/pr-description`, `/next-task`)
 
 ### Assessment & Remediation Pipeline
