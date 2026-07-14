@@ -42,3 +42,9 @@ Feature: FTR-001 — Assessment Pipeline Token Estimation
 [2026-07-14T01:20:36] Agent DONE:  review-solution RE-REVIEW (tokens: 48463, duration: ~17m) — RESULT: PASS (0 CRITICAL, 1 new WARNING, 1 new INFO)
 [2026-07-14T01:20:37] Remediation: fixed WARNING-04 (token-estimation.md trend rule sync) directly
 [2026-07-14T01:20:38] Issues Register: 3 FIXED, 2 DEFERRED, 0 OPEN
+[2026-07-14T01:20:39] Feature Registry: REGISTRY.md created — FTR-001 entry added (status: completed)
+[2026-07-14T01:20:40] PR created: https://github.com/dtlab-tech/ai-toolkit/pull/7
+[2026-07-14T01:20:41] FTR-001-Token-Estimate.md completed — actuals filled, orchestrator row appended
+[2026-07-14T01:20:42] FTR-001-Effort-Estimate.md completed — actuals section appended
+[2026-07-14T01:20:43] RUN COMPLETE
+════════════════════════════════════════════════════════
