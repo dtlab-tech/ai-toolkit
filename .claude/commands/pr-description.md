@@ -9,7 +9,7 @@ Steps:
 1. Determine the current branch name: `git rev-parse --abbrev-ref HEAD`.
 2. Extract a feature identifier from the branch name (look for `FTR-XXX` or a slug pattern).
 3. Find the matching feature folder under `docs/features/`. If multiple match, ask the user.
-4. Read `feature.md` (and `requirements.md` if present) for context.
+4. Read `feature.md` (and `{PREFIX}-Requirements.md` if present) for context.
 5. Collect the commits on this branch: `git log --no-merges $(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master)..HEAD --pretty=format:"%h %s"`. If neither `main` nor `master` exists, ask the user for the base branch.
 6. Produce the PR description using this exact template:
 
