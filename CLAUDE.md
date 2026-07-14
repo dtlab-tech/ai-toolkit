@@ -1,4 +1,4 @@
-# SWF AI Toolkit
+# AI Toolkit
 
 A reusable set of AI agents and procedures for software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
@@ -14,8 +14,6 @@ Install it with:
 npx skills@latest add mattpocock/skills
 ```
 
-Then run `/setup-matt-pocock-skills` in your agent to complete the setup.
-
 > **Tip:** Install Matt's skills globally (`~/.claude/skills/`) so they are available in every project without repeating the setup.
 
 ## How it works
@@ -30,7 +28,7 @@ Add this toolkit to your Claude Code `settings.json`:
 {
   "permissions": {
     "additionalDirectories": [
-      "c:\\ws\\swf-ai-toolkit\\.claude"
+      "c:\\path\\to\\ai-toolkit\\.claude"
     ]
   }
 }
@@ -61,6 +59,7 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 |-------|---------|---------|
 | Install Toolkit | `/install-toolkit` | Copies all agents, skills, commands, and procedures into a destination project (no local toolkit repo needed) |
 | Init AGENTS.md | `/init-agents` | Analyzes a project codebase and generates the AGENTS.md convention file required by all developer agents |
+| Define Feature | `/define-feature` | Interviews you to define a new feature and writes `feature.md` — required input for `/implement-feature` |
 | Implement Feature | `/implement-feature` | Starts the full feature delivery pipeline: docs → approval → implement → review → PR |
 
 ### Assessment & Remediation
@@ -73,7 +72,7 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| Toolkit Guide | `/help [topic]` | Interactive guide to the toolkit — explains pipelines, agents, and commands; helps you find the right tool for your situation |
+| Gaia | `/hi-gaia [topic]` | Your toolkit assistant — introduces herself, explains pipelines, agents, and commands; helps you find the right tool for your situation |
 
 ## Commands (slash shortcuts, in `.claude/commands/`)
 
@@ -100,6 +99,7 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 |-------|---------------|---------|
 | Install Toolkit | `install-toolkit` | Copies toolkit files into a destination project |
 | Init AGENTS.md | `init-agents-md` | Analyzes codebase and generates AGENTS.md |
+| Define Feature | `define-feature` | Interviews the user and writes `feature.md` in `docs/features/FTR-XXX-slug/` |
 | Generate Requirements | `generate-requirements` | Produces functional requirements from feature.md |
 | Generate Tech-Spec | `generate-tech-spec` | Produces technical specification from feature + requirements |
 | Validate Docs | `validate-feature-docs` | Cross-validates requirements + tech-spec against feature.md |

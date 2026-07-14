@@ -8,7 +8,7 @@ Identify the next unblocked task to work on.
 
 Steps:
 1. If `$ARGUMENTS` is provided, target that feature. Otherwise, list all feature folders under `docs/features/` and select the most recently modified one (use `git log -1 --format=%cd <path>` or filesystem mtime).
-2. Read `work-breakdown.md` in the chosen feature folder.
+2. Read `{PREFIX}-Work-Breakdown.md` in the chosen feature folder (where `{PREFIX}` matches the folder name pattern, e.g. `FTR-001`).
 3. Parse the task list. Identify the FIRST task that meets ALL these criteria, in order:
    - Status is `pending` / `todo` / `not started` (not `done`, `in progress`, `blocked`)
    - All listed dependencies (other task IDs) are marked `done`

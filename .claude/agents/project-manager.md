@@ -32,7 +32,7 @@ Read `docs/features/REGISTRY.md` if it exists. Extract all entries as `registry`
 ### 1c. Assess the feature directory
 
 Extract the **feature prefix** from the folder name containing `feature.md`:
-- `FTR-001-Gestione-Utenti` → prefix `FTR-001` (pattern: `[A-Z]+-[0-9]+`)
+- `FTR-001-user-management` → prefix `FTR-001` (pattern: `[A-Z]+-[0-9]+`)
 
 Inspect the directory for existing outputs. For each file: does it exist? Is it stale (older than `feature.md`)? Was `--force` passed (treat all as stale)?
 

@@ -148,7 +148,7 @@ Only apply immutability to types confirmed as value objects (no mutable lifecycl
 
 If the project has inconsistent naming (mix of languages, Hungarian prefixes, abbreviations):
 
-- Replace technical prefixes with domain-meaningful names (e.g. `SInfoPart` → `BeamPartSection`)
+- Replace technical prefixes with domain-meaningful names (e.g. `SvcUser` → `UserService`)
 - Apply consistent casing per project conventions
 - Align field names to a single language (typically English)
 

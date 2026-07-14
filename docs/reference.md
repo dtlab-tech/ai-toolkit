@@ -1,4 +1,4 @@
-# SWF AI Toolkit — Quick Reference
+# AI Toolkit — Quick Reference
 
 Cheatsheet of every skill, command, agent, and procedure shipped with this toolkit. For the full integration guide see [`CLAUDE.md`](../CLAUDE.md). For installation see [`installation.md`](installation.md).
 
@@ -49,7 +49,7 @@ Invoked as `/<name>`. Comprehensive workflows that may chain multiple agents.
 
 | Skill | Purpose | Typical usage |
 |---|---|---|
-| `/define-feature` | Interviews you to produce `feature.md` (from Matt Pocock's skills) | `/define-feature` then answer the prompts |
+| `/define-feature` | Interviews you to produce `feature.md` | `/define-feature` then answer the prompts |
 | `/init-agents` | Analyzes the codebase and generates `AGENTS.md` (the conventions file the toolkit depends on) | Run once per new project |
 | `/install-toolkit` | Copies agents/skills/commands/procedures into a destination project | `/install-toolkit /path/to/dest [--force]` |
 | `/implement-feature` | Full pipeline: requirements → tech-spec → approval → work breakdown → implementation → review → PR | `/implement-feature docs/features/FTR-001-foo/feature.md` |
@@ -64,7 +64,7 @@ Invoked as `/<name>`. Comprehensive workflows that may chain multiple agents.
 
 | Skill | Purpose | Typical usage |
 |---|---|---|
-| `/help [topic]` | Interactive guide — explains pipelines, agents, commands; helps you find the right tool for your situation | `/help`, `/help assess`, `/help setup`, `/help feature` |
+| `/hi-gaia [topic]` | **Gaia** — your toolkit assistant. Explains pipelines, agents, commands; helps you find the right tool for your situation | `/hi-gaia`, `/hi-gaia assess`, `/hi-gaia setup`, `/hi-gaia feature` |
 
 ---
 
@@ -141,11 +141,9 @@ Invoked via the Agent tool with `subagent_type`. Specialised sub-conversations t
 |---|---|---|
 | `god-class-decomposition` | Oversized classes and methods | Intervention doc + `AGENTS.md` |
 | `domain-model-refactoring` | Monolithic model files, missing type hierarchies | Intervention doc + `AGENTS.md` |
-| `layered-architecture-assessment` | Layer violation audit (assessment only, no implementation) | `AGENTS.md` |
 | `dependency-injection-refactoring` | Static/direct coupling converted to DI | Intervention doc + `AGENTS.md` |
 | `security-hardening` | Input validation, SQL injection, secrets, log sanitisation, TLS | Intervention doc + `AGENTS.md` |
 | `dependency-supply-chain-security` | Lock files, integrity verification, unused deps, SCA in CI | Intervention doc + `AGENTS.md` |
-| `concurrency-safety-assessment` | Race conditions, shared state audit (assessment only) | `AGENTS.md` |
 
 ---
 
