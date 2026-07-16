@@ -10,7 +10,7 @@ An intelligent orchestrator that **assesses before it plans, and plans before it
 Before starting, read these procedures from `docs/procedures/`:
 - `process-log.md` — log format and token tracking rules
 - `issues-register.md` — Issues Register format and severity rules
-- `assessment-approval-gate.md` — gate presentation, approvals file format, rules
+- `assessment-findings-gate.md` — gate presentation, approvals file format, rules
 - `token-estimation.md` — Token-Estimate.md format, estimation model, and assessment pipeline input size estimates
 
 Also read `docs/pricing.md` — model pricing table and blended cost formula (80/20 input/output split).
@@ -27,7 +27,7 @@ Scan `.claude/agents/` and read each file's `description` frontmatter. Classify 
 - **Documentation** — produces structured documents (keywords: "documentation standard", "intervention")
 - **Orchestrator** — skip self-invocation
 
-Build two registries: `assessment_agents` and `remediation_agents`.
+Build an `assessment_agents` registry.
 
 ### 1b. Determine assessment prefix
 
@@ -87,8 +87,7 @@ Target codebase
 
 ⏳ QUEUE: intervention-documentation-standard → ASSESS-001-INT-*.md + Interventions-Index.md
 ⏳ WRITE: ASSESS-001-Effort-Estimate.md + ASSESS-001-Token-Estimate.md
-⏳ GATE:  Remediation approval
-⏳ DONE:  Summary (approved interventions → feature delivery pipeline)
+⏳ GATE:  Review findings → acknowledge + flag interventions
 ─────────────────────────────────────────────────────
 ```
 
@@ -176,6 +175,10 @@ Status remains `"complete"` in both cases — a missing usage block does not ind
 
 | Agent | Model | Est. tokens | Est. cost ($) | Actual tokens | Actual cost ($) | Status |
 |-------|-------|-------------|---------------|---------------|-----------------|--------|
+
+## Remediation
+
+Remediation effort is tracked separately via the feature delivery pipeline (not part of this assessment).
 
 ## Phase subtotals
 
@@ -356,23 +359,17 @@ Human sequential total: {total_hours}h
 
 ---
 
-## Phase 5 — Remediation Gate
+## Phase 5 — Findings Gate
 
-Follow `docs/procedures/assessment-approval-gate.md`. Before presenting the gate, read the remediation section from `{PREFIX}-Effort-Estimate.md` and include it in the gate display, immediately before the hard-stop message:
+Follow `docs/procedures/assessment-findings-gate.md`. The gate has two mandatory steps:
 
-```
-Remediation Effort Estimate (from {PREFIX}-Effort-Estimate.md)
-─────────────────────────────────────────────────────────────
-  CRITICAL: {N} × 8h = {Xh}
-  HIGH:     {N} × 4h = {Xh}
-  MEDIUM:   {N} × 2h = {Xh}
-  LOW:      {N} × 1h = {Xh}
-  Total estimated (human sequential): {Xh}
-─────────────────────────────────────────────────────────────
-Interventions Index: {PREFIX}-Interventions-Index.md
-```
+**Step 5a — Acknowledge:** present findings summary (including effort estimate) and wait for acknowledgement. Accept any non-empty text reply.
 
-No writes to the Effort Estimate file during Phase 5. If user selects "Assessment only", skip to Phase 6 (Summary).
+**Step 5b — Flag interventions:** prompt for INT-NNN identifiers to flag for feature delivery. Validate each against `{PREFIX}-Interventions-Index.md`; re-prompt if any are unknown. Accept "None" for zero flagged.
+
+After both steps complete, write `{PREFIX}-Approvals.md` per the format in `docs/procedures/assessment-findings-gate.md`. Verify the file was written before proceeding to Phase 6.
+
+No writes to the Effort Estimate file during Phase 5.
 
 ---
 
@@ -391,14 +388,15 @@ Assessment:
   ...
 ─────────────────────────────────────────────────────
 Findings:      N CRITICAL | N HIGH | N MEDIUM | N LOW
-Interventions: N proposed
+Interventions: N proposed | N flagged for feature delivery
 ─────────────────────────────────────────────────────
+Approvals:     {PREFIX}-Approvals.md
 Effort Estimate: {PREFIX}-Effort-Estimate.md
 Token Estimate:  {PREFIX}-Token-Estimate.md
 Process log:     docs/assessments/{PREFIX}/{PREFIX}-process-log.txt
 ─────────────────────────────────────────────────────
-Remediation gate complete. Approved interventions are
-candidates for the feature delivery pipeline (/implement-feature).
+Flagged interventions can be actioned via /define-feature
+referencing the INT-NNN document.
 ─────────────────────────────────────────────────────
 ```
 
@@ -406,10 +404,11 @@ candidates for the feature delivery pipeline (/implement-feature).
 
 ## Guidelines
 
-- **Read all procedures at startup** — `process-log.md`, `issues-register.md`, `assessment-approval-gate.md`, `token-estimation.md`
+- **Read all procedures at startup** — `process-log.md`, `issues-register.md`, `assessment-findings-gate.md`, `token-estimation.md`
 - **Token tracking — maintain an internal ledger keyed by agent name.** For each completed agent call: extract the `<usage>` block (input_tokens, output_tokens, model), compute `actual_tokens = input_tokens + output_tokens`, and record the result. If the block is absent or unparseable, record `actual_tokens = "N/A"` and log a warning — never halt because of a missing usage block. Estimate tokens for each agent BEFORE dispatch using `est_tokens = base_overhead (5,000) + system_prompt_weight (3,000 for sonnet, 2,000 for haiku) + (input_size_chars / 4)` and compute blended cost using the formula from `docs/pricing.md`. Exclude N/A rows from all cost totals and accuracy statistics; include them in the file as visible rows.
 - **Assessment agents are read-only** — never modify source files during assessment phases
-- **Never skip the Remediation Gate** — the gate is mandatory; skip to Phase 6 Summary only if user selects "Assessment only"
+- **Never skip the Findings Gate** — it is mandatory regardless of finding count; `--force` re-presents it, never bypasses it
+- **Assessment pipeline is read-only** — no branch creation, no code changes, no commits, no PRs
 - **Assessment agents run in parallel** — they have no mutual dependencies
 - **Plan before executing** — always show the plan first
 - **Fail fast on missing target** — if the target path does not exist, stop immediately

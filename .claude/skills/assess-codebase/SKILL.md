@@ -1,5 +1,5 @@
 ---
-description: "Assess Codebase — starts the full codebase assessment pipeline (parallel assessment → findings consolidation → intervention documents → approval gate → remediation → review → PR). Usage: /assess-codebase [path] [--scope=architecture,security,quality,concurrency,devops] [--force]"
+description: "Assess Codebase — starts the codebase assessment pipeline (parallel assessment → findings consolidation → intervention documents → findings gate). Usage: /assess-codebase [path] [--scope=architecture,security,quality,concurrency,devops] [--force]"
 argument-hint: "[path] [--scope=architecture,security,quality,concurrency,devops] [--force]"
 ---
 
@@ -24,10 +24,9 @@ If no path is provided, use `.` (current working directory).
 Wait for the agent to complete. Capture its full result, including the `<usage>` block
 that appears at the end of the tool result (format: `subagent_tokens: N`).
 
-The assessment-manager handles both paths internally — it presents the Phase 5 approval gate
-to the user and either proceeds with remediation (dispatching Phase 6 remediation agents) or
-finishes after assessment-only completion. The skill does not need to detect which path was
-taken; it waits for the result and proceeds to Step 2 regardless of which path ran.
+The assessment-manager handles the full pipeline internally — it presents the Phase 5 Findings Gate
+to the user, records the acknowledgement and flagged interventions, and ends at the summary.
+The skill waits for the agent to complete and proceeds to Step 2 regardless of outcome.
 
 ---
 
@@ -46,9 +45,8 @@ and set `actual_tokens = "N/A"`.
 ## Step 3 — Complete Token Estimate file
 
 The assessment-manager will have written `{PREFIX}-Token-Estimate.md` at
-`docs/assessments/{PREFIX}/{PREFIX}-Token-Estimate.md` with assessment,
-intervention-documentation, and (if remediation ran) remediation rows. Read that file,
-then **append** the following in order:
+`docs/assessments/{PREFIX}/{PREFIX}-Token-Estimate.md` with assessment and
+intervention-documentation rows. Read that file, then **append** the following in order:
 
 ### 3a — Orchestrator row
 
@@ -66,7 +64,7 @@ For use in Step 3b, compute the orchestrator row values as follows:
 
 Append a horizontal rule (`---`) followed by an Actuals vs Estimate section. Include one
 row for every agent that ran: all assessment agents, intervention-documentation-standard,
-remediation agents (if any), and the assessment-manager orchestrator.
+and the assessment-manager orchestrator.
 
 ```markdown
 ## Actuals vs Estimate
@@ -123,8 +121,7 @@ Column rules:
 Summation rules:
 - Sum all agents' tokens and costs; exclude `"N/A"` rows from sums
 - Cost values: 2 decimal places for subtotals and totals; 4 decimal places for per-row costs
-- If the remediation section still contains the `"pending gate approval"` placeholder
-  (assessment-only path): leave it as-is and do not count placeholder rows in totals
+- The "Remediation" section in the Token Estimate file contains a static note (not a placeholder); leave it as-is
 - Wall-clock: convert `duration_ms` from the assessment-manager result to minutes/seconds
 
 ---
@@ -136,8 +133,8 @@ After writing to the Token Estimate file, report:
 ```
 Assessment pipeline complete.
    Token estimate + actuals → {PREFIX}-Token-Estimate.md
+   Approvals                → docs/assessments/{PREFIX}/{PREFIX}-Approvals.md
    Process log              → docs/assessments/{PREFIX}/{PREFIX}-process-log.txt
-   Pull Request             → {PR URL}
 ```
 
 If the Token Estimate file does not exist (assessment-manager failed before writing it):
