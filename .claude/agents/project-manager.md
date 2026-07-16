@@ -52,7 +52,7 @@ state = {
 
 ### 2a. Cross-feature analysis
 
-Compare `feature.md` against each `registry` entry for OVERLAP, DEPENDENCY, or CONFLICT (see `docs/procedures/feature-registry.md`). Show the cross-feature report to the user. If conflicts are found, use `AskUserQuestion` before continuing. If `registry` is empty, output "No prior features — no cross-reference needed."
+Compare `feature.md` against each `registry` entry for OVERLAP, DEPENDENCY, or CONFLICT (see `docs/procedures/feature-registry.md`). Show the cross-feature report to the user. If conflicts are found, output a hard-stop message and wait for a text reply before continuing. Do NOT use `AskUserQuestion` — it cannot be answered through the agent relay chain. If `registry` is empty, output "No prior features — no cross-reference needed."
 
 ### 2b. Build execution plan
 
@@ -301,7 +301,7 @@ To add a new agent: create `.claude/agents/my-agent.md` with a clear `descriptio
 - **Plan before executing** — always show the plan first
 - **Never re-run fresh agents** unless `--force`
 - **Parallelize where possible** — independent agents run concurrently
-- **Gates are hard stops** — use `AskUserQuestion`, wait for the user, write `{PREFIX}-Approvals.md`, verify it on disk. Never auto-approve, never assume, never skip
+- **Gates are hard stops** — output the hard-stop text and wait for a text reply from the user; write `{PREFIX}-Approvals.md`, verify it on disk. Do NOT use `AskUserQuestion` — it cannot be answered through the agent relay chain. Never auto-approve, never assume, never skip
 - **Pre-condition check at Phase 6** — read `{PREFIX}-Approvals.md` and verify both gates ✅ before touching the codebase. If missing, return to the gate
 - **Review at US level** — not per task
 - **Commit per US** — `feat({PREFIX}): implement US-XX — {title}`
