@@ -114,7 +114,7 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 
 | Agent | subagent_type | Purpose |
 |-------|---------------|---------|
-| Assessment Manager | `assessment-manager` | Orchestrates the full assessment + remediation pipeline |
+| Assessment Manager | `assessment-manager` | Orchestrates the assessment pipeline: parallel assessment → intervention docs → approval gate → effort/token estimates → summary |
 | Generic Software Assessment | `generic-software-assessment` | Broad quality analysis across architecture, security, testability, observability, DevOps |
 | Intervention Documentation Standard | `intervention-documentation-standard` | Generates structured, self-contained intervention documents from assessment findings |
 | God Class Decomposition | `god-class-decomposition` | Safe incremental decomposition of oversized classes and methods |
