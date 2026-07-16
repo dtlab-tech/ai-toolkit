@@ -22,11 +22,20 @@ Interventions proposed: N total
 Interventions Index: docs/assessments/ASSESS-001/ASSESS-001-Interventions-Index.md
 ```
 
-Use `AskUserQuestion`:
-- **"Approve all"** — all proposed interventions approved
-- **"Approve CRITICAL only"** — only CRITICAL severity approved
-- **"Select interventions"** — user specifies INT-NNN to approve (comma-separated)
-- **"Assessment only"** — stop here, no remediation
+Output the following hard-stop message and **wait for a text reply from the user**. Do NOT use `AskUserQuestion` — it cannot be answered through the agent relay chain.
+
+```
+⛔ ASSESSMENT GATE — HARD STOP
+
+Review the findings above and reply with one of:
+
+  "Approve all" — all proposed interventions approved
+  "Approve CRITICAL only" — only CRITICAL severity approved
+  "Select interventions: INT-001, INT-003, ..." — specify which to approve
+  "Assessment only" — stop here, no remediation
+
+The pipeline CANNOT continue until you reply directly.
+```
 
 If the user selects **"Assessment only"**, skip to the Summary phase.
 

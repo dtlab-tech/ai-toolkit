@@ -16,15 +16,19 @@ Show the user a summary of the generated documents:
 
 ### Step 2 — Request explicit sign-off
 
-Use `AskUserQuestion` with this exact phrasing:
+Output the following hard-stop message and **wait for a text reply from the user**. Do NOT use `AskUserQuestion` — it cannot be answered through the agent relay chain.
 
-> **"Please review the documents above and choose one of the options below.
-> The pipeline CANNOT continue until you make a selection."**
+```
+⛔ GATE 1 — DOCS APPROVAL — HARD STOP
 
-Options:
-- **"Approve — proceed to Work Breakdown"**
-- **"Request changes"** — describe what to change; the pipeline re-runs affected agents, re-validates, and returns here (max 2 revision cycles)
-- **"Approve with notes"** — accepted with comments recorded in the approval file
+Please review the documents above and reply with one of:
+
+  "Approve — proceed to Work Breakdown"
+  "Request changes: <describe what to change>"
+  "Approve with notes: <your comments>"
+
+The pipeline CANNOT continue until you reply directly.
+```
 
 ### Step 3 — Write approval record BEFORE continuing
 
@@ -81,15 +85,19 @@ Show key metrics:
 
 ### Step 3 — Request explicit sign-off
 
-Use `AskUserQuestion`:
+Output the following hard-stop message and **wait for a text reply from the user**. Do NOT use `AskUserQuestion` — it cannot be answered through the agent relay chain.
 
-> **"Please review the Work Breakdown above and choose one of the options below.
-> Implementation CANNOT start until you approve."**
+```
+⛔ GATE 2 — WORK BREAKDOWN APPROVAL — HARD STOP
 
-Options:
-- **"Approve — start implementation"**
-- **"Request changes"** — re-run `generate-work-breakdown` with feedback (max 2 cycles)
-- **"Approve with notes"** — accepted with comments recorded
+Please review the Work Breakdown above and reply with one of:
+
+  "Approve — start implementation"
+  "Request changes: <describe what to change>"
+  "Approve with notes: <your comments>"
+
+Implementation CANNOT start until you reply directly.
+```
 
 ### Step 4 — Update approval record BEFORE starting implementation
 
