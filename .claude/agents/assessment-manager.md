@@ -375,6 +375,261 @@ No writes to the Effort Estimate file during Phase 5.
 
 ## Phase 6 — Summary
 
+### Data Contract: Interventions Index
+
+The registry write logic depends on `{PREFIX}-Interventions-Index.md` produced by `intervention-documentation-standard` in Phase 4. The following contract defines the expected format that must be honoured before severity counts can be extracted.
+
+**Expected table structure:**
+
+```markdown
+| ID | Title | Area | Criticality | Depends on | Suggested Agent |
+|---|---|---|---|---|---|
+| INT-001 | ... | Security | CRITICAL | — | developer-backend |
+```
+
+**Criticality column contract:**
+
+| Attribute | Value |
+|-----------|-------|
+| Column name | `Criticality` (exact, case-sensitive) |
+| Valid values | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` (exact, case-sensitive) |
+| Type | String — one value per row |
+| Source | Produced by `intervention-documentation-standard` Phase 4 |
+
+**Counting algorithm:**
+
+1. Locate the main interventions table in the file
+2. For each data row, extract the value in the `Criticality` column
+3. Count rows where `Criticality = "CRITICAL"` → `critical_count`
+4. Count rows where `Criticality = "HIGH"` → `high_count`
+5. Count rows where `Criticality = "MEDIUM"` → `medium_count`
+6. Count rows where `Criticality = "LOW"` → `low_count`
+7. Compute `total_count = critical_count + high_count + medium_count + low_count`
+
+**Error handling:**
+
+| Condition | Action |
+|-----------|--------|
+| File not found | Log warning: `"[timestamp] WARNING: {PREFIX}-Interventions-Index.md not found; severity counts set to 0"` — return all counts as 0; continue |
+| `Criticality` column absent from table header | Log warning: `"[timestamp] WARNING: {PREFIX}-Interventions-Index.md missing Criticality column; severity counts set to 0"` — return all counts as 0; continue |
+| Row contains unrecognised Criticality value | Skip that row; log warning with row ID and value — count valid rows only; continue |
+| File present but table is empty | Return all counts as 0 — not an error; valid for zero-finding assessments |
+
+Severity count contract violations are **non-fatal** to the pipeline. The registry row is written with the counts available (defaulting to 0). The Phase 6 summary includes any warnings from this step.
+
+---
+
+### Data Contract: Approvals File
+
+The registry write logic depends on `{PREFIX}-Approvals.md` produced by the Findings Gate in Phase 5. The following contract defines the expected format that must be honoured before the flagged count can be extracted.
+
+**Expected section and table structure:**
+
+```markdown
+## Interventions Flagged for Feature Delivery
+
+| Intervention | Flagged | Date | Notes |
+|---|---|---|---|
+| INT-001 — ... | Yes | {date} | — |
+| INT-002 — ... | No | {date} | Not selected |
+```
+
+**Flagged column contract:**
+
+| Attribute | Value |
+|-----------|-------|
+| Section heading | `## Interventions Flagged for Feature Delivery` (exact, case-sensitive) |
+| Column name | `Flagged` (exact, case-sensitive) |
+| Valid values | `Yes` or `No` (exact, case-sensitive — `yes`, `YES`, `no`, `NO` are not valid) |
+| Type | String — one value per row |
+| Source | Produced by assessment-manager Phase 5 (Findings Gate) |
+
+**Counting algorithm:**
+
+1. Locate the `## Interventions Flagged for Feature Delivery` section in the file
+2. Parse the Markdown table within that section
+3. Count rows where the `Flagged` column value is exactly `"Yes"` (case-sensitive) → `flagged_count`
+4. If the table is present but empty, set `flagged_count = 0` — valid for zero-flagged runs
+
+**Error handling:**
+
+| Condition | Action |
+|-----------|--------|
+| File not found | Log error: `"[timestamp] ERROR: {PREFIX}-Approvals.md not found; cannot extract flagged count"` — **halt registry write**; report in Phase 6 summary |
+| `Interventions Flagged for Feature Delivery` section missing | Log error: `"[timestamp] ERROR: {PREFIX}-Approvals.md missing required section 'Interventions Flagged for Feature Delivery'; cannot extract flagged count"` — **halt registry write**; report in Phase 6 summary |
+| `Flagged` column absent from table header | Log error: `"[timestamp] ERROR: {PREFIX}-Approvals.md missing Flagged column; cannot extract flagged count"` — **halt registry write**; report in Phase 6 summary |
+| File present but section or table is malformed (unparseable) | Log error: `"[timestamp] ERROR: {PREFIX}-Approvals.md malformed; cannot extract flagged count"` — **halt registry write**; report in Phase 6 summary |
+
+Approvals file contract violations are **fatal to the registry write**. Do not create or modify the registry file. The Phase 6 summary reports: `Registry: docs/assessments/registry.md [ERROR — Approvals file contract violation; see process log]`. The pipeline itself does not halt.
+
+---
+
+### Registry Write Algorithm
+
+Execute the following steps in sequence at the start of Phase 6, before building the summary report. Log the start of registry write operations to the process log:
+
+```
+[timestamp] Phase 6 start: registry write
+```
+
+**Step 1 — Prerequisite check.** Before any registry write, verify that `{PREFIX}-Approvals.md` exists on disk. If the file is absent, log an error to the process log:
+
+```
+[timestamp] ERROR: Cannot write registry — {PREFIX}-Approvals.md not found. Ensure the Findings Gate completed successfully.
+```
+
+Record the outcome for the Phase 6 summary: `Registry: docs/assessments/registry.md [ERROR — Approvals file not found]`. Skip all remaining registry write steps. Do not create or modify the registry file. The pipeline does not halt.
+
+If the file exists but does not contain the `## Interventions Flagged for Feature Delivery` section, log an error to the process log:
+
+```
+[timestamp] Phase 6: registry write skipped — {PREFIX}-Approvals.md missing required section 'Interventions Flagged for Feature Delivery'
+```
+
+Record the outcome for the Phase 6 summary: `Registry: docs/assessments/registry.md [ERROR — Approvals file missing required section]`. Skip all remaining registry write steps. Do not create or modify the registry file. The pipeline does not halt.
+
+**Step 2 — Extract severity counts from Interventions Index (US-01-T01).** Using the data contract defined in the "Data Contract: Interventions Index" subsection above, parse `docs/assessments/{PREFIX}/{PREFIX}-Interventions-Index.md` and apply the counting algorithm:
+
+1. Locate the main interventions table
+2. Count rows where `Criticality = "CRITICAL"` → `critical_count`
+3. Count rows where `Criticality = "HIGH"` → `high_count`
+4. Count rows where `Criticality = "MEDIUM"` → `medium_count`
+5. Count rows where `Criticality = "LOW"` → `low_count`
+6. Compute `total_count = critical_count + high_count + medium_count + low_count`
+
+Apply the error handling rules defined in the data contract for all failure conditions (missing file, absent Criticality column, unrecognised values). Severity count failures are non-fatal; all counts default to 0.
+
+Log to process log on success:
+
+```
+[timestamp] Phase 6: extracted severity counts from {PREFIX}-Interventions-Index.md
+  CRITICAL: N, HIGH: N, MEDIUM: N, LOW: N, Total: N
+```
+
+**Step 3 — Extract flagged count from Approvals file (US-01-T02).** Using the data contract defined in the "Data Contract: Approvals File" subsection above, parse `docs/assessments/{PREFIX}/{PREFIX}-Approvals.md` and apply the counting algorithm:
+
+1. Locate the `## Interventions Flagged for Feature Delivery` section
+2. Parse the Markdown table in that section
+3. Count rows where `Flagged = "Yes"` (case-sensitive) → `flagged_count`
+4. If the table is present but empty, set `flagged_count = 0` — this is not an error
+
+Apply the error handling rules defined in the data contract. Approvals file contract violations are fatal to the registry write; if any fatal error condition is met, log the error, skip the remaining registry write steps, and report the error in the Phase 6 summary.
+
+Log to process log on success:
+
+```
+[timestamp] Phase 6: extracted flagged count from {PREFIX}-Approvals.md
+  Flagged for feature delivery: N
+```
+
+**Step 4 — Build registry row (US-01-T03).** Capture the current system date in YYYY-MM-DD format. Construct the Markdown table row:
+
+```
+| {YYYY-MM-DD} | [{PREFIX}]({PREFIX}/) | {total_count} | {critical_count} | {high_count} | {medium_count} | {low_count} | {flagged_count} |
+```
+
+The row must have exactly eight pipe-delimited columns. Numeric values for Total, CRITICAL, HIGH, MEDIUM, LOW, and Flagged must be non-negative integers with no decimal places. The Prefix column must use the relative Markdown link format `[{PREFIX}]({PREFIX}/)`.
+
+**Step 5 — Detect whether registry exists (US-02-T01).** Check for the presence of `docs/assessments/registry.md` in the assessed project directory. If the file system check raises an error (e.g., permission denied), log:
+
+```
+[timestamp] ERROR: Phase 6 — registry existence check failed: {error message}
+```
+
+Record the outcome for the Phase 6 summary as an error and skip the remaining write steps. The pipeline does not halt.
+
+**Step 6 — Create registry on first run (US-01-T04).** If `docs/assessments/registry.md` does not exist, create it with the following content (replacing `{row}` with the constructed row from Step 4):
+
+```markdown
+# Assessment Registry
+
+| Date | Prefix | Total | CRITICAL | HIGH | MEDIUM | LOW | Flagged |
+|------|--------|-------|----------|------|--------|-----|---------|
+{row}
+```
+
+If the write operation itself raises an I/O error (e.g., permission denied, disk full), log:
+
+```
+[timestamp] ERROR: Registry write failed — I/O error during file creation: docs/assessments/registry.md — {error message}
+```
+
+Record for the Phase 6 summary: `Registry: docs/assessments/registry.md [ERROR — I/O error during creation]`. Skip remaining steps. The pipeline does not halt.
+
+After a successful write, verify the file exists and is non-empty by reading it back. If verification fails, log:
+
+```
+[timestamp] ERROR: Registry write failed — file not readable after creation: docs/assessments/registry.md
+```
+
+Record for the Phase 6 summary: `Registry: docs/assessments/registry.md [ERROR — write verification failed]`. The pipeline does not halt.
+
+On success, log to process log (US-01-T05):
+
+```
+[timestamp] Phase 6: created registry.md with first row
+  Location: docs/assessments/registry.md
+  Row: | {date} | [{PREFIX}]({PREFIX}/) | {total} | {critical} | {high} | {medium} | {low} | {flagged} |
+```
+
+Record for the Phase 6 summary: `Registry: docs/assessments/registry.md [created]`.
+
+**Step 7 — Append row on subsequent runs (US-02-T02, US-02-T03).** If `docs/assessments/registry.md` already exists:
+
+1. Read the full file content (UTF-8). If the read fails (e.g., permission denied), log:
+
+   ```
+   [timestamp] ERROR: Registry append failed — cannot read existing file: docs/assessments/registry.md — {error message}
+   ```
+
+   Record for the Phase 6 summary: `Registry: docs/assessments/registry.md [ERROR — read failure; existing file unchanged]`. Skip to Step 8. The pipeline does not halt.
+
+2. Strip all trailing whitespace from the content
+3. Append a newline, the new row from Step 4, and a final trailing newline
+4. Write the assembled content back to the file as a full overwrite
+
+The write is atomic — either the complete updated content is written or the original file is left unchanged. Do not validate, repair, or modify any existing rows during this operation.
+
+If the write operation itself raises an I/O error (e.g., permission denied, disk full), log:
+
+```
+[timestamp] ERROR: Registry append failed — I/O error during write: docs/assessments/registry.md — {error message}
+```
+
+Record for the Phase 6 summary: `Registry: docs/assessments/registry.md [ERROR — I/O error during append]`. Skip remaining steps. The pipeline does not halt.
+
+After a successful write, verify the file exists and is non-empty by reading it back. If verification fails, log:
+
+```
+[timestamp] ERROR: Registry append failed — write verification failed: docs/assessments/registry.md
+```
+
+On success, count the data rows in the file after writing (all rows excluding the title line, the table header row, and the separator row) to determine the new row position N. Log to process log (US-02-T04):
+
+```
+[timestamp] Phase 6: appended row to registry.md
+  Location: docs/assessments/registry.md
+  Row: | {date} | [{PREFIX}]({PREFIX}/) | {total} | {critical} | {high} | {medium} | {low} | {flagged} |
+```
+
+Record for the Phase 6 summary: `Registry: docs/assessments/registry.md [updated — row N appended]`.
+
+**Step 8 — Phase 6 summary update (US-01-T06, US-02-T05).** After the registry write completes (regardless of outcome), include a registry confirmation line in the Phase 6 Report block between the `Approvals:` and `Effort Estimate:` entries. Select the line based on outcome:
+
+| Outcome | Summary line |
+|---------|-------------|
+| Registry created (first run) | `Registry:            docs/assessments/registry.md [created]` |
+| Registry updated (append) | `Registry:            docs/assessments/registry.md [updated — row N appended]` |
+| Write skipped or error | `Registry:            docs/assessments/registry.md [ERROR — {reason}]` |
+
+Log to process log:
+
+```
+[timestamp] Phase 6 end: registry write complete
+```
+
+---
+
 Report:
 
 ```
@@ -390,10 +645,11 @@ Assessment:
 Findings:      N CRITICAL | N HIGH | N MEDIUM | N LOW
 Interventions: N proposed | N flagged for feature delivery
 ─────────────────────────────────────────────────────
-Approvals:     {PREFIX}-Approvals.md
-Effort Estimate: {PREFIX}-Effort-Estimate.md
-Token Estimate:  {PREFIX}-Token-Estimate.md
-Process log:     docs/assessments/{PREFIX}/{PREFIX}-process-log.txt
+Approvals:           {PREFIX}-Approvals.md
+Registry:            docs/assessments/registry.md [created | updated — row N appended | ERROR — {reason}]
+Effort Estimate:     {PREFIX}-Effort-Estimate.md
+Token Estimate:      {PREFIX}-Token-Estimate.md
+Process log:         docs/assessments/{PREFIX}/{PREFIX}-process-log.txt
 ─────────────────────────────────────────────────────
 Flagged interventions can be actioned via /define-feature
 referencing the INT-NNN document.
