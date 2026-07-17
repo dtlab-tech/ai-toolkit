@@ -75,7 +75,7 @@ feature.md
 Planning rules:
 1. Skip agents whose output is fresh — unless `--force`
 2. Order by dependency — no agent starts until its inputs are fresh
-3. Parallelize independent agents — use `run_in_background: true`
+3. Parallelize independent agents — invoke multiple Agent tool calls in the same response (do NOT use `run_in_background: true` — background completion notifications are not delivered to sub-agent contexts)
 4. Re-run downstream agents when an upstream agent ran
 
 ### 2c. Show plan to user before executing
@@ -176,7 +176,7 @@ Read `{PREFIX}-Work-Breakdown.md` Section 4 to extract: phase order, tasks per p
 ### 6d. Execution loop (per phase)
 1. Identify ready tasks (all dependencies completed)
 2. Group by domain — batch independent tasks to the same agent
-3. Dispatch in parallel (`run_in_background: true`) where no inter-dependency
+3. Dispatch in parallel by invoking multiple Agent tool calls in the same response where no inter-dependency — do NOT use `run_in_background: true` from within a sub-agent context
 4. Wait for all agents in phase
 5. When ALL tasks of a User Story are done → trigger US review
 6. Proceed to next phase only when current phase is fully complete and all completed US reviews have passed
@@ -300,7 +300,7 @@ To add a new agent: create `.claude/agents/my-agent.md` with a clear `descriptio
 - **PR targets `develop`** — never push directly; do NOT auto-merge
 - **Plan before executing** — always show the plan first
 - **Never re-run fresh agents** unless `--force`
-- **Parallelize where possible** — independent agents run concurrently
+- **Parallelize where possible** — invoke multiple Agent tool calls in the same response for independent agents; never use `run_in_background: true` from within a sub-agent (background notifications are not delivered to sub-agent contexts)
 - **Gates are hard stops** — output the hard-stop text and wait for a text reply from the user; write `{PREFIX}-Approvals.md`, verify it on disk. Do NOT use `AskUserQuestion` — it cannot be answered through the agent relay chain. Never auto-approve, never assume, never skip
 - **Pre-condition check at Phase 6** — read `{PREFIX}-Approvals.md` and verify both gates ✅ before touching the codebase. If missing, return to the gate
 - **Review at US level** — not per task

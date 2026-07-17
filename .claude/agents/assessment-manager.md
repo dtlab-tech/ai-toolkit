@@ -95,7 +95,7 @@ Target codebase
 
 ## Phase 3 — Assessment Execution
 
-Dispatch all assessment agents in parallel (`run_in_background: true`). Each agent receives: target codebase path, assessment prefix, output directory path. Track tokens for every agent call (see `docs/procedures/process-log.md`).
+Dispatch all assessment agents in parallel by invoking multiple Agent tool calls in the same response. Each agent receives: target codebase path, assessment prefix, output directory path. Do NOT use `run_in_background: true` — background completion notifications are not delivered to sub-agent contexts and will cause the pipeline to block indefinitely. Track tokens for every agent call (see `docs/procedures/process-log.md`).
 
 After all complete:
 - Verify each expected output file exists and is non-empty
