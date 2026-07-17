@@ -28,3 +28,11 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-003-assessment-scope-reduction/feature.md)
 
 ---
+
+## FTR-004 — Assessment Registry
+**Keywords:** registry, assessment-history, assessment-manager, registry.md, severity-counts, flagged-count, Interventions-Index, Approvals
+**Status:** in-progress
+**Summary:** Extends `assessment-manager` Phase 6 to append one row to `docs/assessments/registry.md` after each completed assessment (Findings Gate acknowledged, `{PREFIX}-Approvals.md` written). Severity counts are sourced from `{PREFIX}-Interventions-Index.md`; flagged count from `{PREFIX}-Approvals.md`. File is created on first run with a Markdown table header; subsequent runs append without validating existing rows. Two data contracts (Interventions Index and Approvals file formats) are documented in Phase 6. Registry write is conditional on `{PREFIX}-Approvals.md` existing; all error paths are non-fatal to the pipeline.
+→ [Detail](FTR-004-assessment-registry/feature.md)
+
+---
