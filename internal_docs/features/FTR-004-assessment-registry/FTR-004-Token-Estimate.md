@@ -26,7 +26,7 @@
 | developer-testing (×2 calls) | sonnet | 45,000 | $0.2430 | 96,540 | $0.5213 | ✅ complete |
 | review-solution (×2 calls) | sonnet | 72,000 | $0.3888 | 98,461 | $0.5317 | ✅ complete |
 | rework contingency | sonnet | 58,000 | $0.3132 | included above | — | ✅ complete |
-| project-manager (orchestrator) | sonnet | 35,000 | $0.1890 | — | — | ⏳ pending |
+| project-manager (orchestrator) | sonnet | 35,000 | $0.1890 | 90,597 | $0.4892 | ✅ complete |
 
 ## Phase subtotals
 
@@ -36,14 +36,14 @@
 | Phase 1 — Shared Infrastructure | 17,000 | $0.0918 | 49,670 | $0.2682 |
 | Phase 2 — Core Registry Write | 61,000 | $0.3294 | 55,008 | $0.2970 |
 | Phase 3 — Edge Cases and Testing | 65,000 | $0.3510 | 140,001 | $0.7560 |
-| Orchestrator | 35,000 | $0.1890 | — | ⏳ pending |
+| Orchestrator | 35,000 | $0.1890 | 90,597 | $0.4892 |
 
 ## Grand total
 
 | Metric | Estimated | Actual |
 |--------|-----------|--------|
-| Total tokens | 347,000 | 381,963 (excl. orchestrator) |
-| Total cost ($) | $1.63 | $2.07 (excl. orchestrator) |
+| Total tokens | 347,000 | 472,560 (incl. orchestrator) |
+| Total cost ($) | $1.63 | $2.56 (incl. orchestrator) |
 
 ---
 
