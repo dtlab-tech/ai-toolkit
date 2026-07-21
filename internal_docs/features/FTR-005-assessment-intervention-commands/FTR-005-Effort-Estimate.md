@@ -24,6 +24,25 @@
 |-------|-------|-------------|
 | Phase 1 — Command Implementation | 2 tasks (US-01-T01, US-02-T01) | 2 agents in parallel |
 
+## Agent wall-clock actuals
+
+| Agent | Estimated | Actual | Notes |
+|-------|-----------|--------|-------|
+| generate-requirements | ~5min | 2m 42s | ✅ |
+| generate-tech-spec | ~5min | 1m 55s | ✅ |
+| validate-feature-docs | ~5min | 0m 49s | ✅ |
+| generate-work-breakdown | ~5min | 2h 7m 38s | ⚠️ anomalous — PM relay chain overhead |
+| developer-backend (×2) | ~15min | 0 | not run — main loop implemented directly |
+| review-solution | ~10min | 17m 9s | ✅ |
+| PM orchestrator total | ~30min | ~4h | ⚠️ run_in_background bug caused 5 relay chains |
+
+## Pipeline wall-clock total
+
+| Metric | Estimated | Actual |
+|--------|-----------|--------|
+| Agent critical path | ~30min | ~4h |
+| Human wait (gate approvals) | — | ~30min |
+
 ## Notes
 
 - Both tasks are M-complexity (2h human / 15min agent each).
@@ -31,3 +50,4 @@
 - Agent estimate is 15min per task × 1 (parallel) + ~5min per review × 2 = ~25min total critical path; rounded to 30min.
 - Human estimate is 2h + 2h (sequential) = 4h.
 - No INFRA-TXX setup tasks are required (no shared infrastructure).
+- **Variance:** generate-work-breakdown anomalously took 2h 7m (likely PM relay chain waiting for Gate 2 user input). PM orchestrator massively overran due to `run_in_background: true` spawning 5 relay chains; fixed in Gate Protocol (CLAUDE.md).

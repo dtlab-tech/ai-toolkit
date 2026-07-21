@@ -22,25 +22,35 @@
 | generate-tech-spec | haiku | 11,500 | $0.0207 | 19,800 | $0.0356 | complete |
 | validate-feature-docs | haiku | 14,000 | $0.0252 | 11,400 | $0.0205 | complete |
 | generate-work-breakdown | haiku | 15,000 | $0.0270 | 13,800 | $0.0248 | complete |
-| developer-backend (×2, US-01 + US-02) | sonnet | 33,000 | $0.1782 | — | — | pending |
-| review-solution (×2, US-01 + US-02) | sonnet | 26,000 | $0.1404 | — | — | pending |
-| developer-backend rework contingency (×2, 30%) | sonnet | 33,000 | $0.1782 | — | — | pending |
-| review-solution rework contingency (×2, 30%) | sonnet | 26,000 | $0.1404 | — | — | pending |
-| project-manager (orchestrator) | sonnet | 60,000 | $0.3240 | — | — | pending |
+| developer-backend (×2, US-01 + US-02) | sonnet | 33,000 | $0.1782 | 0 | $0.0000 | not run — implemented directly in main loop |
+| review-solution | sonnet | 26,000 | $0.1404 | 54,264 | $0.2930 | complete |
+| developer-backend rework contingency (×2, 30%) | sonnet | 33,000 | $0.1782 | 0 | $0.0000 | not triggered |
+| review-solution rework contingency (×2, 30%) | sonnet | 26,000 | $0.1404 | 0 | $0.0000 | not triggered |
+| project-manager (orchestrator, all chains) | sonnet | 60,000 | $0.3240 | 187,791 | $1.0141 | complete — 5 PM relay agents due to run_in_background bug |
 
 ## Phase subtotals
 
 | Phase | Est. tokens | Est. cost ($) | Actual tokens | Actual cost ($) |
 |-------|------------|--------------|---------------|----------------|
 | Doc generation | 50,000 | $0.0900 | 59,200 | $0.1065 |
-| Phase 1 — Command Implementation | 118,000 | $0.6372 | pending | pending |
+| Phase 1 — Command Implementation | 118,000 | $0.6372 | 54,264 | $0.2930 |
+| Orchestrator (all PM chains) | 60,000 | $0.3240 | 187,791 | $1.0141 |
 
 ## Grand total
 
-| Metric | Estimated | Actual |
-|--------|-----------|--------|
-| Total tokens | 228,000 | partial — updated at pipeline end |
-| Total cost ($) | $1.23 | partial — updated at pipeline end |
+| Metric | Estimated | Actual | Delta |
+|--------|-----------|--------|-------|
+| Total tokens | 228,000 | 301,255 | +73,255 (+32%) |
+| Total cost ($) | $1.23 | $1.41 | +$0.18 (+15%) |
+
+### Actuals vs Estimate
+
+| Metric | Estimated | Actual | Trend |
+|--------|-----------|--------|-------|
+| Total tokens | 228,000 | 301,255 | ↑ +32% |
+| Total cost ($) | $1.23 | $1.41 | ↑ +15% |
+
+**Variance note:** PM orchestrator consumed 187,791 tokens vs 60,000 estimated (+213%). Root cause: `run_in_background: true` default caused 5 PM relay chains instead of 1 blocking PM run. Developer agents not consumed (implemented directly in main loop). Review-solution overran estimate slightly (+109%).
 
 ---
 
