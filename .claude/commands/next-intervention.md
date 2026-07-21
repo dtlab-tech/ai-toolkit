@@ -67,7 +67,7 @@ For each flagged intervention, determine whether it is "actioned" using this two
 
 1. **Slug match:** Does any feature folder name contain the INT-NNN slug from the `Intervention` column (case-insensitive substring)?
    - The `Intervention` column format is `INT-NNN — {slug}` (e.g. `INT-001 — sql-injection-hardening`). The slug is the part after ` — `.
-2. **Body match (fallback):** For any folder that did NOT match by slug, read its `feature.md` and check whether the INT-NNN identifier string (e.g. `INT-001`) appears anywhere in the body.
+2. **Body match (fallback):** For any folder that did NOT match by slug, read its `feature.md` and check whether the INT-NNN identifier string (e.g. `INT-001`) appears anywhere in the body (case-insensitive).
 
 An intervention is "actioned" if either check returns true for at least one feature folder.
 
