@@ -90,6 +90,8 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 | Command | Purpose |
 |---------|---------|
 | `/assessment-status <prefix>` | Reports presence/state of all assessment artifacts (assessments, interventions, approvals, issues register) |
+| `/next-intervention [prefix]` | Finds the next un-actioned flagged intervention and suggests the `/define-feature` invocation to start on it |
+| `/check-interventions [prefix]` | Full reconciliation table: every intervention cross-referenced against the Index, on-disk files, and existing feature folders |
 
 ## Agents (spawnable subagents, in `.claude/agents/`)
 
