@@ -12,3 +12,35 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-001-assessment-token-estimation/feature.md)
 
 ---
+
+## FTR-002 — Assessment Pipeline Effort Estimation
+**Keywords:** effort-estimation, wall-clock, duration, assessment-manager, Effort-Estimate.md, process-log, remediation-rates, severity-counts
+**Status:** completed
+**Summary:** Extends `assessment-manager` to write `{PREFIX}-Effort-Estimate.md` at end of Phase 3 (assessment agent durations from process log timestamps, batch wall-clock) and finalise it at end of Phase 4 (intervention-documentation-standard row + remediation effort section derived from Interventions Index using fixed rates CRITICAL=8h, HIGH=4h, MEDIUM=2h, LOW=1h). Remediation effort summary displayed at the Findings Gate. File is frozen after Phase 5. No skill-level append step (contrast with FTR-001).
+→ [Detail](FTR-002-assessment-effort-estimation/feature.md)
+
+---
+
+## FTR-003 — Assessment Pipeline Scope Reduction
+**Keywords:** read-only, findings-gate, acknowledgement, flagging, assessment-manager, assessment-findings-gate.md, Approvals.md, remediation-removal
+**Status:** completed
+**Summary:** Makes the assessment pipeline fully read-only. Removes Phase 6 (remediation implementation) and Phase 7 (PR creation) from `assessment-manager`. Replaces the Remediation Gate with a two-step Findings Gate: mandatory acknowledgement (Step 5a) + optional INT-NNN flagging for feature delivery (Step 5b). Renames `assessment-approval-gate.md` → `assessment-findings-gate.md`. New `{PREFIX}-Approvals.md` format: every intervention gets a Flagged: Yes/No row. Removes remediation placeholder from Token Estimate (replaced with static note). Updates `assess-codebase` skill description.
+→ [Detail](FTR-003-assessment-scope-reduction/feature.md)
+
+---
+
+## FTR-004 — Assessment Registry
+**Keywords:** registry, assessment-history, assessment-manager, registry.md, severity-counts, flagged-count, Interventions-Index, Approvals
+**Status:** completed
+**Summary:** Extends `assessment-manager` Phase 6 to append one row to `docs/assessments/registry.md` after each completed assessment (Findings Gate acknowledged, `{PREFIX}-Approvals.md` written). Severity counts are sourced from `{PREFIX}-Interventions-Index.md`; flagged count from `{PREFIX}-Approvals.md`. File is created on first run with a Markdown table header; subsequent runs append without validating existing rows. Two data contracts (Interventions Index and Approvals file formats) are documented in Phase 6. Registry write is conditional on `{PREFIX}-Approvals.md` existing; all error paths are non-fatal to the pipeline.
+→ [Detail](FTR-004-assessment-registry/feature.md)
+
+---
+
+## FTR-005 — Assessment Intervention Commands
+**Keywords:** next-intervention, check-interventions, commands, Approvals.md, Interventions-Index, feature-delivery-handoff, reconciliation, flagged-interventions
+**Status:** defined
+**Summary:** Adds two read-only commands — `/next-intervention [prefix]` and `/check-interventions [prefix]` — that bridge the assessment pipeline output to the feature delivery pipeline. `/next-intervention` reads `{PREFIX}-Approvals.md`, finds the first flagged INT-NNN without a corresponding feature folder in `internal_docs/features/` or `docs/features/`, and outputs the exact `/define-feature` invocation. `/check-interventions` produces a full reconciliation table: every intervention cross-referenced against the Interventions Index, the INT-NNN document files on disk, and existing feature folders. Both commands are strictly read-only (allowed tools: Read, Glob, Grep). Depend on the FTR-003 Approvals file format.
+→ [Detail](FTR-005-assessment-intervention-commands/feature.md)
+
+---

@@ -51,6 +51,38 @@ An `AGENTS.md` file in the project root with:
 
 Generic procedures live in `docs/procedures/` in this toolkit. Projects can override any procedure by placing a file with the same name at `docs/procedures/` in their own root. Agents check the project first, then fall back to the toolkit.
 
+## Gate Protocol — MANDATORY RULES
+
+These rules apply in every session, without exception.
+
+### Launching the Project Manager
+
+**Always pass `run_in_background: false` when spawning the `project-manager` agent.**
+
+Running the PM in the background leaves the main loop free to act independently. This creates two parallel execution paths that will conflict. The PM must block the main loop until it reaches a gate and returns.
+
+### While the PM is running
+
+**Do nothing.** No file reads "to prepare", no file writes "to accelerate", no implementation "because it seems stuck". The only permitted actions are:
+
+- Receiving gate notifications and presenting them to the user
+- Responding to the user's status questions ("still running")
+- Sending messages to the PM via SendMessage if it is genuinely blocked and the user asks to unblock it
+
+If the PM produces relay agents that appear to do nothing useful, that is noise — not a signal that the PM is stuck. Wait.
+
+### Gate notifications are hard stops
+
+When any gate notification arrives (Gate 1, Gate 2, Findings Gate, or any **HARD STOP** in any agent output):
+
+1. Stop immediately — even if mid-turn
+2. Present the full gate content to the user
+3. Wait for explicit written approval before touching any file or spawning any agent
+
+This applies even if the PM appears stuck, in a relay loop, or the gate arrives while another tool call is in progress.
+
+---
+
 ## Skills (user-invocable, in `.claude/skills/`)
 
 ### Feature Delivery
@@ -90,6 +122,8 @@ Generic procedures live in `docs/procedures/` in this toolkit. Projects can over
 | Command | Purpose |
 |---------|---------|
 | `/assessment-status <prefix>` | Reports presence/state of all assessment artifacts (assessments, interventions, approvals, issues register) |
+| `/next-intervention [prefix]` | Finds the next un-actioned flagged intervention and suggests the `/define-feature` invocation to start on it |
+| `/check-interventions [prefix]` | Full reconciliation table: every intervention cross-referenced against the Index, on-disk files, and existing feature folders |
 
 ## Agents (spawnable subagents, in `.claude/agents/`)
 
