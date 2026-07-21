@@ -36,3 +36,11 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-004-assessment-registry/feature.md)
 
 ---
+
+## FTR-005 — Assessment Intervention Commands
+**Keywords:** next-intervention, check-interventions, commands, Approvals.md, Interventions-Index, feature-delivery-handoff, reconciliation, flagged-interventions
+**Status:** defined
+**Summary:** Adds two read-only commands — `/next-intervention [prefix]` and `/check-interventions [prefix]` — that bridge the assessment pipeline output to the feature delivery pipeline. `/next-intervention` reads `{PREFIX}-Approvals.md`, finds the first flagged INT-NNN without a corresponding feature folder in `internal_docs/features/` or `docs/features/`, and outputs the exact `/define-feature` invocation. `/check-interventions` produces a full reconciliation table: every intervention cross-referenced against the Interventions Index, the INT-NNN document files on disk, and existing feature folders. Both commands are strictly read-only (allowed tools: Read, Glob, Grep). Depend on the FTR-003 Approvals file format.
+→ [Detail](FTR-005-assessment-intervention-commands/feature.md)
+
+---
