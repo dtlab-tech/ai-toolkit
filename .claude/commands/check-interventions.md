@@ -48,7 +48,7 @@ STOP.
 Parse the Markdown table under `## Interventions Flagged for Feature Delivery`. Extract all rows (both `Yes` and `No`). Record:
 - `INT-NNN` identifier (normalise by stripping leading zeros for matching)
 - `Flagged` value (`Yes`, `No`, or malformed if any other value)
-- Full `Intervention` column value (e.g. `INT-001 — sql-injection-hardening`) to extract the slug
+- Full `Intervention` column value (e.g. `INT-001 — sql-injection-hardening`) to extract the slug — the slug is the part after ` — `
 
 ## Step 4 — Read Interventions Index
 
@@ -68,7 +68,9 @@ Collect all INT-NNN identifiers from:
 1. The Approvals file (all rows)
 2. The Interventions Index (all rows, if available)
 
-Union both sets (deduplicated, normalised). This is the full list to reconcile.
+Union both sets (deduplicated). This is the full list to reconcile.
+
+For each entry, retain the **original padded identifier** from the source file (e.g., `INT-001`) as the canonical form — this is what is used in file-system glob operations. Stripping leading zeros is applied **only when comparing two identifiers from different sources** to determine whether they refer to the same intervention (e.g., `INT-001` and `INT-1` are treated as equal for deduplication only).
 
 ## Step 6 — For each intervention, collect data
 
@@ -96,7 +98,7 @@ For each INT-NNN in the unified list:
 - Glob `internal_docs/features/FTR-*/` and `docs/features/FTR-*/`
 - For each feature folder, apply the two-step heuristic:
   1. **Slug match:** folder name contains the INT-NNN slug (case-insensitive substring)
-  2. **Body match (fallback):** read `feature.md`; body contains the INT-NNN identifier string
+  2. **Body match (fallback):** read `feature.md`; body contains the INT-NNN identifier string (case-insensitive)
 - If a match is found: `✅ actioned → {matched-folder}`
 - If no match: `⏳ pending`
 - If Flagged is not `Yes`: `n/a`
