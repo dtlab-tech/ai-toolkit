@@ -65,6 +65,32 @@ The toolkit ships **generic agents** that work with any project. Each agent read
 
 Generic procedures live in `docs/procedures/`. Projects can override any of them by placing a file with the same name at their own `docs/procedures/`. Agents check the project first, then fall back to the toolkit.
 
+## Required configuration — subagent spawn depth
+
+> ⚠️ **This setting is not optional for the orchestrated pipelines.** Without it, `/implement-feature` and `/assess-codebase` silently degrade.
+
+The toolkit is built on a **two-level agent hierarchy**: an orchestrator (`project-manager` or `assessment-manager`) is spawned as a subagent, and it in turn spawns the specialized worker agents (developers, reviewers, assessors), each on its own role-appropriate model with an isolated context.
+
+Since Claude Code **v2.1.217, a subagent cannot spawn further subagents by default** (spawn depth is capped at 1, an intentional guard against unbounded recursive fan-out and cost). Under that default, when an orchestrator runs as a subagent it has **no `Agent` tool** — so instead of delegating, it executes every worker's task *inline, in its own context, on its own model*. The consequences:
+
+- **Per-agent model assignment stops taking effect** — the `haiku`/`sonnet`/`opus` mapping on each agent is never applied, because those agents are never actually spawned. Everything runs on the orchestrator's model.
+- **Context isolation is lost** — one long orchestrator context replaces the intended per-agent isolation.
+- **Per-agent token telemetry disappears** — no per-agent `<usage>` blocks are emitted, so `*-Token-Estimate.md` records only an aggregate orchestrator total.
+
+To let the toolkit work as designed, raise the allowed depth to **2** (main loop → orchestrator → workers). This repo already sets it in [`.claude/settings.json`](.claude/settings.json):
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "2"
+  }
+}
+```
+
+**When you install the toolkit into another project, you must add this setting yourself.** The installers (`npx @dtlabs/ai-toolkit`, `ai-toolkit --global`, and the `/install-toolkit` agent) **never copy or edit any `settings.json`** — that file is user-owned, and merging it automatically would risk clobbering your existing configuration. Instead, each installer **checks** whether `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` is set to `2`+ in the destination and, if it is missing, prints the exact snippet to add (to `.claude/settings.json` for one project, or `~/.claude/settings.json` for all projects). After adding it, restart Claude Code so the variable is loaded.
+
+The orchestrator agents already omit the `tools:` frontmatter field, so they inherit the `Agent` tool automatically once the depth allows it — no per-agent changes are needed.
+
 ## Documentation
 
 - [Quick Reference](docs/reference.md) — cheatsheet of every skill, command, agent, and procedure

@@ -82,3 +82,30 @@ Blended rates used (docs/pricing.md): haiku $0.001800/1k, sonnet $0.005400/1k, o
 | Total wall-clock | ~15min (agent, parallel) | ~49min (single-threaded inline run incl. gates) | +34min |
 
 > Note: Because rework did not occur (0 issues), the 30% rework-contingency line ($0.2045 / 55,000 tok) in the pre-execution estimate was not consumed. Effective estimate excluding contingency: ~185,200 tokens / ~$0.78.
+
+---
+
+## Measured Orchestrator Usage (from /implement-feature)
+
+The `<usage>` blocks captured by the `/implement-feature` wrapper across the three
+orchestrator resumes (Gate 1 stop, Gate 2 stop, final completion). Since every child
+agent ran inline, this is the authoritative real token total for the whole pipeline.
+
+| Orchestrator segment | subagent_tokens | duration_ms |
+|----------------------|-----------------|-------------|
+| Run 1 → Gate 1 (docs) | 75,100 | 370,176 |
+| Run 2 → Gate 2 (work breakdown) | 81,243 | 467,177 |
+| Run 3 → completion (implementation + review + PR) | 100,917 | 2,787,638 |
+| **Total (all inline work + orchestration)** | **257,260** | **3,624,991 (~60.4 min)** |
+
+### Grand Total (measured)
+
+| Metric | Estimated | Actual | Delta |
+|--------|-----------|--------|-------|
+| Total tokens (all agents) | ~240,200 (~185,200 excl. contingency) | 257,260 (orchestrator, all inline) | +17,060 vs full est. / +72,060 vs no-contingency |
+| Total wall-clock | ~15min (parallel agents) | ~60.4min (single-threaded inline incl. two gate waits) | +45min |
+
+> The wall-clock delta is dominated by the two human-approval gate pauses, not compute.
+> The token total lands close to the full pre-execution estimate (within ~7%) despite the
+> contingency going unused — expected, since inline execution folds four separate agent
+> system-prompt overheads into one continuous context rather than paying per-spawn base cost.
