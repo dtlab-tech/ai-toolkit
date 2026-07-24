@@ -1,6 +1,7 @@
 ---
 name: install-toolkit
 description: "Installs the ai-toolkit into a destination project by copying agents, skills, commands, and procedures. Input: [path-to-destination] [--force] — defaults to current working directory"
+model: sonnet
 ---
 
 # Install Toolkit
@@ -106,6 +107,8 @@ cp "{source_file}" "{dest_file}"
 
 **Never copy the `install-toolkit/` skill directory** — this skill is toolkit-internal and has no use in a destination project.
 
+**Never copy `.claude/settings.json` or `.claude/settings.local.json`** — these are user-owned configuration. Copying them would clobber the destination's existing settings. The toolkit's own `settings.json` exists only to configure this repo; it is verified and advised on (Step 4b), never installed.
+
 **For `docs/procedures/`**: copy only files that don't already exist in the destination (regardless of `--force`) — project-specific procedure overrides must never be clobbered.
 
 ---
@@ -120,6 +123,44 @@ After copying:
    echo "{current_version}" > "{dest}/.claude/.ai-toolkit-version"
    ```
    This file is read on future installs to show the version comparison prompt.
+
+---
+
+## Step 4b — Verify subagent spawn depth (verify & advise ONLY — never write)
+
+The orchestrated pipelines (`/implement-feature`, `/assess-codebase`) require the
+environment variable `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` to be set to `2` or higher.
+Without it (Claude Code default is `1`), an orchestrator running as a subagent cannot
+spawn its worker subagents, so it executes every task inline on its own model —
+per-agent model assignment, context isolation, and per-agent token telemetry are all lost.
+
+**This is a check, not a change. Do NOT create or edit any settings file** — merging user
+configuration is out of scope and risks clobbering the user's existing settings.
+
+1. Look for the variable in the destination's settings, checking in order:
+   - `{dest}/.claude/settings.local.json`
+   - `{dest}/.claude/settings.json`
+   - `~/.claude/settings.json` (user-global)
+   Read each with a tolerant JSON parse; a value of `2` or higher in `env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` satisfies the requirement.
+2. **If satisfied** → report a one-line confirmation and continue.
+3. **If missing / below 2** → print a warning and the exact snippet the user must add themselves:
+   ```
+   ⚠️  CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH is not set to 2+.
+       Without it, orchestrated pipelines run every worker inline on the
+       orchestrator model (per-agent models, context isolation, and token
+       telemetry are lost).
+
+       Add this to .claude/settings.json (this project) or ~/.claude/settings.json
+       (all projects) — the installer does NOT edit it for you:
+
+         {
+           "env": {
+             "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "2"
+           }
+         }
+
+       Then restart Claude Code so the variable is loaded.
+   ```
 
 ---
 
@@ -177,6 +218,7 @@ Modified/overwritten: N
 Modified/kept:        N  (user chose to keep existing version)
 Unchanged (same):    N  (skipped silently)
 Matt Pocock skills: ✅ installed v{X} / ⬆️ updated v{old}→v{new} / ⏭ skipped / ✅ already up to date v{X}
+Spawn depth: ✅ CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2+ present / ⚠️ MISSING — see action above
 ──────────────────────────────────────────────────
 Next steps:
   1. Run /init-agents to generate AGENTS.md for this project
@@ -192,5 +234,6 @@ If any modified files were kept by the user (not overwritten), list them so they
 
 - **Never overwrite `docs/procedures/` files** regardless of `--force` — project overrides take priority
 - **Never copy `install-toolkit.md`** — it's a toolkit-internal utility
+- **Never copy or edit `settings.json` / `settings.local.json`** — user-owned config; only verify and advise (Step 4b)
 - **Create directories as needed** — destination may not have `.claude/` yet
 - **Abort cleanly** if destination path is invalid — do not create partial installs

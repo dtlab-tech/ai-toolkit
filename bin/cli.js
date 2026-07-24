@@ -40,8 +40,16 @@ function banner() {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+// User-owned config that must NEVER be copied into a destination. We only verify
+// and advise on these — copying would clobber the user's existing settings.
+const NEVER_COPY = new Set(['settings.json', 'settings.local.json']);
+
 function fileHash(filePath) {
   return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function readJsonSafe(filePath) {
+  try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch { return null; }
 }
 
 function ensureDir(filePath) {
@@ -67,10 +75,12 @@ function expandMappings(mappings) {
     if (!fs.existsSync(src)) continue;
     if (fs.statSync(src).isDirectory()) {
       for (const entry of walkDir(src)) {
+        if (NEVER_COPY.has(path.basename(entry))) continue; // never clobber user config
         const rel = path.relative(src, entry);
         files.push({ src: entry, dest: path.join(dest, rel) });
       }
     } else {
+      if (NEVER_COPY.has(path.basename(src))) continue;
       files.push({ src, dest });
     }
   }
@@ -262,6 +272,52 @@ async function askMattPocock() {
   else console.log(`  ${clr('gray', 'Skipped.')}\n`);
 }
 
+// ── subagent spawn-depth check (verify & advise only — never write) ────────────
+
+const SPAWN_DEPTH_VAR = 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH';
+
+// Report whether the spawn-depth prerequisite is satisfied for a destination,
+// checking both project-level and local-override settings files. Purely advisory:
+// this NEVER creates or modifies any settings file.
+function checkSpawnDepth(destRoot) {
+  const candidates = [
+    path.join(destRoot, '.claude', 'settings.json'),
+    path.join(destRoot, '.claude', 'settings.local.json'),
+  ];
+
+  console.log(divider());
+  console.log(bold('  Subagent spawn depth (required for orchestrated pipelines)'));
+  console.log(divider());
+
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    const json = readJsonSafe(file);
+    const value = json && json.env && json.env[SPAWN_DEPTH_VAR];
+    if (value !== undefined && Number(value) >= 2) {
+      console.log(`  ${clr('green', '✔')}  ${SPAWN_DEPTH_VAR}=${value} found in ${dim(path.relative(process.cwd(), file))}`);
+      console.log(`     ${dim('Orchestrators can spawn worker subagents — pipelines will run as designed.')}\n`);
+      return;
+    }
+  }
+
+  console.log(`  ${clr('yellow', '⚠')}  ${SPAWN_DEPTH_VAR} is not set to 2+ in this project.`);
+  console.log(`     ${dim('Without it, /implement-feature and /assess-codebase run every worker inline')}`);
+  console.log(`     ${dim('on the orchestrator model: per-agent model assignment, context isolation,')}`);
+  console.log(`     ${dim('and per-agent token telemetry are all lost.')}`);
+  console.log();
+  console.log(`     ${bold('Action required')} — add this to ${clr('cyan', '.claude/settings.json')} (project)`);
+  console.log(`     or ${clr('cyan', '~/.claude/settings.json')} (all projects). We do not edit it for you,`);
+  console.log(`     ${dim('to avoid clobbering your existing configuration:')}`);
+  console.log();
+  console.log(clr('gray', '       {'));
+  console.log(clr('gray', '         "env": {'));
+  console.log(clr('gray', `           "${SPAWN_DEPTH_VAR}": "2"`));
+  console.log(clr('gray', '         }'));
+  console.log(clr('gray', '       }'));
+  console.log();
+  console.log(`     ${dim('Then restart Claude Code so the variable is loaded.')}\n`);
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force) {
@@ -277,6 +333,7 @@ async function installLocal(targetDir, force) {
   await runInstall(`local project`, mappings, force);
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
+  checkSpawnDepth(targetDir);
   await askMattPocock();
   console.log(divider());
   console.log(`\n  ${bold('Next steps:')}`);
@@ -302,6 +359,7 @@ async function installGlobal(force) {
     await runInstall('global Claude folder', mappings, force);
     writeInstalledVersion(target);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
+    checkSpawnDepth(homedir);
     await askMattPocock();
     console.log(divider());
     console.log(`\n  ${bold('Next steps:')}`);

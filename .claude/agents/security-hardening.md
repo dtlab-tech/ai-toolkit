@@ -1,6 +1,7 @@
 ---
 name: security-hardening
 description: "Security Hardening — guides the implementation of targeted security fixes: input validation at system boundaries, parameterised queries, secret management, log sanitisation, and TLS/transport configuration. Language-agnostic; reads AGENTS.md for project-specific patterns. Input: security findings from assessment"
+model: sonnet
 ---
 
 # Security Hardening

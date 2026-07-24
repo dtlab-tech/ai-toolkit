@@ -1,6 +1,7 @@
 ---
 name: domain-model-refactoring
 description: "Domain Model Refactoring — guides the decomposition of monolithic domain model files, introduction of type hierarchies for structurally similar types, and alignment of model names with domain ubiquitous language. Language-agnostic; reads AGENTS.md for project conventions. Input: target model directory from intervention document"
+model: sonnet
 ---
 
 # Domain Model Refactoring
