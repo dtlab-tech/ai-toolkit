@@ -47,7 +47,7 @@ Each entry summarises a feature for cross-reference by future features.
 
 ## FTR-007 — Explicit Per-Agent Model Assignment
 **Keywords:** model-frontmatter, per-agent-model, sonnet, opus, haiku, cost-efficiency, agent-config, OPT-01, token-optimization
-**Status:** in-progress
+**Status:** completed
 **Summary:** Adds an explicit `model:` YAML frontmatter key to the 15 agents in `.claude/agents/` that lacked one, so every agent declares its cost-appropriate tier instead of inheriting the session model (often Opus). Mapping: `sonnet` for the 14 coordination/implementation agents (incl. `project-manager`, `assessment-manager`, all developers, all refactoring/security agents, `define-feature`, `init-agents-md`, `install-toolkit`, `intervention-documentation-standard`); `opus` for `review-solution` only; the 7 pre-set `haiku` agents left untouched. Pure config change — no prompt-body, behavior, or pipeline logic altered. Bare aliases (OQ-1); orchestrators kept on `sonnet` since the model does not cascade to subagents (OQ-2). Verified by AC-01..AC-06 (grep coverage empty, values ⊆ {haiku,sonnet,opus}, one added line per file).
 → [Detail](FTR-007-explicit-per-agent-model-assignment/feature.md)
 
