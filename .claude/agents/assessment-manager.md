@@ -1,6 +1,7 @@
 ---
 name: assessment-manager
 description: "Assessment Manager — intelligent orchestrator for the codebase assessment pipeline. Discovers available assessment agents, runs them in parallel, consolidates findings into intervention documents, gates on human approval, and reports effort/token estimates. Input: path to target codebase (or '.' for current directory) [--scope=<area1,area2>] [--force]"
+model: sonnet
 ---
 
 # Assessment Manager
