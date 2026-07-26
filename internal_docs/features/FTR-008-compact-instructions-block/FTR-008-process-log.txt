@@ -24,3 +24,20 @@ Feature: FTR-008 — Compact Instructions Block
 [2026-07-26T10:43:37] FTR-008-Approvals.md updated with Gate 2 ✅ and verified
 [2026-07-26T10:43:37] Pre-condition check Phase 6: Gate 1 ✅ Gate 2 ✅ — PASS
 [2026-07-26T10:43:37] Creating feature branch: feature/FTR-008-compact-instructions-block
+[2026-07-26T10:43:40] Branch created: feature/FTR-008-compact-instructions-block
+[2026-07-26T10:43:40] Agent START: developer-backend — US-01-T01 (idempotent section-append logic)
+[2026-07-26T10:58:37] Agent DONE:  developer-backend — US-01, US-02, US-03 tasks complete (inline) — duration: 15m
+[2026-07-26T10:58:37] Review START: US-01 — PASS (no CRITICAL)
+[2026-07-26T10:58:37] Review START: US-02 — PASS (no CRITICAL)
+[2026-07-26T10:58:37] Review START: US-03 — PASS (no CRITICAL)
+[2026-07-26T10:58:50] commit: feat(FTR-008): implement compact instructions block
+[2026-07-26T10:59:39] FTR-008-Test-Checklist.md written (US-03-T03)
+[2026-07-26T11:00:00] Remediation: 0 open issues — skipped
+[2026-07-26T11:00:05] REGISTRY.md updated — FTR-008 in-progress
+[2026-07-26T11:00:30] git push origin feature/FTR-008-compact-instructions-block
+[2026-07-26T11:01:00] PR created: https://github.com/dtlab-tech/ai-toolkit/pull/21
+[2026-07-26T11:01:05] REGISTRY.md updated — FTR-008 completed
+[2026-07-26T11:01:33] FTR-008-Token-Estimate.md actuals section written
+[2026-07-26T11:01:33] FTR-008-Effort-Estimate.md actuals section written
+[2026-07-26T11:01:33] RUN COMPLETE
+════════════════════════════════════════════════════════
