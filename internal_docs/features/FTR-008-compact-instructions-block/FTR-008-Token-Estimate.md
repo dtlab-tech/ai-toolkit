@@ -85,3 +85,27 @@
 | Total tokens (all agents) | 216,845 | N/A | N/A |
 | Total cost ($) | $1.17 | N/A | N/A |
 | Total wall-clock | ~35min (agent) | 42m 37s | +7m 37s |
+
+---
+
+## Measured Orchestrator Usage (from /implement-feature)
+
+`<usage>` blocks captured across the three orchestrator resumes.
+
+| Orchestrator segment | subagent_tokens | duration_ms |
+|----------------------|-----------------|-------------|
+| Run 1 → Gate 1 (docs) | 26,935 | 431,423 |
+| Run 2 → Gate 2 (work breakdown) | 74,789 | 184,959 |
+| Run 3 → completion (implementation + review + PR) | 95,362 | 1,173,883 |
+| **Total (all inline work + orchestration)** | **197,086** | **1,790,265 (~29.8 min)** |
+
+### Grand Total (measured)
+
+| Metric | Estimated | Actual | Delta |
+|--------|-----------|--------|-------|
+| Total tokens (orchestrator, all inline) | 216,845 | 197,086 | −19,759 (−9%) |
+| Total cost ($) | $1.17 | ~$1.06 (197k × $0.005400/1k sonnet) | −$0.11 |
+| Total wall-clock | ~35min (parallel agents) | ~29.8min (inline + two gate waits) | −5min |
+
+> Under-estimate by 9% — within normal variance. Wall-clock shorter than estimated because
+> the inline execution skips per-agent spawn overhead. Rework contingency was not consumed.
