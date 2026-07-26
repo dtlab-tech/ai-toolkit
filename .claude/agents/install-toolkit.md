@@ -208,7 +208,87 @@ After copying the toolkit files, check the state of Matt Pocock's skills:
 
 ---
 
-## Step 6 — Report
+## Step 6 — Compact Instructions opt-in
+
+The toolkit includes a `# Compact instructions` section for `~/.claude/CLAUDE.md` that guides Claude's auto-compaction (what to keep, what to drop) and enables proactive topic-change suggestions.
+
+1. **Offer the opt-in** — inform the user and ask:
+
+   > "Would you like to add a `# Compact instructions` section to your global `~/.claude/CLAUDE.md`?
+   > It guides auto-compaction to preserve decision-critical information and suggests running `/compact` when you switch topics."
+   >
+   > Options: "Yes — add it" / "No — skip"
+
+2. If the user selects **No**: skip silently; set `compact_instructions_status = "skipped (user said No)"`.
+
+3. If the user selects **Yes**:
+
+   a. **Resolve path**: `CLAUDE_MD="$HOME/.claude/CLAUDE.md"` (Windows bash: `$USERPROFILE/.claude/CLAUDE.md` if `$HOME` is not set).
+
+   b. **Idempotency check**: search the file for the exact heading `# Compact instructions`:
+      ```bash
+      grep -q "^# Compact instructions" "$CLAUDE_MD" 2>/dev/null && echo "exists" || echo "absent"
+      ```
+      - If **exists**: display skip notice and set `compact_instructions_status = "skipped (already present)"`. Do **not** modify the file.
+      - If **absent** (or file does not exist): continue to step (c).
+
+   c. **Request confirmation** — display exactly:
+      > "I am about to append a `# Compact instructions` section to your global `~/.claude/CLAUDE.md`. Confirm to proceed."
+
+      - If the user **declines**: skip silently; set `compact_instructions_status = "skipped (declined)"`.
+      - If the user **confirms**: continue to step (d).
+
+   d. **Write the section** — append verbatim to `~/.claude/CLAUDE.md` (create the file if it does not exist):
+
+      ```bash
+      mkdir -p "$(dirname "$CLAUDE_MD")"
+      cat >> "$CLAUDE_MD" << 'COMPACT_SECTION'
+
+# Compact instructions
+
+## What to preserve
+When compacting, always keep:
+- Current objective and active task
+- Confirmed decisions and user approvals
+- User answers to questions asked during the session
+- Paths of files created or modified
+- Open errors and unresolved blockers
+- Finding IDs, artifact IDs, FTR/ASSESS/INT reference numbers
+
+## What to discard
+When compacting, drop:
+- Raw grep and search results
+- Successful tool outputs (file reads, bash commands that completed without error)
+- Repeated or superseded explanations
+- Superseded plans and intermediate reasoning steps
+
+## Topic-change notification
+When the user sends a message containing any of the following phrases (case-insensitive):
+"passiamo a", "ora facciamo", "prossimo punto", "prossimo argomento", "cambiamo argomento",
+"nuovo argomento", "let's move on to", "next topic", "switching to", "now let's do",
+"moving on to", "next up" —
+
+— pause before answering and send exactly this message:
+
+> **Context compaction suggested**
+>
+> You are about to switch to a new topic. Compacting the context now will keep the next session clean and focused.
+>
+> Reply **Approve - Compact context** to run `/compact` now, or continue to proceed without compacting.
+
+If the user replies "Approve - Compact context", run `/compact`. Otherwise proceed normally.
+COMPACT_SECTION
+      ```
+
+      Report success: "✅ `# Compact instructions` section added to `~/.claude/CLAUDE.md`."
+      Set `compact_instructions_status = "✅ added to ~/.claude/CLAUDE.md"`.
+
+**Skip notice** (displayed when section already exists):
+> "A `# Compact instructions` section already exists in `~/.claude/CLAUDE.md`. No changes were made. Review and update it manually if needed."
+
+---
+
+## Step 7 — Report
 
 ```
 ✅ Toolkit installed at {destination}
@@ -219,6 +299,7 @@ Modified/kept:        N  (user chose to keep existing version)
 Unchanged (same):    N  (skipped silently)
 Matt Pocock skills: ✅ installed v{X} / ⬆️ updated v{old}→v{new} / ⏭ skipped / ✅ already up to date v{X}
 Spawn depth: ✅ CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2+ present / ⚠️ MISSING — see action above
+Compact instructions: {compact_instructions_status}
 ──────────────────────────────────────────────────
 Next steps:
   1. Run /init-agents to generate AGENTS.md for this project
