@@ -350,11 +350,12 @@ async function installGlobal(force) {
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
     await checkVersion(target, force);
     const mappings = [
-      { src: path.join(packageRoot, '.claude', 'agents'),   dest: path.join(target, 'agents') },
-      { src: path.join(packageRoot, '.claude', 'skills'),   dest: path.join(target, 'skills') },
-      { src: path.join(packageRoot, '.claude', 'commands'), dest: path.join(target, 'commands') },
-      { src: path.join(packageRoot, 'docs'),                dest: path.join(target, 'docs') },
-      { src: path.join(packageRoot, 'CLAUDE.md'),           dest: path.join(target, 'CLAUDE.md') },
+      { src: path.join(packageRoot, '.claude', 'agents'),    dest: path.join(target, 'agents') },
+      { src: path.join(packageRoot, '.claude', 'skills'),    dest: path.join(target, 'skills') },
+      { src: path.join(packageRoot, '.claude', 'commands'),  dest: path.join(target, 'commands') },
+      { src: path.join(packageRoot, '.claude', 'workflows'), dest: path.join(target, 'workflows') },
+      { src: path.join(packageRoot, 'docs'),                 dest: path.join(target, 'docs') },
+      { src: path.join(packageRoot, 'CLAUDE.md'),            dest: path.join(target, 'CLAUDE.md') },
     ];
     await runInstall('global Claude folder', mappings, force);
     writeInstalledVersion(target);

@@ -5,66 +5,150 @@ argument-hint: "[path] [--scope=architecture,security,quality,concurrency,devops
 
 # Assess Codebase
 
-Orchestrates the full codebase assessment pipeline by spawning the `assessment-manager` agent
-and, once it completes, recording the real token consumption in a dedicated file.
+Orchestrates the full codebase assessment pipeline by invoking two sequential workflow phases
+(`am-phase1`, `am-phase2`), handling the Findings Gate in the main loop between the phases,
+and recording the real token consumption at the end.
+
+Each workflow phase runs as a real subagent boundary, ensuring assessment agents are dispatched
+with accurate per-agent `usage` data and their declared `model:` frontmatter honoured.
 
 ---
 
-## Step 1 — Spawn the Assessment Manager
+## Step 1 — Determine assessment prefix
 
-Spawn the `assessment-manager` agent with the exact arguments the user provided:
-
-```
-subagent_type: assessment-manager
-prompt: <path> [--scope=...] [--force]
-```
-
-If no path is provided, use `.` (current working directory).
-
-Wait for the agent to complete. Capture its full result, including the `<usage>` block
-that appears at the end of the tool result (format: `subagent_tokens: N`).
-
-The assessment-manager handles the full pipeline internally — it presents the Phase 5 Findings Gate
-to the user, records the acknowledgement and flagged interventions, and ends at the summary.
-The skill waits for the agent to complete and proceeds to Step 2 regardless of outcome.
+Scan `docs/assessments/` for folders matching `ASSESS-[0-9]+*`. Increment the highest number
+found, or start at `ASSESS-001`. This prefix is used for all output files in this run.
 
 ---
 
-## Step 2 — Extract orchestrator token usage
+## Step 2 — Invoke am-phase1 (Assessment Phase)
 
-From the `<usage>` block of the assessment-manager result, read:
-- `subagent_tokens` — total tokens consumed by the assessment-manager agent itself (input + output)
-- `duration_ms` — wall-clock duration of the assessment-manager run
+Invoke the `am-phase1` workflow:
+
+```
+subagent_type: am-phase1
+prompt: <path> [--scope=<areas>] --prefix ASSESS-NNN [--force]
+```
+
+If no path was provided by the user, use `.` (current working directory).
+Always pass `--prefix ASSESS-NNN` with the prefix determined in Step 1.
+
+Wait for the workflow to complete. Capture its full result, including the `<usage>` block
+(format: `subagent_tokens: N`). Extract from the result:
+- `prefix` — confirmed assessment prefix
+- `output_dir` — path to `docs/assessments/ASSESS-NNN/`
+- `assessment_summaries` — list of `{ agent, output_file }` for each completed assessment
+- `interventions_index_path` — path to `{PREFIX}-Interventions-Index.md`
+- `severity_counts` — `{ CRITICAL, HIGH, MEDIUM, LOW }`
+- `total_interventions` — total intervention count
+- `remediation_hours_est` — estimated remediation hours
+- `effort_estimate_path` — path to `{PREFIX}-Effort-Estimate.md`
+- `token_estimate_path` — path to `{PREFIX}-Token-Estimate.md`
+- `errors` — any agent failures during phase 1
+
+If `errors` is non-empty, report them to the user before presenting the Findings Gate.
+Partial assessments are acceptable — present the Findings Gate with available data.
+
+---
+
+## Step 3 — Present Findings Gate (HARD STOP — present in main loop)
+
+The Findings Gate has two mandatory steps.
+
+### Step 3a — Acknowledge
+
+Present the findings summary to the user:
+
+```
+Assessment complete for {prefix} — {output_dir}
+────────────────────────────────────────────────────────────
+Findings:      {CRITICAL} CRITICAL | {HIGH} HIGH | {MEDIUM} MEDIUM | {LOW} LOW
+Interventions: {total_interventions} proposed
+────────────────────────────────────────────────────────────
+Estimated remediation effort: {remediation_hours_est}h (human sequential)
+Reference: {effort_estimate_path} for full breakdown
+────────────────────────────────────────────────────────────
+{list each assessment agent and its output file}
+────────────────────────────────────────────────────────────
+```
+
+Then output this hard-stop message and **wait for any non-empty text reply from the user**:
+
+```
+⛔ FINDINGS GATE — ASSESSMENT ACKNOWLEDGEMENT — HARD STOP
+
+Please review the assessment findings above.
+
+Reply with any text to acknowledge (e.g. "Acknowledged", "OK", "Proceed").
+You will then be asked which interventions to flag for feature delivery.
+
+The pipeline CANNOT continue until you reply directly.
+```
+
+Capture the acknowledgement text.
+
+### Step 3b — Flag interventions
+
+After acknowledgement, read `{PREFIX}-Interventions-Index.md` and list all INT-NNN identifiers.
+Present them to the user and prompt:
+
+```
+Which interventions do you want to flag for feature delivery?
+
+{list of INT-NNN — title — criticality}
+
+Reply with a comma-separated list of INT-NNN identifiers (e.g. "INT-001, INT-003"),
+or reply "None" to flag nothing.
+```
+
+Wait for a text reply. Validate each supplied identifier against the Interventions Index.
+If any are unknown, list them and re-prompt once. Accept "None" for zero flagged.
+
+Capture the flagged identifiers (as a comma-separated string, or "none").
+
+---
+
+## Step 4 — Invoke am-phase2 (Approvals and Registry Phase)
+
+Invoke the `am-phase2` workflow:
+
+```
+subagent_type: am-phase2
+prompt: --prefix {prefix} --output-dir {output_dir} --flagged {flagged_ids} --ack "{acknowledgement_text}"
+```
+
+Where `{flagged_ids}` is the comma-separated list of INT-NNN identifiers (or "none").
+
+Wait for the workflow to complete. Extract from the result:
+- `approvals_path` — path to `{PREFIX}-Approvals.md`
+- `registry_updated` — registry write result string
+- `summary` — full assessment summary text
+
+---
+
+## Step 5 — Complete Token Estimate file
+
+From the `<usage>` block of the am-phase1 result, read:
+- `subagent_tokens` — total tokens consumed by the am-phase1 workflow
+- `duration_ms` — wall-clock duration of am-phase1
 
 If the `<usage>` block is missing: log warning
-`"assessment-manager produced no <usage> block; orchestrator token data unavailable"`
+`"am-phase1 produced no <usage> block; orchestrator token data unavailable"`
 and set `actual_tokens = "N/A"`.
 
----
+Read `{token_estimate_path}`. Append the following in order:
 
-## Step 3 — Complete Token Estimate file
+### 5a — Orchestrator row (for use in 5b only)
 
-The assessment-manager will have written `{PREFIX}-Token-Estimate.md` at
-`docs/assessments/{PREFIX}/{PREFIX}-Token-Estimate.md` with assessment and
-intervention-documentation rows. Read that file, then **append** the following in order:
-
-### 3a — Orchestrator row
-
-The orchestrator row is NOT added to any of the three phase-level tables (Assessment agents, Intervention documentation, Remediation agents). It appears only in the Actuals vs Estimate section (Step 3b below).
-
-For use in Step 3b, compute the orchestrator row values as follows:
-
+Compute values:
 - Estimated tokens: 80,000 (baseline from estimation model)
-- Estimated cost: $0.4320 — computed as `80,000 × $0.005400 / 1,000` using the sonnet blended
-  rate from `docs/pricing.md`. If `docs/pricing.md` is missing, use `"N/A"` for est_cost.
-- Actual tokens: value from `subagent_tokens` in the `<usage>` block; `"N/A"` if block was missing
-- Actual cost: `(actual_tokens / 1,000) × blended_rate_per_1k`, formatted to 4 decimal places; `"N/A"` if actual_tokens is `"N/A"` or pricing data is unavailable
+- Estimated cost: $0.4320 — `80,000 × $0.005400 / 1,000` using sonnet blended rate
+- Actual tokens: `subagent_tokens` from `<usage>` block; `"N/A"` if missing
+- Actual cost: `(actual_tokens / 1,000) × 0.005400` at 4 decimal places; `"N/A"` if unavailable
 
-### 3b — Actuals vs Estimate section
+### 5b — Actuals vs Estimate section
 
-Append a horizontal rule (`---`) followed by an Actuals vs Estimate section. Include one
-row for every agent that ran: all assessment agents, intervention-documentation-standard,
-and the assessment-manager orchestrator.
+Append a horizontal rule (`---`) followed by:
 
 ```markdown
 ## Actuals vs Estimate
@@ -72,19 +156,18 @@ and the assessment-manager orchestrator.
 | Agent | Task/Scope | Model | Est. tokens | Actual tokens | Delta | Est. cost ($) | Actual cost ($) | Duration |
 |-------|------------|-------|-------------|---------------|-------|---------------|-----------------|----------|
 | {agent} | {scope} | {model} | {est} | {actual} | {±delta} | {est_cost} | {actual_cost} | {Xmin Ys} |
+...
+| assessment-manager/am-phase1 (orchestrator) | — | sonnet | 80,000 | {actual} | ±{delta} | $0.4320 | ${actual_cost} | {duration} |
 ```
 
 Column rules:
-- **Delta**: `actual_tokens − est_tokens`; show as `+N` or `−N`. Show `"N/A"` if either
-  value is missing.
+- **Delta**: `actual_tokens − est_tokens`; show as `+N` or `−N`. Show `"N/A"` if either missing.
 - **Duration**: convert `duration_ms` to `Xmin Ys` where available; use `"—"` where not.
-- Rows with `"N/A"` actual tokens are still shown in the table but excluded from any
-  aggregate calculations.
+- Rows with `"N/A"` actual tokens are still shown but excluded from aggregate calculations.
 
-### 3c — Estimation accuracy by agent type (conditional)
+### 5c — Estimation accuracy by agent type (conditional)
 
-If 2 or more distinct model tiers appear in the rows that have non-`"N/A"` actual tokens
-(e.g., haiku AND sonnet), append:
+If 2+ distinct model tiers appear with non-N/A actuals, append:
 
 ```markdown
 ## Estimation accuracy by agent type
@@ -94,16 +177,13 @@ If 2 or more distinct model tiers appear in the rows that have non-`"N/A"` actua
 | {model} | {N} | {avg_est} | {avg_actual} | {avg_delta} | {trend} |
 ```
 
-Column rules:
 - One row per model tier (e.g., `haiku`, `sonnet`)
-- Exclude rows with `"N/A"` actual tokens from all averages
-- **Trend**: `"over-target"` if avg delta > +20% of avg est; `"under-target"` if avg delta
-  < −20% of avg est; otherwise `"on-target"`
+- Exclude N/A rows from averages
+- **Trend**: `"over-target"` if avg delta > +20% of avg est; `"under-target"` if < −20%; else `"on-target"`
 
-### 3d — Grand Total section
+### 5d — Grand Total section
 
-Update the Grand Total section already written in the file: replace the
-`"partial — updated at pipeline end"` marker with `"Final"` and fill in the computed values:
+Update the Grand Total section: replace `"partial — updated at pipeline end"` with Final values:
 
 ```markdown
 ## Grand Total (Final)
@@ -115,27 +195,26 @@ Update the Grand Total section already written in the file: replace the
 | Total wall-clock | — | {Xmin Ys} | — | — |
 ```
 
-Column rules:
-- **Delta %**: `(delta / estimated) × 100` at 1 decimal place; show `"N/A"` if estimated is 0
-
-Summation rules:
+- **Delta %**: `(delta / estimated) × 100` at 1 decimal place; `"N/A"` if estimated is 0
 - Sum all agents' tokens and costs; exclude `"N/A"` rows from sums
-- Cost values: 2 decimal places for subtotals and totals; 4 decimal places for per-row costs
-- The "Remediation" section in the Token Estimate file contains a static note (not a placeholder); leave it as-is
-- Wall-clock: convert `duration_ms` from the assessment-manager result to minutes/seconds
+- Cost: 2 decimal places for totals; 4 decimal places for per-row costs
+- The "Remediation" section contains a static note — leave it as-is
+- Wall-clock: convert `duration_ms` from am-phase1 `<usage>` to minutes/seconds
 
 ---
 
-## Step 4 — Report to user
+## Step 6 — Report to user
 
 After writing to the Token Estimate file, report:
 
 ```
 Assessment pipeline complete.
-   Token estimate + actuals → {PREFIX}-Token-Estimate.md
-   Approvals                → docs/assessments/{PREFIX}/{PREFIX}-Approvals.md
-   Process log              → docs/assessments/{PREFIX}/{PREFIX}-process-log.txt
+   Token estimate + actuals → {token_estimate_path}
+   Approvals                → {approvals_path}
+   Process log              → {output_dir}/{prefix}-process-log.txt
+
+{summary from am-phase2}
 ```
 
-If the Token Estimate file does not exist (assessment-manager failed before writing it):
+If the Token Estimate file does not exist (am-phase1 failed before writing it):
 note this in the report but do not halt — the skill has completed its work.

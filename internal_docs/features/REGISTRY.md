@@ -60,3 +60,11 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-008-compact-instructions-block/feature.md)
 
 ---
+
+## FTR-009 — Rewrite Orchestrators as Workflow Scripts
+**Keywords:** workflow-scripts, pm-phase, am-phase, agentType, implement-feature, assess-codebase, subagent-depth, token-tracking, orchestrators, determinism, per-agent-model
+**Status:** completed
+**Summary:** Replaces `project-manager.md` and `assessment-manager.md` subagent orchestrators with five Claude Code Workflow scripts (`pm-phase1/2/3.js`, `am-phase1/2.js`) in `.claude/workflows/`. Updates `implement-feature` and `assess-codebase` skills to invoke workflows sequentially with gates in the main loop. Deletes old orchestrator agent files. Updates `install-toolkit` and `bin/cli.js` to copy `.claude/workflows/` to destination projects. Resolves non-deterministic inline execution at spawn depth 2, enabling effective per-agent model assignment (FTR-007) and accurate token tracking.
+→ [Detail](FTR-009-workflow-orchestrators/feature.md)
+
+---
