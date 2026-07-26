@@ -22,3 +22,26 @@ Feature: FTR-009 — Rewrite Orchestrators as Workflow Scripts
 [2026-07-26T13:54:10] APPROVAL REQUESTED — Gate 2
 [2026-07-26T13:55:46] APPROVAL GRANTED by user — Gate 2
 [2026-07-26T13:55:46] Updated: FTR-009-Approvals.md (Gate 2 ✅)
+[2026-07-26T13:55:47] Phase 6 START — branch: feature/FTR-009-workflow-orchestrators
+[2026-07-26T13:55:47] Pre-condition check: Gate 1 ✅ | Gate 2 ✅ — PASSED
+[2026-07-26T13:55:48] Phase 1 (INFRA): INFRA-T01 DONE — .claude/workflows/ created
+[2026-07-26T14:00:00] Phase 2 (Workflow Scripts): US-01-T01 pm-phase1.js DONE
+[2026-07-26T14:05:00] Phase 2 (Workflow Scripts): US-01-T02 pm-phase2.js DONE
+[2026-07-26T14:15:00] Phase 2 (Workflow Scripts): US-02-T01 am-phase1.js DONE
+[2026-07-26T14:20:00] Phase 2 (Workflow Scripts): US-02-T02 am-phase2.js DONE
+[2026-07-26T14:40:00] Phase 3: US-01-T03 pm-phase3.js DONE
+[2026-07-26T14:50:00] Phase 4: US-03-T01 implement-feature.md rewritten DONE
+[2026-07-26T14:55:00] Phase 4: US-03-T02 assess-codebase.md rewritten DONE
+[2026-07-26T14:57:00] Phase 4: US-03-T03 install-toolkit.md updated DONE
+[2026-07-26T14:58:00] Phase 4: US-03-T04 bin/cli.js installGlobal updated DONE
+[2026-07-26T15:00:00] Phase 5: US-04-T01 project-manager.md deleted DONE
+[2026-07-26T15:00:01] Phase 5: US-04-T02 assessment-manager.md deleted DONE
+[2026-07-26T15:05:00] review-solution (INFRA): PASS — WARNING #1 (pm-phase3.js rework loop) → Issues Register
+[2026-07-26T15:06:00] review-solution (US-01): PASS after rework — WARNING #1 FIXED
+[2026-07-26T15:07:00] review-solution (US-02): PASS — INFO #2, INFO #3 → Issues Register
+[2026-07-26T15:08:00] review-solution (US-03): PASS
+[2026-07-26T15:08:01] review-solution (US-04): PASS
+[2026-07-26T15:10:00] Committed: feat(FTR-009): implement shared infrastructure (INFRA)
+[2026-07-26T15:10:01] Committed: feat(FTR-009): implement US-01 — Feature Delivery Workflow Scripts
+[2026-07-26T15:10:02] Committed: feat(FTR-009): implement US-02 — Assessment Workflow Scripts
+[2026-07-26T15:52:05] Issues Register: 1 FIXED, 2 OPEN (INFO — deferred)
