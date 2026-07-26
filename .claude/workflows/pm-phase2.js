@@ -1,219 +1,108 @@
-/**
- * pm-phase2.js — Feature Delivery: Work Breakdown Phase
- *
- * Workflow phase 2 of the feature delivery pipeline.
- * Precondition: {PREFIX}-Approvals.md must exist with Gate 1 ✅.
- * Runs: generate-work-breakdown → effort-estimate update.
- *
- * Returns gate2_payload to the invoking skill so it can present Gate 2
- * to the user in the main loop.
- *
- * Inputs (from skill prompt):
- *   <path-to-feature.md>
- *
- * Outputs (files written):
- *   {PREFIX}-Work-Breakdown.md
- *   {PREFIX}-Effort-Estimate.md  (updated with WB estimates)
- *   {PREFIX}-process-log.txt     (appended)
- *
- * Returns (to skill):
- *   gate2_payload — summary data for Gate 2 presentation
- */
-
-const fs   = require('fs');
-const path = require('path');
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-function now() {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+export const meta = {
+  name: 'pm-phase2',
+  description: 'Feature delivery phase 2: generate-work-breakdown → Effort-Estimate → gate2_payload. Precondition: Gate 1 approved.',
+  phases: [
+    { title: 'Work Breakdown', detail: 'Run generate-work-breakdown' },
+    { title: 'Effort Estimate', detail: 'Parse WB metrics, write Effort-Estimate.md' },
+  ],
 }
 
-function extractPrefix(featurePath) {
-  const dir  = path.dirname(featurePath);
-  const name = path.basename(dir);
-  const m    = name.match(/^([A-Z]+-[0-9]+)/);
-  if (!m) throw new Error(`Cannot extract prefix from directory name: ${name}`);
-  return m[1];
+// args: "<path-to-feature.md>"
+const featurePath = (typeof args === 'string' ? args : '').trim().split(/\s+/)[0]
+
+// ── generate-work-breakdown ───────────────────────────────────────────────────
+phase('Work Breakdown')
+
+const tokenLedger = []
+
+log(`Running generate-work-breakdown for ${featurePath}`)
+const beforeWB = budget.spent()
+await agent(featurePath, {
+  agentType: 'generate-work-breakdown',
+  label:     'generate-work-breakdown',
+  phase:     'Work Breakdown',
+})
+const wbTokens = budget.spent() - beforeWB
+tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
+log(`generate-work-breakdown done — phase delta: ${wbTokens} tokens`)
+
+// ── Parse WB + write Effort-Estimate ─────────────────────────────────────────
+phase('Effort Estimate')
+
+const PARSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    prefix:                { type: 'string' },
+    feature_dir:           { type: 'string' },
+    user_stories:          { type: 'number' },
+    total_tasks:           { type: 'number' },
+    domain_breakdown:      { type: 'string' },
+    implementation_phases: { type: 'number' },
+    human_estimate:        { type: 'string' },
+    agent_estimate:        { type: 'string' },
+    work_breakdown_path:   { type: 'string' },
+    effort_estimate_path:  { type: 'string' },
+  },
+  required: ['prefix', 'user_stories', 'total_tasks', 'work_breakdown_path'],
 }
 
-function appendLog(logPath, message) {
-  const line = `[${now()}] ${message}\n`;
-  fs.appendFileSync(logPath, line, 'utf8');
-}
+const metrics = await agent(
+  `You have two tasks:
 
-function fileExists(filePath) {
-  try { return fs.statSync(filePath).isFile(); } catch { return false; }
-}
+TASK 1 — Read the Work Breakdown file.
+The feature.md is at: ${featurePath}
+The directory containing feature.md also contains the Work Breakdown file named {PREFIX}-Work-Breakdown.md,
+where PREFIX matches the pattern [A-Z]+-[0-9]+ from the directory name (e.g. FTR-009).
+Use Glob or Read to find and read that file.
 
-function readFile(filePath) {
-  return fs.readFileSync(filePath, 'utf8');
-}
+Extract from the Summary table:
+- prefix (e.g. "FTR-009")
+- feature_dir (directory containing feature.md)
+- user_stories (integer)
+- total_tasks (integer)
+- domain_breakdown (e.g. "DB:0, BE:11, FE:0, INFRA:4, TEST:0")
+- implementation_phases (integer)
+- human_estimate (e.g. "~34h")
+- agent_estimate (e.g. "~2h 6min")
+- work_breakdown_path (full path to the Work Breakdown file)
 
-// ── Parse Work Breakdown for summary metrics ──────────────────────────────────
+TASK 2 — Write the Effort-Estimate.md file.
+Write {feature_dir}/{PREFIX}-Effort-Estimate.md with the extracted metrics in this format:
 
-function parseWorkBreakdownSummary(wbContent) {
-  const summary = {
-    user_stories:          0,
-    total_tasks:           0,
-    domain_breakdown:      {},
-    implementation_phases: 0,
-    human_estimate:        'N/A',
-    agent_estimate:        'N/A',
-  };
-
-  // Extract from Summary table
-  const usMatch    = wbContent.match(/Total User Stories\s*\|\s*(\d+)/);
-  const taskMatch  = wbContent.match(/Total Tasks\s*\|\s*(\d+)/);
-  const phaseMatch = wbContent.match(/Implementation phases\s*\|\s*(\d+)/);
-  const humanMatch = wbContent.match(/Estimated total \(Human\)\s*\|\s*([^\n|]+)/);
-  const agentMatch = wbContent.match(/Estimated total \(Agent\)\s*\|\s*([^\n|]+)/);
-
-  if (usMatch)    summary.user_stories          = parseInt(usMatch[1], 10);
-  if (taskMatch)  summary.total_tasks            = parseInt(taskMatch[1], 10);
-  if (phaseMatch) summary.implementation_phases  = parseInt(phaseMatch[1], 10);
-  if (humanMatch) summary.human_estimate         = humanMatch[1].trim();
-  if (agentMatch) summary.agent_estimate         = agentMatch[1].trim();
-
-  // Extract domain breakdown
-  const domainMatch = wbContent.match(/Domain distribution\s*\|\s*([^\n|]+)/);
-  if (domainMatch) {
-    const raw = domainMatch[1].trim();
-    // Format: "DB: 0, BE: 11, FE: 0, INFRA: 4, TEST: 0"
-    for (const part of raw.split(',')) {
-      const [k, v] = part.trim().split(':').map(s => s.trim());
-      if (k && v) summary.domain_breakdown[k] = parseInt(v, 10) || 0;
-    }
-  }
-
-  return summary;
-}
-
-// ── Build Effort Estimate content ─────────────────────────────────────────────
-
-function buildEffortEstimate(prefix, summary) {
-  const domainRows = Object.entries(summary.domain_breakdown)
-    .map(([d, n]) => `| ${d} | ${n} | — |`)
-    .join('\n');
-
-  return `# Effort Estimate — ${prefix} — Rewrite Orchestrators as Workflow Scripts
+# Effort Estimate — {PREFIX} — {Feature Title}
 
 | Metric | Value |
 |--------|-------|
-| User Stories | ${summary.user_stories} (US-01 ÷ US-0${summary.user_stories}) |
-| Total tasks | ${summary.total_tasks} (${Object.entries(summary.domain_breakdown).map(([k, v]) => `${k}:${v}`).join(', ')}) |
-| Implementation phases | ${summary.implementation_phases} |
-| Human estimate | ${summary.human_estimate} (sequential, no parallelism) |
-| Agent estimate | ${summary.agent_estimate} (parallel dispatch, critical path only) |
+| User Stories | {user_stories} |
+| Total tasks | {total_tasks} ({domain_breakdown}) |
+| Implementation phases | {implementation_phases} |
+| Human estimate | {human_estimate} (sequential, no parallelism) |
+| Agent estimate | {agent_estimate} (parallel dispatch, critical path only) |
 
-## Domain breakdown
+Set effort_estimate_path to the full path of the written file.
 
-| Domain | Tasks | Notes |
-|--------|-------|-------|
-${domainRows}
+Return the extracted metrics as structured output.`,
+  {
+    label:  'parse-wb-write-effort-estimate',
+    phase:  'Effort Estimate',
+    schema: PARSE_SCHEMA,
+  }
+)
 
-## Implementation phases
+log(`WB parsed: ${metrics.user_stories} US, ${metrics.total_tasks} tasks, ${metrics.implementation_phases} phases`)
+log(`Effort-Estimate written: ${metrics.effort_estimate_path}`)
 
-| Phase | Tasks | Parallelism |
-|-------|-------|-------------|
-| Phase 1 — Shared Infrastructure | 1 task | 1 agent |
-| Phase 2 — Workflow Scripts (pm-phase1/2, am-phase1/2) | 4 tasks | 4 agents in parallel |
-| Phase 3 — pm-phase3.js | 1 task | 1 agent |
-| Phase 4 — Skills and Install Files | 4 tasks | 4 agents in parallel |
-| Phase 5 — Delete Orchestrator Files | 2 tasks | 1 agent |
-
-## Notes
-
-Estimation assumptions: S=30min avg, M=3h avg, L=10h avg for human; agent critical path only.
-No DB, FE, or TEST tasks — pure tooling/configuration change.
-`;
+return {
+  prefix:                metrics.prefix,
+  feature_path:          featurePath,
+  user_stories:          metrics.user_stories,
+  total_tasks:           metrics.total_tasks,
+  domain_breakdown:      metrics.domain_breakdown  || 'N/A',
+  implementation_phases: metrics.implementation_phases,
+  human_estimate:        metrics.human_estimate    || 'N/A',
+  agent_estimate:        metrics.agent_estimate    || 'N/A',
+  work_breakdown_path:   metrics.work_breakdown_path,
+  effort_estimate_path:  metrics.effort_estimate_path || '',
+  token_ledger:          tokenLedger,
+  errors:                [],
 }
-
-// ── main ──────────────────────────────────────────────────────────────────────
-
-async function main(args) {
-  const featurePath = args.trim();
-  if (!fileExists(featurePath)) {
-    return { error: `feature.md not found: ${featurePath}` };
-  }
-
-  const prefix       = extractPrefix(featurePath);
-  const dir          = path.dirname(featurePath);
-  const logPath      = path.join(dir, `${prefix}-process-log.txt`);
-  const approvalsPath = path.join(dir, `${prefix}-Approvals.md`);
-  const wbPath        = path.join(dir, `${prefix}-Work-Breakdown.md`);
-  const effortPath    = path.join(dir, `${prefix}-Effort-Estimate.md`);
-
-  appendLog(logPath, `pm-phase2 START — prefix: ${prefix}`);
-
-  // ── Precondition: Gate 1 must be approved ────────────────────────────────
-  if (!fileExists(approvalsPath)) {
-    const msg = `HARD STOP — ${prefix}-Approvals.md not found. Gate 1 must be completed before pm-phase2 runs.`;
-    appendLog(logPath, msg);
-    return { error: msg };
-  }
-  const approvalsContent = readFile(approvalsPath);
-  if (!approvalsContent.includes('Gate 1') || !approvalsContent.includes('✅ Approved')) {
-    const msg = `HARD STOP — Gate 1 approval not found in ${prefix}-Approvals.md.`;
-    appendLog(logPath, msg);
-    return { error: msg };
-  }
-  appendLog(logPath, `Precondition check: Gate 1 ✅ confirmed`);
-
-  const tokenLedger = [];
-
-  // ── generate-work-breakdown ───────────────────────────────────────────────
-  appendLog(logPath, `Agent START: generate-work-breakdown (${prefix})`);
-  const t0 = Date.now();
-  const result = await workflow.agent({
-    agentType: 'generate-work-breakdown',
-    prompt:    featurePath,
-  });
-  const dur = Date.now() - t0;
-  const tokens = result.usage
-    ? result.usage.input_tokens + result.usage.output_tokens
-    : 'N/A';
-  appendLog(logPath, `Agent DONE:  generate-work-breakdown (${prefix}) — tokens: ${tokens}, duration: ${Math.round(dur / 1000)}s`);
-  tokenLedger.push({
-    agent: 'generate-work-breakdown',
-    model: 'haiku',
-    actual_tokens: tokens,
-    duration_ms: dur,
-  });
-
-  if (!fileExists(wbPath)) {
-    appendLog(logPath, `ERROR: generate-work-breakdown produced no output`);
-    return { error: 'generate-work-breakdown produced no output', logPath };
-  }
-
-  // ── Parse WB for summary ──────────────────────────────────────────────────
-  const wbContent = readFile(wbPath);
-  const summary   = parseWorkBreakdownSummary(wbContent);
-  appendLog(logPath, `Work Breakdown parsed: ${summary.user_stories} US, ${summary.total_tasks} tasks, ${summary.implementation_phases} phases`);
-
-  // ── Update Effort Estimate ────────────────────────────────────────────────
-  const effortContent = buildEffortEstimate(prefix, summary);
-  fs.writeFileSync(effortPath, effortContent, 'utf8');
-  appendLog(logPath, `Updated: ${prefix}-Effort-Estimate.md`);
-
-  // ── Build gate2_payload ───────────────────────────────────────────────────
-  const gate2Payload = {
-    prefix,
-    feature_dir:           path.dirname(featurePath),
-    user_stories:          summary.user_stories,
-    total_tasks:           summary.total_tasks,
-    domain_breakdown:      summary.domain_breakdown,
-    implementation_phases: summary.implementation_phases,
-    human_estimate:        summary.human_estimate,
-    agent_estimate:        summary.agent_estimate,
-    work_breakdown_path:   wbPath,
-    effort_estimate_path:  effortPath,
-    token_ledger:          tokenLedger,
-    errors:                [],
-  };
-
-  appendLog(logPath, `pm-phase2 COMPLETE — gate2_payload ready`);
-  return gate2Payload;
-}
-
-module.exports = { main };

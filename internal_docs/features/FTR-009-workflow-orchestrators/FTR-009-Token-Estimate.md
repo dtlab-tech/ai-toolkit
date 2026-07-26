@@ -25,7 +25,7 @@
 | generate-work-breakdown | haiku | 22,625 | $0.0407 | N/A | N/A | ✅ complete |
 | developer-backend (×3) | sonnet | 69,000 | $0.3726 | N/A | N/A | ✅ complete |
 | review-solution (×4) | sonnet | 80,000 | $0.4320 | N/A | N/A | ✅ complete |
-| project-manager (orchestrator) | sonnet | 80,000 | $0.4320 | N/A | N/A | ✅ complete |
+| project-manager (orchestrator) | sonnet | 80,000 | $0.4320 | 329,274 | $1.7781 | ✅ complete |
 
 ## Phase subtotals
 
@@ -38,7 +38,7 @@
 
 | Metric | Estimated | Actual |
 |--------|-----------|--------|
-| Total tokens | 307,900 | N/A (pipeline ran inline — no subagent boundaries) |
-| Total cost ($) | $1.44 | N/A |
+| Total tokens | 307,900 | 329,274 (orchestrator only; per-agent N/A — inline run) |
+| Total cost ($) | $1.44 | $1.78 (orchestrator actual) |
 
-> Note: All agents ran inline in the orchestrator context (CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2 with project-manager as subagent at depth 2). This is precisely the condition FTR-009 addresses — actual per-agent token data is unavailable for this run. The new workflow-based pipeline will produce real per-agent actuals from the next run forward.
+> Note: Per-agent actuals are N/A because the pipeline ran inline (PM as subagent at depth 2, no real subagent boundaries). The orchestrator total (329,274 tokens) is exact from the task notification. This is precisely the condition FTR-009 addresses — the new workflow-based pipeline produces real per-phase actuals from the next run forward.

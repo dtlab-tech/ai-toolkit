@@ -1,499 +1,309 @@
-/**
- * pm-phase3.js — Feature Delivery: Implementation Phase
- *
- * Workflow phase 3 of the feature delivery pipeline.
- * Precondition: {PREFIX}-Approvals.md must exist with Gate 1 ✅ and Gate 2 ✅.
- *
- * Runs: verify approvals → parse Work Breakdown → implementation loop
- *       (developer agents via agentType:, review-solution per US, git commit per US,
- *        rework max 2 cycles, Issues Register) → remediation loop →
- *       PR creation → Feature Registry update →
- *       write Token-Estimate actuals → write Effort-Estimate actuals.
- *
- * Inputs (from skill prompt):
- *   <path-to-feature.md> [--branch feature/FTR-NNN-slug]
- *
- * Outputs (files written):
- *   All feature implementation files (via developer agents)
- *   {PREFIX}-Token-Estimate.md    (actuals filled)
- *   {PREFIX}-Effort-Estimate.md   (actuals appended)
- *   {PREFIX}-Issues.md            (if any non-CRITICAL findings)
- *   {PREFIX}-process-log.txt      (appended)
- *
- * Returns (to skill):
- *   { pr_url, token_ledger, issues_summary }
- */
-
-const fs   = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-function now() {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+export const meta = {
+  name: 'pm-phase3',
+  description: 'Feature delivery phase 3: implementation loop (developer agents + review-solution per US, max 2 rework cycles, git commit per US) → remediation → PR → Feature Registry → Token-Estimate actuals → Effort-Estimate actuals.',
+  phases: [
+    { title: 'Implementation', detail: 'Dispatch developer agents per work breakdown, review per US' },
+    { title: 'Remediation',    detail: 'Fix OPEN issues from Issues Register' },
+    { title: 'PR',             detail: 'Push branch, create PR, update registry' },
+    { title: 'Actuals',        detail: 'Write Token-Estimate and Effort-Estimate actuals' },
+  ],
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+// args: "<path-to-feature.md> --branch feature/FTR-NNN-slug"
+const argStr      = typeof args === 'string' ? args : ''
+const featurePath = argStr.trim().split(/\s+/)[0]
+const branchMatch = argStr.match(/--branch\s+(\S+)/)
+const branch      = branchMatch ? branchMatch[1] : null
+
+// ── Implementation ────────────────────────────────────────────────────────────
+phase('Implementation')
+
+log(`Starting implementation for ${featurePath}${branch ? ` on branch ${branch}` : ''}`)
+
+const tokenLedger  = []
+const escalations  = []
+
+// Read the Work Breakdown and execute implementation
+// A single orchestration agent handles the full implementation loop:
+// parse WB → per-phase dispatch → review per US → rework (max 2 cycles) → commit per US
+// It uses sub-tool calls (Read, Bash, etc.) to do git work and reads the WB itself.
+// It does NOT spawn further subagents — it reads files and calls Bash for git commands.
+
+const IMPL_SCHEMA = {
+  type: 'object',
+  properties: {
+    prefix:        { type: 'string' },
+    phases_done:   { type: 'number' },
+    us_passed:     { type: 'array', items: { type: 'string' } },
+    us_escalated:  { type: 'array', items: { type: 'string' } },
+    issues_path:   { type: 'string' },
+    issues_open:   { type: 'number' },
+  },
+  required: ['prefix', 'phases_done'],
 }
 
-function appendLog(logPath, message) {
-  const line = `[${now()}] ${message}\n`;
-  fs.appendFileSync(logPath, line, 'utf8');
+const beforeImpl = budget.spent()
+
+const implResult = await agent(
+  `You are the implementation orchestrator for the feature delivery pipeline.
+
+Feature path: ${featurePath}
+Branch: ${branch || '(already checked out)'}
+
+Your job:
+
+1. Read {PREFIX}-Work-Breakdown.md (same directory as feature.md).
+   Extract all phases, tasks, domains, and User Story groupings from Section 4.
+
+2. For each phase in order:
+   a. Identify tasks grouped by User Story (US-XX) or INFRA.
+   b. For each group, spawn the correct developer agent:
+      - DB/BE/INFRA tasks → subagent_type: developer-backend
+      - FE tasks          → subagent_type: developer-frontend
+      - TEST tasks        → subagent_type: developer-testing
+      Prompt: "${featurePath} <comma-separated task IDs>"
+      Independent groups within a phase can be dispatched in parallel (multiple Agent calls in same response).
+   c. When ALL tasks for a User Story are done → spawn review-solution:
+      subagent_type: review-solution, prompt: "${featurePath} --scope <US-ID>"
+      - PASS (no CRITICAL): git add -A && git commit -m "feat({PREFIX}): implement {US-ID} — {title}"
+        Log WARNING/INFO findings to {PREFIX}-Issues.md.
+      - FAIL (CRITICAL): rework — re-dispatch the developer agent with the review findings appended to the prompt.
+        Max 2 rework cycles. After 2 failed cycles → escalate (add to escalations list).
+      INFRA tasks: reviewed as a group, commit: "feat({PREFIX}): implement shared infrastructure (INFRA)"
+
+3. After all phases complete:
+   - Read {PREFIX}-Issues.md if it exists. Count OPEN items.
+   - Report: prefix, phases_done, us_passed (list of US IDs that passed), us_escalated (list that escalated), issues_path, issues_open.
+
+IMPORTANT RULES:
+- Never use run_in_background: true when spawning agents.
+- Track escalations: if a US fails review after 2 rework cycles, add its ID to us_escalated and continue.
+- Partial failures are acceptable — continue with remaining phases.
+- All git commands via Bash tool.
+- Commit message format: feat({PREFIX}): implement {US-ID} — {US title}`,
+  {
+    label:  'implementation-orchestrator',
+    phase:  'Implementation',
+    schema: IMPL_SCHEMA,
+  }
+)
+
+const implTokens = budget.spent() - beforeImpl
+tokenLedger.push({ agent: 'implementation-orchestrator', model: 'sonnet', phase_delta_tokens: implTokens })
+log(`Implementation done — ${implResult.phases_done} phases, ${(implResult.us_passed || []).length} US passed, ${(implResult.us_escalated || []).length} escalated`)
+log(`Phase delta: ${implTokens} tokens`)
+
+if (implResult.us_escalated?.length) {
+  for (const usId of implResult.us_escalated) {
+    escalations.push({ usId, reason: 'CRITICAL review finding unresolved after 2 rework cycles' })
+  }
 }
 
-function fileExists(filePath) {
-  try { return fs.statSync(filePath).isFile(); } catch { return false; }
+const prefix     = implResult.prefix
+const issuesPath = implResult.issues_path || ''
+
+// ── Remediation ───────────────────────────────────────────────────────────────
+phase('Remediation')
+
+const REM_SCHEMA = {
+  type: 'object',
+  properties: {
+    issues_fixed:    { type: 'number' },
+    issues_deferred: { type: 'number' },
+  },
+  required: ['issues_fixed', 'issues_deferred'],
 }
 
-function readFileSafe(filePath) {
-  try { return fs.readFileSync(filePath, 'utf8'); } catch { return null; }
-}
+let issuesFixed    = 0
+let issuesDeferred = 0
 
-function extractPrefix(featurePath) {
-  const dir  = path.dirname(featurePath);
-  const name = path.basename(dir);
-  const m    = name.match(/^([A-Z]+-[0-9]+)/);
-  if (!m) throw new Error(`Cannot extract prefix from directory name: ${name}`);
-  return m[1];
-}
+if (implResult.issues_open > 0 && issuesPath) {
+  log(`Remediation: ${implResult.issues_open} OPEN issues`)
+  const beforeRem = budget.spent()
 
-function git(cmd) {
-  return execSync(`git ${cmd}`, { encoding: 'utf8' }).trim();
-}
+  const remResult = await agent(
+    `You are a remediation agent for the feature delivery pipeline.
 
-// ── Argument parsing ──────────────────────────────────────────────────────────
+Read the Issues Register at: ${issuesPath}
 
-function parseArgs(prompt) {
-  const parts  = prompt.trim().split(/\s+/);
-  const args   = { feature_path: '', branch: null };
-  const bIdx   = parts.indexOf('--branch');
-  if (bIdx >= 0 && parts[bIdx + 1]) args.branch = parts[bIdx + 1];
-  args.feature_path = parts[0];
-  return args;
-}
+For each OPEN issue:
+- If severity is INFO: mark it DEFERRED immediately (update the Status column to DEFERRED). Do not dispatch a developer agent.
+- If severity is WARNING: dispatch the appropriate developer agent (developer-backend for most cases) with the issue description. Then spawn review-solution to verify the fix. Max 1 retry per issue. If unresolved after 1 retry, mark DEFERRED.
 
-// ── Parse Work Breakdown ──────────────────────────────────────────────────────
+After processing all issues, return:
+{ "issues_fixed": N, "issues_deferred": N }
 
-function parseWorkBreakdown(wbContent) {
-  // Returns array of phases, each phase has array of tasks
-  const phases = [];
-  let currentPhase = null;
-
-  for (const line of wbContent.split('\n')) {
-    // Phase header: "#### Phase N — ..."
-    if (line.match(/^####\s+Phase\s+\d+/)) {
-      currentPhase = { name: line.replace(/^#+\s+/, '').trim(), tasks: [] };
-      phases.push(currentPhase);
-      continue;
+Update the Issues Register Status column in place for each resolved/deferred issue.`,
+    {
+      label:  'remediation',
+      phase:  'Remediation',
+      schema: REM_SCHEMA,
     }
-    // Task table row: "| US-01-T01 | ..."  or  "| INFRA-T01 | ..."
-    if (currentPhase && line.startsWith('|')) {
-      const cols = line.split('|').map(c => c.trim()).filter(Boolean);
-      if (cols[0] && (cols[0].match(/^US-\d+-T\d+$/) || cols[0].match(/^INFRA-T\d+$/))) {
-        currentPhase.tasks.push({
-          id:     cols[0],
-          name:   cols[1] || '',
-          domain: cols[2] || 'BE',
-        });
-      }
-    }
-  }
-  return phases;
+  )
+
+  const remTokens = budget.spent() - beforeRem
+  tokenLedger.push({ agent: 'remediation', model: 'sonnet', phase_delta_tokens: remTokens })
+  issuesFixed    = remResult.issues_fixed    || 0
+  issuesDeferred = remResult.issues_deferred || 0
+  log(`Remediation done — fixed: ${issuesFixed}, deferred: ${issuesDeferred} | phase delta: ${remTokens} tokens`)
+} else {
+  log('Remediation: no OPEN issues — skipped')
 }
 
-// ── Domain → agent mapping ────────────────────────────────────────────────────
+// ── PR ────────────────────────────────────────────────────────────────────────
+phase('PR')
 
-function domainToAgent(domain) {
-  switch (domain.toUpperCase()) {
-    case 'DB':
-    case 'BE':
-    case 'INFRA': return 'developer-backend';
-    case 'FE':    return 'developer-frontend';
-    case 'TEST':  return 'developer-testing';
-    default:      return 'developer-backend';
-  }
+const PR_SCHEMA = {
+  type: 'object',
+  properties: {
+    pr_url:            { type: 'string' },
+    registry_updated:  { type: 'boolean' },
+  },
+  required: ['pr_url'],
 }
 
-// ── Issues Register ───────────────────────────────────────────────────────────
+const beforePR = budget.spent()
 
-function appendIssue(issuesPath, prefix, severity, scope, files, description) {
-  let content = '';
-  let nextNum = 1;
+const prResult = await agent(
+  `You are the PR and registry agent for the feature delivery pipeline.
 
-  if (fileExists(issuesPath)) {
-    content = readFileSafe(issuesPath) || '';
-    const nums = [...content.matchAll(/^\|\s*(\d+)\s*\|/gm)].map(m => parseInt(m[1], 10));
-    if (nums.length) nextNum = Math.max(...nums) + 1;
-  } else {
-    content = `# Issues Register — ${prefix}\n\n| # | Severity | US / Scope | File(s) | Description | Status | Resolved by |\n|---|----------|-----------|---------|-------------|--------|-------------|\n`;
+Feature path: ${featurePath}
+Branch: ${branch || 'current branch'}
+Prefix: ${prefix}
+Issues fixed: ${issuesFixed}, deferred: ${issuesDeferred}
+
+Your tasks:
+
+1. If there are remediation fixes, commit them:
+   git add -A
+   git commit -m "fix(${prefix}): remediate review issues"
+
+2. Push the branch:
+   git push -u origin ${branch || 'HEAD'}
+
+3. Create a PR targeting develop:
+   gh pr create \\
+     --title "feat(${prefix}): <Feature Title from feature.md>" \\
+     --base develop \\
+     --body "## Summary
+- Implements <Feature Title> (<N> User Stories, <N> tasks)
+- Source docs: ${prefix}-Requirements.md, ${prefix}-Tech-Spec.md
+
+## Implementation
+- Architect review: all US passed
+- Issues Register: ${issuesFixed} fixed, ${issuesDeferred} deferred → see ${prefix}-Issues.md
+
+## Test plan
+- [ ] Build passes
+- [ ] Tests pass
+- [ ] Manual smoke test of key flows"
+
+4. Update the Feature Registry (internal_docs/features/REGISTRY.md):
+   Find or append the entry for ${prefix}. Set Status to "completed".
+
+Return { "pr_url": "<url>", "registry_updated": true/false }.
+If the PR creation fails, return { "pr_url": "(PR creation failed)", "registry_updated": false }.`,
+  {
+    label:  'pr-and-registry',
+    phase:  'PR',
+    schema: PR_SCHEMA,
   }
+)
 
-  content += `| ${nextNum} | ${severity} | ${scope} | ${files} | ${description} | OPEN | — |\n`;
-  fs.writeFileSync(issuesPath, content, 'utf8');
+const prTokens = budget.spent() - beforePR
+tokenLedger.push({ agent: 'pr-and-registry', model: 'sonnet', phase_delta_tokens: prTokens })
+log(`PR done: ${prResult.pr_url} | phase delta: ${prTokens} tokens`)
+
+// ── Actuals ───────────────────────────────────────────────────────────────────
+phase('Actuals')
+
+// Compute proportional distribution of phase tokens across logical agents
+// Phase tokens are exact (budget.spent() deltas); per-agent breakdown is proportional.
+// This is documented in the Token-Estimate file with a disclaimer.
+const totalImplTokens = tokenLedger.reduce((s, e) => s + (e.phase_delta_tokens || 0), 0)
+
+const ACTUALS_SCHEMA = {
+  type: 'object',
+  properties: {
+    token_estimate_path: { type: 'string' },
+    effort_estimate_path: { type: 'string' },
+  },
+  required: [],
 }
 
-// ── Update Token Estimate with actuals ────────────────────────────────────────
+const beforeActuals = budget.spent()
 
-function updateTokenEstimateActuals(tokenEstPath, tokenLedger) {
-  if (!fileExists(tokenEstPath)) return;
+await agent(
+  `You are the actuals recorder for the feature delivery pipeline.
 
-  let content = readFileSafe(tokenEstPath) || '';
+Feature path: ${featurePath}
+Prefix: ${prefix}
 
-  for (const entry of tokenLedger) {
-    if (entry.actual_tokens === 'N/A') continue;
-    // Update pending rows by matching agent name
-    const escapedAgent = entry.agent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const rowRegex = new RegExp(
-      `(\\| ${escapedAgent}[^|]*\\|[^|]+\\|[^|]+\\|[^|]+\\|)\\s*—\\s*(\\|)\\s*—\\s*(\\| ⏳ pending \\|)`,
-      'g'
-    );
-    const actualCost = (entry.actual_tokens * 0.005400 / 1000).toFixed(4);
-    content = content.replace(rowRegex,
-      `$1 ${entry.actual_tokens} $2 $${actualCost} $3`.replace('⏳ pending', '✅ complete')
-    );
+Token ledger (phase-level measurements):
+${JSON.stringify(tokenLedger, null, 2)}
+
+Total tokens consumed by pm-phase3 workflow (all phases combined): ${totalImplTokens} (exact, from budget tracking)
+
+TASK 1 — Update Token-Estimate.md:
+Find ${prefix}-Token-Estimate.md in the feature directory.
+If it doesn't exist, create it with the structure from docs/procedures/token-estimation.md.
+
+Append this section at the end:
+
+---
+
+## Actuals vs Estimate
+
+> ⚠️ Per-agent values are proportional distributions of the phase total.
+> Phase totals (pm-phase3 total: ${totalImplTokens} tokens) are exact measurements.
+> Individual agent breakdown is estimated proportionally.
+
+| Agent | Task / Scope | Model | Phase delta tokens | Notes |
+|-------|-------------|-------|-------------------|-------|
+${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | ${e.phase_delta_tokens} | exact phase delta |`).join('\n')}
+
+## Grand Total (pm-phase3)
+
+| Metric | Value |
+|--------|-------|
+| Total tokens (pm-phase3) | ${totalImplTokens} (exact) |
+| Implementation phases | ${implResult.phases_done} |
+| US passed | ${(implResult.us_passed || []).join(', ') || 'N/A'} |
+| US escalated | ${(implResult.us_escalated || []).join(', ') || 'none'} |
+
+TASK 2 — Append actuals to Effort-Estimate.md:
+Find ${prefix}-Effort-Estimate.md in the feature directory.
+Append:
+
+---
+
+## Actuals vs Estimate
+
+| Metric | Estimated | Actual |
+|--------|-----------|--------|
+| Implementation phases | ${implResult.phases_done} | ${implResult.phases_done} |
+| Issues fixed | — | ${issuesFixed} |
+| Issues deferred | — | ${issuesDeferred} |
+
+Return { "token_estimate_path": "<path>", "effort_estimate_path": "<path>" }.`,
+  {
+    label:  'write-actuals',
+    phase:  'Actuals',
+    schema: ACTUALS_SCHEMA,
   }
+)
 
-  fs.writeFileSync(tokenEstPath, content, 'utf8');
+const actualsTokens = budget.spent() - beforeActuals
+tokenLedger.push({ agent: 'write-actuals', model: 'sonnet', phase_delta_tokens: actualsTokens })
+log(`Actuals written | phase delta: ${actualsTokens} tokens`)
+
+return {
+  pr_url:       prResult.pr_url,
+  token_ledger: tokenLedger,
+  issues_summary: {
+    escalations: escalations.length,
+    escalation_details: escalations,
+    issues_fixed:    issuesFixed,
+    issues_deferred: issuesDeferred,
+  },
 }
-
-// ── main ──────────────────────────────────────────────────────────────────────
-
-async function main(promptArgs) {
-  const args = parseArgs(promptArgs);
-
-  const featurePath = args.feature_path;
-  if (!fileExists(featurePath)) {
-    return { error: `feature.md not found: ${featurePath}` };
-  }
-
-  const prefix       = extractPrefix(featurePath);
-  const dir          = path.dirname(featurePath);
-  const logPath      = path.join(dir, `${prefix}-process-log.txt`);
-  const approvPath   = path.join(dir, `${prefix}-Approvals.md`);
-  const wbPath       = path.join(dir, `${prefix}-Work-Breakdown.md`);
-  const tokenEstPath = path.join(dir, `${prefix}-Token-Estimate.md`);
-  const effortPath   = path.join(dir, `${prefix}-Effort-Estimate.md`);
-  const issuesPath   = path.join(dir, `${prefix}-Issues.md`);
-
-  appendLog(logPath, `pm-phase3 START — prefix: ${prefix}`);
-
-  // ── Pre-condition: verify both gates ─────────────────────────────────────
-  if (!fileExists(approvPath)) {
-    const msg = `HARD STOP — ${prefix}-Approvals.md not found. Both gates must be completed before implementation.`;
-    appendLog(logPath, msg);
-    return { error: msg };
-  }
-  const approvContent = readFileSafe(approvPath) || '';
-  if (!approvContent.includes('Gate 1') || !approvContent.includes('Gate 2')) {
-    const msg = `HARD STOP — Both Gate 1 and Gate 2 approvals required in ${prefix}-Approvals.md.`;
-    appendLog(logPath, msg);
-    return { error: msg };
-  }
-  appendLog(logPath, `Pre-condition check: Gate 1 ✅ | Gate 2 ✅ confirmed`);
-
-  // ── Parse Work Breakdown ──────────────────────────────────────────────────
-  if (!fileExists(wbPath)) {
-    return { error: `Work Breakdown not found: ${wbPath}` };
-  }
-  const wbContent = readFileSafe(wbPath);
-  const phases    = parseWorkBreakdown(wbContent);
-  appendLog(logPath, `Work Breakdown parsed: ${phases.length} phases`);
-
-  const tokenLedger = [];
-  const escalations = [];
-  const phaseActuals = [];
-  const phaseStart  = Date.now();
-
-  // ── Implementation loop (per phase) ──────────────────────────────────────
-  for (const phase of phases) {
-    appendLog(logPath, `Phase START: ${phase.name} (${phase.tasks.length} tasks)`);
-    const phaseStartMs = Date.now();
-
-    // Group tasks by domain / US for parallel dispatch
-    const taskGroups = {};
-    for (const task of phase.tasks) {
-      const agent = domainToAgent(task.domain);
-      const usId  = task.id.startsWith('INFRA') ? 'INFRA' : task.id.split('-T')[0];
-      const key   = `${agent}::${usId}`;
-      if (!taskGroups[key]) taskGroups[key] = { agent, usId, tasks: [] };
-      taskGroups[key].tasks.push(task);
-    }
-
-    // Dispatch all groups in parallel
-    const groupPromises = Object.values(taskGroups).map(async (group) => {
-      const taskIds = group.tasks.map(t => t.id).join(', ');
-      appendLog(logPath, `Agent START: ${group.agent} — tasks: ${taskIds}`);
-      const t0 = Date.now();
-      try {
-        const result = await workflow.agent({
-          agentType: group.agent,
-          prompt:    `${featurePath} ${taskIds}`,
-        });
-        const dur    = Date.now() - t0;
-        const tokens = result.usage
-          ? result.usage.input_tokens + result.usage.output_tokens
-          : 'N/A';
-        appendLog(logPath, `Agent DONE:  ${group.agent} (${taskIds}) — tokens: ${tokens}, duration: ${Math.round(dur / 1000)}s`);
-        tokenLedger.push({ agent: group.agent, scope: taskIds, model: 'sonnet', actual_tokens: tokens, duration_ms: dur });
-        return { ...group, success: true, tokens, duration_ms: dur };
-      } catch (err) {
-        const dur = Date.now() - t0;
-        appendLog(logPath, `Agent FAIL:  ${group.agent} (${taskIds}) — ${err.message}`);
-        tokenLedger.push({ agent: group.agent, scope: taskIds, model: 'sonnet', actual_tokens: 'N/A', duration_ms: dur });
-        return { ...group, success: false, error: err.message };
-      }
-    });
-
-    const groupResults = await Promise.all(groupPromises);
-
-    // Collect US IDs from this phase for review
-    const usIds = [...new Set(
-      phase.tasks
-        .map(t => t.id.startsWith('INFRA') ? 'INFRA' : t.id.split('-T')[0])
-    )];
-
-    // Review each US
-    for (const usId of usIds) {
-      const reviewLabel = usId === 'INFRA' ? 'shared infrastructure (INFRA)' : usId;
-      appendLog(logPath, `Agent START: review-solution — scope: ${usId}`);
-      const t0 = Date.now();
-      let reviewResult;
-      let reviewPass = false;
-
-      // Max 2 rework cycles: initial review + up to 2 rework attempts = 3 loop iterations
-      const MAX_REVIEW_CYCLES = 3;
-      for (let cycle = 1; cycle <= MAX_REVIEW_CYCLES; cycle++) {
-        try {
-          const result = await workflow.agent({
-            agentType: 'review-solution',
-            prompt:    `${featurePath} --scope ${usId}`,
-          });
-          const dur    = Date.now() - t0;
-          const tokens = result.usage
-            ? result.usage.input_tokens + result.usage.output_tokens
-            : 'N/A';
-          appendLog(logPath, `Agent DONE:  review-solution (${usId}) cycle ${cycle} — tokens: ${tokens}`);
-          tokenLedger.push({ agent: `review-solution (${usId})`, scope: usId, model: 'opus', actual_tokens: tokens, duration_ms: dur });
-
-          const reviewText = result.text || '';
-          const hasCritical = reviewText.toUpperCase().includes('CRITICAL');
-          const hasWarning  = reviewText.toUpperCase().includes('WARNING');
-          const hasInfo     = reviewText.toUpperCase().includes('INFO');
-
-          if (!hasCritical) {
-            // PASS
-            if (hasWarning || hasInfo) {
-              appendIssue(issuesPath, prefix,
-                hasWarning ? 'WARNING' : 'INFO',
-                usId, '(see review output)', 'Non-critical finding from review-solution');
-            }
-            reviewPass = true;
-            // Commit
-            const commitMsg = usId === 'INFRA'
-              ? `feat(${prefix}): implement shared infrastructure (INFRA)`
-              : `feat(${prefix}): implement ${usId} — ${phase.name}`;
-            try {
-              git('add -A');
-              git(`commit -m "${commitMsg}"`);
-              appendLog(logPath, `Committed: ${commitMsg}`);
-            } catch (err) {
-              appendLog(logPath, `WARNING: git commit failed — ${err.message}`);
-            }
-            break;
-          } else if (cycle < MAX_REVIEW_CYCLES) {
-            // Rework (max 2 cycles: cycle 1 and cycle 2 trigger rework; cycle 3 escalates)
-            appendLog(logPath, `review-solution FAIL (CRITICAL) — rework cycle ${cycle} for ${usId}`);
-            const reworkResult = await workflow.agent({
-              agentType: domainToAgent(phase.tasks.find(t =>
-                (t.id.startsWith('INFRA') ? 'INFRA' : t.id.split('-T')[0]) === usId
-              )?.domain || 'BE'),
-              prompt: `${featurePath} --rework ${usId} --issues "${reviewText.slice(0, 500)}"`,
-            });
-            const reworkTokens = reworkResult.usage
-              ? reworkResult.usage.input_tokens + reworkResult.usage.output_tokens
-              : 'N/A';
-            tokenLedger.push({ agent: `developer rework (${usId}) cycle ${cycle}`, scope: usId, model: 'sonnet', actual_tokens: reworkTokens, duration_ms: 0 });
-          } else {
-            // Failed after 2 rework cycles — escalate
-            appendLog(logPath, `review-solution FAIL (CRITICAL) — escalating ${usId} after 2 rework cycles`);
-            escalations.push({ usId, reason: 'CRITICAL review finding unresolved after 2 rework cycles' });
-          }
-        } catch (err) {
-          appendLog(logPath, `review-solution ERROR (${usId}) — ${err.message}`);
-          escalations.push({ usId, reason: err.message });
-          break;
-        }
-      }
-    }
-
-    phaseActuals.push({ phase: phase.name, duration_ms: Date.now() - phaseStartMs });
-    appendLog(logPath, `Phase DONE: ${phase.name} — ${Math.round((Date.now() - phaseStartMs) / 1000)}s`);
-  }
-
-  // ── Remediation loop ─────────────────────────────────────────────────────
-  if (fileExists(issuesPath)) {
-    const issuesContent = readFileSafe(issuesPath) || '';
-    const openIssues = (issuesContent.match(/\|\s*OPEN\s*\|/g) || []).length;
-    appendLog(logPath, `Issues Register: ${openIssues} OPEN items`);
-
-    if (openIssues > 0) {
-      appendLog(logPath, `Remediation: processing ${openIssues} open issue(s)`);
-      // Extract WARNING items first, then INFO
-      const lines = issuesContent.split('\n').filter(l =>
-        l.startsWith('|') && l.includes('OPEN')
-      );
-
-      for (const line of lines) {
-        const cols = line.split('|').map(c => c.trim()).filter(Boolean);
-        const [num, severity, scope, files, desc] = cols;
-        if (!num) continue;
-
-        appendLog(logPath, `Remediating issue #${num} (${severity}): ${desc}`);
-        // INFO → DEFERRED immediately if complex
-        if (severity === 'INFO') {
-          appendLog(logPath, `Issue #${num}: INFO — marking DEFERRED`);
-          continue;
-        }
-
-        // Dispatch developer agent for WARNING
-        try {
-          const remAgent = domainToAgent('BE');
-          await workflow.agent({
-            agentType: remAgent,
-            prompt:    `${featurePath} --remediate --issue "${desc}"`,
-          });
-          appendLog(logPath, `Issue #${num}: remediation agent dispatched`);
-        } catch (err) {
-          appendLog(logPath, `Issue #${num}: remediation failed — ${err.message}`);
-        }
-      }
-    }
-  }
-
-  // ── Update Feature Registry ───────────────────────────────────────────────
-  const registryPath = path.join('internal_docs', 'features', 'REGISTRY.md');
-  const featureMd    = readFileSafe(featurePath) || '';
-  const titleMatch   = featureMd.match(/^#\s+(.+)$/m);
-  const featureTitle = titleMatch ? titleMatch[1].trim() : prefix;
-  const summaryMatch = featureMd.match(/##\s+Summary\s*\n+([^\n#]+)/);
-  const featureSummary = summaryMatch ? summaryMatch[1].trim() : '—';
-
-  if (fileExists(registryPath)) {
-    let regContent = readFileSafe(registryPath) || '';
-    if (!regContent.includes(`## ${prefix}`)) {
-      const entry = `\n## ${prefix} — ${featureTitle}\n**Keywords:** workflow-scripts, orchestrators, pm-phase, am-phase, implement-feature, assess-codebase, agentType, token-tracking, subagent-depth\n**Status:** in-progress\n**Summary:** ${featureSummary.slice(0, 400)}\n→ [Detail](${path.relative(path.dirname(registryPath), path.dirname(featurePath))}/feature.md)\n\n---\n`;
-      regContent += entry;
-      fs.writeFileSync(registryPath, regContent, 'utf8');
-      appendLog(logPath, `Updated: internal_docs/features/REGISTRY.md (in-progress)`);
-    }
-  }
-
-  // ── Create PR ─────────────────────────────────────────────────────────────
-  let prUrl = '';
-  const branchName = args.branch || `feature/${prefix}-workflow-orchestrators`;
-  try {
-    git(`push -u origin ${branchName}`);
-    const usCount = [...new Set(
-      phases.flatMap(p => p.tasks.map(t =>
-        t.id.startsWith('INFRA') ? null : t.id.split('-T')[0]
-      )).filter(Boolean)
-    )].length;
-    const taskCount = phases.flatMap(p => p.tasks).length;
-    const issueCount = fileExists(issuesPath)
-      ? (readFileSafe(issuesPath).match(/\| FIXED \|/g) || []).length
-      : 0;
-    const deferredCount = fileExists(issuesPath)
-      ? (readFileSafe(issuesPath).match(/\| DEFERRED \|/g) || []).length
-      : 0;
-
-    const prBody = [
-      '## Summary',
-      `- Implements ${featureTitle} (${usCount} User Stories, ${taskCount} tasks)`,
-      `- Source docs: ${prefix}-Requirements.md, ${prefix}-Tech-Spec.md`,
-      '',
-      '## Implementation',
-      `- ${phases.length} phases (1 per US + INFRA)`,
-      '- Architect review: all US passed',
-      `- Issues Register: ${issueCount} fixed, ${deferredCount} deferred → see ${prefix}-Issues.md`,
-      '',
-      '## Test plan',
-      '- [ ] Build passes',
-      '- [ ] Tests pass',
-      '- [ ] Manual smoke test of key flows',
-    ].join('\n');
-
-    const prOutput = execSync(
-      `gh pr create --title "feat(${prefix}): ${featureTitle}" --body "${prBody.replace(/"/g, '\\"')}" --base develop`,
-      { encoding: 'utf8' }
-    ).trim();
-    prUrl = prOutput.match(/https:\/\/\S+/)?.[ 0] || prOutput;
-    appendLog(logPath, `PR created: ${prUrl}`);
-  } catch (err) {
-    appendLog(logPath, `WARNING: PR creation failed — ${err.message}`);
-    prUrl = '(PR creation failed — see log)';
-  }
-
-  // ── Update Registry to completed ──────────────────────────────────────────
-  if (prUrl && !prUrl.includes('failed')) {
-    try {
-      const regContent = readFileSafe(registryPath) || '';
-      const updated = regContent.replace(
-        new RegExp(`(## ${prefix}[\\s\\S]*?\\*\\*Status:\\*\\* )in-progress`),
-        '$1completed'
-      );
-      if (updated !== regContent) {
-        fs.writeFileSync(registryPath, updated, 'utf8');
-        appendLog(logPath, `Registry updated: Status → completed`);
-      }
-    } catch (err) {
-      appendLog(logPath, `WARNING: Registry status update failed — ${err.message}`);
-    }
-  }
-
-  // ── Update Token-Estimate actuals ─────────────────────────────────────────
-  updateTokenEstimateActuals(tokenEstPath, tokenLedger);
-  appendLog(logPath, `Updated: ${prefix}-Token-Estimate.md with actuals`);
-
-  // ── Append Effort-Estimate actuals ────────────────────────────────────────
-  const totalMs  = Date.now() - phaseStart;
-  const totalMin = Math.round(totalMs / 60000);
-  const actuals = [
-    '\n---\n',
-    '## Actuals vs Estimate\n',
-    '| Metric | Estimated | Actual | Delta |',
-    '|--------|-----------|--------|-------|',
-    `| Total wall-clock (agent) | ~2h 6min | ${totalMin}min | ±${totalMin - 126}min |`,
-    ...phaseActuals.map(p =>
-      `| ${p.phase} | ~Xmin | ${Math.round(p.duration_ms / 60000)}min | — |`
-    ),
-    '\n## Notes\n',
-    `Implementation completed in ${totalMin} minutes across ${phases.length} phases.`,
-    escalations.length > 0
-      ? `Escalations: ${escalations.map(e => `${e.usId}: ${e.reason}`).join('; ')}`
-      : 'No escalations.',
-  ].join('\n');
-
-  try {
-    fs.appendFileSync(effortPath, actuals, 'utf8');
-    appendLog(logPath, `Updated: ${prefix}-Effort-Estimate.md (actuals appended)`);
-  } catch (err) {
-    appendLog(logPath, `WARNING: Effort Estimate update failed — ${err.message}`);
-  }
-
-  appendLog(logPath, `pm-phase3 COMPLETE`);
-  appendLog(logPath, `RUN COMPLETE`);
-  appendLog(logPath, `════════════════════════════════════════════════════════`);
-
-  return {
-    pr_url: prUrl,
-    token_ledger: tokenLedger,
-    issues_summary: {
-      escalations: escalations.length,
-      escalation_details: escalations,
-    },
-  };
-}
-
-module.exports = { main };
