@@ -55,7 +55,7 @@ Each entry summarises a feature for cross-reference by future features.
 
 ## FTR-008 — Compact Instructions Block
 **Keywords:** compact-instructions, CLAUDE.md, auto-compaction, topic-change, trigger-phrases, install-toolkit, context-management
-**Status:** in-progress
+**Status:** completed
 **Summary:** Adds a `# Compact instructions` section to `~/.claude/CLAUDE.md` (global Claude Code config) via a new Step 6 opt-in in the `install-toolkit` agent. The section guides auto-compaction to preserve 6 decision-critical item categories and discard 4 noise categories, and instructs Claude to send a verbatim compact notification when any of 12 topic-change trigger phrases (Italian + English) are detected. Write is idempotent (skips if heading already present) and requires explicit user confirmation. Runtime behaviour is instruction-only — no code, no API, no database.
 → [Detail](FTR-008-compact-instructions-block/feature.md)
 
