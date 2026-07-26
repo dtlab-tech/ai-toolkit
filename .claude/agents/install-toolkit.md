@@ -44,13 +44,14 @@ The user provides:
 
 ## Step 2 — Plan what to copy
 
-Four source directories to install:
+Five source directories to install:
 
 | Source (toolkit) | Destination | Purpose |
 |------------------|-------------|---------|
 | `.claude/agents/` | `{dest}/.claude/agents/` | All spawnable subagents |
 | `.claude/skills/` | `{dest}/.claude/skills/` | All user-invocable skills (except `install-toolkit/`) |
 | `.claude/commands/` | `{dest}/.claude/commands/` | All slash commands |
+| `.claude/workflows/` | `{dest}/.claude/workflows/` | Claude Code Workflow scripts for orchestrated pipelines |
 | `docs/procedures/` | `{dest}/docs/procedures/` | Generic procedures (only if destination has no override) |
 
 For each file, compare source content against destination using an MD5/hash check and determine status:
@@ -64,7 +65,6 @@ Build and display the plan before executing:
 📦 Install Plan  →  {destination}
 ──────────────────────────────────────────────────
 .claude/agents/
-  ✅ NEW       project-manager.md
   ✅ NEW       generate-requirements.md
   ⚠️  MODIFIED  developer-backend.md    ← content differs
   ⏭  SAME      review-solution.md
@@ -72,6 +72,13 @@ Build and display the plan before executing:
 .claude/skills/
   ✅ NEW       implement-feature/SKILL.md
   ⏭  SAME      init-agents/SKILL.md
+
+.claude/workflows/
+  ✅ NEW       pm-phase1.js
+  ✅ NEW       pm-phase2.js
+  ✅ NEW       pm-phase3.js
+  ✅ NEW       am-phase1.js
+  ✅ NEW       am-phase2.js
 
 docs/procedures/
   ✅ NEW       code-generation.md
