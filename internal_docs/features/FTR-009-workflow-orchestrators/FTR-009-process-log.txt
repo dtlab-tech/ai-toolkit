@@ -45,3 +45,10 @@ Feature: FTR-009 — Rewrite Orchestrators as Workflow Scripts
 [2026-07-26T15:10:01] Committed: feat(FTR-009): implement US-01 — Feature Delivery Workflow Scripts
 [2026-07-26T15:10:02] Committed: feat(FTR-009): implement US-02 — Assessment Workflow Scripts
 [2026-07-26T15:52:05] Issues Register: 1 FIXED, 2 OPEN (INFO — deferred)
+[2026-07-26T15:52:10] Phase 7 (Remediation): INFO #2 → DEFERRED, INFO #3 → DEFERRED
+[2026-07-26T15:52:15] Phase 8: REGISTRY.md updated — FTR-009 in-progress
+[2026-07-26T15:52:20] Phase 9: PR created → https://github.com/dtlab-tech/ai-toolkit/pull/22
+[2026-07-26T15:52:21] Phase 8: REGISTRY.md updated — FTR-009 completed
+[2026-07-26T16:00:58] Phase 10/11: Token-Estimate and Effort-Estimate actuals finalized
+[2026-07-26T16:00:58] RUN COMPLETE
+[2026-07-26T16:00:58] ════════════════════════════════════════════════════════
