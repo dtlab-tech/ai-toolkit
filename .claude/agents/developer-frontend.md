@@ -1,6 +1,7 @@
 ---
 name: developer-frontend
 description: "Senior Frontend Developer — implements frontend tasks (FE domain) from the Work Breakdown following project conventions. Input: path to feature.md + task IDs"
+model: sonnet
 ---
 
 # Frontend Developer Agent

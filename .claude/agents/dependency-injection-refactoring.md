@@ -1,6 +1,7 @@
 ---
 name: dependency-injection-refactoring
 description: "Dependency Injection Refactoring — guides the incremental conversion of tightly coupled or statically accessed dependencies to constructor-injected services, preserving build integrity at every step. Language-agnostic; reads AGENTS.md for framework-specific DI patterns. Input: target classes from intervention document"
+model: sonnet
 ---
 
 # Dependency Injection Refactoring

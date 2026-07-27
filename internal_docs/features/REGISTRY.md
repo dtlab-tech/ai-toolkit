@@ -44,3 +44,27 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-005-assessment-intervention-commands/feature.md)
 
 ---
+
+## FTR-007 — Explicit Per-Agent Model Assignment
+**Keywords:** model-frontmatter, per-agent-model, sonnet, opus, haiku, cost-efficiency, agent-config, OPT-01, token-optimization
+**Status:** completed
+**Summary:** Adds an explicit `model:` YAML frontmatter key to the 15 agents in `.claude/agents/` that lacked one, so every agent declares its cost-appropriate tier instead of inheriting the session model (often Opus). Mapping: `sonnet` for the 14 coordination/implementation agents (incl. `project-manager`, `assessment-manager`, all developers, all refactoring/security agents, `define-feature`, `init-agents-md`, `install-toolkit`, `intervention-documentation-standard`); `opus` for `review-solution` only; the 7 pre-set `haiku` agents left untouched. Pure config change — no prompt-body, behavior, or pipeline logic altered. Bare aliases (OQ-1); orchestrators kept on `sonnet` since the model does not cascade to subagents (OQ-2). Verified by AC-01..AC-06 (grep coverage empty, values ⊆ {haiku,sonnet,opus}, one added line per file).
+→ [Detail](FTR-007-explicit-per-agent-model-assignment/feature.md)
+
+---
+
+## FTR-008 — Compact Instructions Block
+**Keywords:** compact-instructions, CLAUDE.md, auto-compaction, topic-change, trigger-phrases, install-toolkit, context-management
+**Status:** completed
+**Summary:** Adds a `# Compact instructions` section to `~/.claude/CLAUDE.md` (global Claude Code config) via a new Step 6 opt-in in the `install-toolkit` agent. The section guides auto-compaction to preserve 6 decision-critical item categories and discard 4 noise categories, and instructs Claude to send a verbatim compact notification when any of 12 topic-change trigger phrases (Italian + English) are detected. Write is idempotent (skips if heading already present) and requires explicit user confirmation. Runtime behaviour is instruction-only — no code, no API, no database.
+→ [Detail](FTR-008-compact-instructions-block/feature.md)
+
+---
+
+## FTR-009 — Rewrite Orchestrators as Workflow Scripts
+**Keywords:** workflow-scripts, pm-phase, am-phase, agentType, implement-feature, assess-codebase, subagent-depth, token-tracking, orchestrators, determinism, per-agent-model
+**Status:** completed
+**Summary:** Replaces `project-manager.md` and `assessment-manager.md` subagent orchestrators with five Claude Code Workflow scripts (`pm-phase1/2/3.js`, `am-phase1/2.js`) in `.claude/workflows/`. Updates `implement-feature` and `assess-codebase` skills to invoke workflows sequentially with gates in the main loop. Deletes old orchestrator agent files. Updates `install-toolkit` and `bin/cli.js` to copy `.claude/workflows/` to destination projects. Resolves non-deterministic inline execution at spawn depth 2, enabling effective per-agent model assignment (FTR-007) and accurate token tracking.
+→ [Detail](FTR-009-workflow-orchestrators/feature.md)
+
+---

@@ -1,6 +1,7 @@
 ---
 name: review-solution
 description: "Senior Architect — full solution review across quality, reuse, architecture, and security dimensions. Reports findings without auto-fixing. Input: scope (files, US-XX, or git diff)"
+model: opus
 tools: Read, Grep, Glob, Bash
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: developer-backend
 description: "Senior Backend Developer — implements backend tasks (DB, BE, INFRA domains) from the Work Breakdown following project conventions. Input: path to feature.md + task IDs"
+model: sonnet
 ---
 
 # Backend Developer Agent

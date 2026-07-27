@@ -1,6 +1,7 @@
 ---
 name: god-class-decomposition
 description: "God Class Decomposition — guides the safe, incremental decomposition of oversized classes and methods using responsibility cluster analysis, extract-method, extract-class, and parameter object refactoring. Language-agnostic; reads AGENTS.md for project conventions. Input: target class(es) from intervention document"
+model: sonnet
 ---
 
 # God Class Decomposition

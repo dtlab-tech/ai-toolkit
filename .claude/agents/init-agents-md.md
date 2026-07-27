@@ -1,6 +1,7 @@
 ---
 name: init-agents-md
 description: "Analyzes a project codebase and generates a complete AGENTS.md file with tech stack, conventions, real code patterns, build/test commands, and hard constraints. Input: (optional) path to project root — defaults to current working directory."
+model: sonnet
 tools: Read, Glob, Grep, Bash, Write
 ---
 
