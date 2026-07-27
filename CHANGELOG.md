@@ -1,4 +1,25 @@
 ## 0.1.4 (2026-07-21)
+## [0.2.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.1.7...v0.2.0) (2026-07-27)
+
+
+### Features
+
+* **FTR-007:** explicit per-agent model assignment ([853eb0f](https://github.com/dtlab-tech/ai-toolkit/commit/853eb0f956a9a1aa64dedac7100fb1ad9eab4b08))
+* **FTR-007:** implement US-01 — explicit per-agent model assignment ([0fe5fba](https://github.com/dtlab-tech/ai-toolkit/commit/0fe5fba9b25dc261e840d99d97105dec7c0c9318))
+* **FTR-008:** compact instructions block for ~/.claude/CLAUDE.md ([738df59](https://github.com/dtlab-tech/ai-toolkit/commit/738df597e2da3edc04de68462f0e4555b232941d))
+* **FTR-008:** implement compact instructions block ([0dab04d](https://github.com/dtlab-tech/ai-toolkit/commit/0dab04d9c14392866c9046eee9e7052a2beac586))
+* **FTR-009:** implement shared infrastructure (INFRA) ([31bceb9](https://github.com/dtlab-tech/ai-toolkit/commit/31bceb9788a1f403eea3f2971b87959fa9e33f97))
+* **FTR-009:** implement US-01 — Feature Delivery Workflow Scripts ([7f6dd7d](https://github.com/dtlab-tech/ai-toolkit/commit/7f6dd7da8280d9bc6b5b9922bf7f751c1837f8ad))
+* **FTR-009:** implement US-02 — Assessment Workflow Scripts ([7b1e668](https://github.com/dtlab-tech/ai-toolkit/commit/7b1e668217f89ef16011fbe253a8e4bfb5714d0c))
+* **FTR-009:** rewrite orchestrators as Workflow scripts ([7f63b20](https://github.com/dtlab-tech/ai-toolkit/commit/7f63b209e6f4826115c74189847f68d77dc16ac1))
+* release develop → main (FTR-007, FTR-008, FTR-009) ([66c9e05](https://github.com/dtlab-tech/ai-toolkit/commit/66c9e05dde12be03f2c3d2a13eea112103fd6a20))
+
+
+### Bug Fixes
+
+* **FTR-009:** remediate review issues; update registry ([6aaeeb0](https://github.com/dtlab-tech/ai-toolkit/commit/6aaeeb0465b4d2003e61f33f7c6d0641bc477f9c))
+* **FTR-009:** rewrite all 5 workflow scripts with correct Workflow SDK API ([2c6da04](https://github.com/dtlab-tech/ai-toolkit/commit/2c6da041c07a1c233678cd0d64dfeaf66f0674a5))
+
 ## 0.1.7 (2026-07-23)
 
 
