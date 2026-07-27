@@ -113,8 +113,9 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   tokenLedger.push({ agent: `validate-feature-docs (cycle ${cycle})`, model: 'haiku', phase_delta_tokens: valTokens })
 
   // valResult is the agent's text output — check for gap indicators
+  // Use only 'MISSING:' as the gap signal: 'gaps found' also matches 'ZERO GAPS FOUND'
   const resultText = typeof valResult === 'string' ? valResult : JSON.stringify(valResult)
-  const hasGaps    = resultText.includes('MISSING:') || resultText.toLowerCase().includes('gaps found')
+  const hasGaps    = resultText.includes('MISSING:')
 
   if (!hasGaps) {
     validationSummary = `0 gaps (clean on cycle ${cycle})`

@@ -123,6 +123,8 @@ For each document with gaps, invoke the corresponding agent with a **targeted re
 
 ## Phase 6 — Write Validation Report
 
+**Always execute this phase**, regardless of whether gaps were found. The report is required even when validation is clean.
+
 Write `{PREFIX}-Validation-Report.md` in the same directory:
 
 ```markdown
