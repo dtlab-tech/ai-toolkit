@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.2.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.0...v0.2.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* validate-feature-docs always writes report; fix false-positive gap detection ([68caf3e](https://github.com/dtlab-tech/ai-toolkit/commit/68caf3e25214bcb219df1654c4b3ede5cc42eb3b))
+* validate-feature-docs always writes report; fix false-positive gap detection in pm-phase1 ([d99fdb3](https://github.com/dtlab-tech/ai-toolkit/commit/d99fdb39be1663539bd0ed7e6ca4facc2c53fd76))
+
 ## [0.2.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.1.7...v0.2.0) (2026-07-27)
 
 
