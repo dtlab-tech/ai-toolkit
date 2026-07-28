@@ -1,4 +1,11 @@
 ## 0.1.4 (2026-07-21)
+## [0.2.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.2...v0.2.3) (2026-07-28)
+
+
+### Bug Fixes
+
+* **pm-phase2:** generate full Effort-Estimate and Token-Estimate in phase 2 ([f3afbae](https://github.com/dtlab-tech/ai-toolkit/commit/f3afbae8b445632e8d8dd0ba8930d89042e9f3f4))
+
 ## [0.2.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.1...v0.2.2) (2026-07-28)
 
 
