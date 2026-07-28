@@ -7,3 +7,13 @@
 | Implementation phases | 4 |
 | Human estimate | 34h (sequential, no parallelism) |
 | Agent estimate | 145min (parallel dispatch, critical path only) |
+
+---
+
+## Actuals vs Estimate
+
+| Metric | Estimated | Actual |
+|--------|-----------|--------|
+| Implementation phases | 4 | 4 |
+| Issues fixed | — | 0 |
+| Issues deferred | — | 0 |
