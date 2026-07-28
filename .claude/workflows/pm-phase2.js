@@ -92,6 +92,33 @@ Return the extracted metrics as structured output.`,
 log(`WB parsed: ${metrics.user_stories} US, ${metrics.total_tasks} tasks, ${metrics.implementation_phases} phases`)
 log(`Effort-Estimate written: ${metrics.effort_estimate_path}`)
 
+// ── Append to process-log (phase 2 events) ───────────────────────────────────
+const wbEntry = tokenLedger.find(e => e.agent === 'generate-work-breakdown')
+const phase2Events = [
+  `APPROVAL GRANTED by user — Gate 1`,
+  `pm-phase2 START — work breakdown phase`,
+  `Agent DONE: generate-work-breakdown — tokens: ${wbEntry ? wbEntry.phase_delta_tokens : 'N/A'}`,
+  `Written: ${metrics.prefix}-Work-Breakdown.md (${metrics.user_stories} US, ${metrics.total_tasks} tasks, ${metrics.implementation_phases} phases)`,
+  `Written: ${metrics.prefix}-Effort-Estimate.md`,
+  `pm-phase2 COMPLETE`,
+  `APPROVAL REQUESTED — Gate 2`,
+].join('\n')
+
+await agent(
+  `Append phase 2 events to the process-log for this feature delivery run.
+
+Process-log path: ${metrics.feature_dir}/${metrics.prefix}-process-log.txt
+
+Steps:
+1. Get current UTC datetime via Bash: run \`date -u +"%Y-%m-%dT%H:%M:%S"\`
+2. Append the following lines to the existing file. Use the datetime from step 1 for ALL event lines.
+   Format each event line as: [{datetime}] {event text}
+
+Events to append:
+${phase2Events}`,
+  { label: 'append-process-log', phase: 'Effort Estimate' }
+)
+
 return {
   prefix:                metrics.prefix,
   feature_path:          featurePath,
