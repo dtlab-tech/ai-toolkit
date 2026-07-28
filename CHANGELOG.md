@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.2.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.1...v0.2.2) (2026-07-28)
+
+
+### Bug Fixes
+
+* restore process-log trace across pm-phase1/2/3 workflow scripts ([6748cf9](https://github.com/dtlab-tech/ai-toolkit/commit/6748cf9aab94efc76aa41c6c97cfe9493bc8db92))
+* restore process-log trace across pm-phase1/2/3 workflow scripts ([844965a](https://github.com/dtlab-tech/ai-toolkit/commit/844965abe5f0486cc5915819e5879b0486a3e993))
+
 ## [0.2.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.0...v0.2.1) (2026-07-27)
 
 
