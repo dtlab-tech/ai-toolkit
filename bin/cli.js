@@ -407,3 +407,18 @@ async function main() {
 }
 
 main();
+
+// ── conditional exports (for Jest/testing only) ───────────────────────────────
+// When cli.js is required as a module (e.g., by Jest), export the pure functions
+// so they can be unit-tested without triggering the CLI entry point.
+if (require.main !== module) {
+  module.exports = {
+    fileHash,
+    walkDir,
+    expandMappings,
+    categorize,
+    readInstalledVersion,
+    isMattPocockInstalled,
+    NEVER_COPY,
+  };
+}
