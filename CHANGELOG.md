@@ -1,4 +1,24 @@
 ## 0.1.4 (2026-07-21)
+## [0.3.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.3...v0.3.0) (2026-07-28)
+
+
+### Features
+
+* **FTR-010:** add feature docs and delivery artifacts for unit test suite ([0ffd712](https://github.com/dtlab-tech/ai-toolkit/commit/0ffd7123d899655aea4d5acaee5e8b25ce2e1b43))
+* **FTR-010:** add token estimate and process log for unit test suite ([ef2f38e](https://github.com/dtlab-tech/ai-toolkit/commit/ef2f38e03d063161f0521ca0c5b54119eff37cb6))
+* **FTR-010:** implement shared infrastructure (INFRA) ([dfbc72c](https://github.com/dtlab-tech/ai-toolkit/commit/dfbc72caf0906e5ea0421f079881e6b020d3124c))
+* **FTR-010:** implement US-01 — Developer Runs Unit Tests for CLI Functions ([60170aa](https://github.com/dtlab-tech/ai-toolkit/commit/60170aa21f245cbb76a1a201feab53439f4588f3))
+* **FTR-010:** implement US-02 and US-03 — coverage report and frontmatter validation ([d939bc2](https://github.com/dtlab-tech/ai-toolkit/commit/d939bc20fe04ab5832e556f7df42a525833de1ab))
+* **FTR-010:** implement US-04 — CI Pipeline Test Automation ([466ab0b](https://github.com/dtlab-tech/ai-toolkit/commit/466ab0bf6dc77d53e67304c2fde2a1be06ad1b70))
+* **FTR-010:** Unit Test Suite — CLI Logic and Frontmatter Validation ([ad7d012](https://github.com/dtlab-tech/ai-toolkit/commit/ad7d012c7e6ac1cbb339d0249deaf34c2f42ee7a))
+* **pm-phase2/3:** generate Work-Breakdown CSV for deterministic phase dispatch ([3ffa25e](https://github.com/dtlab-tech/ai-toolkit/commit/3ffa25ef30fdee6033f045e84a941ef9fc97a0cd))
+* **wb-csv:** add depends_on column and parallel wave execution in pm-phase3 ([6939972](https://github.com/dtlab-tech/ai-toolkit/commit/6939972813573a893b070be2770826212172f5c3))
+
+
+### Bug Fixes
+
+* **pm-phase3:** dispatch specialist agents per US instead of single orchestrator ([bef21c1](https://github.com/dtlab-tech/ai-toolkit/commit/bef21c1e4c1354c29bc9366b959237986a588f91))
+
 ## [0.2.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.2...v0.2.3) (2026-07-28)
 
 
