@@ -26,7 +26,7 @@ const wbTokens = budget.spent() - beforeWB
 tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
 log(`generate-work-breakdown done — phase delta: ${wbTokens} tokens`)
 
-// ── Parse WB + write Effort-Estimate ─────────────────────────────────────────
+// ── Parse WB + write Effort-Estimate + Token-Estimate ────────────────────────
 phase('Effort Estimate')
 
 const PARSE_SCHEMA = {
@@ -42,12 +42,15 @@ const PARSE_SCHEMA = {
     agent_estimate:        { type: 'string' },
     work_breakdown_path:   { type: 'string' },
     effort_estimate_path:  { type: 'string' },
+    token_estimate_path:   { type: 'string' },
   },
   required: ['prefix', 'user_stories', 'total_tasks', 'work_breakdown_path'],
 }
 
+const phase1Tokens = wbTokens  // tokens consumed by this phase so far
+
 const metrics = await agent(
-  `You have two tasks:
+  `You have four tasks:
 
 TASK 1 — Read the Work Breakdown file.
 The feature.md is at: ${featurePath}
@@ -58,6 +61,7 @@ Use Glob or Read to find and read that file.
 Extract from the Summary table:
 - prefix (e.g. "FTR-009")
 - feature_dir (directory containing feature.md)
+- feature_title (full feature title from the Work Breakdown header)
 - user_stories (integer)
 - total_tasks (integer)
 - domain_breakdown (e.g. "DB:0, BE:11, FE:0, INFRA:4, TEST:0")
@@ -66,10 +70,19 @@ Extract from the Summary table:
 - agent_estimate (e.g. "~2h 6min")
 - work_breakdown_path (full path to the Work Breakdown file)
 
-TASK 2 — Write the Effort-Estimate.md file.
-Write {feature_dir}/{PREFIX}-Effort-Estimate.md with the extracted metrics in this format:
+Also read Section 4 of the Work Breakdown to extract per-User-Story details:
+- US ID (e.g. US-01)
+- US title
+- task count
+- domains involved
+- estimated hours (from the Work Breakdown if present, otherwise estimate based on task count: ~2h per BE task, ~1h per TEST task, ~30min per INFRA task)
 
-# Effort Estimate — {PREFIX} — {Feature Title}
+TASK 2 — Write the Effort-Estimate.md file.
+Write {feature_dir}/{PREFIX}-Effort-Estimate.md with this format:
+
+# Effort Estimate — {PREFIX} — {feature_title}
+
+## Summary
 
 | Metric | Value |
 |--------|-------|
@@ -79,11 +92,68 @@ Write {feature_dir}/{PREFIX}-Effort-Estimate.md with the extracted metrics in th
 | Human estimate | {human_estimate} (sequential, no parallelism) |
 | Agent estimate | {agent_estimate} (parallel dispatch, critical path only) |
 
-Set effort_estimate_path to the full path of the written file.
+## Per-User-Story Breakdown
+
+| US | Title | Tasks | Domains | Est. hours |
+|----|-------|-------|---------|------------|
+{one row per US extracted from Section 4}
+
+## Notes
+- Human estimate assumes sequential execution with no parallelism.
+- Agent estimate assumes parallel dispatch of independent tasks within each phase.
+- Actual effort will be recorded in the Actuals section after implementation.
+
+TASK 3 — Write the Token-Estimate.md file.
+Write {feature_dir}/{PREFIX}-Token-Estimate.md with this format:
+
+# Token Estimate — {PREFIX} — {feature_title}
+
+## Phase 1 — Documentation (Actuals)
+
+| Agent | Task | Model | Tokens (actual) |
+|-------|------|-------|----------------|
+| generate-requirements | Generate requirements from feature.md | haiku | ${phase1Tokens} (phase delta) |
+| generate-tech-spec | Generate tech spec from feature.md | haiku | (see phase delta) |
+| validate-feature-docs | Validate requirements + tech spec | haiku | (see phase delta) |
+
+## Phase 2 — Work Breakdown (Actuals)
+
+| Agent | Task | Model | Tokens (actual) |
+|-------|------|-------|----------------|
+| generate-work-breakdown | Generate work breakdown from docs | haiku | ${phase1Tokens} (phase delta) |
+
+## Phase 3 — Implementation (Estimates)
+
+Estimates based on {total_tasks} tasks ({domain_breakdown}), {user_stories} User Stories.
+Token estimates use ~15,000 tokens per BE task, ~8,000 per TEST task, ~5,000 per INFRA task as baseline.
+
+| Agent | Task | Model | Tokens (estimated) |
+|-------|------|-------|-------------------|
+| implementation-orchestrator | Full implementation loop | sonnet | {estimated: total_tasks * 12000} |
+| review-solution (×{user_stories}) | Architect review per US | sonnet | {estimated: user_stories * 8000} |
+| remediation | Fix WARNING issues | sonnet | ~10,000 |
+| pr-and-registry | Push branch, create PR | sonnet | ~5,000 |
+| write-actuals | Update Token/Effort Estimate | sonnet | ~3,000 |
+
+## Grand Total (Estimate)
+
+| Phase | Tokens (estimated) | Notes |
+|-------|-------------------|-------|
+| Phase 1 — Documentation | ${phase1Tokens} | Actual (phase delta) |
+| Phase 2 — Work Breakdown | {wbTokens from above} | Actual (phase delta) |
+| Phase 3 — Implementation | {sum of phase 3 estimates} | Estimated |
+| **Total** | **{grand total}** | |
+
+---
+*Actuals will be appended by pm-phase3 after implementation completes.*
+
+TASK 4 — Set return values.
+Set effort_estimate_path to the full path of the written Effort-Estimate.md.
+Set token_estimate_path to the full path of the written Token-Estimate.md.
 
 Return the extracted metrics as structured output.`,
   {
-    label:  'parse-wb-write-effort-estimate',
+    label:  'parse-wb-write-estimates',
     phase:  'Effort Estimate',
     schema: PARSE_SCHEMA,
   }
@@ -91,6 +161,7 @@ Return the extracted metrics as structured output.`,
 
 log(`WB parsed: ${metrics.user_stories} US, ${metrics.total_tasks} tasks, ${metrics.implementation_phases} phases`)
 log(`Effort-Estimate written: ${metrics.effort_estimate_path}`)
+log(`Token-Estimate written: ${metrics.token_estimate_path}`)
 
 // ── Append to process-log (phase 2 events) ───────────────────────────────────
 const wbEntry = tokenLedger.find(e => e.agent === 'generate-work-breakdown')
@@ -130,6 +201,7 @@ return {
   agent_estimate:        metrics.agent_estimate    || 'N/A',
   work_breakdown_path:   metrics.work_breakdown_path,
   effort_estimate_path:  metrics.effort_estimate_path || '',
+  token_estimate_path:   metrics.token_estimate_path  || '',
   token_ledger:          tokenLedger,
   errors:                [],
 }
