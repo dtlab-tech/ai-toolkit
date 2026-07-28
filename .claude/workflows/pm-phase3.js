@@ -19,88 +19,82 @@ const branch      = branchMatch ? branchMatch[1] : null
 const tokenLedger = []
 const escalations = []
 
-// ── Parse Work Breakdown ──────────────────────────────────────────────────────
+// ── Parse Work Breakdown CSV (deterministic, no AI) ───────────────────────────
 phase('Parse')
 
-const WB_SCHEMA = {
+// Derive feature_dir and prefix from featurePath (e.g. "docs/features/FTR-004-.../feature.md")
+const featureDir  = featurePath.replace(/\/[^/]+$/, '')
+const prefixMatch = featureDir.match(/([A-Z]+-\d+)/)
+const prefix      = prefixMatch ? prefixMatch[1] : 'FTR-000'
+const csvPath     = `${featureDir}/${prefix}-Work-Breakdown.csv`
+
+log(`Reading CSV: ${csvPath}`)
+
+const READ_SCHEMA = {
   type: 'object',
-  properties: {
-    prefix:      { type: 'string' },
-    feature_dir: { type: 'string' },
-    phases: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          phase_id:       { type: 'string' },
-          title:          { type: 'string' },
-          commit_message: { type: 'string' },
-          impl_groups: {
-            type: 'array',
-            description: 'Non-TEST task groups (INFRA/BE/DB/FE). Run BEFORE test_groups.',
-            items: {
-              type: 'object',
-              properties: {
-                agent_type: { type: 'string' },
-                task_ids:   { type: 'array', items: { type: 'string' } },
-              },
-              required: ['agent_type', 'task_ids'],
-            },
-          },
-          test_groups: {
-            type: 'array',
-            description: 'TEST task groups. Run AFTER impl_groups complete.',
-            items: {
-              type: 'object',
-              properties: {
-                agent_type: { type: 'string' },
-                task_ids:   { type: 'array', items: { type: 'string' } },
-              },
-              required: ['agent_type', 'task_ids'],
-            },
-          },
-        },
-        required: ['phase_id', 'title', 'impl_groups', 'test_groups'],
-      },
-    },
-  },
-  required: ['prefix', 'feature_dir', 'phases'],
+  properties: { content: { type: 'string' } },
+  required: ['content'],
 }
 
-const beforeParse = budget.spent()
-const wb = await agent(
-  `Read the Work Breakdown file for the feature at: ${featurePath}
-The WB file is named {PREFIX}-Work-Breakdown.md in the same directory as feature.md.
-
-Parse it into implementation phases. For EACH phase in Section 4 (Implementation Phases):
-
-Fields to populate:
-- phase_id: "INFRA" for shared infrastructure phase, or the US ID (e.g. "US-01", "US-02")
-- title: the phase/US title from the WB
-- commit_message:
-    INFRA → "feat({PREFIX}): implement shared infrastructure (INFRA)"
-    US    → "feat({PREFIX}): implement {US-ID} — {US title}"
-- impl_groups: groups of non-TEST tasks (domains: INFRA, BE, DB, FE)
-    - INFRA/BE/DB tasks → agent_type "developer-backend"
-    - FE tasks          → agent_type "developer-frontend"
-    - One entry per agent_type (merge all INFRA+BE+DB tasks into one developer-backend group)
-    - task_ids: array of task IDs (e.g. ["INFRA-T01", "INFRA-T02", "US-01-T01"])
-- test_groups: groups of TEST tasks only
-    - TEST tasks → agent_type "developer-testing"
-    - task_ids: array of task IDs (e.g. ["US-01-T05", "US-01-T06"])
-
-RULES:
-- impl_groups are dispatched BEFORE test_groups (implementation must precede tests)
-- If a phase has only INFRA/BE tasks → impl_groups only, test_groups: []
-- If a phase has only TEST tasks → test_groups only, impl_groups: []
-- Independent impl_groups within the same phase CAN run in parallel
-
-Return the full structured phases list.`,
-  { label: 'parse-work-breakdown', phase: 'Parse', schema: WB_SCHEMA, model: 'haiku' }
+const csvResult = await agent(
+  `Read the file at path: ${csvPath}\nReturn its full text content as the "content" field.`,
+  { label: 'read-wb-csv', phase: 'Parse', schema: READ_SCHEMA, model: 'haiku' }
 )
-const parseTokens = budget.spent() - beforeParse
-tokenLedger.push({ agent: 'parse-work-breakdown', model: 'haiku', phase_delta_tokens: parseTokens })
-log(`WB parsed: ${wb.phases.length} phases for ${wb.prefix}`)
+
+// Parse CSV into structured phases — pure JS, no AI
+const rows = csvResult.content
+  .split('\n')
+  .map(l => l.trim())
+  .filter(l => l && !l.startsWith('phase_id'))  // skip header and empty lines
+  .map(l => {
+    const [phase_id, phase_title, commit_message, task_id, task_title, domain, agent_type] = l.split('|')
+    return { phase_id, phase_title, commit_message, task_id, task_title, domain, agent_type }
+  })
+  .filter(r => r.phase_id && r.task_id)
+
+// Group rows into phases preserving order
+const phaseMap = new Map()
+for (const row of rows) {
+  if (!phaseMap.has(row.phase_id)) {
+    phaseMap.set(row.phase_id, {
+      phase_id:       row.phase_id,
+      title:          row.phase_title,
+      commit_message: row.commit_message,
+      impl_tasks:     [],
+      test_tasks:     [],
+    })
+  }
+  const p = phaseMap.get(row.phase_id)
+  if (row.domain === 'TEST') {
+    p.test_tasks.push({ task_id: row.task_id, agent_type: row.agent_type })
+  } else {
+    p.impl_tasks.push({ task_id: row.task_id, agent_type: row.agent_type })
+  }
+}
+
+// Build impl_groups and test_groups (merge by agent_type within each phase)
+const buildGroups = (tasks) => {
+  const map = new Map()
+  for (const t of tasks) {
+    if (!map.has(t.agent_type)) map.set(t.agent_type, [])
+    map.get(t.agent_type).push(t.task_id)
+  }
+  return Array.from(map.entries()).map(([agent_type, task_ids]) => ({ agent_type, task_ids }))
+}
+
+const wb = {
+  prefix,
+  feature_dir: featureDir,
+  phases: Array.from(phaseMap.values()).map(p => ({
+    phase_id:       p.phase_id,
+    title:          p.title,
+    commit_message: p.commit_message,
+    impl_groups:    buildGroups(p.impl_tasks),
+    test_groups:    buildGroups(p.test_tasks),
+  })),
+}
+
+log(`CSV parsed: ${rows.length} tasks → ${wb.phases.length} phases for ${wb.prefix}`)
 
 const prefix     = wb.prefix
 let phasesDone   = 0

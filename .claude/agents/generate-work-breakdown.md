@@ -50,7 +50,9 @@ Extract the **feature prefix** from the folder name containing `feature.md`:
 
 The prefix is everything up to and including the second hyphen-separated segment (pattern: `[A-Z]+-[0-9]+`).
 
-Output file: `{PREFIX}-Work-Breakdown.md` in the same directory as `feature.md`.
+Output files (both in the same directory as `feature.md`):
+- `{PREFIX}-Work-Breakdown.md` — full human-readable document
+- `{PREFIX}-Work-Breakdown.csv` — machine-readable task list for automated dispatch
 
 ---
 
@@ -122,6 +124,40 @@ Provide **two time estimates** for each task — one for a human developer, one 
 ### Step 7 — Generate Output
 
 Write the Work Breakdown document following the Output Template below.
+
+### Step 8 — Generate Work Breakdown CSV
+
+After writing the `.md` file, write `{PREFIX}-Work-Breakdown.csv` in the same directory.
+
+**Format:** pipe-separated (`|`), no quoting, one row per task.
+
+**Header row:**
+```
+phase_id|phase_title|commit_message|task_id|task_title|domain|agent_type
+```
+
+**Rules:**
+- `phase_id`: `INFRA` for shared infrastructure tasks; `US-XX` for User Story tasks
+- `phase_title`: the phase/US title (e.g. "Shared Infrastructure", "Query AssemblyItems Collection")
+- `commit_message`: the git commit message for that phase:
+  - INFRA → `feat({PREFIX}): implement shared infrastructure (INFRA)`
+  - US-XX → `feat({PREFIX}): implement {US-ID} — {US title}`
+- `task_id`: the task ID (e.g. `INFRA-T01`, `US-01-T03`)
+- `task_title`: short task title (no pipes — replace any `|` with `-`)
+- `domain`: `DB`, `BE`, `FE`, `INFRA`, or `TEST`
+- `agent_type`: derived from domain:
+  - `DB`, `BE`, `INFRA` → `developer-backend`
+  - `FE` → `developer-frontend`
+  - `TEST` → `developer-testing`
+
+**Example rows:**
+```
+INFRA|Shared Infrastructure|feat(FTR-004): implement shared infrastructure (INFRA)|INFRA-T01|Create IConstructionValidator interface|INFRA|developer-backend
+US-01|Query AssemblyItems Collection|feat(FTR-004): implement US-01 — Query AssemblyItems Collection|US-01-T01|Refactor IAssemblyItemRepository interface|INFRA|developer-backend
+US-01|Query AssemblyItems Collection|feat(FTR-004): implement US-01 — Query AssemblyItems Collection|US-01-T05|Integration test AssemblyItems collection|TEST|developer-testing
+```
+
+All tasks from all phases must appear in the CSV, in implementation order (INFRA tasks first, then US-01 tasks, then US-02 tasks, etc.). Within each phase, non-TEST tasks before TEST tasks.
 
 ---
 
