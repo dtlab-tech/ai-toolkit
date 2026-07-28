@@ -43,6 +43,7 @@ const PARSE_SCHEMA = {
     work_breakdown_path:   { type: 'string' },
     effort_estimate_path:  { type: 'string' },
     token_estimate_path:   { type: 'string' },
+    tasks_csv_path:        { type: 'string' },
   },
   required: ['prefix', 'user_stories', 'total_tasks', 'work_breakdown_path'],
 }
@@ -150,6 +151,7 @@ Token estimates use ~15,000 tokens per BE task, ~8,000 per TEST task, ~5,000 per
 TASK 4 — Set return values.
 Set effort_estimate_path to the full path of the written Effort-Estimate.md.
 Set token_estimate_path to the full path of the written Token-Estimate.md.
+Set tasks_csv_path to the full path of the {PREFIX}-Work-Breakdown.csv file (written by generate-work-breakdown in the same directory as feature.md).
 
 Return the extracted metrics as structured output.`,
   {
@@ -202,6 +204,7 @@ return {
   work_breakdown_path:   metrics.work_breakdown_path,
   effort_estimate_path:  metrics.effort_estimate_path || '',
   token_estimate_path:   metrics.token_estimate_path  || '',
+  tasks_csv_path:        metrics.tasks_csv_path        || '',
   token_ledger:          tokenLedger,
   errors:                [],
 }

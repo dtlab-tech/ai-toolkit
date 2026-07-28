@@ -13,7 +13,13 @@
     "ai-toolkit": "bin/cli.js"
   },
   "scripts": {
-    "prepublishOnly": "npm pack --dry-run"
+    "prepublishOnly": "npm pack --dry-run",
+    "test": "jest --bail",
+    "test:coverage": "jest --coverage"
+  },
+  "devDependencies": {
+    "gray-matter": "^4.0.3",
+    "jest": "^29.7.0"
   },
   "repository": {
     "type": "git",
