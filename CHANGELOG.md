@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.3.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.3.0...v0.3.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* include README.md in npm package files ([1998d47](https://github.com/dtlab-tech/ai-toolkit/commit/1998d476d23de1c2791af97b3217492b1364a9c8))
+* include README.md in npm package files ([f710534](https://github.com/dtlab-tech/ai-toolkit/commit/f71053472afeb87c2a4cd8e8a0b826103c6205f0))
+
 ## [0.3.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.2.3...v0.3.0) (2026-07-28)
 
 
