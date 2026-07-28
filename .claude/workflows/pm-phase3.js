@@ -47,8 +47,8 @@ const rows = csvResult.content
   .map(l => l.trim())
   .filter(l => l && !l.startsWith('phase_id'))  // skip header and empty lines
   .map(l => {
-    const [phase_id, phase_title, commit_message, task_id, task_title, domain, agent_type] = l.split('|')
-    return { phase_id, phase_title, commit_message, task_id, task_title, domain, agent_type }
+    const [phase_id, phase_title, commit_message, depends_on, task_id, task_title, domain, agent_type] = l.split('|')
+    return { phase_id, phase_title, commit_message, depends_on: depends_on || '', task_id, task_title, domain, agent_type }
   })
   .filter(r => r.phase_id && r.task_id)
 
@@ -60,6 +60,7 @@ for (const row of rows) {
       phase_id:       row.phase_id,
       title:          row.phase_title,
       commit_message: row.commit_message,
+      depends_on:     row.depends_on.split(' ').filter(Boolean),  // [] for empty
       impl_tasks:     [],
       test_tasks:     [],
     })
@@ -82,19 +83,41 @@ const buildGroups = (tasks) => {
   return Array.from(map.entries()).map(([agent_type, task_ids]) => ({ agent_type, task_ids }))
 }
 
-const wb = {
-  prefix,
-  feature_dir: featureDir,
-  phases: Array.from(phaseMap.values()).map(p => ({
-    phase_id:       p.phase_id,
-    title:          p.title,
-    commit_message: p.commit_message,
-    impl_groups:    buildGroups(p.impl_tasks),
-    test_groups:    buildGroups(p.test_tasks),
-  })),
-}
+const allPhases = Array.from(phaseMap.values()).map(p => ({
+  phase_id:       p.phase_id,
+  title:          p.title,
+  commit_message: p.commit_message,
+  depends_on:     p.depends_on,
+  impl_groups:    buildGroups(p.impl_tasks),
+  test_groups:    buildGroups(p.test_tasks),
+}))
+
+const wb = { prefix, feature_dir: featureDir, phases: allPhases }
 
 log(`CSV parsed: ${rows.length} tasks → ${wb.phases.length} phases for ${wb.prefix}`)
+
+// Build execution waves: phases whose dependencies are all satisfied can run in parallel.
+// Wave 0 = no deps, Wave 1 = depends only on Wave 0 phases, etc.
+const buildWaves = (phases) => {
+  const done   = new Set()
+  const waves  = []
+  let remaining = [...phases]
+  while (remaining.length > 0) {
+    const ready = remaining.filter(p => p.depends_on.every(d => done.has(d)))
+    if (ready.length === 0) {
+      // Circular or unresolvable deps — run the rest sequentially to avoid deadlock
+      waves.push(remaining)
+      break
+    }
+    waves.push(ready)
+    ready.forEach(p => done.add(p.phase_id))
+    remaining = remaining.filter(p => !done.has(p.phase_id))
+  }
+  return waves
+}
+
+const waves = buildWaves(wb.phases)
+log(`Execution plan: ${waves.length} wave(s) — ${waves.map((w, i) => `wave${i+1}:[${w.map(p => p.phase_id).join(',')}]`).join(' ')}`)
 
 const prefix     = wb.prefix
 let phasesDone   = 0
@@ -116,7 +139,8 @@ const REVIEW_SCHEMA = {
   required: ['has_critical'],
 }
 
-for (const implPhase of wb.phases) {
+// executePhase: runs impl_groups → test_groups → review → rework → commit for one phase
+const executePhase = async (implPhase) => {
   log(`Starting phase ${implPhase.phase_id}: ${implPhase.title}`)
 
   let reworkCycle  = 0
@@ -220,6 +244,16 @@ for (const implPhase of wb.phases) {
   }
 
   phasesDone++
+}
+
+// Execute waves: phases in the same wave run in parallel, waves are sequential
+for (const wave of waves) {
+  if (wave.length === 1) {
+    await executePhase(wave[0])
+  } else {
+    log(`Wave: running ${wave.map(p => p.phase_id).join(', ')} in parallel`)
+    await parallel(wave.map(p => () => executePhase(p)))
+  }
 }
 
 // Count open issues

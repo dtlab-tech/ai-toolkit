@@ -133,7 +133,7 @@ After writing the `.md` file, write `{PREFIX}-Work-Breakdown.csv` in the same di
 
 **Header row:**
 ```
-phase_id|phase_title|commit_message|task_id|task_title|domain|agent_type
+phase_id|phase_title|commit_message|depends_on|task_id|task_title|domain|agent_type
 ```
 
 **Rules:**
@@ -142,6 +142,7 @@ phase_id|phase_title|commit_message|task_id|task_title|domain|agent_type
 - `commit_message`: the git commit message for that phase:
   - INFRA → `feat({PREFIX}): implement shared infrastructure (INFRA)`
   - US-XX → `feat({PREFIX}): implement {US-ID} — {US title}`
+- `depends_on`: space-separated list of `phase_id` values this phase depends on (e.g. `INFRA US-01`). Empty string `""` for phases with no dependencies. Derived from the Dependency Graph in Section 4 of the WB.
 - `task_id`: the task ID (e.g. `INFRA-T01`, `US-01-T03`)
 - `task_title`: short task title (no pipes — replace any `|` with `-`)
 - `domain`: `DB`, `BE`, `FE`, `INFRA`, or `TEST`
@@ -152,12 +153,16 @@ phase_id|phase_title|commit_message|task_id|task_title|domain|agent_type
 
 **Example rows:**
 ```
-INFRA|Shared Infrastructure|feat(FTR-004): implement shared infrastructure (INFRA)|INFRA-T01|Create IConstructionValidator interface|INFRA|developer-backend
-US-01|Query AssemblyItems Collection|feat(FTR-004): implement US-01 — Query AssemblyItems Collection|US-01-T01|Refactor IAssemblyItemRepository interface|INFRA|developer-backend
-US-01|Query AssemblyItems Collection|feat(FTR-004): implement US-01 — Query AssemblyItems Collection|US-01-T05|Integration test AssemblyItems collection|TEST|developer-testing
+phase_id|phase_title|commit_message|depends_on|task_id|task_title|domain|agent_type
+INFRA|Shared Infrastructure|feat(FTR-004): implement shared infrastructure (INFRA)||INFRA-T01|Create IConstructionValidator interface|INFRA|developer-backend
+US-01|Query AssemblyItems Collection|feat(FTR-004): implement US-01 — Query AssemblyItems Collection|INFRA|US-01-T01|Refactor IAssemblyItemRepository interface|INFRA|developer-backend
+US-02|Query Single AssemblyItem|feat(FTR-004): implement US-02 — Query Single AssemblyItem|INFRA US-01|US-02-T01|Update controller Get(key)|INFRA|developer-backend
+US-03|Query Volumes Collection|feat(FTR-004): implement US-03 — Query Volumes Collection|INFRA|US-03-T01|Refactor IVolumeRepository interface|INFRA|developer-backend
 ```
 
-All tasks from all phases must appear in the CSV, in implementation order (INFRA tasks first, then US-01 tasks, then US-02 tasks, etc.). Within each phase, non-TEST tasks before TEST tasks.
+Note: `depends_on` is the same for ALL rows of the same phase — it is a phase-level attribute repeated on every task row for simplicity.
+
+All tasks from all phases must appear in the CSV, in implementation order (INFRA tasks first, then US tasks in phase order). Within each phase, non-TEST tasks before TEST tasks.
 
 ---
 
