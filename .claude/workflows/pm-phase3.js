@@ -297,6 +297,41 @@ const actualsTokens = budget.spent() - beforeActuals
 tokenLedger.push({ agent: 'write-actuals', model: 'sonnet', phase_delta_tokens: actualsTokens })
 log(`Actuals written | phase delta: ${actualsTokens} tokens`)
 
+// ── Append to process-log (phase 3 events + RUN COMPLETE) ────────────────────
+const usPassed    = (implResult.us_passed    || []).join(', ') || 'none'
+const usEscalated = (implResult.us_escalated || []).join(', ') || 'none'
+const phase3Events = [
+  `APPROVAL GRANTED by user — Gate 2`,
+  `pm-phase3 START — implementation phase — branch: ${branch || '(current)'}`,
+  `Implementation DONE — ${implResult.phases_done} phases | US passed: ${usPassed} | US escalated: ${usEscalated}`,
+  issuesFixed + issuesDeferred > 0
+    ? `Remediation: ${issuesFixed} fixed, ${issuesDeferred} deferred`
+    : `Remediation: skipped (no open issues)`,
+  `PR created: ${prResult.pr_url}`,
+  `Actuals written: Token-Estimate.md + Effort-Estimate.md`,
+  `RUN COMPLETE`,
+  `════════════════════════════════════════════════════════`,
+].join('\n')
+
+// feature_dir is not directly available in pm-phase3; derive from featurePath
+const featureDir3 = featurePath.replace(/\/[^/]+$/, '')
+
+await agent(
+  `Append phase 3 events to the process-log for this feature delivery run.
+
+Process-log path: ${featureDir3}/${prefix}-process-log.txt
+
+Steps:
+1. Get current UTC datetime via Bash: run \`date -u +"%Y-%m-%dT%H:%M:%S"\`
+2. Append the following lines to the existing file. Use the datetime from step 1 for ALL event lines.
+   Format each event line as: [{datetime}] {event text}
+   The final line (════…) is a separator — append it as-is, without a timestamp prefix.
+
+Events to append:
+${phase3Events}`,
+  { label: 'finalize-process-log', phase: 'Actuals' }
+)
+
 return {
   pr_url:       prResult.pr_url,
   token_ledger: tokenLedger,

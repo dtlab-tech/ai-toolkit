@@ -139,6 +139,46 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   }
 }
 
+// ── Write process-log (phase 1 snapshot) ─────────────────────────────────────
+const reqEntry   = tokenLedger.find(e => e.agent === 'generate-requirements')
+const specEntry  = tokenLedger.find(e => e.agent === 'generate-tech-spec')
+const valEntries = tokenLedger.filter(e => e.agent.startsWith('validate-feature-docs'))
+const phase1Events = [
+  `pm-phase1 START — documentation phase`,
+  reqEntry
+    ? `Agent DONE: generate-requirements — tokens: ${reqEntry.phase_delta_tokens}`
+    : `generate-requirements: skipped (fresh)`,
+  specEntry
+    ? `Agent DONE: generate-tech-spec — tokens: ${specEntry.phase_delta_tokens}`
+    : `generate-tech-spec: skipped (fresh)`,
+  ...valEntries.map(e => `Agent DONE: ${e.agent} — tokens: ${e.phase_delta_tokens}`),
+  `Validation result: ${validationSummary}`,
+  `APPROVAL REQUESTED — Gate 1`,
+].join('\n')
+
+await agent(
+  `Create the process-log file for this feature delivery run.
+
+File path: ${feature_dir}/${prefix}-process-log.txt
+
+Steps:
+1. Get current UTC datetime via Bash: run \`date -u +"%Y-%m-%dT%H:%M:%S"\`
+2. Read feature.md at: ${featurePath} — extract the feature title (first H1 heading after the frontmatter).
+3. Write the file using the Write tool. Use the datetime from step 1 for ALL timestamps.
+   Format each event line as: [{datetime}] {event text}
+
+File structure:
+════════════════════════════════════════════════════════
+RUN STARTED — {datetime}
+Feature: ${prefix} — {title from step 2}
+════════════════════════════════════════════════════════
+{one line per event below, each prefixed with [{datetime}]}
+
+Events to log:
+${phase1Events}`,
+  { label: 'write-process-log', phase: 'Validation' }
+)
+
 // ── Build gate1_payload ───────────────────────────────────────────────────────
 const gate1Payload = {
   prefix,
