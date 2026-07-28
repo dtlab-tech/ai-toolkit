@@ -68,3 +68,11 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-009-workflow-orchestrators/feature.md)
 
 ---
+
+## FTR-010 — Unit Test Suite — CLI Logic and Frontmatter Validation
+**Keywords:** unit-tests, jest, frontmatter, cli, bin/cli.js, gray-matter, coverage, ci, github-actions, devDependencies, walkDir, fileHash, expandMappings, categorize
+**Status:** completed
+**Summary:** Introduces a Jest-based unit test suite covering pure functions in `bin/cli.js` (`fileHash`, `walkDir`, `expandMappings`, `categorize`, `readInstalledVersion`, `isMattPocockInstalled`) and structural frontmatter validation for all agent `.md` and skill `SKILL.md` files. Adds `devDependencies` (`jest`, `gray-matter`), `npm test` (`jest --bail`) and `npm run test:coverage` scripts, test files under `tests/cli/` and `tests/frontmatter/`, and a new `.github/workflows/ci.yml` that triggers on PRs to `main`, runs `npm ci` + `npm test` + coverage upload. Functions are exported via conditional `if (require.main !== module)` block so the CLI continues to work normally when invoked directly.
+→ [Detail](FTR-010-unit-tests/feature.md)
+
+---

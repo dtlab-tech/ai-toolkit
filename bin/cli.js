@@ -406,4 +406,20 @@ async function main() {
   }
 }
 
-main();
+// ── entry point guard ─────────────────────────────────────────────────────────
+// Run the CLI only when invoked directly (node bin/cli.js).
+// When required as a module (e.g., by Jest), skip main() and export pure
+// functions so they can be unit-tested without side effects.
+if (require.main === module) {
+  main();
+} else {
+  module.exports = {
+    fileHash,
+    walkDir,
+    expandMappings,
+    categorize,
+    readInstalledVersion,
+    isMattPocockInstalled,
+    NEVER_COPY,
+  };
+}

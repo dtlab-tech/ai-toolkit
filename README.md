@@ -91,6 +91,47 @@ To let the toolkit work as designed, raise the allowed depth to **2** (main loop
 
 The orchestrator agents already omit the `tools:` frontmatter field, so they inherit the `Agent` tool automatically once the depth allows it — no per-agent changes are needed.
 
+## Development
+
+### Running tests locally
+
+```bash
+npm install        # install devDependencies (jest, gray-matter)
+npm test           # run all tests; stops at first failure (--bail)
+npm run test:coverage  # run all tests and generate a coverage report
+```
+
+The test suite covers:
+
+- **`tests/cli/`** — unit tests for pure functions in `bin/cli.js`
+  (`fileHash`, `walkDir`, `expandMappings`, `categorize`, `readInstalledVersion`, `isMattPocockInstalled`)
+- **`tests/frontmatter/`** — structural validation of all `.claude/agents/*.md`
+  and `.claude/skills/**/SKILL.md` frontmatter fields
+
+Coverage reports land in `coverage/` (gitignored). Open `coverage/index.html`
+in a browser to browse line-level coverage. No coverage threshold is enforced;
+the report is diagnostic only.
+
+### CI
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs automatically on
+every pull request targeting `main`:
+
+1. Checks out the repo on `ubuntu-latest` with Node 20
+2. Installs dependencies with `npm ci`
+3. Runs `npm test` — the PR check is red if any test fails
+4. Runs `npm run test:coverage` and uploads the `coverage/` directory as a
+   30-day workflow artifact
+
+### Adding or changing tests
+
+- When you modify a function in `bin/cli.js`, update the matching test file
+  in `tests/cli/`.
+- When you add an agent `.md` or skill `SKILL.md`, the frontmatter tests in
+  `tests/frontmatter/` run against it automatically — just make sure the
+  required fields (`name`, `description`, `model` for agents; `description`
+  for skills) are present and valid.
+
 ## Documentation
 
 - [Quick Reference](docs/reference.md) — cheatsheet of every skill, command, agent, and procedure
