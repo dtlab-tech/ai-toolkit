@@ -6,6 +6,7 @@
     "docs/",
     "CLAUDE.md",
     "CHANGELOG.md",
+    "README.md",
     ".claude",
     "bin"
   ],
