@@ -1,4 +1,11 @@
 ## 0.1.4 (2026-07-21)
+## [0.5.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.4.0...v0.5.0) (2026-07-29)
+
+
+### Features
+
+* **pm-phase3:** Option C review architecture + estimate format improvements ([b385b3e](https://github.com/dtlab-tech/ai-toolkit/commit/b385b3e35ef9121b8d9008223c77c88291c4173a))
+
 ## [0.4.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.3.1...v0.4.0) (2026-07-29)
 
 
