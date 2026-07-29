@@ -2,7 +2,7 @@
 
 A reusable set of AI agents and procedures for software feature delivery and codebase assessment — from requirements to PR, and from audit to remediation.
 
-> **Need a quick overview of what's available?** See [`docs/reference.md`](docs/reference.md) for the cheatsheet.
+> **Full catalog of skills, commands, agents, and procedures:** [`docs/reference.md`](docs/reference.md)
 
 ## Dependencies
 
@@ -81,89 +81,17 @@ When any gate notification arrives (Gate 1, Gate 2, Findings Gate, or any **HARD
 
 This applies even if the PM appears stuck, in a relay loop, or the gate arrives while another tool call is in progress.
 
----
+## Compact instructions
 
-## Skills (user-invocable, in `.claude/skills/`)
+When compacting this conversation, preserve:
+- Current objective and which pipeline step we are on
+- User decisions and approvals (Gate 1, Gate 2, Findings Gate)
+- Files created or modified this session
+- Open errors or blockers
+- Feature/assessment prefix IDs and artifact paths (e.g. FTR-010, ASSESS-001)
 
-### Feature Delivery
-
-| Skill | Command | Purpose |
-|-------|---------|---------|
-| Install Toolkit | `/install-toolkit` | Copies all agents, skills, commands, and procedures into a destination project (no local toolkit repo needed) |
-| Init AGENTS.md | `/init-agents` | Analyzes a project codebase and generates the AGENTS.md convention file required by all developer agents |
-| Define Feature | `/define-feature` | Interviews you to define a new feature and writes `feature.md` — required input for `/implement-feature` |
-| Implement Feature | `/implement-feature` | Starts the full feature delivery pipeline: docs → approval → implement → review → PR |
-
-### Assessment & Remediation
-
-| Skill | Command | Purpose |
-|-------|---------|---------|
-| Assess Codebase | `/assess-codebase` | Starts the full assessment pipeline: parallel assessment → intervention docs → approval gate → remediation → review → PR |
-
-### General
-
-| Skill | Command | Purpose |
-|-------|---------|---------|
-| Gaia | `/hi-gaia [topic]` | Your toolkit assistant — introduces herself, explains pipelines, agents, and commands; helps you find the right tool for your situation |
-
-## Commands (slash shortcuts, in `.claude/commands/`)
-
-### Feature Delivery
-
-| Command | Purpose |
-|---------|---------|
-| `/feature-status <slug>` | Reports presence/state of feature.md, requirements, tech-spec, work-breakdown, and implementation progress |
-| `/check-docs <slug>` | Terse consistency check between feature docs — outputs only the inconsistencies |
-| `/pr-description` | Generates a PR description from the current branch commits + linked feature.md |
-| `/next-task [slug]` | Finds the next unblocked task in the work breakdown and suggests the agent to delegate it to |
-
-### Assessment & Remediation
-
-| Command | Purpose |
-|---------|---------|
-| `/assessment-status <prefix>` | Reports presence/state of all assessment artifacts (assessments, interventions, approvals, issues register) |
-| `/next-intervention [prefix]` | Finds the next un-actioned flagged intervention and suggests the `/define-feature` invocation to start on it |
-| `/check-interventions [prefix]` | Full reconciliation table: every intervention cross-referenced against the Index, on-disk files, and existing feature folders |
-
-## Agents (spawnable subagents, in `.claude/agents/`)
-
-### Feature Delivery
-
-| Agent | subagent_type | Purpose |
-|-------|---------------|---------|
-| Install Toolkit | `install-toolkit` | Copies toolkit files into a destination project |
-| Init AGENTS.md | `init-agents-md` | Analyzes codebase and generates AGENTS.md |
-| Define Feature | `define-feature` | Interviews the user and writes `feature.md` in `docs/features/FTR-XXX-slug/` |
-| Generate Requirements | `generate-requirements` | Produces functional requirements from feature.md |
-| Generate Tech-Spec | `generate-tech-spec` | Produces technical specification from feature + requirements |
-| Validate Docs | `validate-feature-docs` | Cross-validates requirements + tech-spec against feature.md |
-| Generate Work Breakdown | `generate-work-breakdown` | Creates User Stories + tasks from approved docs |
-| Backend Developer | `developer-backend` | Implements backend tasks (DB, BE, INFRA domains) |
-| Frontend Developer | `developer-frontend` | Implements frontend tasks (FE domain) |
-| Testing Agent | `developer-testing` | Creates unit/integration tests (TEST domain) |
-| Review Solution | `review-solution` | Architect-level code review |
-| Project Manager | `project-manager` | Orchestrates the full feature delivery pipeline |
-
-### Assessment & Remediation
-
-| Agent | subagent_type | Purpose |
-|-------|---------------|---------|
-| Assessment Manager | `assessment-manager` | Orchestrates the assessment pipeline: parallel assessment → intervention docs → approval gate → effort/token estimates → summary |
-| Generic Software Assessment | `generic-software-assessment` | Broad quality analysis across architecture, security, testability, observability, DevOps |
-| Intervention Documentation Standard | `intervention-documentation-standard` | Generates structured, self-contained intervention documents from assessment findings |
-| God Class Decomposition | `god-class-decomposition` | Safe incremental decomposition of oversized classes and methods |
-| Domain Model Refactoring | `domain-model-refactoring` | Splits monolithic model files, introduces type hierarchies, aligns domain vocabulary |
-| Layered Architecture Assessment | `layered-architecture-assessment` | Audits layer boundary violations and namespace/package misalignment |
-| Dependency Injection Refactoring | `dependency-injection-refactoring` | Converts static/direct coupling to constructor-injected services |
-| Security Hardening | `security-hardening` | Input validation, parameterised queries, secret management, log sanitisation, TLS |
-| Dependency Supply Chain Security | `dependency-supply-chain-security` | Lock files, integrity verification, unused dependency audit, SCA in CI |
-| Concurrency Safety Assessment | `concurrency-safety-assessment` | Race conditions, shared mutable state, unsafe shutdown patterns |
-
-## Available procedures (in `docs/procedures/`)
-
-| Procedure | Purpose |
-|-----------|---------|
-| `code-generation.md` | Step-by-step workflow for generating/modifying code |
-| `code-review.md` | Checklist and process for reviewing code |
-| `secure-coding.md` | Security checklist for auth/data handling |
-| `testing.md` | Strategy and guidelines for writing tests |
+Discard:
+- Raw grep/glob/read output that has already been acted on
+- Successful tool-call results that produced no follow-up action
+- Repeated explanations of the same concept
+- Superseded plans or approaches
