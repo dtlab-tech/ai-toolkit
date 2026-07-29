@@ -75,6 +75,32 @@ describe('readManifest()', () => {
     }
   });
 
+  test('returns { files: [] } when manifest is valid JSON but has no files array', () => {
+    const claudeDir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(claudeDir);
+    fs.writeFileSync(
+      path.join(claudeDir, '.ai-toolkit-manifest.json'),
+      JSON.stringify({ version: '1' }),
+      'utf8'
+    );
+
+    const result = readManifest(tmpDir);
+    expect(result).toEqual({ files: [] });
+  });
+
+  test('returns { files: [] } when manifest is valid JSON but is a non-object scalar', () => {
+    const claudeDir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(claudeDir);
+    fs.writeFileSync(
+      path.join(claudeDir, '.ai-toolkit-manifest.json'),
+      '5',
+      'utf8'
+    );
+
+    const result = readManifest(tmpDir);
+    expect(result).toEqual({ files: [] });
+  });
+
   test('normalizes backslash paths to forward slashes on read', () => {
     const claudeDir = path.join(tmpDir, '.claude');
     fs.mkdirSync(claudeDir);

@@ -107,3 +107,39 @@ Direction: Optional — add a comment in writeManifest.test.js pointing to expan
 [INFO] Defensive dedup — bin/cli.js:204-211
 `writeManifest` does not dedupe `fileList`. In current usage `newFileSet` derives from `expandMappings` output which contains no duplicates, so this is not a live bug.
 Direction: No change needed; note for awareness if writeManifest is ever called with caller-supplied lists.
+
+## FTR-011 Review — US-05 (Integrate Prune Phase into runInstall + UI Display)
+
+### Empirical verification
+- Build: N/A — plain JavaScript project, no compile step (AGENTS.md: "npm test is the primary verification command"). Not a defect.
+- Tests: PASS — `npm test` → 163/163 passed, 11 suites, `--bail` clean. US-05 has no dedicated automated test (integration/E2E CLI tests are Out of Scope per feature.md line 92); prune-phase behavior verified by ad-hoc empirical probes against the exported pure functions.
+
+### Verdict: PASS (0 CRITICAL; build + tests green)
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+
+**[WARNING] Functional / Design discrepancy — bin/cli.js:343 (+ 303, 314) writeManifest call in runInstall**
+Declined orphans are silently dropped from the manifest and will never be re-shown. When a user declines to trash an orphan, `runInstall` still writes the manifest with `writeManifest(destRoot, newFileSet)` — i.e. only the current shipped set, which by definition excludes the orphan. On the next install the old manifest no longer lists the declined file, so `computeOrphans(oldManifest.files, newFileSet)` returns `[]` and the stale file is never re-flagged.
+Empirically confirmed across two simulated installs: manifest `[keep, orphan]` + user declines → manifest rewritten to `[keep]` → next install detects 0 orphans; the orphan persists on disk forever, untracked.
+This directly contradicts the documented design: feature.md line 104 ("new manifest still written — they will re-appear as orphans next time") and Tech-Spec Open Question #1 ("Design decision: Yes — they stay as orphan candidates every time"). It also undercuts the feature's stated purpose of eliminating silent accumulation of stale artifacts. It is, however, consistent with AC-10's literal "Then" (which only requires that a manifest be written), so this is WARNING rather than CRITICAL.
+Direction: To honor the documented re-appearance design, the manifest written after prune should include kept/declined orphans in addition to `newFileSet` (e.g. union of `newFileSet` and the orphans the user did not move). Alternatively, if the team decides declined orphans should NOT re-appear (the opposite of the current spec), update feature.md line 104 and Tech-Spec Open Question #1 to record that decision so code and docs agree. Either way, resolve Open Question #1 explicitly and add a focused test asserting the chosen behavior.
+
+**[WARNING] Process / Traceability — git history (commit 718b0eb)**
+There is no dedicated `feat(FTR-011): implement US-05` commit. The entire prune-phase integration in `runInstall` (orphan display, per-file prompt vs `--force` auto-move, moved/kept summary, manifest write on every exit path — the whole of US-05-T01..T04) landed inside the INFRA commit `718b0eb` ("implement shared infrastructure (INFRA)"), which was meant to be an audit-only task (INFRA-T01). This breaks the one-User-Story-per-commit vertical-slice convention (Work Breakdown §4) and makes per-US traceability/rollback of US-05 impossible. This repeats the same process defect already flagged for US-02 and US-04.
+Direction: Not a code-correctness blocker. For remaining stories keep each US in its own commit aligned to the Work Breakdown CSV commit messages. No action on the code itself.
+
+### INFO (improvements)
+
+**[INFO] Consistency — bin/cli.js:257-269 (interactive orphan loop)**
+The interactive branch re-checks `fs.existsSync(fullPath)` and `continue`s (line 259) before prompting, but `existingOrphans` was already filtered for existence at line 235; the `--force` branch (lines 251-255) does not re-check. The extra guard is harmless (defends against a file vanishing between filter and prompt) but is asymmetric with the force branch.
+Direction: Optional — either drop the redundant check or apply the same defensive check in both branches for symmetry.
+
+**[INFO] Coverage — no test exercises the prune wiring inside runInstall**
+All four pure functions are unit-tested in isolation, but the US-05 wiring (orphan display, prompt-vs-force move, moved/kept summary, manifest-on-every-exit-path, declined-orphan lifecycle) has no automated test. feature.md line 92 explicitly defers end-to-end CLI tests (Out of Scope), so acceptable for MVP — but a light integration test constructing an old manifest + fake mappings would have caught the declined-orphan discrepancy above.
+Direction: Consider a focused prune-path test once the declined-orphan behavior (WARNING #1) is resolved, asserting the settled re-appearance semantics.
+
+**[INFO] Prior WARNING resolved — bin/cli.js:167 (readManifest hardening)**
+The previously-open cross-cutting WARNING (valid-JSON-wrong-shape / scalar manifest → `TypeError: Cannot read properties of undefined (reading 'map')` crashing the installer once US-05 wired the prune phase) is now FIXED: line 167 guards `if (!parsed || !Array.isArray(parsed.files)) return { files: [] }`. Empirically re-verified — `{"version":"1"}` and scalar `5` both return `{ files: [] }` and the downstream `computeOrphans` call in the prune phase no longer throws. No further action; recorded for closure of that item in the register.

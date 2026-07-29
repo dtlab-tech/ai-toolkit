@@ -164,9 +164,8 @@ function readManifest(destRoot) {
   if (!fs.existsSync(manifestPath)) return { files: [] };
   try {
     const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    if (Array.isArray(parsed.files)) {
-      parsed.files = parsed.files.map(f => f.replace(/\\/g, '/'));
-    }
+    if (!parsed || !Array.isArray(parsed.files)) return { files: [] };
+    parsed.files = parsed.files.map(f => f.replace(/\\/g, '/'));
     return parsed;
   } catch {
     console.log(dim('Previous manifest is corrupt; treating as empty'));
