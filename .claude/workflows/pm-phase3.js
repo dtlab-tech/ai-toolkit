@@ -119,7 +119,6 @@ const buildWaves = (phases) => {
 const waves = buildWaves(wb.phases)
 log(`Execution plan: ${waves.length} wave(s) — ${waves.map((w, i) => `wave${i+1}:[${w.map(p => p.phase_id).join(',')}]`).join(' ')}`)
 
-const prefix     = wb.prefix
 let phasesDone   = 0
 const usPassed   = []
 const usEscalated = []
