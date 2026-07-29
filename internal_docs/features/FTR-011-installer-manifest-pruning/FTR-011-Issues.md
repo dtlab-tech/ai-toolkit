@@ -40,3 +40,24 @@ Direction: In `readManifest`, guarantee an array `files` field on every return, 
 
 **[INFO] Coverage — tests/cli**
 readManifest is well unit-tested in isolation, but its integration with `computeOrphans`/`runInstall` (where the wrong-shape crash actually manifests) has no test. Feature.md defers end-to-end CLI tests (Out of Scope) so acceptable for MVP; a light integration test of the prune path would have caught the WARNING above. Revisit when US-05 is reviewed.
+
+## Review Report — FTR-011 US-03 (moveToTrash)
+
+### Empirical verification
+- Build: N/A — plain JS project, no compile step (per AGENTS.md). Not a defect.
+- Tests: PASS — `npm test` → 158/158 passed, 11 suites. moveToTrash suite 5/5.
+
+### Verdict: PASS
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+none
+
+### INFO (improvements)
+- INFO — Robustness — bin/cli.js:189-198
+  `moveToTrash` does not guard against the destination trash path already existing as a directory, nor does EXDEV fallback handle a source that is a directory. Not reachable in current design (orphans are always files from the manifest), so no action needed now. Direction: if manifest ever tracks directory entries, add an isDirectory branch; otherwise leave as-is.
+
+- INFO — Uncommitted change outside US-03 scope — tests/cli/readManifest.test.js
+  Working tree has an unstaged addition of a corrupt-JSON warning test in readManifest.test.js (belongs to US-01, not US-03). Also an untracked FTR-011-token-ledger.json artifact. Neither affects US-03. Direction: commit/stage these under their proper user story before opening the PR to keep the history clean.
