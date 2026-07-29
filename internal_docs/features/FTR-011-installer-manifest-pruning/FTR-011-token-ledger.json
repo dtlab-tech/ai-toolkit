@@ -78,5 +78,10 @@
     "agent": "review-solution:US-02",
     "model": "sonnet",
     "phase_delta_tokens": 27783
+  },
+  {
+    "agent": "developer-testing:US-04",
+    "model": "sonnet",
+    "phase_delta_tokens": 78986
   }
 ]

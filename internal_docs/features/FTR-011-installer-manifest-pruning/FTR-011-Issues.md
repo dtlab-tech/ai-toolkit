@@ -76,3 +76,34 @@ none
 
 - [INFO] Process / Commit hygiene — commit 718b0eb
   Commit message says "implement shared infrastructure (INFRA)" but the diff lands all four manifest functions and the full prune-phase integration in `runInstall` (US-01..US-05 scope), not just INFRA-T01 (which was an audit-only task). Direction: align commit granularity/messages with the per-User-Story vertical-slice plan in the Work Breakdown to keep traceability clean. No code defect.
+
+## Review Report — FTR-011 US-04 (writeManifest)
+
+### Empirical verification
+- Build: N/A — plain JavaScript project, no compile step (AGENTS.md: "npm test is the primary verification command").
+- Tests: PASS — 161/161 across 11 suites, including `tests/cli/writeManifest.test.js` (11 tests). `npm test` runs with `--bail`; no failures.
+
+### Verdict: PASS
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+
+[WARNING] Architecture/Process — bin/cli.js:201 (git history)
+The US-04 `writeManifest()` implementation and its `runInstall` integration were committed inside the INFRA commit `718b0eb`, and its test file `tests/cli/writeManifest.test.js` was committed inside the US-02 commit `3a70517`. There is no dedicated `feat(FTR-011): implement US-04` commit, unlike US-01/US-02/US-03. This breaks the one-User-Story-per-commit vertical-slice convention stated in the Work Breakdown (section 4) and makes per-US traceability/rollback harder.
+Direction: Not a code-correctness blocker. For future stories, keep each US in its own commit. No action required on the code itself.
+
+### INFO (improvements)
+
+[INFO] Error handling — bin/cli.js:213-218
+`writeManifest` swallows all write errors, logging only a dim warning and returning normally. This is intentional best-effort behavior per the feature doc, but a silent manifest-write failure means the next install sees no manifest and treats every file as a first-install (orphans never computed) — degraded pruning with no visible signal beyond one dim line.
+Direction: Consider elevating the warning severity or surfacing it in the final install summary so a persistent manifest-write failure is not missed.
+
+[INFO] Test coverage — tests/cli/writeManifest.test.js
+AC-13 (settings files never enter the manifest) is mapped to US-04 in the traceability matrix but is verified indirectly via `tests/cli/expandMappings.test.js` (lines 25-43), since `writeManifest` intentionally does not re-filter NEVER_COPY. This matches the feature's design note ("no additional manifest-level filter is needed"), so coverage exists — just not inside the writeManifest suite.
+Direction: Optional — add a comment in writeManifest.test.js pointing to expandMappings as the AC-13 owner, to make the coverage boundary explicit for future reviewers.
+
+[INFO] Defensive dedup — bin/cli.js:204-211
+`writeManifest` does not dedupe `fileList`. In current usage `newFileSet` derives from `expandMappings` output which contains no duplicates, so this is not a live bug.
+Direction: No change needed; note for awareness if writeManifest is ever called with caller-supplied lists.
