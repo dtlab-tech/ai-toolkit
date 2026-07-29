@@ -104,7 +104,7 @@ npm run test:coverage  # run all tests and generate a coverage report
 The test suite covers:
 
 - **`tests/cli/`** — unit tests for pure functions in `bin/cli.js`
-  (`fileHash`, `walkDir`, `expandMappings`, `categorize`, `readInstalledVersion`, `isMattPocockInstalled`)
+  (`fileHash`, `walkDir`, `expandMappings`, `categorize`, `readInstalledVersion`)
 - **`tests/frontmatter/`** — structural validation of all `.claude/agents/*.md`
   and `.claude/skills/**/SKILL.md` frontmatter fields
 
