@@ -54,6 +54,27 @@ describe('readManifest()', () => {
     expect(result).toEqual({ files: [] });
   });
 
+  test('logs a warning when manifest is corrupt JSON', () => {
+    const claudeDir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(claudeDir);
+    fs.writeFileSync(
+      path.join(claudeDir, '.ai-toolkit-manifest.json'),
+      '{ this is not json !!!',
+      'utf8'
+    );
+
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      readManifest(tmpDir);
+      // The warning message is wrapped in dim() ANSI escape codes; verify the key text is present
+      const calls = consoleSpy.mock.calls.map(args => args.join(' '));
+      const hasWarning = calls.some(msg => msg.includes('Previous manifest is corrupt'));
+      expect(hasWarning).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
   test('normalizes backslash paths to forward slashes on read', () => {
     const claudeDir = path.join(tmpDir, '.claude');
     fs.mkdirSync(claudeDir);

@@ -17,3 +17,26 @@ All four pure functions are unit-tested in isolation, but the wiring in `runInst
 
 **[INFO] Consistency — bin/cli.js:257-271 (interactive orphan loop)**
 The interactive branch re-checks `fs.existsSync(fullPath)` and `continue`s before prompting, but `existingOrphans` was already filtered for existence at line 236, and the `--force` branch does not re-check. The redundant guard is harmless (guards against a file vanishing between filter and prompt) but is asymmetric with the force branch. Direction: optional — either drop the redundant check or apply the same defensive check in both branches for symmetry.
+
+## FTR-011 Review — US-01 (`readManifest()`)
+
+Empirical verification:
+- Build/verify (`npm test`): PASS — 158/158 tests, 11 suites.
+- Tests: readManifest.test.js — 5/5 pass (AC-14, AC-15, AC-16, backslash normalization, corrupt-JSON warning log).
+
+Verdict: PASS (0 CRITICAL; build + tests green)
+
+### WARNING (should fix)
+
+**[WARNING] Robustness — bin/cli.js:162-175 (readManifest)**
+`readManifest` returns `parsed` verbatim whenever `JSON.parse` succeeds but the payload is not the expected shape, because the `if (Array.isArray(parsed.files))` guard (line 167) only conditionally normalizes and never defaults the shape.
+Empirically reproduced (ran the exported function directly):
+- Manifest `{"version":"1"}` -> returns `{"version":"1"}`; downstream `computeOrphans(oldManifest.files, ...)` at bin/cli.js:234 throws `TypeError: Cannot read properties of undefined (reading 'map')` — unhandled installer crash.
+- Manifest `5` (valid JSON scalar) -> returns the number `5`, an even more degenerate result.
+AC-16 (corrupt/unparseable JSON) is handled; the "valid JSON, wrong shape" case (interrupted/partial write, hand-edited manifest, future toolkit schema) is not. Outside US-01's defined ACs, so WARNING not CRITICAL; surfaces to users once US-05 wires the prune phase. Duplicate of existing FTR-011-Issues.md entry — confirmed still open.
+Direction: In `readManifest`, guarantee an array `files` field on every return, e.g. `if (!parsed || !Array.isArray(parsed.files)) return { files: [] };` before normalizing. Add a unit test for the valid-JSON-without-files-array case (and a scalar/non-object case) asserting `{ files: [] }`.
+
+### INFO (improvements)
+
+**[INFO] Coverage — tests/cli**
+readManifest is well unit-tested in isolation, but its integration with `computeOrphans`/`runInstall` (where the wrong-shape crash actually manifests) has no test. Feature.md defers end-to-end CLI tests (Out of Scope) so acceptable for MVP; a light integration test of the prune path would have caught the WARNING above. Revisit when US-05 is reviewed.

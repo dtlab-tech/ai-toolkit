@@ -43,4 +43,16 @@ describe('computeOrphans()', () => {
     const result = computeOrphans(['Foo.md'], ['foo.md']);
     expect(result).toEqual(['Foo.md']);
   });
+
+  test('duplicate entries in newFiles do not produce false negatives', () => {
+    // newFiles with duplicates: Set deduplication means 'b' is still recognized as present
+    const result = computeOrphans(['a', 'b'], ['b', 'b']);
+    expect(result).toEqual(['a']);
+  });
+
+  test('duplicate entries in oldFiles each appear as orphans when absent from newFiles', () => {
+    // Documents behavior: duplicates in oldFiles are preserved in output (no implicit dedup)
+    const result = computeOrphans(['a', 'a', 'b'], ['b']);
+    expect(result).toEqual(['a', 'a']);
+  });
 });
