@@ -61,3 +61,18 @@ none
 
 - INFO — Uncommitted change outside US-03 scope — tests/cli/readManifest.test.js
   Working tree has an unstaged addition of a corrupt-JSON warning test in readManifest.test.js (belongs to US-01, not US-03). Also an untracked FTR-011-token-ledger.json artifact. Neither affects US-03. Direction: commit/stage these under their proper user story before opening the PR to keep the history clean.
+
+## FTR-011 US-02 (computeOrphans) — Issues Register
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+none
+
+### INFO (improvements)
+- [INFO] Quality / Robustness — bin/cli.js `computeOrphans(oldFiles, newFiles)`
+  The function assumes both arguments are arrays and will throw `TypeError` if passed `null`/`undefined`. The only current caller (`runInstall`) sources `oldFiles` from `readManifest`, which always returns `{ files: [] }`, and `newFiles` from a mapped array — so it is safe in practice. Direction: optionally default params (`oldFiles = [], newFiles = []`) for defensive hardening; low priority, not required by any AC.
+
+- [INFO] Process / Commit hygiene — commit 718b0eb
+  Commit message says "implement shared infrastructure (INFRA)" but the diff lands all four manifest functions and the full prune-phase integration in `runInstall` (US-01..US-05 scope), not just INFRA-T01 (which was an audit-only task). Direction: align commit granularity/messages with the per-User-Story vertical-slice plan in the Work Breakdown to keep traceability clean. No code defect.

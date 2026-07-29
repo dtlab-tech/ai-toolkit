@@ -68,10 +68,24 @@ describe('writeManifest()', () => {
     expect(result.files).toEqual(['.claude/agents/foo.md', '.claude/skills/bar/SKILL.md']);
   });
 
-  test('excludes paths whose absolute location is inside the trash directory', () => {
-    // Local install: trash entries would resolve to <destRoot>/.claude/.ai-toolkit-trash/...
+  test('excludes paths whose absolute location is inside the trash directory (local install)', () => {
+    // Local install: regular entries have .claude/ prefix; trash entries resolve to
+    // <destRoot>/.claude/.ai-toolkit-trash/.claude/agents/old.md
     const trashRel = '.claude/.ai-toolkit-trash/.claude/agents/old.md';
     const keepRel  = '.claude/agents/new.md';
+    writeManifest(tmpDir, [trashRel, keepRel]);
+    const result = readWrittenManifest();
+    expect(result.files).toContain(keepRel);
+    expect(result.files).not.toContain(trashRel);
+  });
+
+  test('excludes global-install trash entries using absolute path comparison, not string prefix on rel', () => {
+    // Global install (destRoot = ~/.claude): regular entries have NO .claude/ prefix
+    // (e.g. "agents/foo.md"). Trash entries are ".claude/.ai-toolkit-trash/agents/old.md".
+    // AC-12 requires absolute path comparison so global-mode regular entries are never
+    // accidentally filtered by a naive string-prefix check on the relative path.
+    const trashRel  = '.claude/.ai-toolkit-trash/agents/old.md';
+    const keepRel   = 'agents/new.md';
     writeManifest(tmpDir, [trashRel, keepRel]);
     const result = readWrittenManifest();
     expect(result.files).toContain(keepRel);
