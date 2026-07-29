@@ -111,39 +111,43 @@ Write {feature_dir}/{PREFIX}-Token-Estimate.md with this format:
 
 ## Phase 1 — Documentation (Actuals)
 
-| Agent | Task | Model | Tokens (actual) |
-|-------|------|-------|----------------|
-| generate-requirements | Generate requirements from feature.md | haiku | ${phase1Tokens} (phase delta) |
-| generate-tech-spec | Generate tech spec from feature.md | haiku | (see phase delta) |
-| validate-feature-docs | Validate requirements + tech spec | haiku | (see phase delta) |
+| Agent | Task | Model | Tokens Est. | Tokens Actual |
+|-------|------|-------|------------|--------------|
+| generate-requirements | Generate requirements from feature.md | haiku | — | {phase1_req_tokens} |
+| generate-tech-spec | Generate tech spec from feature.md | haiku | — | {phase1_spec_tokens} |
+| validate-feature-docs | Validate requirements + tech spec | haiku | — | {phase1_val_tokens} |
+| **Phase 1 total** | | | **—** | **${phase1Tokens}** |
 
 ## Phase 2 — Work Breakdown (Actuals)
 
-| Agent | Task | Model | Tokens (actual) |
-|-------|------|-------|----------------|
-| generate-work-breakdown | Generate work breakdown from docs | haiku | ${phase1Tokens} (phase delta) |
+| Agent | Task | Model | Tokens Est. | Tokens Actual |
+|-------|------|-------|------------|--------------|
+| generate-work-breakdown | Generate work breakdown from docs | haiku | — | {wbTokens from above} |
+| **Phase 2 total** | | | **—** | **{wbTokens from above}** |
 
 ## Phase 3 — Implementation (Estimates)
 
 Estimates based on {total_tasks} tasks ({domain_breakdown}), {user_stories} User Stories.
-Token estimates use ~15,000 tokens per BE task, ~8,000 per TEST task, ~5,000 per INFRA task as baseline.
+Baseline: ~15,000 tokens/BE task, ~8,000/TEST task, ~5,000/INFRA task.
 
-| Agent | Task | Model | Tokens (estimated) |
-|-------|------|-------|-------------------|
-| implementation-orchestrator | Full implementation loop | sonnet | {estimated: total_tasks * 12000} |
-| review-solution (×{user_stories}) | Architect review per US | sonnet | {estimated: user_stories * 8000} |
-| remediation | Fix WARNING issues | sonnet | ~10,000 |
-| pr-and-registry | Push branch, create PR | sonnet | ~5,000 |
-| write-actuals | Update Token/Effort Estimate | sonnet | ~3,000 |
+| Agent | Task | Model | Tokens Est. | Tokens Actual |
+|-------|------|-------|------------|--------------|
+| developer-backend | Implement BE/INFRA tasks | sonnet | {estimated: be_tasks * 15000 + infra_tasks * 5000} | — |
+| developer-testing | Implement TEST tasks | sonnet | {estimated: test_tasks * 8000} | — |
+| review-solution (×{user_stories}) | Architect review per US | sonnet | {estimated: user_stories * 8000} | — |
+| remediation | Fix review issues | sonnet | ~10,000 | — |
+| pr-and-registry | Push branch, create PR | sonnet | ~5,000 | — |
+| write-actuals | Update Token/Effort Estimate | sonnet | ~3,000 | — |
+| **Phase 3 total** | | | **{sum of phase 3 estimates}** | **—** |
 
-## Grand Total (Estimate)
+## Grand Total
 
-| Phase | Tokens (estimated) | Notes |
-|-------|-------------------|-------|
-| Phase 1 — Documentation | ${phase1Tokens} | Actual (phase delta) |
-| Phase 2 — Work Breakdown | {wbTokens from above} | Actual (phase delta) |
-| Phase 3 — Implementation | {sum of phase 3 estimates} | Estimated |
-| **Total** | **{grand total}** | |
+| Phase | Tokens Est. | Tokens Actual |
+|-------|------------|--------------|
+| Phase 1 — Documentation | — | ${phase1Tokens} |
+| Phase 2 — Work Breakdown | — | {wbTokens from above} |
+| Phase 3 — Implementation | {sum of phase 3 estimates} | — |
+| **Total** | **{sum of phase 3 estimates}** | **{phase1Tokens + wbTokens} (partial)** |
 
 ---
 *Actuals will be appended by pm-phase3 after implementation completes.*

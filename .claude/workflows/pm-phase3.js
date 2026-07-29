@@ -419,20 +419,28 @@ Append this section at the end of the file:
 
 ---
 
-## Actuals vs Estimate (pm-phase3)
+## Phase 3 — Implementation (Actuals)
 
 > Phase totals are exact measurements from budget tracking.
 > Per-agent values are exact where each agent ran separately; proportional where merged.
 
-| Agent | Phase | Model | Phase delta tokens |
-|-------|-------|-------|-------------------|
-${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | ${e.phase_delta_tokens} |`).join('\n')}
+| Agent | Phase | Model | Tokens Est. | Tokens Actual |
+|-------|-------|-------|------------|--------------|
+${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | — | ${e.phase_delta_tokens} |`).join('\n')}
+| **Phase 3 total** | | | **—** | **${totalPhase3Tokens}** |
 
-## Grand Total (pm-phase3)
+## Grand Total (updated)
+
+| Phase | Tokens Est. | Tokens Actual |
+|-------|------------|--------------|
+| Phase 1 — Documentation | — | *(see above)* |
+| Phase 2 — Work Breakdown | — | *(see above)* |
+| Phase 3 — Implementation | *(see above)* | ${totalPhase3Tokens} |
+
+## Implementation Summary
 
 | Metric | Value |
 |--------|-------|
-| Total tokens (pm-phase3) | ${totalPhase3Tokens} (exact) |
 | Implementation phases done | ${phasesDone} |
 | US passed | ${usPassed.join(', ') || 'N/A'} |
 | US escalated | ${usEscalated.join(', ') || 'none'} |
