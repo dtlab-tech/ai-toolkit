@@ -225,53 +225,6 @@ async function runInstall(label, mappings, force) {
   );
 }
 
-// ── Matt Pocock skills ───────────────────────────────────────────────────────
-
-function isMattPocockInstalled() {
-  const homedir = require('os').homedir();
-  // 'grilling' is a skill exclusive to Matt Pocock's package — not included in this toolkit
-  const pathsToCheck = [
-    path.join(homedir, '.claude', 'skills', 'grilling', 'SKILL.md'),
-    path.join(process.cwd(), '.claude', 'skills', 'grilling', 'SKILL.md'),
-  ];
-  return pathsToCheck.some(p => fs.existsSync(p));
-}
-
-async function installMattPocock() {
-  const { execSync } = require('child_process');
-  console.log(`\n  ${clr('cyan', '↓')}  Running: ${dim('npx skills@latest add mattpocock/skills')}\n`);
-  try {
-    execSync('npx skills@latest add mattpocock/skills', { stdio: 'inherit' });
-    console.log(`\n  ${clr('green', '✔')}  Matt Pocock skills installed successfully.\n`);
-  } catch (err) {
-    console.error(`\n  ${clr('red', '✖')}  Install failed: ${err.message}`);
-    console.error(`     Run manually: ${dim('npx skills@latest add mattpocock/skills')}\n`);
-  }
-}
-
-async function askMattPocock() {
-  const installed = isMattPocockInstalled();
-
-  console.log(divider());
-  console.log(bold('  Matt Pocock Skills'));
-  console.log(divider());
-  console.log(`  ${dim('Includes: define-feature, grilling, TDD, prototype, handoff, and more.')}`);
-  console.log();
-
-  if (!installed) {
-    console.log(`  ${clr('gray', '○')}  Status : ${clr('gray', 'not installed')}\n`);
-    const ok = await askConfirm('Install Matt Pocock\'s skills now?');
-    if (ok) await installMattPocock();
-    else console.log(`\n  ${clr('gray', 'Skipped. Install later with: npx skills@latest add mattpocock/skills')}\n`);
-    return;
-  }
-
-  console.log(`  ${clr('green', '✔')}  Status : ${clr('green', 'installed')}\n`);
-  const ok = await askConfirm('Re-install / update Matt Pocock skills?');
-  if (ok) await installMattPocock();
-  else console.log(`  ${clr('gray', 'Skipped.')}\n`);
-}
-
 // ── subagent spawn-depth check (verify & advise only — never write) ────────────
 
 const SPAWN_DEPTH_VAR = 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH';
@@ -334,7 +287,6 @@ async function installLocal(targetDir, force) {
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
   checkSpawnDepth(targetDir);
-  await askMattPocock();
   console.log(divider());
   console.log(`\n  ${bold('Next steps:')}`);
   console.log(`  ${clr('cyan', '1.')} Run ${clr('cyan', '/init-agents')} to generate AGENTS.md`);
@@ -355,13 +307,12 @@ async function installGlobal(force) {
       { src: path.join(packageRoot, '.claude', 'commands'),  dest: path.join(target, 'commands') },
       { src: path.join(packageRoot, '.claude', 'workflows'), dest: path.join(target, 'workflows') },
       { src: path.join(packageRoot, 'docs'),                 dest: path.join(target, 'docs') },
-      { src: path.join(packageRoot, 'CLAUDE.md'),            dest: path.join(target, 'CLAUDE.md') },
+      { src: path.join(packageRoot, 'CLAUDE.global.md'),    dest: path.join(target, 'CLAUDE.md') },
     ];
     await runInstall('global Claude folder', mappings, force);
     writeInstalledVersion(target);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     checkSpawnDepth(homedir);
-    await askMattPocock();
     console.log(divider());
     console.log(`\n  ${bold('Next steps:')}`);
     console.log(`  ${clr('cyan', '1.')} The toolkit is now available in all your projects`);
@@ -419,7 +370,6 @@ if (require.main === module) {
     expandMappings,
     categorize,
     readInstalledVersion,
-    isMattPocockInstalled,
     NEVER_COPY,
   };
 }

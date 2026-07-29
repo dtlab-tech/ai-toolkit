@@ -171,51 +171,7 @@ configuration is out of scope and risks clobbering the user's existing settings.
 
 ---
 
-## Step 5 — Matt Pocock Skills (version check + optional install/update)
-
-After copying the toolkit files, check the state of Matt Pocock's skills:
-
-1. **Detect installed version**: check if `~/.claude/skills/mattpocock/.version` exists and read it. If not found, try `npm list -g mattpocock --json` to get the cached version. If neither works, assume not installed.
-
-2. **Detect latest available version**: run `npm view mattpocock version` to get the current version on npm. If offline or unavailable, skip the version comparison.
-
-3. **Present the appropriate prompt** using `AskUserQuestion`:
-
-   **Not installed:**
-   ```
-   question: "Matt Pocock's skills are not installed. Install them now?"
-   description: "Includes define-feature, grilling, TDD, prototype, handoff, and more.
-                 Installs globally via: npx skills@latest add mattpocock/skills"
-   options:
-     - "Yes — install now"
-     - "No — skip (install manually later)"
-   ```
-
-   **Installed, update available (installed=vX, latest=vY):**
-   ```
-   question: "Matt Pocock skills v{installed} is installed. Update to v{latest}?"
-   options:
-     - "Yes — update now"
-     - "No — keep current version"
-   ```
-
-   **Already up to date:**
-   ```
-   question: "Matt Pocock skills v{installed} is already up to date. Re-install?"
-   options:
-     - "Yes — re-install"
-     - "No — skip"
-   ```
-
-4. If the user selects **Yes** (install or update), run:
-   ```bash
-   npx skills@latest add mattpocock/skills
-   ```
-   Report the outcome. If it fails, show the manual install command.
-
----
-
-## Step 6 — Compact Instructions opt-in
+## Step 5 — Compact Instructions opt-in
 
 The toolkit includes a `# Compact instructions` section for `~/.claude/CLAUDE.md` that guides Claude's auto-compaction (what to keep, what to drop) and enables proactive topic-change suggestions.
 
@@ -304,7 +260,6 @@ New files copied:    N
 Modified/overwritten: N
 Modified/kept:        N  (user chose to keep existing version)
 Unchanged (same):    N  (skipped silently)
-Matt Pocock skills: ✅ installed v{X} / ⬆️ updated v{old}→v{new} / ⏭ skipped / ✅ already up to date v{X}
 Spawn depth: ✅ CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2+ present / ⚠️ MISSING — see action above
 Compact instructions: {compact_instructions_status}
 ──────────────────────────────────────────────────

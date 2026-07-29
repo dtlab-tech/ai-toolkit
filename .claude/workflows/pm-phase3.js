@@ -30,19 +30,13 @@ const csvPath     = `${featureDir}/${prefix}-Work-Breakdown.csv`
 
 log(`Reading CSV: ${csvPath}`)
 
-const READ_SCHEMA = {
-  type: 'object',
-  properties: { content: { type: 'string' } },
-  required: ['content'],
-}
-
-const csvResult = await agent(
-  `Read the file at path: ${csvPath}\nReturn its full text content as the "content" field.`,
-  { label: 'read-wb-csv', phase: 'Parse', schema: READ_SCHEMA, model: 'haiku' }
+const csvContent = await agent(
+  `Read the file at path: ${csvPath}\nReturn ONLY the raw file contents, nothing else. No explanation, no formatting, no JSON wrapping — just the raw text of the file.`,
+  { label: 'read-wb-csv', phase: 'Parse', model: 'haiku' }
 )
 
 // Parse CSV into structured phases — pure JS, no AI
-const rows = csvResult.content
+const rows = csvContent
   .split('\n')
   .map(l => l.trim())
   .filter(l => l && !l.startsWith('phase_id'))  // skip header and empty lines
@@ -119,7 +113,6 @@ const buildWaves = (phases) => {
 const waves = buildWaves(wb.phases)
 log(`Execution plan: ${waves.length} wave(s) — ${waves.map((w, i) => `wave${i+1}:[${w.map(p => p.phase_id).join(',')}]`).join(' ')}`)
 
-const prefix     = wb.prefix
 let phasesDone   = 0
 const usPassed   = []
 const usEscalated = []
@@ -419,30 +412,41 @@ Append this section at the end of the file:
 
 ---
 
-## Actuals vs Estimate (pm-phase3)
+## Phase 3 — Implementation (Actuals)
 
 > Phase totals are exact measurements from budget tracking.
 > Per-agent values are exact where each agent ran separately; proportional where merged.
 
-| Agent | Phase | Model | Phase delta tokens |
-|-------|-------|-------|-------------------|
-${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | ${e.phase_delta_tokens} |`).join('\n')}
+| Agent | Phase | Model | Tokens Est. | Tokens Actual |
+|-------|-------|-------|------------|--------------|
+${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | — | ${e.phase_delta_tokens} |`).join('\n')}
+| **Phase 3 total** | | | **—** | **${totalPhase3Tokens}** |
 
-## Grand Total (pm-phase3)
+## Grand Total (updated)
+
+| Phase | Tokens Est. | Tokens Actual |
+|-------|------------|--------------|
+| Phase 1 — Documentation | — | *(see above)* |
+| Phase 2 — Work Breakdown | — | *(see above)* |
+| Phase 3 — Implementation | *(see above)* | ${totalPhase3Tokens} |
+
+## Implementation Summary
 
 | Metric | Value |
 |--------|-------|
-| Total tokens (pm-phase3) | ${totalPhase3Tokens} (exact) |
 | Implementation phases done | ${phasesDone} |
 | US passed | ${usPassed.join(', ') || 'N/A'} |
 | US escalated | ${usEscalated.join(', ') || 'none'} |
 
-TASK 2 — Append actuals to ${prefix}-Effort-Estimate.md:
-Find the file in the feature directory. Append:
+TASK 2 — Update actuals in ${prefix}-Effort-Estimate.md:
+Find the file in the feature directory. Read the existing Per-Phase Breakdown table and update the "Actual Agent" column for each phase that was implemented. Use the token ledger to infer which phases completed:
+- Phases in usPassed: ${usPassed.join(', ') || 'none'} — mark Actual Agent as completed (write the wall-clock duration if available, otherwise write "done (agent)")
+- Phases escalated: ${usEscalated.join(', ') || 'none'} — mark Actual Agent as "escalated"
+- Also append this summary section at the end of the file:
 
 ---
 
-## Actuals vs Estimate
+## Implementation Summary
 
 | Metric | Estimated | Actual |
 |--------|-----------|--------|
