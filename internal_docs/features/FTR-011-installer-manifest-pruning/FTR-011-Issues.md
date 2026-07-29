@@ -143,3 +143,27 @@ Direction: Consider a focused prune-path test once the declined-orphan behavior 
 
 **[INFO] Prior WARNING resolved — bin/cli.js:167 (readManifest hardening)**
 The previously-open cross-cutting WARNING (valid-JSON-wrong-shape / scalar manifest → `TypeError: Cannot read properties of undefined (reading 'map')` crashing the installer once US-05 wired the prune phase) is now FIXED: line 167 guards `if (!parsed || !Array.isArray(parsed.files)) return { files: [] }`. Empirically re-verified — `{"version":"1"}` and scalar `5` both return `{ files: [] }` and the downstream `computeOrphans` call in the prune phase no longer throws. No further action; recorded for closure of that item in the register.
+
+## FTR-011 Review — US-06 (CI Safety Net — Agent Name-to-Filename Alignment Check)
+
+### Empirical verification
+- Build: N/A — plain JavaScript project, no compile step (AGENTS.md: "npm test is the primary verification command"). Not a defect.
+- Tests: PASS — `npm test` → 163/163 passed, 11 suites, `--bail` clean.
+- AC-22 assertion verified effective via adversarial probe: a mismatched agent (`file: bad-agent.md` / `name: totally-wrong-name`) makes the exact assertion FAIL as intended; all 20 real agent files pass.
+
+### Verdict: PASS (0 CRITICAL; tests green; AC-22 + AC-25 satisfied)
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+
+**[WARNING] Process / Traceability — git history (commit 718b0eb) — tests/frontmatter/agents.test.js:57-61**
+There is no dedicated `feat(FTR-011): implement US-06` commit. The AC-22 name-match assertion (US-06-T01) landed inside the INFRA commit `718b0eb` ("implement shared infrastructure (INFRA)"), which per the Work Breakdown was meant to be an audit-only task (INFRA-T01). This breaks the one-User-Story-per-commit vertical-slice convention (Work Breakdown §4) and makes per-US traceability/rollback of US-06 impossible. This is the same process defect already flagged for US-02, US-04, and US-05.
+Direction: Not a code-correctness blocker; the assertion itself is correct and effective. For remaining work keep each User Story in its own commit aligned to the Work Breakdown CSV commit messages. No action required on the code.
+
+### INFO (improvements)
+
+**[INFO] Failure-message specificity — tests/frontmatter/agents.test.js:57-61**
+AC-22 requires "any mismatch fails the test with a message identifying the file." The current assertion `expect(parsed.data.name).toBe(expectedName)` relies on the `describe.each('$file', ...)` block title to identify the file plus Jest's default expected/received diff; the inline `// failure: ...` comment is not surfaced in test output. This satisfies AC-22 (the `$file` label names the file), but a custom matcher message (e.g. a message argument or `expect(...).toBe(..., ...)` style hint) would make the failure self-explanatory without relying on the block title.
+Direction: Optional — pass an explicit assertion message so the mismatched name and expected filename appear directly in the failure line.
