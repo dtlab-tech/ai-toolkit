@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.7.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.6.0...v0.7.0) (2026-07-29)
+
+
+### Features
+
+* **pipeline:** centralized test run + persistent token ledger + validation report fix + smarter define-feature ([c9fad6e](https://github.com/dtlab-tech/ai-toolkit/commit/c9fad6e4e5dfe25823df1d6534b4e597baa97001))
+* **pm-phase3:** add centralized test run phase to streamline testing process ([972fac5](https://github.com/dtlab-tech/ai-toolkit/commit/972fac55d0754743859a7d75379a41acd49a890d))
+* **pm-phase3:** persist token ledger to disk after every phase ([b6ad681](https://github.com/dtlab-tech/ai-toolkit/commit/b6ad6814770fae31cda60f25298dab9b2739eeaa))
+
 ## [0.6.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.5.0...v0.6.0) (2026-07-29)
 
 
