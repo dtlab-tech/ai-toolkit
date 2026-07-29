@@ -78,7 +78,7 @@ Follow all conventions EXACTLY.
 4. **Create test project/file** if it doesn't exist (following project conventions)
 5. **Write test helpers** (custom factories, builders, mocks) if needed
 6. **Implement tests** following AAA pattern
-7. **Verify** by running the test command from AGENTS.md
+7. **Syntax check only (optional)** — you MAY run a build to confirm the test files compile (e.g. `dotnet build`, `npx tsc --noEmit`). **Do NOT run the test suite** (`dotnet test`, `npm test`, etc.) — the orchestrator runs the full suite once, after all agents finish. Running it here duplicates a multi-minute build per agent and contends for build artifacts.
 
 ---
 
@@ -102,13 +102,13 @@ When all assigned tasks are complete, return a **structured summary** to the orc
 Tasks completed: [list]
 Files created:   [list with path only]
 Files modified:  [list with path only]
-Test result:     ✅ N/N passed / ❌ N failed — [failing test names if any]
+Build check:     ✅ compiles / ❌ compile error — [first error line if any] / ⏭️ not run
 Notes:           [blocking issues, skipped cases, TODO items]
 ─────────────────────────────────────────────
 ```
 
 - **Never dump test code** into the summary
-- If tests FAILED, include only the failing test names and first error line
+- Do NOT report test-run results — you do not run the suite; the orchestrator runs it once after all agents finish. Report only whether the test files compile.
 
 ---
 
@@ -119,4 +119,4 @@ Notes:           [blocking issues, skipped cases, TODO items]
 - **No testing of trivial code** — getters/setters, data classes, config files
 - **Mock external dependencies** — databases, HTTP clients, file systems
 - **Use the project's preferred mocking approach** — as defined in AGENTS.md
-- **After implementation**: run the test command to verify all tests pass
+- **Do NOT run the test suite** — the orchestrator runs the full suite once, after every agent has finished writing its files. A build for a quick syntax check is fine; running the tests here wastes minutes on a duplicate build and can lock build artifacts.
