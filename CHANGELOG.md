@@ -1,4 +1,19 @@
 ## 0.1.4 (2026-07-21)
+## [0.4.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.3.1...v0.4.0) (2026-07-29)
+
+
+### Features
+
+* **effort-estimate:** add Est./Actual Human/Agent columns to Per-Phase Breakdown ([696146c](https://github.com/dtlab-tech/ai-toolkit/commit/696146cc583ca13ee18914af19ff4de87a91cb60))
+* FTR-010 unit tests, process-log, OPT-02/03/04, remove Matt Pocock dependency ([1f43a4e](https://github.com/dtlab-tech/ai-toolkit/commit/1f43a4e6bf98a4b5821f1a0ae2dac33aca090597))
+* **token-estimate:** split tokens into Est./Actual columns in pm-phase2 and pm-phase3 ([d85b6e4](https://github.com/dtlab-tech/ai-toolkit/commit/d85b6e4aa871a934190e1d65995cb8e7e8db4495))
+
+
+### Bug Fixes
+
+* **pm-phase3:** read CSV as raw string instead of schema-wrapped object ([1737842](https://github.com/dtlab-tech/ai-toolkit/commit/17378422f6a9dc9168a35c7114cdd227e9214ce8))
+* **pm-phase3:** remove duplicate const prefix declaration ([85455e8](https://github.com/dtlab-tech/ai-toolkit/commit/85455e83929ccc6274d7d888fd429fc83ad78137))
+
 ## [0.3.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.3.0...v0.3.1) (2026-07-28)
 
 
