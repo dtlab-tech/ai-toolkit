@@ -103,6 +103,7 @@ if (discoveryResult.needs_tech_spec) {
 phase('Validation')
 
 let validationSummary = 'skipped'
+let lastValText       = ''
 const MAX_CYCLES = 3
 
 for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
@@ -115,6 +116,7 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   // valResult is the agent's text output — check for gap indicators
   // Use only 'MISSING:' as the gap signal: 'gaps found' also matches 'ZERO GAPS FOUND'
   const resultText = typeof valResult === 'string' ? valResult : JSON.stringify(valResult)
+  lastValText      = resultText
   const hasGaps    = resultText.includes('MISSING:')
 
   if (!hasGaps) {
@@ -137,6 +139,56 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
     validationSummary = 'gaps remain after 3 cycles'
     errors.push('validate-feature-docs: gaps remain after 3 revision cycles')
   }
+}
+
+// ── Guarantee the Validation Report exists on disk ───────────────────────────
+// The validate-feature-docs agent (haiku) is instructed to write the report in its
+// Phase 6, but this is LLM-dependent and unreliable when validation is clean. Downstream
+// pm-phase2 (generate-work-breakdown) treats the report as a hard precondition, so its
+// absence aborts the whole pipeline. This step deterministically ensures the file exists.
+if (validationSummary !== 'skipped') {
+  const validationReportPath = `${feature_dir}/${prefix}-Validation-Report.md`
+  await agent(
+    `Ensure the Validation Report file exists on disk for this feature delivery run.
+
+File path: ${validationReportPath}
+
+Steps:
+1. Check whether the file already exists (use Read or Glob).
+2. If it ALREADY EXISTS: do nothing, return "exists".
+3. If it DOES NOT EXIST: write it now using the Write tool, based on the validation outcome below.
+   Get the current date via Bash: run \`date -u +"%Y-%m-%d"\`.
+
+Validation outcome summary: ${validationSummary}
+
+Validation agent output (source of truth for gaps found/resolved):
+──────────────────────────────────────────────────
+${lastValText.slice(0, 4000)}
+──────────────────────────────────────────────────
+
+File format to write (fill from the outcome above; if the run was clean, mark both documents Clean with 0 gaps):
+
+# Validation Report — ${prefix}
+
+## Summary
+| Document | Gaps found | Gaps resolved | Status |
+|----------|-----------|--------------|--------|
+| ${prefix}-Requirements.md | N | N | Clean / Gaps remain |
+| ${prefix}-Tech-Spec.md    | N | N | Clean / Gaps remain |
+
+## Gaps found and resolved
+(derive from the validation output above; write "(none)" if clean)
+
+## Remaining gaps (if any)
+(list any unresolved gaps, or "(none)")
+
+## Validation date
+{date from Bash}
+
+Return "written" if you created the file, or "exists" if it was already present.`,
+    { label: 'ensure-validation-report', phase: 'Validation' }
+  )
+  log(`Validation report ensured at ${validationReportPath}`)
 }
 
 // ── Write process-log (phase 1 snapshot) ─────────────────────────────────────

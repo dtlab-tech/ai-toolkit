@@ -121,9 +121,11 @@ For each document with gaps, invoke the corresponding agent with a **targeted re
 
 ---
 
-## Phase 6 — Write Validation Report
+## Phase 6 — Write Validation Report (MANDATORY — your final action)
 
-**Always execute this phase**, regardless of whether gaps were found. The report is required even when validation is clean.
+**This is not optional and not the same as the Phase 4 gap report.** The coverage report you produced in Phase 4 is on-screen text; it is NOT the deliverable. Your job is not complete until the file `{PREFIX}-Validation-Report.md` exists **on disk**. You MUST call the `Write` tool to create it — even when validation is clean and zero gaps were found. Returning a summary without having called `Write` is a failure.
+
+Execute this phase **last, always**, regardless of outcome. Downstream agents read this file as a hard precondition; if it is missing, the entire pipeline aborts.
 
 Write `{PREFIX}-Validation-Report.md` in the same directory:
 
@@ -166,6 +168,7 @@ Do NOT guess how to fill ambiguous gaps. Ask first, then revise only with a clea
 
 ## Guidelines
 
+- **Always call `Write` for the Validation Report before finishing** (Phase 6) — the on-screen gap report is not the deliverable; the file on disk is. This is your last action, clean or not.
 - **Do not regenerate documents from scratch** — targeted revisions only
 - **Be specific about gaps** — point to the exact section, claim, and what is missing
 - **Stop after 3 revision cycles** — if coverage is still incomplete, report remaining gaps and exit
