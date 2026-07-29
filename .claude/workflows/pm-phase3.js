@@ -445,12 +445,15 @@ ${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | — | ${e.phase_delta_
 | US passed | ${usPassed.join(', ') || 'N/A'} |
 | US escalated | ${usEscalated.join(', ') || 'none'} |
 
-TASK 2 — Append actuals to ${prefix}-Effort-Estimate.md:
-Find the file in the feature directory. Append:
+TASK 2 — Update actuals in ${prefix}-Effort-Estimate.md:
+Find the file in the feature directory. Read the existing Per-Phase Breakdown table and update the "Actual Agent" column for each phase that was implemented. Use the token ledger to infer which phases completed:
+- Phases in usPassed: ${usPassed.join(', ') || 'none'} — mark Actual Agent as completed (write the wall-clock duration if available, otherwise write "done (agent)")
+- Phases escalated: ${usEscalated.join(', ') || 'none'} — mark Actual Agent as "escalated"
+- Also append this summary section at the end of the file:
 
 ---
 
-## Actuals vs Estimate
+## Implementation Summary
 
 | Metric | Estimated | Actual |
 |--------|-----------|--------|

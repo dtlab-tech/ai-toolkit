@@ -93,16 +93,18 @@ Write {feature_dir}/{PREFIX}-Effort-Estimate.md with this format:
 | Human estimate | {human_estimate} (sequential, no parallelism) |
 | Agent estimate | {agent_estimate} (parallel dispatch, critical path only) |
 
-## Per-User-Story Breakdown
+## Per-Phase Breakdown
 
-| US | Title | Tasks | Domains | Est. hours |
-|----|-------|-------|---------|------------|
-{one row per US extracted from Section 4}
+| Phase | Title | Tasks | Domains | Est. Human | Est. Agent | Actual Human | Actual Agent |
+|-------|-------|-------|---------|-----------|-----------|-------------|-------------|
+{one row per phase (INFRA + each US) extracted from Section 4 of the Work Breakdown — use ~2h per BE task, ~1h per TEST task, ~30min per INFRA task for human estimate; agent estimate = human / 6 as baseline}
+| **Total** | | **{total_tasks}** | | **{human_estimate}** | **{agent_estimate}** | **—** | **—** |
 
 ## Notes
 - Human estimate assumes sequential execution with no parallelism.
-- Agent estimate assumes parallel dispatch of independent tasks within each phase.
-- Actual effort will be recorded in the Actuals section after implementation.
+- Agent estimate assumes parallel dispatch of independent tasks within each phase (critical path only).
+- Actual Human: filled in if a human developer performed or reviewed the implementation.
+- Actual Agent: filled in by pm-phase3 after implementation completes.
 
 TASK 3 — Write the Token-Estimate.md file.
 Write {feature_dir}/{PREFIX}-Token-Estimate.md with this format:
