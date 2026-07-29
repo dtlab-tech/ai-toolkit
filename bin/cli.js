@@ -355,7 +355,7 @@ async function installGlobal(force) {
       { src: path.join(packageRoot, '.claude', 'commands'),  dest: path.join(target, 'commands') },
       { src: path.join(packageRoot, '.claude', 'workflows'), dest: path.join(target, 'workflows') },
       { src: path.join(packageRoot, 'docs'),                 dest: path.join(target, 'docs') },
-      { src: path.join(packageRoot, 'CLAUDE.md'),            dest: path.join(target, 'CLAUDE.md') },
+      { src: path.join(packageRoot, 'CLAUDE.global.md'),    dest: path.join(target, 'CLAUDE.md') },
     ];
     await runInstall('global Claude folder', mappings, force);
     writeInstalledVersion(target);
