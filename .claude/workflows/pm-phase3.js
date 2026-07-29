@@ -30,19 +30,13 @@ const csvPath     = `${featureDir}/${prefix}-Work-Breakdown.csv`
 
 log(`Reading CSV: ${csvPath}`)
 
-const READ_SCHEMA = {
-  type: 'object',
-  properties: { content: { type: 'string' } },
-  required: ['content'],
-}
-
-const csvResult = await agent(
-  `Read the file at path: ${csvPath}\nReturn its full text content as the "content" field.`,
-  { label: 'read-wb-csv', phase: 'Parse', schema: READ_SCHEMA, model: 'haiku' }
+const csvContent = await agent(
+  `Read the file at path: ${csvPath}\nReturn ONLY the raw file contents, nothing else. No explanation, no formatting, no JSON wrapping — just the raw text of the file.`,
+  { label: 'read-wb-csv', phase: 'Parse', model: 'haiku' }
 )
 
 // Parse CSV into structured phases — pure JS, no AI
-const rows = csvResult.content
+const rows = csvContent
   .split('\n')
   .map(l => l.trim())
   .filter(l => l && !l.startsWith('phase_id'))  // skip header and empty lines
