@@ -238,6 +238,16 @@ const executePhase = async (implPhase) => {
   }
 
   phasesDone++
+
+  // Persist the cumulative token ledger to disk after every completed phase.
+  // budget.spent() is an in-memory counter — if the workflow is stopped (manual
+  // stop, crash, timeout) before the Actuals phase, all token data would be lost.
+  // Writing the full ledger here means the file always reflects real consumption
+  // up to the last completed phase, recoverable manually or by a resumed run.
+  await agent(
+    `Write the following JSON to ${featureDir}/${prefix}-token-ledger.json (overwrite the file if it exists):\n${JSON.stringify(tokenLedger, null, 2)}`,
+    { label: `persist-ledger:${implPhase.phase_id}`, phase: 'Implementation', model: 'haiku' }
+  )
 }
 
 // Execute waves: phases in the same wave run in parallel, waves are sequential
@@ -403,6 +413,30 @@ log(`PR done: ${prResult.pr_url} — ${prTokens} tokens`)
 
 // ── Actuals ───────────────────────────────────────────────────────────────────
 phase('Actuals')
+
+// Fallback: merge in any ledger entries that were persisted to disk but are missing
+// from the in-memory ledger (e.g. this is a resumed run and earlier phases ran in a
+// previous, interrupted invocation). The in-memory ledger has priority for entries
+// present in both — it reflects the most recent measurements.
+const persistedLedgerRaw = await agent(
+  `Read ${featureDir}/${prefix}-token-ledger.json and return its contents as a raw JSON string, nothing else. If the file does not exist, return exactly "[]".`,
+  { label: 'read-ledger', phase: 'Actuals', model: 'haiku' }
+)
+try {
+  const persisted = JSON.parse(typeof persistedLedgerRaw === 'string' ? persistedLedgerRaw.trim() : '[]')
+  if (Array.isArray(persisted)) {
+    const seen = new Set(tokenLedger.map(e => e.agent))
+    for (const entry of persisted) {
+      if (entry && entry.agent && !seen.has(entry.agent)) {
+        tokenLedger.push(entry)
+        seen.add(entry.agent)
+        log(`Recovered ledger entry from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
+      }
+    }
+  }
+} catch (e) {
+  log(`Could not parse persisted token ledger — using in-memory ledger only`)
+}
 
 const totalPhase3Tokens = tokenLedger.reduce((s, e) => s + (e.phase_delta_tokens || 0), 0)
 
