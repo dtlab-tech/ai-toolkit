@@ -1,4 +1,17 @@
 ## 0.1.4 (2026-07-21)
+## [0.6.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.5.0...v0.6.0) (2026-07-29)
+
+
+### Features
+
+* **define-feature:** context ingestion + adaptive grilling; add AGENTS.md ([581b783](https://github.com/dtlab-tech/ai-toolkit/commit/581b783a18626796ae764ce69f658556b83ab490))
+
+
+### Bug Fixes
+
+* **pipeline:** persist Validation Report + smarter define-feature + AGENTS.md ([a5bae6a](https://github.com/dtlab-tech/ai-toolkit/commit/a5bae6aab65ca78aa5daa08a4a731b7c16051754))
+* **pm-phase1:** guarantee Validation Report is persisted to disk ([53e10c0](https://github.com/dtlab-tech/ai-toolkit/commit/53e10c0e8f20021da9408d6b9e0c077142a449ae))
+
 ## [0.5.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.4.0...v0.5.0) (2026-07-29)
 
 
