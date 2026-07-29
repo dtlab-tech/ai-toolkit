@@ -4,6 +4,7 @@ export const meta = {
   phases: [
     { title: 'Parse',          detail: 'Parse Work Breakdown into structured implementation phases' },
     { title: 'Implementation', detail: 'Dispatch developer agents per US, review, commit' },
+    { title: 'Test',           detail: 'Single test run after all phases complete' },
     { title: 'Remediation',    detail: 'Fix OPEN issues from Issues Register' },
     { title: 'PR',             detail: 'Push branch, create PR, update registry' },
     { title: 'Actuals',        detail: 'Write Token-Estimate and Effort-Estimate actuals' },
@@ -266,6 +267,28 @@ const issuesResult = await agent(
 issuesPath = issuesResult?.path || ''
 issuesOpen = issuesResult?.open_count || 0
 log(`Implementation complete — ${phasesDone} phases, ${usPassed.length} US passed, ${usEscalated.length} escalated, ${issuesOpen} open issues`)
+
+// ── Final test run ────────────────────────────────────────────────────────────
+// Developer agents no longer run the test suite themselves (they do a syntax-check
+// build at most). Running the suite once here, after all files are written, replaces
+// N parallel per-agent test runs — cutting ~1h of duplicated builds and artifact
+// contention down to a single centralized run with one consolidated failure report.
+phase('Test')
+
+const beforeTest = budget.spent()
+await agent(
+  `Run the full test suite in the repository root and report the result.
+
+1. Read AGENTS.md in the repository root to find the exact test command for this project.
+2. Run that command (e.g. \`dotnet test --no-restore --logger "console;verbosity=normal"\`, \`npm test\`).
+3. Report the outcome: total passed/failed, and for any failures the test name and first error line.
+
+Do NOT fix failing tests — only report them.`,
+  { label: 'final-test-run', phase: 'Test', model: 'haiku' }
+)
+const testTokens = budget.spent() - beforeTest
+tokenLedger.push({ agent: 'final-test-run', model: 'haiku', phase_delta_tokens: testTokens })
+log(`Test run complete — ${testTokens} tokens`)
 
 // ── Remediation ───────────────────────────────────────────────────────────────
 phase('Remediation')
