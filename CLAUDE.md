@@ -4,18 +4,6 @@ A reusable set of AI agents and procedures for software feature delivery and cod
 
 > **Full catalog of skills, commands, agents, and procedures:** [`docs/reference.md`](docs/reference.md)
 
-## Dependencies
-
-This toolkit expects the **`define-feature`** agent from [Matt Pocock's skills package](https://github.com/mattpocock/skills) to be available. That agent is responsible for producing the `feature.md` input file that `/implement-feature` and all downstream agents consume.
-
-Install it with:
-
-```bash
-npx skills@latest add mattpocock/skills
-```
-
-> **Tip:** Install Matt's skills globally (`~/.claude/skills/`) so they are available in every project without repeating the setup.
-
 ## How it works
 
 This toolkit provides **generic agents** that work with any project. Each agent reads project-specific conventions from `AGENTS.md` in the current working directory.
