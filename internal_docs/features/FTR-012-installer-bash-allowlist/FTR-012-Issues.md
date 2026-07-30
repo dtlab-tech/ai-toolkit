@@ -170,3 +170,35 @@ Direction: Add a code comment noting the ordering dependency, or fold the ask-be
 **[INFO] Commit traceability — da14ae1**
 Neither the `applyAskBeatsAllow` call in `mergeAllowlist` nor the US-03-T02 tests have a dedicated US-03 commit; both landed in da14ae1 (labeled "implement shared infrastructure (INFRA)"). US-04 similarly has no discrete commit. The code and tests exist and pass, so this is hygiene only.
 Direction: For future stories, keep one commit per US so the Work-Breakdown-to-commit mapping is auditable; no action required for correctness.
+
+---
+
+## Review Report — FTR-012 US-04 (Reinstall with Idempotent Merge)
+
+### Empirical verification
+- **Build/Test:** `npm test` → **198/198 passed**, 12 suites. There is no separate build step for this JS project (per AGENTS.md, `npm test` is the primary verification command).
+- **Idempotency subset:** `npx jest mergeAllowlist -t "idempotency"` → 5 passed, 30 skipped, 0 failed.
+- Working tree: changes confined to `tests/cli/mergeAllowlist.test.js` (US-04-T01) and a telemetry-only edit to `FTR-012-token-ledger.json`. US-04 was not yet committed at review time (prior US commits present through US-03).
+
+### Verdict: PASS
+
+### Scope confirmation
+Per `FTR-012-Work-Breakdown.md` / `.csv`, US-04 = **US-04-T01 only** — a TEST task covering AC-09 (deterministic merged output). No production code is in scope. The diff matches: only test additions.
+
+### Adversarial verification of the idempotency claim
+Traced `mergeAllowlist` (bin/cli.js:489-553) and helpers:
+- `mergeArrays` (line 113) = `[...new Set([...a, ...b])]` — dedup union, order-preserving.
+- `applyAskBeatsAllow` (line 121) strips allow entries present in ask.
+- Run 1 on fresh dir → `written` (canonical arrays verbatim). Run 2 → merge path: `mergeArrays(canonical, canonical)` returns canonical unchanged; ask-beats-allow removes nothing → byte-identical JSON. Confirmed by the `toEqual(first)` test.
+- With pre-seeded user rules, `mergeArrays([user, ...canonical], canonical)` already contains all canonical entries, so the second run is a no-op union → identical output, no duplicates. Confirmed by the two pre-existing-user-rules tests.
+
+The new tests follow the AGENTS.md unit-test pattern (`'use strict'`, destructured import from `../../bin/cli`, per-test `tmpDir` via `mkdtempSync`, AAA structure, one behavior per test).
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+none
+
+### INFO (improvements)
+- **[INFO] Report-count semantics — bin/cli.js:534,551.** On a reinstall (the idempotent second run), `preserved = existingAllow.length + existingAsk.length` counts the canonical entries written by the first run, not just genuinely user-authored rules. Via AC-14's Step 7 report line this would render e.g. "merged (~33 rules preserved)", overstating preserved user rules. Outside US-04's test-only scope and not asserted by US-04-T01 (which only checks `status === 'merged'`), so non-blocking. Direction: if the report line is meant to convey user-authored rules retained, compute `preserved` as the count of pre-existing entries not present in the canonical lists; otherwise document that the count is total-rules-before-write.

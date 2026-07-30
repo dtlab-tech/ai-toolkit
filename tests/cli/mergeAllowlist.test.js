@@ -364,23 +364,30 @@ describe('mergeAllowlist() — ask-beats-allow priority', () => {
   });
 });
 
-// ── mergeAllowlist() — idempotency (AC-09) ────────────────────────────────────
+// ── mergeAllowlist() — idempotency (AC-09, US-04-T01) ────────────────────────
 
 describe('mergeAllowlist() — idempotency', () => {
   test('running twice on a fresh directory produces identical JSON output', () => {
+    // Arrange: fresh directory (no existing settings.local.json)
     mergeAllowlist(tmpDir);
     const first = readSettingsJson(tmpDir);
 
+    // Act: call a second time with the same state
     mergeAllowlist(tmpDir);
     const second = readSettingsJson(tmpDir);
 
+    // Assert: output is byte-for-byte identical
     expect(second).toEqual(first);
   });
 
   test('second run introduces no new duplicate entries', () => {
-    mergeAllowlist(tmpDir);
+    // Arrange
     mergeAllowlist(tmpDir);
 
+    // Act
+    mergeAllowlist(tmpDir);
+
+    // Assert: allow and ask arrays contain no duplicates after two runs
     const json = readSettingsJson(tmpDir);
     const allowSet = new Set(json.permissions.Bash.allow);
     const askSet   = new Set(json.permissions.Bash.ask);
@@ -388,10 +395,77 @@ describe('mergeAllowlist() — idempotency', () => {
     expect(json.permissions.Bash.ask.length).toBe(askSet.size);
   });
 
-  test('second run still returns a non-error status', () => {
+  test('second run returns merged status (not written and not error)', () => {
+    // US-04-T01: the second call finds an existing file and must follow the
+    // merge path, returning { status: 'merged' } — not 'written' (which is only
+    // for fresh files) and not 'error'.
+    //
+    // Arrange: first call creates the file
     mergeAllowlist(tmpDir);
+
+    // Act: second call on the already-populated directory
     const result = mergeAllowlist(tmpDir);
-    expect(result.status).not.toBe('error');
+
+    // Assert: status is 'merged', confirming the merge path was taken
+    expect(result.status).toBe('merged');
+  });
+
+  test('running twice with pre-existing user rules produces identical JSON output', () => {
+    // US-04-T01: "same input" includes the scenario where the directory already
+    // has user-defined rules before the first installer run. Both runs must
+    // converge to the same result.
+    //
+    // Arrange: pre-seed with user rules before either installer run
+    const userAllow = 'Bash(my-script:*)';
+    const userAsk   = 'Bash(my-deploy:*)';
+    const initial = {
+      permissions: {
+        Bash: { allow: [userAllow], ask: [userAsk] },
+      },
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, '.claude', 'settings.local.json'),
+      JSON.stringify(initial, null, 2),
+      'utf8'
+    );
+
+    // Act: run once, capture output, run again
+    mergeAllowlist(tmpDir);
+    const first = readSettingsJson(tmpDir);
+
+    mergeAllowlist(tmpDir);
+    const second = readSettingsJson(tmpDir);
+
+    // Assert: both runs produce identical JSON
+    expect(second).toEqual(first);
+  });
+
+  test('running twice with pre-existing user rules introduces no duplicates', () => {
+    // US-04-T01: no duplicate entries even when user rules overlap with canonical
+    //
+    // Arrange: pre-seed with a rule that already matches a canonical entry
+    const sharedAllow = commandToPermission('ls');
+    const initial = {
+      permissions: {
+        Bash: { allow: [sharedAllow], ask: [] },
+      },
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, '.claude', 'settings.local.json'),
+      JSON.stringify(initial, null, 2),
+      'utf8'
+    );
+
+    // Act: two runs
+    mergeAllowlist(tmpDir);
+    mergeAllowlist(tmpDir);
+
+    // Assert: no duplicates after two runs with overlapping input
+    const json = readSettingsJson(tmpDir);
+    const allowSet = new Set(json.permissions.Bash.allow);
+    const askSet   = new Set(json.permissions.Bash.ask);
+    expect(json.permissions.Bash.allow.length).toBe(allowSet.size);
+    expect(json.permissions.Bash.ask.length).toBe(askSet.size);
   });
 });
 
