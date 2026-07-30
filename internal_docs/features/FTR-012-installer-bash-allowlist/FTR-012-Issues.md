@@ -138,3 +138,35 @@ Direction: Optionally surface a warning when the update-gitignore exit code is n
 **[INFO] AC-14 status-value mismatch — install-toolkit.md:264-277 (Step 6, adjacent to US-05 edits)**
 Outside strict US-05 scope but in the same edited file: AC-14 specifies the Allowlist report values as "written" / "merged (N rules preserved)" / "skipped (user said No)" / "skipped (already up to date)" / "failed — see above". Step 6 instead can set "reset (file was malformed)" (not in AC-14's list) and never sets "skipped (already up to date)".
 Direction: Reconcile the Step 6 status strings with AC-14 (either add "skipped (already up to date)" handling and align "reset..." wording, or update AC-14). Track under US-01/US-02 rather than US-05.
+
+---
+
+## Review Report — FTR-012 US-03 (Ask-Beats-Allow Conflict Resolution)
+
+**Empirical verification**
+- Build: N/A — plain JavaScript project, no compile step (per AGENTS.md, `npm test` is the primary verification).
+- Tests: PASS — `npm test` (jest --bail) 12 suites, 196/196 pass, including the US-03-T02 ask-beats-allow tests. Targeted run `npx jest -t "ask-beats-allow"` → 3/3 pass. No pre-existing tests broken.
+- Adversarial probe: ran `mergeAllowlist` on a fixture where the user's existing allow list contains a *narrower* token `Bash(git push:origin main)` while the canonical ask list contains `Bash(git push:*)`. Result: the narrow allow token survives in `allow`; `ask` gets `Bash(git push:*)`. The dangerous `git push origin main` invocation remains auto-approved — the ask-beats-allow safety invariant is bypassed.
+
+**Verdict: PASS** (0 CRITICAL; tests pass)
+
+US-03 core logic is present and correct for the literal ACs: `applyAskBeatsAllow(allow, ask)` (bin/cli.js:121) filters allow by exact set-membership against ask; invoked in `mergeAllowlist` at bin/cli.js:540 after both arrays are dedup-merged. Conflict tests at tests/cli/mergeAllowlist.test.js:294-365 verify both directions and no-duplicates.
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+
+**[WARNING] Safety invariant — bin/cli.js:121-124 (`applyAskBeatsAllow`), consumed at line 540**
+The ask-beats-allow filter uses exact permission-string equality (`new Set(ask)` membership). This defeats the invariant US-03 exists to guarantee ("a dangerous command is never silently auto-approved") whenever a user's pre-existing allow token is *narrower or differently-scoped* than the canonical ask token for the same command family. Empirically confirmed: with existing `allow: ["Bash(git push:origin main)"]` and canonical ask `Bash(git push:*)`, the merge keeps `Bash(git push:origin main)` in allow — so `git push origin main` is auto-approved even though the whole point is that any `git push` must prompt. AC-03/AC-04 speak only of identical tokens, and the tests only exercise identical tokens, so this passes the letter of the AC while missing its intent. US-03's Description explicitly frames the goal as "ensuring dangerous commands are never auto-approved".
+Direction: Make ask-beats-allow subsume by command prefix/family, not exact string. When an ask entry is `Bash(<cmd>:*)`, strip from allow any token whose command matches `<cmd>` (e.g. `Bash(git push:...)` in any form), not just the identical `Bash(git push:*)`. Add a test case with a narrower user allow token for a canonical-ask command asserting it is removed from allow.
+
+### INFO (improvements)
+
+**[INFO] Merge order coupling — bin/cli.js:536-540 (`mergeAllowlist`)**
+Correctness of ask-beats-allow depends on `mergedAsk` being computed before `applyAskBeatsAllow(mergedAllow, mergedAsk)` runs. This ordering is correct today but implicit; a future refactor that reorders these lines would silently break the priority guarantee with no failing test that isolates the ordering.
+Direction: Add a code comment noting the ordering dependency, or fold the ask-beats-allow strip into a single merge helper so the two steps cannot be separated.
+
+**[INFO] Commit traceability — da14ae1**
+Neither the `applyAskBeatsAllow` call in `mergeAllowlist` nor the US-03-T02 tests have a dedicated US-03 commit; both landed in da14ae1 (labeled "implement shared infrastructure (INFRA)"). US-04 similarly has no discrete commit. The code and tests exist and pass, so this is hygiene only.
+Direction: For future stories, keep one commit per US so the Work-Breakdown-to-commit mapping is auditable; no action required for correctness.
