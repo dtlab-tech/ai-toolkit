@@ -1,0 +1,17 @@
+════════════════════════════════════════════════════════
+RUN STARTED — 2026-07-30T13:02:24
+Feature: FTR-012 — Installer Bash Allowlist
+════════════════════════════════════════════════════════
+[2026-07-30T13:02:24] pm-phase1 START — documentation phase
+[2026-07-30T13:02:24] Agent DONE: generate-requirements — tokens: 5676
+[2026-07-30T13:02:24] Agent DONE: generate-tech-spec — tokens: 8107
+[2026-07-30T13:02:24] Agent DONE: validate-feature-docs (cycle 1) — tokens: 3873
+[2026-07-30T13:02:24] Validation result: 0 gaps (clean on cycle 1)
+[2026-07-30T13:02:24] APPROVAL REQUESTED — Gate 1
+[2026-07-30T13:36:24] APPROVAL GRANTED by user — Gate 1
+[2026-07-30T13:36:24] pm-phase2 START — work breakdown phase
+[2026-07-30T13:36:24] Agent DONE: generate-work-breakdown — tokens: 8382
+[2026-07-30T13:36:24] Written: FTR-012-Work-Breakdown.md (5 US, 17 tasks, 6 phases)
+[2026-07-30T13:36:24] Written: FTR-012-Effort-Estimate.md
+[2026-07-30T13:36:24] pm-phase2 COMPLETE
+[2026-07-30T13:36:24] APPROVAL REQUESTED — Gate 2
