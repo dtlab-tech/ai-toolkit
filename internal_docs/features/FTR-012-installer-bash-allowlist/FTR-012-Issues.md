@@ -73,3 +73,43 @@ Direction: Distinguish read-I/O errors from JSON parse errors; consider not over
 **[INFO] AC-08 / opt-in integration not yet coded (out of US-01 code scope)**
 The install-toolkit Step 6 opt-in prompt ("Yes — write allowlist" / "No — skip") and the AC-08 "skipped (user said No)" report path are not implemented — no `allowlist` / `settings.local.json` / `merge-allowlist` references exist in `.claude/skills` or `docs`, and the install-toolkit skill is unchanged vs `main`. This belongs to US-05-T02 and the AC-13 doc task, so it does not fail this US-01 code review, but the overall FTR-012 feature is not done until it lands.
 Direction: Ensure US-05-T02 (install-toolkit Step 6/Step 7 integration) and the AC-13 reference.md section are implemented and reviewed before the feature branch merges.
+
+---
+
+## Review Report — FTR-012 US-02 (Merge Allowlist into Existing Settings)
+
+**Empirical verification**
+- Build: N/A — plain JavaScript project, no compile step (AGENTS.md: `npm test` is the primary verification).
+- Tests: PASS — 12 suites, 196/196 (`npm test`, jest --bail), including the 3 new US-02-T03 ask-preservation tests and the US-02-T04 malformed-recovery tests. No pre-existing tests broken.
+- CLI smoke test: `node bin/cli.js merge-allowlist <tmp>` on a fixture with `env`, custom allow/ask, and conflicting entries → AC-02 (user rules + non-Bash `env` preserved), AC-03/AC-04 (ask-beats-allow both directions), AC-05 (malformed reset), and idempotency all confirmed empirically.
+
+**Verdict: PASS** (0 CRITICAL; tests pass)
+
+Scope note: the US-02 core logic (merge path + malformed recovery in `mergeAllowlist`) was already committed in `803018a`. The uncommitted working tree adds the US-02-T03 tests (in scope) plus an `update-gitignore` CLI handler that belongs to US-05.
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+
+**[WARNING] Reporting accuracy — bin/cli.js:534,551 (`preserved` count, a US-02-T01 deliverable)**
+`countBefore = existingAllow.length + existingAsk.length` counts every pre-existing entry as a "preserved rule", including pure canonical duplicates and entries stripped from allow by ask-beats-allow. Confirmed empirically: a first merge of a 4-entry file reported `merged (4 rules preserved)`, then an immediate reinstall reported `merged (35 rules preserved)` — implying 35 user rules were preserved when the file is now almost entirely canonical entries. US-02-T01 specifies the return `{ status: 'merged', preserved: N }` and AC-14 renders it as "merged (N rules preserved)", so this misleading N is a US-02 deliverable defect (previously flagged in INFRA and US-01 reviews, still unfixed).
+Direction: Count only existing entries not present in the canonical lists (distinct user rules), or rename the metric so N is not read as "user rules preserved".
+
+### INFO (improvements)
+
+**[INFO] Reset reason not surfaced by CLI — bin/cli.js:504,513,676 vs AC-05**
+`mergeAllowlist` returns `{ status: 'reset', reason: 'malformed' }`, but the CLI handler prints only `Allowlist: reset` (the `preserved !== undefined` branch does not cover `reason`). AC-05 / AC-14 call for "reset (file was malformed)". The status line loses the cause.
+Direction: Include the `reason` in the reset status line so the installer can report "reset (file was malformed)".
+
+**[INFO] I/O read error mislabeled as malformed — bin/cli.js:135-137, 503-514 (`readSettings` / `mergeAllowlist`)**
+An `fs.readFileSync` throw (permission/transient I/O error) returns `{ malformed: true }`, driving the "reset" path, logging "not valid JSON", and overwriting the file. A transient read error is thus mislabeled and can silently clobber a valid `settings.local.json`. Pre-existing across INFRA/US-01; still present in the US-02 merge entry.
+Direction: Distinguish read-I/O errors from JSON parse errors; consider not overwriting on a transient read failure.
+
+**[INFO] Out-of-scope handler landed in working tree — bin/cli.js:682-699 (`update-gitignore` CLI entry)**
+The uncommitted diff adds an `update-gitignore <dest>` CLI handler. This is US-05 (`.gitignore` management), not US-02. It is harmless and its `updateGitignore()` unit tests pass, but it is not part of the US-02 slice under review.
+Direction: Confirm this is intentional pre-work for US-05; otherwise stage it with the US-05 commit rather than the US-02 test additions.
+
+**[INFO] Malformed reset discards non-Bash sections (accepted per AC-05)**
+On the reset path, a prior `env`/other top-level keys are lost because the unparseable file cannot be read. Empirically confirmed (`env.KEEP` gone after reset). This matches AC-05's "reset to canonical" intent, so it is not a defect — noted for awareness only.
+Direction: None required; document the reset behavior in the AC-13 reference.md section if user data loss on malformed reset is a concern.

@@ -171,6 +171,42 @@ describe('mergeAllowlist() — merge with existing user rules', () => {
     expect(count).toBe(1);
   });
 
+  test('user-defined ask rules are preserved in merged result', () => {
+    // US-02-T03: a custom ask entry not present in canonical lists must survive merge
+    const userAskRule = 'Bash(my-custom-ask:*)';
+    writeInitialSettings([], [userAskRule]);
+
+    mergeAllowlist(tmpDir);
+
+    const json = readSettingsJson(tmpDir);
+    expect(json.permissions.Bash.ask).toContain(userAskRule);
+  });
+
+  test('canonical ask entries are present after merge', () => {
+    // US-02-T03: all canonical ask entries must be in the resulting ask array
+    writeInitialSettings([], ['Bash(my-custom-ask:*)']);
+
+    mergeAllowlist(tmpDir);
+
+    const json = readSettingsJson(tmpDir);
+    for (const cmd of CANONICAL_ASK) {
+      expect(json.permissions.Bash.ask).toContain(commandToPermission(cmd));
+    }
+  });
+
+  test('no user rules dropped when existing file has both custom allow and ask entries', () => {
+    // US-02-T03: comprehensive union check — neither allow nor ask user rules may be lost
+    const userAllow = 'Bash(my-build-script:*)';
+    const userAsk   = 'Bash(my-deploy-script:*)';
+    writeInitialSettings([userAllow], [userAsk]);
+
+    mergeAllowlist(tmpDir);
+
+    const json = readSettingsJson(tmpDir);
+    expect(json.permissions.Bash.allow).toContain(userAllow);
+    expect(json.permissions.Bash.ask).toContain(userAsk);
+  });
+
   test('returns merged status', () => {
     writeInitialSettings(['Bash(custom:*)'], []);
     const result = mergeAllowlist(tmpDir);

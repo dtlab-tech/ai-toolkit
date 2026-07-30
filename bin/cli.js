@@ -679,6 +679,24 @@ async function main() {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
+  } else if (argv[0] === 'update-gitignore') {
+    const destDir = argv[1];
+    if (!destDir) {
+      console.error('Error: update-gitignore requires a destination directory');
+      process.exit(1);
+    }
+    try {
+      const result = updateGitignore(destDir);
+      if (result.status === 'error') {
+        console.error(`Error: ${result.message}`);
+        process.exit(1);
+      }
+      console.log(`Gitignore: ${result.status}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force);
   } else {
