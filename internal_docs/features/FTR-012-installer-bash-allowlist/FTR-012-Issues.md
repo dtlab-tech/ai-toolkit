@@ -113,3 +113,28 @@ Direction: Confirm this is intentional pre-work for US-05; otherwise stage it wi
 **[INFO] Malformed reset discards non-Bash sections (accepted per AC-05)**
 On the reset path, a prior `env`/other top-level keys are lost because the unparseable file cannot be read. Empirically confirmed (`env.KEEP` gone after reset). This matches AC-05's "reset to canonical" intent, so it is not a defect — noted for awareness only.
 Direction: None required; document the reset behavior in the AC-13 reference.md section if user data loss on malformed reset is a concern.
+
+---
+
+## FTR-012 US-05 Review — Issues Register
+
+**Verdict: PASS** — 0 CRITICAL. `npm test` 196/196 passed. No build step (JS project; npm test is the verification command per AGENTS.md).
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+
+**[WARNING] Architecture/Traceability — install-toolkit.md:287-304 (Step 7 report)**
+US-05-T02 in the Work Breakdown explicitly states "Record status in Step 7 report" for the .gitignore step, but the Step 7 report template has no `.gitignore` status line. The `update-gitignore` CLI returns a meaningful status ('created' / 'appended' / 'already') via stdout ("Gitignore: {status}"), and Step 6b invokes it, yet that result is silently discarded and never surfaced to the user.
+Direction: Add a `.gitignore: {gitignore_status}` line to the Step 7 report block, and capture the `Gitignore: ...` stdout in Step 6b to populate it (mirroring how `allowlist_status` is captured). AC-06/AC-07 are functionally satisfied by the code, so this is a reporting/traceability gap, not a correctness bug.
+
+### INFO (improvements)
+
+**[INFO] Error handling — install-toolkit.md:279-283 (Step 6b)**
+Step 6b calls `node bin/cli.js update-gitignore "{dest}"` but does not check its exit code. If the write fails (function returns {status:'error'}, CLI exits 1), the installer neither reports nor reacts. Since the allowlist step is documented as advisory/non-blocking this is acceptable, but a one-line "gitignore update failed — add .claude/settings.local.json manually" notice would prevent a silent gap where a user's local settings could later be committed.
+Direction: Optionally surface a warning when the update-gitignore exit code is non-zero.
+
+**[INFO] AC-14 status-value mismatch — install-toolkit.md:264-277 (Step 6, adjacent to US-05 edits)**
+Outside strict US-05 scope but in the same edited file: AC-14 specifies the Allowlist report values as "written" / "merged (N rules preserved)" / "skipped (user said No)" / "skipped (already up to date)" / "failed — see above". Step 6 instead can set "reset (file was malformed)" (not in AC-14's list) and never sets "skipped (already up to date)".
+Direction: Reconcile the Step 6 status strings with AC-14 (either add "skipped (already up to date)" handling and align "reset..." wording, or update AC-14). Track under US-01/US-02 rather than US-05.

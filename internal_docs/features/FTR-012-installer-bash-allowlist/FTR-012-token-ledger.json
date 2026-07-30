@@ -23,5 +23,30 @@
     "agent": "review-solution:US-01",
     "model": "sonnet",
     "phase_delta_tokens": 10443
+  },
+  {
+    "agent": "developer-backend:US-02",
+    "model": "sonnet",
+    "phase_delta_tokens": 8879
+  },
+  {
+    "agent": "developer-testing:US-02",
+    "model": "sonnet",
+    "phase_delta_tokens": 10813
+  },
+  {
+    "agent": "developer-backend:US-05",
+    "model": "sonnet",
+    "phase_delta_tokens": 29141
+  },
+  {
+    "agent": "review-solution:US-02",
+    "model": "sonnet",
+    "phase_delta_tokens": 15485
+  },
+  {
+    "agent": "developer-testing:US-05",
+    "model": "sonnet",
+    "phase_delta_tokens": 9025
   }
 ]
