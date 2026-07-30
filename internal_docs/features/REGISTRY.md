@@ -76,3 +76,11 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-010-unit-tests/feature.md)
 
 ---
+
+## FTR-011 — Installer Manifest and Orphan Pruning
+**Keywords:** installer, manifest, prune, orphans, trash, bin/cli.js, readManifest, writeManifest, computeOrphans, moveToTrash, ai-toolkit-manifest.json, ai-toolkit-trash, frontmatter-ci, NEVER_COPY, global-install
+**Status:** completed
+**Summary:** Extends the AI Toolkit installer (`bin/cli.js`) with a manifest mechanism and a prune step. On every install/update the installer writes `.claude/.ai-toolkit-manifest.json` recording every file it deposited (version, installedAt ISO 8601, forward-slash destination-relative `files`). On reinstall it reads the previous manifest, computes orphans (files no longer shipped) via set difference, and moves them into a recoverable `.claude/.ai-toolkit-trash/` backup folder rather than hard-deleting — safe in shared destinations like `~/.claude/` since only toolkit-placed files are candidates. Adds pure functions `readManifest`, `writeManifest`, `computeOrphans`, `moveToTrash` (exported via the `require.main` guard) with unit tests in `tests/cli/`, plus a CI safety net asserting each agent's `name` frontmatter matches its filename (AC-22). Path shape differs by install mode (local paths keep the `.claude/` prefix, global paths do not); trash filtering uses absolute-path comparison. Deferred: skill name==folder check (AC-23), no-orphan-references check (AC-24), trash auto-cleanup.
+→ [Detail](FTR-011-installer-manifest-pruning/feature.md)
+
+---
