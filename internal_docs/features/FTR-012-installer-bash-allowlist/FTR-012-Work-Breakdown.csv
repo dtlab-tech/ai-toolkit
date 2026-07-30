@@ -1,0 +1,20 @@
+phase_id|phase_title|commit_message|depends_on|task_id|task_title|domain|agent_type
+INFRA|Shared Infrastructure|feat(FTR-012): implement shared infrastructure (INFRA)||INFRA-T01|Define CANONICAL_ALLOW and CANONICAL_ASK arrays|INFRA|developer-backend
+INFRA|Shared Infrastructure|feat(FTR-012): implement shared infrastructure (INFRA)||INFRA-T02|Implement normalizeSettings() helper function|INFRA|developer-backend
+INFRA|Shared Infrastructure|feat(FTR-012): implement shared infrastructure (INFRA)||INFRA-T03|Implement deduplication and merge logic|INFRA|developer-backend
+INFRA|Shared Infrastructure|feat(FTR-012): implement shared infrastructure (INFRA)||INFRA-T04|Implement file I/O wrapper with error handling|INFRA|developer-backend
+US-01|Fresh Installation with Allowlist Opt-In|feat(FTR-012): implement US-01 — Fresh Installation with Allowlist Opt-In|INFRA|US-01-T01|Implement mergeAllowlist() core function|BE|developer-backend
+US-01|Fresh Installation with Allowlist Opt-In|feat(FTR-012): implement US-01 — Fresh Installation with Allowlist Opt-In|INFRA|US-01-T02|Add merge-allowlist CLI entry point|BE|developer-backend
+US-01|Fresh Installation with Allowlist Opt-In|feat(FTR-012): implement US-01 — Fresh Installation with Allowlist Opt-In|INFRA|US-01-T03|Export mergeAllowlist via require.main guard|INFRA|developer-backend
+US-01|Fresh Installation with Allowlist Opt-In|feat(FTR-012): implement US-01 — Fresh Installation with Allowlist Opt-In|INFRA|US-01-T04|Create basic test fixtures for fresh install|TEST|developer-testing
+US-01|Fresh Installation with Allowlist Opt-In|feat(FTR-012): implement US-01 — Fresh Installation with Allowlist Opt-In|INFRA|US-01-T05|Verify fresh install test passes|TEST|developer-testing
+US-02|Merge Allowlist into Existing Settings|feat(FTR-012): implement US-02 — Merge Allowlist into Existing Settings|US-01|US-02-T01|Handle existing settings.local.json merge path|BE|developer-backend
+US-02|Merge Allowlist into Existing Settings|feat(FTR-012): implement US-02 — Merge Allowlist into Existing Settings|US-01|US-02-T02|Implement malformed JSON recovery|BE|developer-backend
+US-02|Merge Allowlist into Existing Settings|feat(FTR-012): implement US-02 — Merge Allowlist into Existing Settings|US-01|US-02-T03|Create test fixture for merge with user rules|TEST|developer-testing
+US-02|Merge Allowlist into Existing Settings|feat(FTR-012): implement US-02 — Merge Allowlist into Existing Settings|US-01|US-02-T04|Create test fixture for malformed JSON recovery|TEST|developer-testing
+US-03|Ask-Beats-Allow Conflict Resolution|feat(FTR-012): implement US-03 — Ask-Beats-Allow Conflict Resolution|US-02|US-03-T01|Implement ask-beats-allow priority logic in mergeAllowlist()|BE|developer-backend
+US-03|Ask-Beats-Allow Conflict Resolution|feat(FTR-012): implement US-03 — Ask-Beats-Allow Conflict Resolution|US-02|US-03-T02|Create test cases for ask-beats-allow conflicts|TEST|developer-testing
+US-04|Reinstall with Idempotent Merge|feat(FTR-012): implement US-04 — Reinstall with Idempotent Merge|US-03|US-04-T01|Verify mergeAllowlist() idempotency property|TEST|developer-testing
+US-05|.gitignore Creation and Idempotent Update|feat(FTR-012): implement US-05 — .gitignore Creation and Idempotent Update|US-01|US-05-T01|Implement updateGitignore() helper function|BE|developer-backend
+US-05|.gitignore Creation and Idempotent Update|feat(FTR-012): implement US-05 — .gitignore Creation and Idempotent Update|US-01|US-05-T02|Call updateGitignore() from install-toolkit agent|INFRA|developer-backend
+US-05|.gitignore Creation and Idempotent Update|feat(FTR-012): implement US-05 — .gitignore Creation and Idempotent Update|US-01|US-05-T03|Create test cases for .gitignore idempotency|TEST|developer-testing

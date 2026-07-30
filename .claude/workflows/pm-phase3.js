@@ -440,6 +440,19 @@ try {
 
 const totalPhase3Tokens = tokenLedger.reduce((s, e) => s + (e.phase_delta_tokens || 0), 0)
 
+// Aggregate the per-agent ledger into per-role totals so the actuals line up with the
+// per-role estimate rows pm-phase2 wrote (developer-backend, developer-testing,
+// review-solution, pr-and-registry, write-actuals, plus final-test-run). Precomputing
+// here keeps the write-actuals agent from having to reason about grouping.
+const roleTotals = {}
+for (const e of tokenLedger) {
+  const role = String(e.agent).split(':')[0]
+  roleTotals[role] = (roleTotals[role] || 0) + (e.phase_delta_tokens || 0)
+}
+const roleRows = Object.entries(roleTotals)
+  .map(([role, tok]) => `| ${role} | ${tok} |`)
+  .join('\n')
+
 const ACTUALS_SCHEMA = {
   type: 'object',
   properties: {
@@ -462,30 +475,50 @@ ${JSON.stringify(tokenLedger, null, 2)}
 
 Total tokens consumed by pm-phase3 workflow: ${totalPhase3Tokens} (exact, from budget tracking)
 
-TASK 1 — Append actuals to ${prefix}-Token-Estimate.md:
-Find the file in the feature directory. If it does not exist, create it.
+TASK 1 — Fill in the Phase 3 actuals in ${prefix}-Token-Estimate.md IN PLACE.
+Read the file in the feature directory first (it was written by pm-phase2 and already contains
+Phase 1/Phase 2 actuals and the Phase 3 estimate table). If it does not exist, create it.
 
-Append this section at the end of the file:
+Do NOT append a second Phase 3 table. Instead:
 
----
+1. Locate the existing "## Phase 3 — Implementation (Estimates)" section. Replace its heading
+   with "## Phase 3 — Implementation (Est. vs Actual, by role)" and REPLACE its table with the
+   per-role reconciliation below — filling the "Tokens Actual" column of the existing per-role
+   estimate rows (keep the existing Tokens Est. values; add a Delta column):
 
-## Phase 3 — Implementation (Actuals)
+| Role | Model | Tokens Actual |
+|------|-------|--------------|
+${roleRows}
+| **Phase 3 total** | | **${totalPhase3Tokens}** |
 
-> Phase totals are exact measurements from budget tracking.
-> Per-agent values are exact where each agent ran separately; proportional where merged.
+   Match each existing estimate row (developer-backend, developer-testing, review-solution,
+   remediation, pr-and-registry, write-actuals) to the actual role total above by name, write the
+   actual into its "Tokens Actual" cell, and compute Delta = Actual − Est. Roles present in the
+   actuals but absent from the estimate rows (e.g. final-test-run) get a new row with Est. = —.
 
-| Agent | Phase | Model | Tokens Est. | Tokens Actual |
-|-------|-------|-------|------------|--------------|
-${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | — | ${e.phase_delta_tokens} |`).join('\n')}
-| **Phase 3 total** | | | **—** | **${totalPhase3Tokens}** |
+2. Immediately after that table, add the per-agent detail as a sub-table (source of truth):
 
-## Grand Total (updated)
+### Phase 3 — per-agent detail (actuals)
 
-| Phase | Tokens Est. | Tokens Actual |
-|-------|------------|--------------|
-| Phase 1 — Documentation | — | *(see above)* |
-| Phase 2 — Work Breakdown | — | *(see above)* |
-| Phase 3 — Implementation | *(see above)* | ${totalPhase3Tokens} |
+| Agent | Model | Tokens Actual |
+|-------|-------|--------------|
+${tokenLedger.map(e => `| ${e.agent} | ${e.model} | ${e.phase_delta_tokens} |`).join('\n')}
+| **Detail total** | | **${totalPhase3Tokens}** |
+
+3. Update the existing "## Grand Total" table. Read the Phase 1 and Phase 2 actual totals from
+   the top of THIS SAME file (the "Phase 1 total" and "Phase 2 total" rows already present) and
+   copy them verbatim — never the literal text "(see above)". If a value there is "—" (Phase 1 is
+   written as a placeholder by pm-phase2 and filled later by the orchestrator), keep it as "—";
+   do NOT invent a number. The table must read:
+
+| Phase | Tokens Est. | Tokens Actual | Delta |
+|-------|------------|--------------|-------|
+| Phase 1 — Documentation | — | {Phase 1 total from this file, or — if placeholder} | — |
+| Phase 2 — Work Breakdown | — | {Phase 2 total from this file} | — |
+| Phase 3 — Implementation | {existing Phase 3 estimate total} | ${totalPhase3Tokens} | {Actual − Est} |
+| **Total** | **{sum of Est}** | **{sum of the numeric Tokens Actual cells above}** | **{Actual − Est}** |
+
+4. Append (or update if present) the Implementation Summary section:
 
 ## Implementation Summary
 
@@ -494,6 +527,8 @@ ${tokenLedger.map(e => `| ${e.agent} | — | ${e.model} | — | ${e.phase_delta_
 | Implementation phases done | ${phasesDone} |
 | US passed | ${usPassed.join(', ') || 'N/A'} |
 | US escalated | ${usEscalated.join(', ') || 'none'} |
+
+Remove the stale "*Actuals will be appended by pm-phase3...*" footer line if it is still present.
 
 TASK 2 — Update actuals in ${prefix}-Effort-Estimate.md:
 Find the file in the feature directory. Read the existing Per-Phase Breakdown table and update the "Actual Agent" column for each phase that was implemented. Use the token ledger to infer which phases completed:

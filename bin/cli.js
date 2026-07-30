@@ -67,6 +67,92 @@ function askConfirm(question) {
   });
 }
 
+// ── allowlist ─────────────────────────────────────────────────────────────────
+
+// INFRA-T01: Canonical Bash permission lists (FTR-012, AC-11, AC-12).
+// These are fixed baselines — one combined list covering base read-only,
+// .NET, and npm commands. Unused entries in a project are harmless.
+const CANONICAL_ALLOW = [
+  'ls', 'dir', 'cat', 'head', 'tail', 'find', 'grep', 'rg', 'wc', 'echo',
+  'pwd', 'which', 'date',
+  'git status', 'git diff', 'git log', 'git show', 'git branch', 'git rev-parse',
+  'git add', 'git commit',
+  'dotnet build', 'dotnet test', 'dotnet restore',
+  'npm test', 'npm run build',
+];
+
+// Dangerous outward-facing commands that must always surface a human prompt.
+// git checkout stays on ask: it runs only in the implement-feature main loop
+// (Step 5), never inside pm-phase3 worker agents. If pm-phase3 ever gains
+// branch-management steps, this decision must be revisited.
+const CANONICAL_ASK = [
+  'git push', 'gh pr create', 'rm', 'del',
+  'git checkout', 'git reset', 'git clean',
+];
+
+// INFRA-T01: Format a raw command string into a Claude Code permission token.
+// Every command — including no-argument ones like 'pwd' — is formatted as
+// 'Bash(<cmd>:*)' for consistency across all entries.
+function commandToPermission(cmd) {
+  return `Bash(${cmd}:*)`;
+}
+
+// INFRA-T02: Ensure an object parsed from settings.local.json has the expected
+// shape. Mutates and returns the object so callers can chain immediately.
+function normalizeSettings(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) obj = {};
+  if (!obj.permissions || typeof obj.permissions !== 'object') obj.permissions = {};
+  if (!obj.permissions.Bash || typeof obj.permissions.Bash !== 'object') obj.permissions.Bash = {};
+  if (!Array.isArray(obj.permissions.Bash.allow)) obj.permissions.Bash.allow = [];
+  if (!Array.isArray(obj.permissions.Bash.ask)) obj.permissions.Bash.ask = [];
+  return obj;
+}
+
+// INFRA-T03: Return the dedup union of two arrays (preserves insertion order,
+// all elements of a appear before novel elements of b).
+function mergeArrays(a, b) {
+  return [...new Set([...a, ...b])];
+}
+
+// INFRA-T03: Remove from allow every entry that also appears in ask.
+// This enforces the ask-beats-allow invariant: a command that could be
+// dangerous is never silently auto-approved just because it was also listed
+// in an allow array.
+function applyAskBeatsAllow(allow, ask) {
+  const askSet = new Set(ask);
+  return allow.filter(cmd => !askSet.has(cmd));
+}
+
+// INFRA-T04: Read {destDir}/.claude/settings.local.json.
+// Returns a descriptor so callers can distinguish missing vs. malformed.
+//   { exists: false, data: null,  malformed: false }  — file absent
+//   { exists: true,  data: <obj>, malformed: false }  — parsed OK
+//   { exists: true,  data: null,  malformed: true  }  — invalid JSON
+function readSettings(destDir) {
+  const settingsPath = path.join(destDir, '.claude', 'settings.local.json');
+  if (!fs.existsSync(settingsPath)) return { exists: false, data: null, malformed: false };
+  let raw;
+  try { raw = fs.readFileSync(settingsPath, 'utf8'); } catch (err) {
+    console.error(`Warning: could not read settings.local.json — ${err.message}`);
+    return { exists: true, data: null, malformed: true };
+  }
+  try {
+    const data = JSON.parse(raw);
+    return { exists: true, data, malformed: false };
+  } catch {
+    return { exists: true, data: null, malformed: true };
+  }
+}
+
+// INFRA-T04: Write {destDir}/.claude/settings.local.json, creating the
+// .claude/ directory if it does not exist. Throws on I/O failure so callers
+// can catch and report gracefully.
+function writeSettings(destDir, data) {
+  const settingsPath = path.join(destDir, '.claude', 'settings.local.json');
+  ensureDir(settingsPath);
+  fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2), 'utf8');
+}
+
 // ── file enumeration ─────────────────────────────────────────────────────────
 
 function expandMappings(mappings) {
@@ -389,6 +475,114 @@ function checkSpawnDepth(destRoot) {
   console.log(`     ${dim('Then restart Claude Code so the variable is loaded.')}\n`);
 }
 
+// ── mergeAllowlist ────────────────────────────────────────────────────────────
+
+// US-01-T01 / US-02-T01 / US-02-T02 / US-03-T01:
+// Core pure function — creates or merges the Bash permission allowlist in
+// {destDir}/.claude/settings.local.json using the canonical lists above.
+//
+// Return values:
+//   { status: 'written' }                     — fresh file created
+//   { status: 'merged', preserved: N }        — merged with N pre-existing rules
+//   { status: 'reset',  reason: 'malformed' } — invalid JSON was replaced
+//   { status: 'error',  message: '...' }      — I/O failure
+function mergeAllowlist(destDir) {
+  if (!destDir || typeof destDir !== 'string') {
+    return { status: 'error', message: 'destDir must be a non-empty string' };
+  }
+  if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+    return { status: 'error', message: `destination does not exist or is not a directory: ${destDir}` };
+  }
+
+  const canonicalAllow = CANONICAL_ALLOW.map(commandToPermission);
+  const canonicalAsk   = CANONICAL_ASK.map(commandToPermission);
+
+  const { exists, data, malformed } = readSettings(destDir);
+
+  // Malformed JSON recovery (AC-05)
+  if (malformed) {
+    console.log('Warning: settings.local.json is not valid JSON; resetting to default');
+    const fresh = normalizeSettings({});
+    fresh.permissions.Bash.allow = canonicalAllow;
+    fresh.permissions.Bash.ask   = canonicalAsk;
+    try {
+      writeSettings(destDir, fresh);
+    } catch (err) {
+      return { status: 'error', message: err.message };
+    }
+    return { status: 'reset', reason: 'malformed' };
+  }
+
+  // Fresh install: no existing file (AC-01)
+  if (!exists) {
+    const fresh = normalizeSettings({});
+    fresh.permissions.Bash.allow = canonicalAllow;
+    fresh.permissions.Bash.ask   = canonicalAsk;
+    try {
+      writeSettings(destDir, fresh);
+    } catch (err) {
+      return { status: 'error', message: err.message };
+    }
+    return { status: 'written' };
+  }
+
+  // Merge path: existing file, valid JSON (AC-02, AC-03, AC-04)
+  const existing = normalizeSettings(data);
+  const existingAllow = existing.permissions.Bash.allow;
+  const existingAsk   = existing.permissions.Bash.ask;
+
+  const countBefore = existingAllow.length + existingAsk.length;
+
+  let mergedAllow = mergeArrays(existingAllow, canonicalAllow);
+  const mergedAsk = mergeArrays(existingAsk,   canonicalAsk);
+
+  // ask-beats-allow: strip from allow any cmd that is now in ask
+  mergedAllow = applyAskBeatsAllow(mergedAllow, mergedAsk);
+
+  existing.permissions.Bash.allow = mergedAllow;
+  existing.permissions.Bash.ask   = mergedAsk;
+
+  try {
+    writeSettings(destDir, existing);
+  } catch (err) {
+    return { status: 'error', message: err.message };
+  }
+
+  const preserved = countBefore;
+  return { status: 'merged', preserved };
+}
+
+// US-05-T01:
+// Idempotently append `.claude/settings.local.json` to {destDir}/.gitignore.
+// Creates .gitignore if it does not exist (AC-06, AC-07).
+//
+// Return values:
+//   { status: 'appended' }     — line was added
+//   { status: 'already' }      — line was already present
+//   { status: 'created' }      — .gitignore did not exist; created with line
+//   { status: 'error', message } — I/O failure
+function updateGitignore(destDir) {
+  const GITIGNORE_ENTRY = '.claude/settings.local.json';
+  const gitignorePath   = path.join(destDir, '.gitignore');
+
+  try {
+    if (!fs.existsSync(gitignorePath)) {
+      fs.writeFileSync(gitignorePath, `${GITIGNORE_ENTRY}\n`, 'utf8');
+      return { status: 'created' };
+    }
+
+    const content = fs.readFileSync(gitignorePath, 'utf8');
+    const lines   = content.split('\n').map(l => l.trim());
+    if (lines.includes(GITIGNORE_ENTRY)) return { status: 'already' };
+
+    const trailing = content.endsWith('\n') ? '' : '\n';
+    fs.writeFileSync(gitignorePath, `${content}${trailing}${GITIGNORE_ENTRY}\n`, 'utf8');
+    return { status: 'appended' };
+  } catch (err) {
+    return { status: 'error', message: err.message };
+  }
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force) {
@@ -467,6 +661,42 @@ async function main() {
     await installGlobal(force);
   } else if (argv[0] === 'help' || argv[0] === '--help') {
     help();
+  } else if (argv[0] === 'merge-allowlist') {
+    const destDir = argv[1];
+    if (!destDir) {
+      console.error('Error: merge-allowlist requires a destination directory');
+      process.exit(1);
+    }
+    try {
+      const result = mergeAllowlist(destDir);
+      if (result.status === 'error') {
+        console.error(`Error: ${result.message}`);
+        process.exit(1);
+      }
+      console.log(`Allowlist: ${result.status}${result.preserved !== undefined ? ` (${result.preserved} rules preserved)` : ''}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  } else if (argv[0] === 'update-gitignore') {
+    const destDir = argv[1];
+    if (!destDir) {
+      console.error('Error: update-gitignore requires a destination directory');
+      process.exit(1);
+    }
+    try {
+      const result = updateGitignore(destDir);
+      if (result.status === 'error') {
+        console.error(`Error: ${result.message}`);
+        process.exit(1);
+      }
+      console.log(`Gitignore: ${result.status}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force);
   } else {
@@ -493,5 +723,15 @@ if (require.main === module) {
     computeOrphans,
     moveToTrash,
     writeManifest,
+    CANONICAL_ALLOW,
+    CANONICAL_ASK,
+    commandToPermission,
+    normalizeSettings,
+    mergeArrays,
+    applyAskBeatsAllow,
+    readSettings,
+    writeSettings,
+    mergeAllowlist,
+    updateGitignore,
   };
 }

@@ -48,7 +48,11 @@ const PARSE_SCHEMA = {
   required: ['prefix', 'user_stories', 'total_tasks', 'work_breakdown_path'],
 }
 
-const phase1Tokens = wbTokens  // tokens consumed by this phase so far
+// NOTE: pm-phase2 is a separate workflow and does NOT receive pm-phase1's token ledger,
+// so the real Phase 1 actuals (generate-requirements/tech-spec/validate) are unknown here.
+// They are written as "—" placeholders below and filled later by the orchestrator (the
+// implement-feature skill Step 7, which holds all three phase ledgers). Do NOT reuse wbTokens
+// as a stand-in for Phase 1 — that mislabels Phase 2's tokens as Phase 1's.
 
 const metrics = await agent(
   `You have four tasks:
@@ -113,12 +117,15 @@ Write {feature_dir}/{PREFIX}-Token-Estimate.md with this format:
 
 ## Phase 1 — Documentation (Actuals)
 
+Phase 1 ran in a separate workflow (pm-phase1); its per-agent token actuals are filled in
+by the orchestrator after implementation. Leave the Tokens Actual cells as "—" here.
+
 | Agent | Task | Model | Tokens Est. | Tokens Actual |
 |-------|------|-------|------------|--------------|
-| generate-requirements | Generate requirements from feature.md | haiku | — | {phase1_req_tokens} |
-| generate-tech-spec | Generate tech spec from feature.md | haiku | — | {phase1_spec_tokens} |
-| validate-feature-docs | Validate requirements + tech spec | haiku | — | {phase1_val_tokens} |
-| **Phase 1 total** | | | **—** | **${phase1Tokens}** |
+| generate-requirements | Generate requirements from feature.md | haiku | — | — |
+| generate-tech-spec | Generate tech spec from feature.md | haiku | — | — |
+| validate-feature-docs | Validate requirements + tech spec | haiku | — | — |
+| **Phase 1 total** | | | **—** | **—** |
 
 ## Phase 2 — Work Breakdown (Actuals)
 
@@ -146,10 +153,10 @@ Baseline: ~15,000 tokens/BE task, ~8,000/TEST task, ~5,000/INFRA task.
 
 | Phase | Tokens Est. | Tokens Actual |
 |-------|------------|--------------|
-| Phase 1 — Documentation | — | ${phase1Tokens} |
+| Phase 1 — Documentation | — | — (filled by orchestrator) |
 | Phase 2 — Work Breakdown | — | {wbTokens from above} |
 | Phase 3 — Implementation | {sum of phase 3 estimates} | — |
-| **Total** | **{sum of phase 3 estimates}** | **{phase1Tokens + wbTokens} (partial)** |
+| **Total** | **{sum of phase 3 estimates}** | **{wbTokens} (partial — Phase 1 & 3 pending)** |
 
 ---
 *Actuals will be appended by pm-phase3 after implementation completes.*
