@@ -155,9 +155,71 @@ async function checkVersion(destRoot, force) {
   return true;
 }
 
+// ── manifest ──────────────────────────────────────────────────────────────────
+
+const MANIFEST_FILE = '.ai-toolkit-manifest.json';
+
+function readManifest(destRoot) {
+  const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
+  if (!fs.existsSync(manifestPath)) return { files: [] };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (!parsed || !Array.isArray(parsed.files)) return { files: [] };
+    parsed.files = parsed.files.map(f => f.replace(/\\/g, '/'));
+    return parsed;
+  } catch {
+    console.log(dim('Previous manifest is corrupt; treating as empty'));
+    return { files: [] };
+  }
+}
+
+function computeOrphans(oldFiles, newFiles) {
+  const newSet = new Set(newFiles.map(f => f.replace(/\\/g, '/')));
+  return oldFiles
+    .map(f => f.replace(/\\/g, '/'))
+    .filter(f => !newSet.has(f));
+}
+
+function moveToTrash(destRoot, relativePath) {
+  const source = path.join(destRoot, relativePath);
+  if (!fs.existsSync(source)) return;
+  const trashPath = path.join(destRoot, '.claude', '.ai-toolkit-trash', relativePath);
+  ensureDir(trashPath);
+  try {
+    fs.renameSync(source, trashPath);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      fs.copyFileSync(source, trashPath);
+      fs.unlinkSync(source);
+    } else {
+      throw err;
+    }
+  }
+}
+
+function writeManifest(destRoot, fileList) {
+  const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
+  const trashDir = path.join(destRoot, '.claude', '.ai-toolkit-trash');
+  const filtered = fileList.filter(rel => {
+    const abs = path.join(destRoot, rel);
+    return !abs.startsWith(trashDir + path.sep) && abs !== trashDir;
+  });
+  const manifest = {
+    version: TOOLKIT_VERSION,
+    installedAt: new Date().toISOString(),
+    files: filtered.map(f => f.replace(/\\/g, '/')),
+  };
+  try {
+    ensureDir(manifestPath);
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+  } catch (err) {
+    console.log(dim(`Warning: could not write manifest — ${err.message}`));
+  }
+}
+
 // ── install ───────────────────────────────────────────────────────────────────
 
-async function runInstall(label, mappings, force) {
+async function runInstall(label, mappings, force, destRoot) {
   const files    = expandMappings(mappings);
   const entries  = categorize(files);
 
@@ -165,6 +227,58 @@ async function runInstall(label, mappings, force) {
   const modified = entries.filter(e => e.status === 'modified');
   const same     = entries.filter(e => e.status === 'same');
 
+  // ── prune phase (before file copy) ───────────────────────────────────────────
+  const oldManifest = readManifest(destRoot);
+  const newFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
+  const orphans     = computeOrphans(oldManifest.files, newFileSet);
+
+  const existingOrphans = orphans.filter(o => fs.existsSync(path.join(destRoot, o)));
+
+  if (existingOrphans.length > 0) {
+    console.log();
+    console.log(`${bold('📦 Orphan cleanup')}  ${clr('gray', '→')}  ${clr('red', `${existingOrphans.length} stale file(s) found`)}`);
+    console.log(divider());
+    for (const orphan of existingOrphans) {
+      console.log(`  ${clr('red', '∅')} ${clr('red', 'REMOVED ')}  ${orphan}`);
+    }
+    console.log(divider());
+  }
+
+  let removedCount = 0;
+  let keptCount    = 0;
+
+  if (force) {
+    for (const orphan of existingOrphans) {
+      moveToTrash(destRoot, orphan);
+      removedCount++;
+      console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
+    }
+  } else {
+    for (const orphan of existingOrphans) {
+      const fullPath = path.join(destRoot, orphan);
+      if (!fs.existsSync(fullPath)) continue;
+      const ok = await askConfirm(`  Move to trash  ${clr('red', orphan)}?`);
+      if (ok) {
+        moveToTrash(destRoot, orphan);
+        console.log(`     ${clr('green', '✔')} Moved to trash\n`);
+        removedCount++;
+      } else {
+        console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
+        keptCount++;
+      }
+    }
+  }
+
+  if (existingOrphans.length > 0) {
+    console.log(divider());
+    console.log(
+      `  ${clr('red', `∅ Moved: ${removedCount}`)}` +
+      `  ${clr('gray', `↪ .claude/.ai-toolkit-trash/`)}` +
+      `  ${clr('gray', `✖ Kept: ${keptCount}`)}\n`
+    );
+  }
+
+  // ── install plan display ──────────────────────────────────────────────────────
   console.log();
   console.log(`${bold('📦 Install plan')}  ${clr('gray', '→')}  ${clr('cyan', label)}`);
   console.log(divider());
@@ -186,6 +300,7 @@ async function runInstall(label, mappings, force) {
 
   if (modified.length === 0) {
     console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
+    writeManifest(destRoot, newFileSet);
     return;
   }
 
@@ -196,6 +311,7 @@ async function runInstall(label, mappings, force) {
       fs.copyFileSync(e.src, e.dest);
       console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
+    writeManifest(destRoot, newFileSet);
     return;
   }
 
@@ -223,6 +339,8 @@ async function runInstall(label, mappings, force) {
     `  ${clr('green', `✔ Overwritten: ${overwritten}`)}` +
     `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
   );
+
+  writeManifest(destRoot, newFileSet);
 }
 
 // ── subagent spawn-depth check (verify & advise only — never write) ────────────
@@ -283,7 +401,7 @@ async function installLocal(targetDir, force) {
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`local project`, mappings, force);
+  await runInstall(`local project`, mappings, force, targetDir);
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
   checkSpawnDepth(targetDir);
@@ -309,7 +427,7 @@ async function installGlobal(force) {
       { src: path.join(packageRoot, 'docs'),                 dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'),    dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force);
+    await runInstall('global Claude folder', mappings, force, target);
     writeInstalledVersion(target);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     checkSpawnDepth(homedir);
@@ -371,5 +489,9 @@ if (require.main === module) {
     categorize,
     readInstalledVersion,
     NEVER_COPY,
+    readManifest,
+    computeOrphans,
+    moveToTrash,
+    writeManifest,
   };
 }
