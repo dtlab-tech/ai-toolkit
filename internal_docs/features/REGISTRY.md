@@ -84,3 +84,11 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-011-installer-manifest-pruning/feature.md)
 
 ---
+
+## FTR-012 — Installer Bash Allowlist
+**Keywords:** bash-allowlist, settings.local.json, mergeAllowlist, pm-phase3, permissions, install-toolkit, ask-beats-allow, gitignore, canonical-allow, canonical-ask
+**Status:** completed
+**Summary:** Extends the `install-toolkit` agent with an opt-in Step 6 that creates or merges a Bash permission allowlist into `.claude/settings.local.json` in the destination project. The new pure function `mergeAllowlist` in `bin/cli.js` reads an existing `settings.local.json` (if present), fuses the canonical allow and ask arrays with existing entries, deduplicates, and enforces ask-beats-allow priority. A fixed canonical allow list covers read-only base + .NET + npm commands (`ls`, `dir`, `cat`, `git status`, `git log`, `dotnet build`, `npm test`, etc.); a fixed ask list keeps dangerous commands (`git push`, `gh pr create`, `rm`, `git reset`, `git clean`, `git checkout`) requiring human confirmation. Malformed JSON is reset to the canonical list. `.gitignore` is updated idempotently. Unit-tested in `tests/cli/mergeAllowlist.test.js`. `docs/reference.md` gains a new "Bash Permission Allowlist" section. Deferred: stack detection from `AGENTS.md`, auto-upgrade on reinstall, `npm run` sub-command granularity.
+→ [Detail](FTR-012-installer-bash-allowlist/feature.md)
+
+---
