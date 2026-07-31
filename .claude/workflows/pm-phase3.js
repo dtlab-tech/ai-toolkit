@@ -425,12 +425,19 @@ const persistedLedgerRaw = await agent(
 try {
   const persisted = JSON.parse(typeof persistedLedgerRaw === 'string' ? persistedLedgerRaw.trim() : '[]')
   if (Array.isArray(persisted)) {
-    const seen = new Set(tokenLedger.map(e => e.agent))
+    const inMemoryByAgent = new Map(tokenLedger.map((e, i) => [e.agent, i]))
     for (const entry of persisted) {
-      if (entry && entry.agent && !seen.has(entry.agent)) {
+      if (!entry || !entry.agent) continue
+      const idx = inMemoryByAgent.get(entry.agent)
+      if (idx === undefined) {
+        // entry exists on disk but not in memory — recover it (e.g. from a prior interrupted run)
         tokenLedger.push(entry)
-        seen.add(entry.agent)
+        inMemoryByAgent.set(entry.agent, tokenLedger.length - 1)
         log(`Recovered ledger entry from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
+      } else if (tokenLedger[idx].phase_delta_tokens === 0 && (entry.phase_delta_tokens || 0) > 0) {
+        // in-memory entry has delta=0 (cached agent on resume) but disk has real data — prefer disk
+        tokenLedger[idx] = entry
+        log(`Restored real token count from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
       }
     }
   }
@@ -591,6 +598,17 @@ Steps:
 Events to append:
 ${phase3Events}`,
   { label: 'finalize-process-log', phase: 'Actuals' }
+)
+
+await agent(
+  `Commit the actuals files for this feature delivery run.
+
+Run these exact git commands in the repository root:
+  git add "${featureDir3}/${prefix}-Token-Estimate.md" "${featureDir3}/${prefix}-Effort-Estimate.md" "${featureDir3}/${prefix}-process-log.txt"
+  git commit -m "docs(${prefix}): add token/effort actuals and process log"
+
+If there is nothing to commit (all files already committed), that is fine — report success.`,
+  { label: 'commit-actuals', phase: 'Actuals' }
 )
 
 return {
