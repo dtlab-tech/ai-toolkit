@@ -206,3 +206,37 @@ Direction: Acceptable given the runtime constraint. Consider the Deferred shared
 
 **[I3] Bookkeeping agent() round-trips — .claude/workflows/pm-phase1.js:14-30**
 Each append/update is a separate haiku agent() round-trip; a clean phase-1 run issues ~6 extra agent calls plus ensure-ledger purely for ledger bookkeeping. Inherited design choice from pm-phase2.js, not a US-02 defect. Noted for future consolidation.
+
+---
+
+## Review Report — FTR-013 US-01 (Initialize and Track Ledger in define-feature Agent)
+
+### Empirical verification
+- Build: N/A (plain JS, no compile step per AGENTS.md)
+- Tests: PASS — `npm test` 373/373 passed; `defineLedger` suite 24/24 passed
+- cli.js loads clean; `appendLedgerEntry` / `updateLedgerEntry` exported via require.main guard
+- Global copy sync (AC-11): `define-feature.md` repo vs `C:/Users/Tomada D/.claude/agents/` — IDENTICAL
+
+### Verdict: PASS (0 CRITICAL)
+
+### CRITICAL
+none
+
+### WARNING
+
+[WARNING] Test coverage — tests/cli/defineLedger.test.js
+The US-01-T03 tests exercise the INFRA helpers `appendLedgerEntry`/`updateLedgerEntry` as *proxies* for the Write-tool operations that define-feature.md actually performs (the test file header states this explicitly). The agent's real Phase 1c behavior writes raw JSON via the Write tool, not via these helpers, so the prose instructions themselves are not executed by any test. Only one test (line 179, "direct raw-JSON write") approximates the real path. Net effect: US-01-T03 largely re-tests INFRA-T01/T02 rather than the define-feature contract. This is inherent to testing a prose agent spec, but the coverage claim for US-01 is weaker than it appears.
+Direction: Acceptable for MVP given a prose agent cannot be unit-executed. Consider a structural test asserting the exact JSON schema/keys embedded in define-feature.md Phase 1c/4b code fences stay in sync with the entry shape the helpers produce, so drift in the agent prose is caught.
+
+[WARNING] AC alignment — define-feature entry phase_delta_tokens is permanently 0
+Phase 4b (define-feature.md lines 364-367) instructs leaving `phase_delta_tokens: 0` because the agent cannot measure tokens. AC-02 (define-specific: status=done + non-null completed_at) is satisfied. However AC-01 requires "positive phase_delta_tokens for each" entry across all four phases — the define entry can never meet this. This is an acknowledged limitation in the spec/implementation, not a regression, but AC-01 as literally worded is unsatisfiable for the define row.
+Direction: No code change required for US-01. Flag for the acceptance sign-off that AC-01's "positive tokens for every entry" carve-outs the define-feature row (0 tokens is expected and documented). If token attribution for define is ever needed, it must come from the orchestrator, not the agent.
+
+### INFO
+
+[INFO] Path convention — define-feature.md hardcodes docs/features/
+define-feature.md (lines 3, 85-89, 104, 257, 262) writes feature dirs and the new ledger to `docs/features/{PREFIX}-{slug}/`, but this project's actual features (including FTR-013) live under `internal_docs/features/`. Phase 0c even lists both "(whichever exists)". This inconsistency predates US-01 (present in ca84538~1), so it is not introduced by this story — but US-01 added the ledger write to the same hardcoded `docs/features/` path, meaning in a repo that uses `internal_docs/features/` the ledger would land in a different tree than the feature docs.
+Direction: Out of scope for US-01. Track separately: make the output root a single derived value (respecting `internal_docs/features/` when that is the house style) so the ledger co-locates with feature.md.
+
+[INFO] Comment banner typo risk in bin/cli.js (INFRA, not US-01)
+Grep initially rendered comment lines 582/588/616 with a leading backslash; Read confirmed they are valid `//` comments and node loads cli.js cleanly. No action — noted only to document the artifact was investigated and ruled out.

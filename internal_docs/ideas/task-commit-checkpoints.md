@@ -239,6 +239,103 @@ Prima del Gate 2, una validazione deterministica o strutturata deve segnalare i 
 
 La soglia temporale deve essere configurabile. I valori definitivi devono essere calibrati mediante i dati reali del ledger, ma la policy iniziale deve escludere esplicitamente task con durata attesa nell'ordine delle ore.
 
+### Difesa su tre livelli
+
+L'atomicità non deve dipendere soltanto dalla qualità del prompt di `generate-work-breakdown`. Deve essere trattata come un'invariante verificata in tre momenti distinti.
+
+#### 1. Generazione
+
+`generate-work-breakdown` ha la responsabilità primaria di proporre task atomici. Per ciascun task deve dichiarare almeno:
+
+- outcome osservabile;
+- dominio principale;
+- agent type;
+- dipendenze;
+- verifica mirata;
+- commit message;
+- durata agentica stimata;
+- token stimati;
+- numero di output;
+- motivazione dell'eventuale raggruppamento di più elementi.
+
+La valutazione dell'outcome e della reale indipendenza dei comportamenti è semantica e può essere effettuata dall'agente LLM che conosce Requirements, Tech Spec e codebase.
+
+#### 2. Validazione pre-Gate 2
+
+Un validatore indipendente, indicativamente `validate-work-breakdown`, deve analizzare il piano prima della presentazione del Gate 2.
+
+Controlli deterministici:
+
+- task ID univoci;
+- campi obbligatori;
+- dipendenze mancanti o cicliche;
+- durata sopra soglia;
+- agent type o domini multipli;
+- task senza verifica;
+- task senza commit message;
+- output multipli senza motivazione;
+- acceptance criteria senza task corrispondenti.
+
+Controlli semantici:
+
+- più comportamenti nel titolo o nella descrizione;
+- CRUD completo nascosto in un singolo task;
+- molteplicità come `N tipi`, `tutti gli adapter` o elenchi di output;
+- attività autonomamente verificabili che potrebbero essere separate;
+- stima incompatibile con il perimetro dichiarato;
+- disallineamento tra scope della User Story e task associati.
+
+Il Gate 2 deve essere bloccato quando esistono task che richiedono split. Un raggruppamento sopra soglia può essere approvato soltanto mediante motivazione esplicita e visibile all'utente.
+
+Output indicativo:
+
+```text
+Work Breakdown Validation
+
+Tasks:                   27
+Atomic tasks:            24
+Tasks requiring split:    2
+Tasks requiring waiver:   1
+Maximum estimated time:  22 min
+Tasks above threshold:    0
+```
+
+#### 3. Controllo runtime
+
+L'orchestratore deve sorvegliare durante l'esecuzione se le ipotesi del Work Breakdown rimangono valide. L'execution ledger fornisce durata, token, tentativi e rework reali.
+
+Segnali di task mal dimensionato:
+
+- durata significativamente oltre la stima;
+- token oltre il budget;
+- secondo rework;
+- scoperta di più output indipendenti;
+- espansione non prevista dei file o dei domini coinvolti;
+- verifica che richiede scenari autonomi non previsti.
+
+In questi casi il task non deve continuare indefinitamente:
+
+```text
+active
+→ blocked: replan-required
+→ analisi del motivo
+→ riscomposizione o chiarimento
+→ nuovi task tracciati nel Work Breakdown e nell'execution ledger
+```
+
+La riscomposizione deve preservare la storia del task originale e collegare i task sostitutivi tramite identificatori espliciti.
+
+### Responsabilità
+
+| Momento | Responsabile | Azione |
+|---------|--------------|--------|
+| Creazione | `generate-work-breakdown` | Propone task atomici |
+| Pre-approvazione | `validate-work-breakdown` | Cerca task sovradimensionati o incoerenti |
+| Gate 2 | Utente | Approva granularità, stime ed eventuali waiver |
+| Esecuzione | Orchestratore | Controlla budget, durata e rework |
+| Recovery | Execution ledger | Determina task completati, interrotti e da riprendere |
+| Miglioramento | Analisi dei dati storici | Calibra soglie e qualità della scomposizione |
+
 Il ledger consentirà successivamente di confrontare stima e durata reale e di rilevare pattern ricorrenti:
 
 - task frequentemente oltre soglia;
@@ -772,22 +869,25 @@ La prima implementazione può considerarsi completata quando:
 2. ogni task definisce un solo outcome principale, una verifica mirata e un commit specifico;
 3. task sopra la soglia configurata vengono rifiutati o richiedono una motivazione esplicita al Gate 2;
 4. task che attraversano domini o agent type differenti vengono suddivisi;
-5. i task vengono eseguiti individualmente nel worktree condiviso;
-6. il ledger viene aggiornato atomicamente a `active` prima di invocare l'agente;
-7. ogni tentativo registra inizio, fine, stato, token utilizzati e durata;
-8. un task viene marcato `resolved` soltanto dopo verifiche riuscite;
-9. ogni task risolto produce un commit Git autonomo;
-10. ogni commit contiene trailer per feature, task e fase;
-11. l'execution ledger è persistito nel dossier della feature;
-12. Git e ledger possono essere riconciliati deterministicamente;
-13. una nuova esecuzione salta i task `resolved` o `closed`;
-14. un task rimasto `active` viene riconosciuto come interrotto;
-15. stati incoerenti causano un hard stop con diagnosi esplicita;
-16. modifiche non attribuite non vengono incluse automaticamente;
-17. il workflow può riprendere limitando la perdita al solo task interrotto;
-18. nessun modello LLM decide se un commit esista o se un task sia completato;
-19. i checkpoint non provocano push automatici;
-20. i test coprono granularità, transizioni, commit, ledger, riconciliazione e recovery.
+5. un validatore indipendente controlla atomicità e completezza prima del Gate 2;
+6. il Gate 2 è bloccato in presenza di task che richiedono split;
+7. l'orchestratore blocca e richiede replan per task fuori budget o con rework ripetuto;
+8. i task vengono eseguiti individualmente nel worktree condiviso;
+9. il ledger viene aggiornato atomicamente a `active` prima di invocare l'agente;
+10. ogni tentativo registra inizio, fine, stato, token utilizzati e durata;
+11. un task viene marcato `resolved` soltanto dopo verifiche riuscite;
+12. ogni task risolto produce un commit Git autonomo;
+13. ogni commit contiene trailer per feature, task e fase;
+14. l'execution ledger è persistito nel dossier della feature;
+15. Git e ledger possono essere riconciliati deterministicamente;
+16. una nuova esecuzione salta i task `resolved` o `closed`;
+17. un task rimasto `active` viene riconosciuto come interrotto;
+18. stati incoerenti causano un hard stop con diagnosi esplicita;
+19. modifiche non attribuite non vengono incluse automaticamente;
+20. il workflow può riprendere limitando la perdita al solo task interrotto;
+21. nessun modello LLM decide se un commit esista o se un task sia completato;
+22. i checkpoint non provocano push automatici;
+23. i test coprono granularità, validazione, transizioni, commit, ledger, riconciliazione e recovery.
 
 ## Perimetro della prima feature
 
