@@ -240,3 +240,50 @@ Direction: Out of scope for US-01. Track separately: make the output root a sing
 
 [INFO] Comment banner typo risk in bin/cli.js (INFRA, not US-01)
 Grep initially rendered comment lines 582/588/616 with a leading backslash; Read confirmed they are valid `//` comments and node loads cli.js cleanly. No action — noted only to document the artifact was investigated and ruled out.
+
+---
+
+## Review Report — FTR-013 US-03 (pm-phase2.js Phase 2 ledger tracking)
+
+### Empirical verification
+- Build: N/A — plain JS project, no compile step (AGENTS.md; `npm test` is the verification command)
+- Full suite: PASS — `npm test` = 373/373 passed, 21 suites green
+- Scoped tests (pm-phase2): PASS — 40/40 (`npx jest pm-phase2`: pm-phase2-ledger.test.js + pm-phase2-source.test.js)
+- Dual-copy (AC-11): PASS — global `pm-phase2.js` byte-identical to repo copy
+- Runtime constraint: PASS — no `fs`/`require`/`import`; all ledger I/O via `agent()`
+- Model consistency: PASS — ledger hardcodes `model: 'haiku'`, matches declared model in `generate-work-breakdown.md`
+- Budget ordering: PASS — `beforeWB` captured after `appendLedgerEntry`, so bookkeeping round-trip is excluded from `wbTokens`
+
+### Verdict: PASS (0 CRITICAL)
+
+---
+
+### CRITICAL (blocks merge)
+none
+
+---
+
+### WARNING (should fix)
+
+**[W1] Interrupted-path leaves no "failed" status — .claude/workflows/pm-phase2.js:59-69**
+If the `generate-work-breakdown` `agent()` call throws, `updateLedgerEntry(...'done'...)` never runs and the entry is left `status: "running"`. Per the feature's resume semantics this is the intended "interrupted here" signal, but unlike pm-phase3's design (feature.md step 13: "On failure: update status: failed") there is no try/catch to distinguish a genuine crash from an in-progress run in phase 2. Acceptable for MVP (US-03 tasks do not call for failure handling), but the omission is undocumented for phase 2.
+Direction: Either wrap the dispatch in try/catch to set `status: "failed"` on error (mirroring the phase3 contract), or add a one-line comment declaring phase-2 failure handling intentionally deferred so the gap is a documented decision.
+
+---
+
+### INFO (improvements)
+
+**[I1] Proxy-only test coverage — tests/cli/pm-phase2-ledger.test.js**
+The behavior suite exercises the `bin/cli.js` fs-based helpers as a proxy; the actual `agent()`-based helpers inside pm-phase2.js are only verified by source-structure regex (pm-phase2-source.test.js), never executed. Inherent to the workflow runtime, but prompt-text drift between the workflow helpers and the fs proxy would go undetected. Already acknowledged in the test header. Consider the Deferred shared importable helper module so one implementation is both run at runtime and unit-tested.
+
+**[I2] Duplicated helpers — pm-phase2.js:14-30 vs pm-phase1.js:14-30 vs bin/cli.js:564-614**
+Three copies of appendLedgerEntry/updateLedgerEntry (two agent()-based inline copies + one fs-based tested copy). Already documented in FTR-013-Issues.md and explicitly deferred in feature.md. No action for MVP.
+
+**[I3] Per-entry agent() round-trips — pm-phase2.js**
+Each append/update is a separate haiku `agent()` call, adding ~2 bookkeeping round-trips to phase 2. Deliberate design choice, documented. Noted for future consolidation.
+
+**[I4] Commit hygiene — commit 7d6f9bb**
+The US-03 commit to pm-phase2.js is only a 2-line comment; the functional append/update wrapping actually landed in ca84538 (labelled "US-01"). The same US-03 commit also preemptively added tests/cli/pm-phase3-source.test.js (US-04 scope), which was red until US-04 landed. Full suite is green at HEAD now, so no residual impact — flagged only for traceability.
+
+**[I5] Prior branch-red warning resolved**
+The W1 recorded in earlier US-03/US-02 reviews (full `npm test` red due to unimplemented pm-phase3) is now RESOLVED: US-04 has been committed and the suite is green (373/373) at HEAD.
