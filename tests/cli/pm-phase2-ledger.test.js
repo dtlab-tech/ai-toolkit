@@ -7,9 +7,16 @@
  * uses for the single agent it dispatches:
  *   1. generate-work-breakdown:phase2
  *
- * These tests call `appendLedgerEntry` and `updateLedgerEntry` from bin/cli.js —
- * the same pure functions whose logic is inlined in pm-phase2.js.  Testing the
- * exported versions is equivalent: same algorithm, same file I/O contract.
+ * pm-phase2.js defines async appendLedgerEntry / updateLedgerEntry helpers that
+ * route all file I/O through agent() calls (the workflow runtime does not expose
+ * the `fs` module).  The helpers share the same read-modify-write contract as the
+ * same-named exports in bin/cli.js (same JSON array semantics, same append and
+ * last-match-update algorithm).  These tests import from bin/cli.js and therefore
+ * exercise the same behavioral contract.
+ *
+ * Structural properties of pm-phase2.js (that helpers are async, use await agent()
+ * instead of fs, and that append-before/update-after call ordering is correct) are
+ * verified separately in tests/cli/pm-phase2-source.test.js.
  *
  * Acceptance Criteria covered:
  *   AC-01: ledger entry has correct fields after a successful run

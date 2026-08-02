@@ -8,6 +8,8 @@ export const meta = {
 }
 
 // ── Ledger helper functions ───────────────────────────────────────────────────
+// Route all ledger I/O through agent() — fs is not available in the workflow runtime.
+// Mirrors appendLedgerEntry / updateLedgerEntry from bin/cli.js (same contract).
 
 async function appendLedgerEntry(featureDir, prefix, entry) {
   const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`

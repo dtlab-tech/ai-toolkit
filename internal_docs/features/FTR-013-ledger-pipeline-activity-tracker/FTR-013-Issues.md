@@ -123,3 +123,41 @@ Direction: No action for US-01. If a single canonical path is desired, address i
 [INFO] Sync/async mismatch carried from INFRA — bin/cli.js:564,593
 Helpers are synchronous (`fs.*Sync`) while the Tech-Spec declares them `async`. US-01's agent uses neither (it uses the Write tool), so this does not affect US-01, but the note from the INFRA review still stands for the workflow-based stories.
 Direction: Track under the existing INFRA WARNING; no US-01 action.
+
+---
+
+## Review Report — FTR-013 US-03 (Track Phase 2 Agent Invocations, pm-phase2.js)
+
+### Empirical verification
+- Build: N/A — plain JS project, no compile step (per AGENTS.md; `npm test` is the verification command)
+- Scoped tests (pm-phase2): PASS — 40/40 passed — `npx jest pm-phase2` (pm-phase2-ledger.test.js + pm-phase2-source.test.js)
+- Full suite: FAIL — 22 failed / 378 passed (400 total) — ALL failures isolated to `tests/cli/pm-phase3-source.test.js` (US-04 scope; pm-phase3.js is unmodified on this branch)
+
+### Verdict: PASS (US-03 scope only)
+0 CRITICAL findings within US-03 scope. The feature branch is not mergeable until US-04 completes (see W1 below).
+
+---
+
+### CRITICAL (blocks merge)
+none (within US-03 scope)
+
+---
+
+### WARNING (should fix)
+
+**[W1] Branch-level test failure — tests/cli/pm-phase3-source.test.js — 22 failing tests**
+The overall `npm test` is RED. Every failure is in the US-04 pm-phase3 source-structure suite (asserts appendLedgerEntry/updateLedgerEntry wrapping inside executePhase, review-solution wrapping, etc.). pm-phase3.js has NOT been modified on this branch, so US-04 is unimplemented. US-03 is independently complete, but the feature branch as a whole cannot merge to main (CI runs the full Jest suite on every PR) until US-04 lands and turns the suite green.
+Direction: Complete US-04 (pm-phase3.js helper functions + per-agent-call append/update wrapping + persist-ledger removal) before opening the FTR-013 PR. Do not merge US-03 in isolation on a branch that leaves `npm test` red.
+
+---
+
+### INFO (improvements)
+
+**[I1] Duplicated helpers — pm-phase2.js:14-30 vs bin/cli.js:564-614**
+appendLedgerEntry/updateLedgerEntry exist in three forms: the CommonJS versions in bin/cli.js (fs-based, tested) and inline agent()-based copies in pm-phase1.js / pm-phase2.js. This divergence is already acknowledged in FTR-013-Issues.md (interop risk: workflow ESM runtime cannot require the CJS bin/cli.js) and explicitly deferred in the feature.md "Deferred" list. No action for MVP; revisit as shared-utility extraction.
+
+**[I2] Per-entry agent() round-trips — pm-phase2.js**
+Each append/update is a separate haiku agent() call, adding ~2 bookkeeping round-trips to phase 2. Already documented as a deliberate design choice in FTR-013-Issues.md. Noted for future consolidation.
+
+**[I3] Modified artifact FTR-013-token-ledger.json is runtime output**
+The modified artifact FTR-013-token-ledger.json is runtime output (actuals written by the in-progress pipeline run), not US-03 source code. Out of review scope; no concern.

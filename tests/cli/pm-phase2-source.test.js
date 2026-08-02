@@ -1,0 +1,169 @@
+'use strict';
+
+/**
+ * US-03-T01 / US-03-T02 — pm-phase2.js source-structure validation
+ *
+ * pm-phase2.js runs inside the Claude Code Workflow runtime, which is an external
+ * process that does NOT expose Node.js globals such as `fs`, `require`, or `module`.
+ * Because of this constraint the file cannot be `require()`-d or executed inside Jest.
+ *
+ * Source-level analysis is the correct testing strategy for workflow scripts: read the
+ * file as text and assert structural properties that proxy-only tests (pm-phase2-ledger.test.js)
+ * cannot catch, specifically:
+ *
+ *   1. No direct `fs` usage — the workflow runtime does not provide the `fs` module, so any
+ *      call to fs.readFileSync / fs.writeFileSync / fs.existsSync would throw
+ *      `ReferenceError: fs is not defined` at runtime.  pm-phase1.js (the sibling, reviewed
+ *      PASS) deliberately avoids `fs` entirely and routes all ledger I/O through agent() calls.
+ *      pm-phase2.js must follow the same pattern.
+ *
+ *   2. Helper functions are async and use agent() for I/O — confirms the correct
+ *      implementation pattern, matching pm-phase1.js.
+ *
+ *   3. Correct agent key is embedded — the key "generate-work-breakdown:phase2" is the key
+ *      that pm-phase2 passes to appendLedgerEntry/updateLedgerEntry; a wrong key silently
+ *      produces incorrect ledger entries at runtime with no test failure.
+ *
+ *   4. Append-before / update-after pattern is present — the structural ordering of
+ *      appendLedgerEntry() and updateLedgerEntry() relative to the agent() dispatch call
+ *      must be correct; inversion produces liveness-signal failures (AC-07, AC-13).
+ */
+
+const fs   = require('fs');
+const path = require('path');
+
+const PM_PHASE2_PATH = path.join(__dirname, '..', '..', '.claude', 'workflows', 'pm-phase2.js');
+
+let source;
+
+beforeAll(() => {
+  source = fs.readFileSync(PM_PHASE2_PATH, 'utf8');
+});
+
+// ── Critical: no direct fs usage ──────────────────────────────────────────────
+// The original US-03 submission used fs.readFileSync / fs.writeFileSync directly
+// inside the helper functions.  The workflow runtime does not provide the `fs`
+// module, so every call throws `ReferenceError: fs is not defined` at runtime.
+// pm-phase1.js (reviewed PASS) deliberately avoids `fs` entirely and routes all
+// ledger I/O through agent() calls.  pm-phase2.js must follow the same pattern.
+
+describe('pm-phase2.js — no direct Node.js fs usage (workflow runtime constraint)', () => {
+  test('does not call require("fs")', () => {
+    expect(source).not.toMatch(/require\s*\(\s*['"]fs['"]\s*\)/);
+  });
+
+  test('does not use an ESM "import fs" statement', () => {
+    expect(source).not.toMatch(/\bimport\s+\w*\s*\bfs\b/);
+  });
+
+  test('does not call fs.readFileSync directly', () => {
+    expect(source).not.toMatch(/\bfs\s*\.\s*readFileSync\b/);
+  });
+
+  test('does not call fs.writeFileSync directly', () => {
+    expect(source).not.toMatch(/\bfs\s*\.\s*writeFileSync\b/);
+  });
+
+  test('does not call fs.existsSync directly', () => {
+    expect(source).not.toMatch(/\bfs\s*\.\s*existsSync\b/);
+  });
+});
+
+// ── Helper function definitions ───────────────────────────────────────────────
+
+describe('pm-phase2.js — ledger helper functions defined at top of file (Tech-Spec §4.3)', () => {
+  test('defines appendLedgerEntry as an async function', () => {
+    expect(source).toMatch(/async\s+function\s+appendLedgerEntry\s*\(/);
+  });
+
+  test('defines updateLedgerEntry as an async function', () => {
+    expect(source).toMatch(/async\s+function\s+updateLedgerEntry\s*\(/);
+  });
+
+  test('appendLedgerEntry is defined before updateLedgerEntry (correct source order)', () => {
+    const appendDefIdx = source.indexOf('async function appendLedgerEntry');
+    const updateDefIdx = source.indexOf('async function updateLedgerEntry');
+
+    expect(appendDefIdx).toBeGreaterThan(-1);
+    expect(updateDefIdx).toBeGreaterThan(-1);
+    expect(appendDefIdx).toBeLessThan(updateDefIdx);
+  });
+
+  test('appendLedgerEntry body uses await agent() for file I/O (not fs)', () => {
+    const appendDefStart = source.indexOf('async function appendLedgerEntry');
+    const updateDefStart = source.indexOf('async function updateLedgerEntry');
+    expect(appendDefStart).toBeGreaterThan(-1);
+    expect(updateDefStart).toBeGreaterThan(appendDefStart);
+    const funcBody = source.slice(appendDefStart, updateDefStart);
+
+    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
+    expect(funcBody).not.toMatch(/\bfs\s*\.\s*(readFileSync|writeFileSync|existsSync)\b/);
+  });
+
+  test('updateLedgerEntry body uses await agent() for file I/O (not fs)', () => {
+    const updateDefStart = source.indexOf('async function updateLedgerEntry');
+    const parseArgsMarker = source.indexOf('const featurePath');
+    expect(updateDefStart).toBeGreaterThan(-1);
+    expect(parseArgsMarker).toBeGreaterThan(updateDefStart);
+    const funcBody = source.slice(updateDefStart, parseArgsMarker);
+
+    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
+    expect(funcBody).not.toMatch(/\bfs\s*\.\s*(readFileSync|writeFileSync|existsSync)\b/);
+  });
+});
+
+// ── Correct agent key (AC-05) ─────────────────────────────────────────────────
+// The agent key is passed to appendLedgerEntry and then matched by updateLedgerEntry
+// to find and mutate the correct entry.  A wrong key silently creates a dangling
+// "running" entry on disk and an orphaned "done" update.
+
+describe('pm-phase2.js — correct agent key embedded in source (AC-05)', () => {
+  test('uses agent key "generate-work-breakdown:phase2"', () => {
+    expect(source).toContain('generate-work-breakdown:phase2');
+  });
+});
+
+// ── Append-before / update-after pattern (AC-07, AC-13) ──────────────────────
+// The liveness guarantee (status: "running" visible on disk between dispatch calls)
+// depends on appendLedgerEntry executing BEFORE the agent() call and
+// updateLedgerEntry executing AFTER.
+
+describe('pm-phase2.js — append-before / update-after call ordering (AC-07, AC-13)', () => {
+  test('appendLedgerEntry is called at least once (before generate-work-breakdown)', () => {
+    const matches = source.match(/\bappendLedgerEntry\s*\(/g);
+    expect(matches).not.toBeNull();
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('updateLedgerEntry is called at least once (after generate-work-breakdown)', () => {
+    const matches = source.match(/\bupdateLedgerEntry\s*\(/g);
+    expect(matches).not.toBeNull();
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('appendLedgerEntry call-count equals updateLedgerEntry call-count (symmetric wrapping)', () => {
+    const appendCount = (source.match(/\bappendLedgerEntry\s*\(/g) || []).length;
+    const updateCount = (source.match(/\bupdateLedgerEntry\s*\(/g) || []).length;
+
+    expect(appendCount).toBe(updateCount);
+  });
+
+  test('await appendLedgerEntry call site appears before generate-work-breakdown dispatch in source', () => {
+    // Use "await appendLedgerEntry(" to match call sites only, not the function definition.
+    const appendCallIdx = source.indexOf('await appendLedgerEntry(');
+    const dispatchIdx   = source.indexOf("agentType: 'generate-work-breakdown'");
+
+    expect(appendCallIdx).toBeGreaterThan(-1);
+    expect(dispatchIdx).toBeGreaterThan(-1);
+    expect(appendCallIdx).toBeLessThan(dispatchIdx);
+  });
+
+  test('await updateLedgerEntry call site appears after generate-work-breakdown dispatch in source', () => {
+    const dispatchIdx  = source.indexOf("agentType: 'generate-work-breakdown'");
+    const updateCallIdx = source.indexOf("await updateLedgerEntry(");
+
+    expect(dispatchIdx).toBeGreaterThan(-1);
+    expect(updateCallIdx).toBeGreaterThan(-1);
+    expect(updateCallIdx).toBeGreaterThan(dispatchIdx);
+  });
+});
