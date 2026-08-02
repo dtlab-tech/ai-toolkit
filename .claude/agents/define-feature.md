@@ -96,6 +96,41 @@ Ask the user: **"What is the name of this feature?"** (short, descriptive, in th
 
 Example: "Supplier Onboarding" → `FTR-003-supplier-onboarding`
 
+### 1c. Create feature directory and initialize ledger
+
+Once you know the PREFIX (from 1a) and the feature slug (from 1b), do the following **before asking any grilling questions**:
+
+1. Compute the paths:
+   - `featureDir` = `docs/features/{PREFIX}-{slug}` (e.g. `docs/features/FTR-003-supplier-onboarding`)
+   - `ledgerPath` = `{featureDir}/{PREFIX}-token-ledger.json`
+
+2. Create the feature directory via Bash:
+   ```bash
+   mkdir -p {featureDir}
+   ```
+
+3. Capture the current UTC timestamp via Bash:
+   ```bash
+   started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && echo $started_at
+   ```
+
+4. Write the initial ledger file at `{ledgerPath}` using the Write tool with exactly this content (substitute the actual PREFIX and timestamp):
+   ```json
+   [
+     {
+       "agent": "define-feature:define",
+       "phase": "define",
+       "model": "sonnet",
+       "status": "running",
+       "phase_delta_tokens": 0,
+       "started_at": "<started_at from step 3>",
+       "completed_at": null
+     }
+   ]
+   ```
+
+The ledger records that the define-feature agent is now running. Proceed to Phase 2.
+
 ---
 
 ## Phase 2 — Grilling (only the gaps)
@@ -224,7 +259,7 @@ docs/features/{PREFIX}-{slug}/feature.md
 
 Example: `docs/features/FTR-003-supplier-onboarding/feature.md`
 
-Create the directory if it doesn't exist.
+The directory was created in Phase 1c. If for any reason it doesn't exist, create it now.
 
 ### feature.md template
 
@@ -314,6 +349,37 @@ For each entity: name, key fields (name, type, constraints), relationships.
 - Mark open questions explicitly rather than guessing
 - Acceptance criteria must be **testable** (Given/When/Then) — for technical features, express them as observable/verifiable checks (e.g. "grep returns nothing", "build passes", "output file exists")
 - Be concrete and specific — avoid vague statements like "the system should be fast"
+
+### 4b. Finalize ledger entry
+
+After writing `feature.md`, update the ledger entry to record successful completion:
+
+1. Capture the current UTC timestamp via Bash:
+   ```bash
+   completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && echo $completed_at
+   ```
+
+2. Read the ledger file at `{featureDir}/{PREFIX}-token-ledger.json` using the Read tool.
+
+3. Write the updated ledger file using the Write tool, replacing the entry's fields:
+   - `"status"`: `"done"`
+   - `"completed_at"`: the timestamp captured in step 1
+   - `"phase_delta_tokens"`: leave as `0` — token measurement is not available to the agent directly
+
+   Example final ledger content:
+   ```json
+   [
+     {
+       "agent": "define-feature:define",
+       "phase": "define",
+       "model": "sonnet",
+       "status": "done",
+       "phase_delta_tokens": 0,
+       "started_at": "<original started_at>",
+       "completed_at": "<completed_at from step 1>"
+     }
+   ]
+   ```
 
 ---
 

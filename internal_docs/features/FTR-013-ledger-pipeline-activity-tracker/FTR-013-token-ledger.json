@@ -1,0 +1,12 @@
+[
+  {
+    "agent": "developer-backend:INFRA",
+    "model": "sonnet",
+    "phase_delta_tokens": 47205
+  },
+  {
+    "agent": "review-solution:INFRA",
+    "model": "sonnet",
+    "phase_delta_tokens": 12978
+  }
+]

@@ -7,8 +7,35 @@ export const meta = {
   ],
 }
 
+// ── Ledger helper functions ───────────────────────────────────────────────────
+
+async function appendLedgerEntry(featureDir, prefix, entry) {
+  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
+  const entryJson = JSON.stringify(entry)
+  await agent(
+    `Append a JSON object to the ledger array at: ${ledgerPath}\n\n1. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n2. Push this object onto the array: ${entryJson}\n3. Write the full array back (JSON, 2-space indent). Return no output.`,
+    { label: 'append-ledger', phase: 'Work Breakdown', model: 'haiku' }
+  )
+}
+
+async function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
+  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
+  const updatesJson = JSON.stringify(updates)
+  await agent(
+    `Update an entry in the ledger array at: ${ledgerPath}\n\n1. Read the file. If it does not exist or cannot be parsed as a JSON array, do nothing.\n2. Search from the end for the last entry where agent === "${agentKey}".\n3. If found, merge these fields into that entry: ${updatesJson}\n4. Write the full array back (JSON, 2-space indent). Return no output.\n5. If not found, do nothing.`,
+    { label: 'update-ledger', phase: 'Work Breakdown', model: 'haiku' }
+  )
+}
+
+// ── Parse args ────────────────────────────────────────────────────────────────
+
 // args: "<path-to-feature.md>"
 const featurePath = (typeof args === 'string' ? args : '').trim().split(/\s+/)[0]
+
+// Derive feature directory and prefix early (needed for ledger writes before metrics agent runs)
+const featureDir  = featurePath.replace(/\/[^/]+$/, '')
+const prefixMatch = featureDir.match(/([A-Z]+-\d+)/)
+const prefix      = prefixMatch ? prefixMatch[1] : 'FTR-000'
 
 // ── generate-work-breakdown ───────────────────────────────────────────────────
 phase('Work Breakdown')
@@ -16,6 +43,16 @@ phase('Work Breakdown')
 const tokenLedger = []
 
 log(`Running generate-work-breakdown for ${featurePath}`)
+const wbStartedAt = new Date().toISOString()
+await appendLedgerEntry(featureDir, prefix, {
+  agent: 'generate-work-breakdown:phase2',
+  phase: 'phase2',
+  model: 'haiku',
+  status: 'running',
+  phase_delta_tokens: 0,
+  started_at: wbStartedAt,
+  completed_at: null,
+})
 const beforeWB = budget.spent()
 await agent(featurePath, {
   agentType: 'generate-work-breakdown',
@@ -23,6 +60,11 @@ await agent(featurePath, {
   phase:     'Work Breakdown',
 })
 const wbTokens = budget.spent() - beforeWB
+await updateLedgerEntry(featureDir, prefix, 'generate-work-breakdown:phase2', {
+  status: 'done',
+  completed_at: new Date().toISOString(),
+  phase_delta_tokens: wbTokens,
+})
 tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
 log(`generate-work-breakdown done — phase delta: ${wbTokens} tokens`)
 
