@@ -92,3 +92,11 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-012-installer-bash-allowlist/feature.md)
 
 ---
+
+## FTR-013 — Ledger as Full Pipeline Activity Tracker
+**Keywords:** token-ledger, pipeline-tracker, ledger-activity, define-feature, pm-phase1, pm-phase2, pm-phase3, appendLedgerEntry, updateLedgerEntry, resume-safety, liveness, status-running, status-done, timestamps, token-attribution
+**Status:** completed
+**Summary:** Evolves `{PREFIX}-token-ledger.json` from a passive phase-3-only token counter into a full pipeline activity tracker covering every agent from `define-feature` through `pm-phase3`. Each entry records agent identity, phase, model, status (`running | done | failed | skipped`), token delta, and start/end timestamps. Adds `appendLedgerEntry` and `updateLedgerEntry` helper functions in `bin/cli.js` (with unit tests); inline agent()-based equivalents in `pm-phase1.js` and `pm-phase2.js`; and wraps every `agent()` call in `pm-phase3.js` with append-before/update-after pattern. `define-feature.md` writes an initial `status: "running"` entry immediately after directory creation and finalizes it on completion. Enables liveness inspection, deterministic resume detection, and full cost attribution across all pipeline phases. Both repo (`.claude/`) and global (`C:/Users/Tomada D/.claude/`) copies of all four modified files are kept byte-identical.
+→ [Detail](FTR-013-ledger-pipeline-activity-tracker/feature.md)
+
+---
