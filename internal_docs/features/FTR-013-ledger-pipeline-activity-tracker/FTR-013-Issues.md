@@ -41,6 +41,42 @@ Direction: Fine to leave enforcement to the callers, but note that no layer vali
 
 ---
 
+## Review Report — FTR-013 US-02 (pm-phase1.js ledger tracking)
+
+**Empirical verification**
+- Build: N/A (plain JS project; AGENTS.md: "no separate compile/build step")
+- Tests: PASS — `npm test` = 352/352 passed, 20 suites green
+- Dual-copy: PASS — global `pm-phase1.js` byte-identical to repo copy
+- Runtime constraint: PASS — no `fs`/`require`/`import` in the workflow script
+
+**Verdict: PASS** (0 CRITICAL)
+
+---
+
+### CRITICAL (blocks merge)
+none
+
+### WARNING (should fix)
+
+**[WARNING] Correctness / Token attribution — .claude/workflows/pm-phase1.js:211,214**
+The validation revision re-runs of `generate-requirements` and `generate-tech-spec` (invoked inside the cycle loop when gaps are found) are real agent invocations that consume tokens, but they are NOT wrapped with append/update ledger entries and are NOT pushed to the in-memory `tokenLedger`. AC-01 requires "one entry per agent invocation across all four phases," and these revision invocations produce unattributed token cost that will silently under-count phase-1 actuals whenever a validation cycle triggers a doc regeneration.
+Direction: Either wrap these two revision `agent()` calls with the same append/update pattern (e.g. keys `generate-requirements:phase1:revision{N}`), or add a short code comment + feature-doc note explicitly declaring revision re-runs out of ledger scope so the omission is a documented decision rather than a silent gap.
+
+### INFO (improvements)
+
+**[INFO] Telemetry label — .claude/workflows/pm-phase1.js:19,28**
+The `appendLedgerEntry`/`updateLedgerEntry` helpers hardcode `phase: 'Requirements'` in the meta `agent()` options, even when the helper is called during the Tech-Spec and Validation phases. This mislabels the helper's own token telemetry against the Requirements phase. Cosmetic (does not affect the ledger contents written to disk).
+Direction: Pass the current phase name into the helpers, or drop the phase option, so helper telemetry is attributed to the correct phase.
+
+**[INFO] Test coverage of the real helpers — tests/cli/pm-phase1-ledger.test.js**
+The ledger behavior test exercises the `bin/cli.js` fs-based helpers as a proxy; the actual `agent()`-based helpers inside `pm-phase1.js` are only verified via source-structure regex assertions (pm-phase1-source.test.js), never executed. This is an inherent limitation of the workflow runtime (acknowledged in the test header), but it means a semantic drift between the prompt text of the workflow helpers and the fs proxy would go undetected.
+Direction: Acceptable for now given the runtime constraint. Consider a future shared, importable helper module (already listed as Deferred in feature.md) so one implementation is both used at runtime and unit-tested.
+
+**[INFO] I/O-via-agent() call volume — .claude/workflows/pm-phase1.js:14-30**
+Each append and update is a separate haiku `agent()` round-trip, so a clean phase-1 run issues ~6 extra agent calls purely for ledger bookkeeping (plus ensure-ledger). This is the pattern inherited from pm-phase2.js and is a deliberate design choice, not a US-02 defect. Noted for future consolidation.
+
+---
+
 ## Review Report — FTR-013 US-01 (define-feature ledger init/finalize)
 
 ### Empirical verification
