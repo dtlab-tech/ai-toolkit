@@ -161,3 +161,48 @@ Each append/update is a separate haiku agent() call, adding ~2 bookkeeping round
 
 **[I3] Modified artifact FTR-013-token-ledger.json is runtime output**
 The modified artifact FTR-013-token-ledger.json is runtime output (actuals written by the in-progress pipeline run), not US-03 source code. Out of review scope; no concern.
+
+---
+
+## Review Report — FTR-013 US-02 (pm-phase1.js Phase 1 ledger tracking)
+
+**Empirical verification**
+- Build: N/A — plain JS project; AGENTS.md: "no separate compile/build step"; `npm test` is the verification command.
+- Scoped tests (US-02): PASS — 55/55 (pm-phase1-source.test.js, pm-phase1-ledger.test.js, appendLedgerEntry.test.js, updateLedgerEntry.test.js).
+- Full suite: FAIL — 22 failed / 378 passed (400 total). ALL failures isolated to `tests/cli/pm-phase3-source.test.js` (US-04 scope; pm-phase3.js unmodified on this branch).
+- Dual-copy (AC-11): PASS — global `pm-phase1.js` byte-identical to repo copy.
+- Runtime constraint: PASS — no `fs`/`require`/`import`; all I/O via `agent()`.
+
+**Verdict: PASS (US-02 scope only)** — 0 CRITICAL in scope.
+
+---
+
+### CRITICAL (blocks merge)
+none (within US-02 scope)
+
+---
+
+### WARNING (should fix)
+
+**[W1] Branch-level test failure — tests/cli/pm-phase3-source.test.js — 22 failing tests**
+The overall `npm test` is RED. Per the review protocol, a PASS at the branch level requires the full suite to succeed. Every failure is in the US-04 pm-phase3 source-structure suite (asserts appendLedgerEntry/updateLedgerEntry wrapping inside executePhase, review-solution wrapping, etc.). pm-phase3.js has NOT been modified on this branch, so US-04 is unimplemented. US-02 is independently complete, but the feature branch as a whole cannot merge to main (CI runs the full Jest suite on every PR to main per AGENTS.md/FTR-010) until US-04 lands and turns the suite green.
+Direction: Complete US-04 before opening the FTR-013 PR. Do not merge on a branch that leaves `npm test` red.
+
+**[W2] Correctness / Token attribution — .claude/workflows/pm-phase1.js:210-215**
+The validation revision re-runs of `generate-requirements` and `generate-tech-spec` (invoked inside the cycle loop when `resultText.includes('Requirements')` / `'Tech-Spec'`) are real token-consuming agent() invocations, but they are NOT wrapped with append/update ledger entries and NOT pushed to the in-memory `tokenLedger`. AC-01 requires "one entry per agent invocation across all four phases," so these revision invocations produce unattributed token cost that silently under-counts phase-1 actuals whenever a validation cycle triggers a doc regeneration. Already recorded in FTR-013-Issues.md:61-63 but not remediated.
+Direction: Either wrap these two revision agent() calls with the append/update pattern (e.g. keys `generate-requirements:phase1:revision{N}`), or add a code comment + feature-doc note explicitly declaring revision re-runs out of ledger scope so the omission is a documented decision, not a silent gap.
+
+---
+
+### INFO (improvements)
+
+**[I1] Telemetry phase label — .claude/workflows/pm-phase1.js:19,28**
+`appendLedgerEntry`/`updateLedgerEntry` hardcode `phase: 'Requirements'` in the helper's own `agent()` options, even when called during Tech-Spec and Validation phases. This mislabels the helper's own token telemetry against the Requirements phase. Cosmetic — does not affect ledger contents written to disk.
+Direction: Pass the current phase name into the helpers or drop the phase option.
+
+**[I2] Test coverage is proxy-only — tests/cli/pm-phase1-ledger.test.js**
+The ledger behavior test exercises the bin/cli.js fs-based helpers as a proxy; the actual agent()-based helpers inside pm-phase1.js are only verified via source-structure regex (pm-phase1-source.test.js), never executed. Inherent limitation of the workflow runtime (acknowledged in the test header), but semantic drift between the workflow helpers' prompt text and the fs proxy would go undetected.
+Direction: Acceptable given the runtime constraint. Consider the Deferred shared importable helper module so one implementation is both run at runtime and unit-tested.
+
+**[I3] Bookkeeping agent() round-trips — .claude/workflows/pm-phase1.js:14-30**
+Each append/update is a separate haiku agent() round-trip; a clean phase-1 run issues ~6 extra agent calls plus ensure-ledger purely for ledger bookkeeping. Inherited design choice from pm-phase2.js, not a US-02 defect. Noted for future consolidation.

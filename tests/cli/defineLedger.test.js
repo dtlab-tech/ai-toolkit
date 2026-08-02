@@ -343,6 +343,102 @@ describe('define-feature finalization (Phase 4b)', () => {
   });
 });
 
+// ── Interrupted run (Phase 4b never called) ───────────────────────────────────
+
+describe('define-feature interrupted run (Phase 1c only — no Phase 4b)', () => {
+  test('entry remains status="running" with completed_at=null when finalization is skipped', () => {
+    // Arrange + Act — only Phase 1c runs; agent is interrupted before Phase 4b
+    appendLedgerEntry(tmpDir, PREFIX, {
+      agent: AGENT_KEY,
+      phase: 'define',
+      model: 'sonnet',
+      status: 'running',
+      phase_delta_tokens: 0,
+      started_at: '2026-08-01T09:00:00Z',
+      completed_at: null,
+    });
+
+    // Assert — file persists with running entry; no finalization has occurred
+    const ledger = readLedger(tmpDir);
+    expect(ledger[0].status).toBe('running');
+    expect(ledger[0].completed_at).toBeNull();
+  });
+
+  test('running entry is the resume signal (status="running", completed_at=null)', () => {
+    // An interrupted define-feature leaves a running entry that identifies the
+    // resume point. A future resume orchestrator detects this by checking status.
+    appendLedgerEntry(tmpDir, PREFIX, {
+      agent: AGENT_KEY,
+      phase: 'define',
+      model: 'sonnet',
+      status: 'running',
+      phase_delta_tokens: 0,
+      started_at: '2026-08-01T09:00:00Z',
+      completed_at: null,
+    });
+
+    const ledger = readLedger(tmpDir);
+    const runningEntries = ledger.filter(e => e.status === 'running' && e.completed_at === null);
+    expect(runningEntries).toHaveLength(1);
+    expect(runningEntries[0].agent).toBe(AGENT_KEY);
+  });
+});
+
+// ── Finalization with missing ledger file ─────────────────────────────────────
+
+describe('define-feature finalization with missing ledger (Phase 4b — no Phase 1c)', () => {
+  test('does not throw when ledger file does not exist before finalization', () => {
+    // define-feature Phase 4b calls updateLedgerEntry; if for any reason Phase 1c
+    // did not run the file will be absent. updateLedgerEntry must be a silent no-op.
+    expect(() =>
+      updateLedgerEntry(tmpDir, PREFIX, AGENT_KEY, {
+        status: 'done',
+        completed_at: '2026-08-01T09:04:30Z',
+        phase_delta_tokens: 0,
+      })
+    ).not.toThrow();
+  });
+
+  test('does not create a ledger file when none existed before finalization', () => {
+    updateLedgerEntry(tmpDir, PREFIX, AGENT_KEY, {
+      status: 'done',
+      completed_at: '2026-08-01T09:04:30Z',
+      phase_delta_tokens: 0,
+    });
+
+    expect(fs.existsSync(ledgerPath(tmpDir))).toBe(false);
+  });
+});
+
+// ── featureDir created on first write ────────────────────────────────────────
+
+describe('define-feature Phase 1c — featureDir created by mkdir -p', () => {
+  test('appendLedgerEntry creates nested directories when featureDir does not yet exist', () => {
+    // define-feature runs mkdir -p before writing, so by the time appendLedgerEntry
+    // is called the directory exists. But appendLedgerEntry must itself handle the
+    // case where the directory is absent (defensive behavior).
+    const nestedDir = path.join(tmpDir, 'docs', 'features', 'FTR-003-supplier-onboarding');
+    // nestedDir does NOT yet exist
+
+    appendLedgerEntry(nestedDir, 'FTR-003', {
+      agent: AGENT_KEY,
+      phase: 'define',
+      model: 'sonnet',
+      status: 'running',
+      phase_delta_tokens: 0,
+      started_at: '2026-08-01T09:00:00Z',
+      completed_at: null,
+    });
+
+    const ledgerFile = path.join(nestedDir, 'FTR-003-token-ledger.json');
+    expect(fs.existsSync(ledgerFile)).toBe(true);
+    const ledger = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(Array.isArray(ledger)).toBe(true);
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0].agent).toBe(AGENT_KEY);
+  });
+});
+
 // ── Full workflow: initialization → finalization ──────────────────────────────
 
 describe('define-feature complete workflow (Phase 1c → Phase 4b)', () => {
