@@ -425,12 +425,19 @@ const persistedLedgerRaw = await agent(
 try {
   const persisted = JSON.parse(typeof persistedLedgerRaw === 'string' ? persistedLedgerRaw.trim() : '[]')
   if (Array.isArray(persisted)) {
-    const seen = new Set(tokenLedger.map(e => e.agent))
+    const inMemoryByAgent = new Map(tokenLedger.map((e, i) => [e.agent, i]))
     for (const entry of persisted) {
-      if (entry && entry.agent && !seen.has(entry.agent)) {
+      if (!entry || !entry.agent) continue
+      const idx = inMemoryByAgent.get(entry.agent)
+      if (idx === undefined) {
+        // entry exists on disk but not in memory — recover it (e.g. from a prior interrupted run)
         tokenLedger.push(entry)
-        seen.add(entry.agent)
+        inMemoryByAgent.set(entry.agent, tokenLedger.length - 1)
         log(`Recovered ledger entry from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
+      } else if (tokenLedger[idx].phase_delta_tokens === 0 && (entry.phase_delta_tokens || 0) > 0) {
+        // in-memory entry has delta=0 (cached agent on resume) but disk has real data — prefer disk
+        tokenLedger[idx] = entry
+        log(`Restored real token count from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
       }
     }
   }
@@ -440,18 +447,43 @@ try {
 
 const totalPhase3Tokens = tokenLedger.reduce((s, e) => s + (e.phase_delta_tokens || 0), 0)
 
+// ── Load token pricing for cost columns ──────────────────────────────────────
+const pricingRaw3 = await agent(
+  `Read the file docs/token-pricing.json and return its raw JSON contents as a string, nothing else.`,
+  { label: 'read-pricing', phase: 'Actuals', model: 'haiku' }
+)
+let pricing3 = null
+try { pricing3 = JSON.parse(typeof pricingRaw3 === 'string' ? pricingRaw3.trim() : '{}') } catch (_) {}
+
+function tokenCostEur3(tokens, model) {
+  if (!pricing3 || !pricing3.models) return null
+  const m = pricing3.models[model] || pricing3.models['sonnet']
+  const usdPer1M = 0.8 * m.input_per_1m_usd + 0.2 * m.output_per_1m_usd
+  return (tokens * usdPer1M / 1_000_000) * (pricing3.usd_to_eur || 1)
+}
+
+function formatEur3(val) {
+  if (val === null || val === undefined) return '—'
+  return '€' + val.toFixed(4)
+}
+
 // Aggregate the per-agent ledger into per-role totals so the actuals line up with the
 // per-role estimate rows pm-phase2 wrote (developer-backend, developer-testing,
 // review-solution, pr-and-registry, write-actuals, plus final-test-run). Precomputing
 // here keeps the write-actuals agent from having to reason about grouping.
 const roleTotals = {}
+const roleModels = {}
 for (const e of tokenLedger) {
   const role = String(e.agent).split(':')[0]
   roleTotals[role] = (roleTotals[role] || 0) + (e.phase_delta_tokens || 0)
+  roleModels[role] = e.model || 'sonnet'
 }
 const roleRows = Object.entries(roleTotals)
-  .map(([role, tok]) => `| ${role} | ${tok} |`)
+  .map(([role, tok]) => `| ${role} | ${tok} | ${formatEur3(tokenCostEur3(tok, roleModels[role]))} |`)
   .join('\n')
+const totalPhase3CostEur = formatEur3(
+  Object.entries(roleTotals).reduce((s, [role, tok]) => s + (tokenCostEur3(tok, roleModels[role]) || 0), 0)
+)
 
 const ACTUALS_SCHEMA = {
   type: 'object',
@@ -483,27 +515,27 @@ Do NOT append a second Phase 3 table. Instead:
 
 1. Locate the existing "## Phase 3 — Implementation (Estimates)" section. Replace its heading
    with "## Phase 3 — Implementation (Est. vs Actual, by role)" and REPLACE its table with the
-   per-role reconciliation below — filling the "Tokens Actual" column of the existing per-role
-   estimate rows (keep the existing Tokens Est. values; add a Delta column):
+   per-role reconciliation below — filling the "Tokens Actual" and "Actual cost €" columns of the
+   existing per-role estimate rows (keep the existing Tokens Est. and Est. cost € values; add a Delta column):
 
-| Role | Model | Tokens Actual |
-|------|-------|--------------|
+| Role | Model | Tokens Actual | Actual cost € |
+|------|-------|--------------|--------------|
 ${roleRows}
-| **Phase 3 total** | | **${totalPhase3Tokens}** |
+| **Phase 3 total** | | **${totalPhase3Tokens}** | **${totalPhase3CostEur}** |
 
    Match each existing estimate row (developer-backend, developer-testing, review-solution,
    remediation, pr-and-registry, write-actuals) to the actual role total above by name, write the
-   actual into its "Tokens Actual" cell, and compute Delta = Actual − Est. Roles present in the
-   actuals but absent from the estimate rows (e.g. final-test-run) get a new row with Est. = —.
+   actual into its "Tokens Actual" and "Actual cost €" cells, and compute Delta = Actual − Est (tokens).
+   Roles present in the actuals but absent from the estimate rows (e.g. final-test-run) get a new row with Est. = —.
 
 2. Immediately after that table, add the per-agent detail as a sub-table (source of truth):
 
 ### Phase 3 — per-agent detail (actuals)
 
-| Agent | Model | Tokens Actual |
-|-------|-------|--------------|
-${tokenLedger.map(e => `| ${e.agent} | ${e.model} | ${e.phase_delta_tokens} |`).join('\n')}
-| **Detail total** | | **${totalPhase3Tokens}** |
+| Agent | Model | Tokens Actual | Actual cost € |
+|-------|-------|--------------|--------------|
+${tokenLedger.map(e => `| ${e.agent} | ${e.model} | ${e.phase_delta_tokens} | ${formatEur3(tokenCostEur3(e.phase_delta_tokens, e.model))} |`).join('\n')}
+| **Detail total** | | **${totalPhase3Tokens}** | **${totalPhase3CostEur}** |
 
 3. Update the existing "## Grand Total" table. Read the Phase 1 and Phase 2 actual totals from
    the top of THIS SAME file (the "Phase 1 total" and "Phase 2 total" rows already present) and
@@ -511,12 +543,12 @@ ${tokenLedger.map(e => `| ${e.agent} | ${e.model} | ${e.phase_delta_tokens} |`).
    written as a placeholder by pm-phase2 and filled later by the orchestrator), keep it as "—";
    do NOT invent a number. The table must read:
 
-| Phase | Tokens Est. | Tokens Actual | Delta |
-|-------|------------|--------------|-------|
-| Phase 1 — Documentation | — | {Phase 1 total from this file, or — if placeholder} | — |
-| Phase 2 — Work Breakdown | — | {Phase 2 total from this file} | — |
-| Phase 3 — Implementation | {existing Phase 3 estimate total} | ${totalPhase3Tokens} | {Actual − Est} |
-| **Total** | **{sum of Est}** | **{sum of the numeric Tokens Actual cells above}** | **{Actual − Est}** |
+| Phase | Tokens Est. | Est. cost € | Tokens Actual | Actual cost € | Delta (tokens) |
+|-------|------------|------------|--------------|--------------|---------------|
+| Phase 1 — Documentation | — | — | {Phase 1 total from this file, or — if placeholder} | — | — |
+| Phase 2 — Work Breakdown | — | — | {Phase 2 total from this file} | {Phase 2 cost from this file} | — |
+| Phase 3 — Implementation | {existing Phase 3 estimate total} | {existing Phase 3 est. cost} | ${totalPhase3Tokens} | ${totalPhase3CostEur} | {Actual − Est} |
+| **Total** | **{sum of numeric Est}** | **{sum of numeric Est. cost}** | **{sum of numeric Actual}** | **{sum of numeric Actual cost}** | **{Actual − Est}** |
 
 4. Append (or update if present) the Implementation Summary section:
 
@@ -591,6 +623,17 @@ Steps:
 Events to append:
 ${phase3Events}`,
   { label: 'finalize-process-log', phase: 'Actuals' }
+)
+
+await agent(
+  `Commit the actuals files for this feature delivery run.
+
+Run these exact git commands in the repository root:
+  git add "${featureDir3}/${prefix}-Token-Estimate.md" "${featureDir3}/${prefix}-Effort-Estimate.md" "${featureDir3}/${prefix}-process-log.txt"
+  git commit -m "docs(${prefix}): add token/effort actuals and process log"
+
+If there is nothing to commit (all files already committed), that is fine — report success.`,
+  { label: 'commit-actuals', phase: 'Actuals' }
 )
 
 return {
