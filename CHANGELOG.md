@@ -1,4 +1,46 @@
 ## 0.1.4 (2026-07-21)
+## [0.8.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.7.0...v0.8.0) (2026-08-04)
+
+
+### Features
+
+* **FTR-011:** implement shared infrastructure (INFRA) ([718b0eb](https://github.com/dtlab-tech/ai-toolkit/commit/718b0ebe684814028b0457351a40b171ea80a197))
+* **FTR-011:** implement US-01 — Implement readManifest() Function ([aad7de1](https://github.com/dtlab-tech/ai-toolkit/commit/aad7de19aa6aaf48578c46eebd3bb236ebb4fadb))
+* **FTR-011:** implement US-02 — Implement computeOrphans() Function ([3a70517](https://github.com/dtlab-tech/ai-toolkit/commit/3a705173e649aa7782d036b5790c830c88a1d797))
+* **FTR-011:** implement US-03 — Implement moveToTrash() Function ([a6ac7d2](https://github.com/dtlab-tech/ai-toolkit/commit/a6ac7d2d841905bba24f5349a7d763c9f43527e8))
+* **FTR-011:** implement US-04 — Implement writeManifest() Function ([dc43ea1](https://github.com/dtlab-tech/ai-toolkit/commit/dc43ea1e35c2e4981876ad5f46b3138890851fcd))
+* **FTR-011:** implement US-05 — Integrate Prune Phase into runInstall() and Add UI Display ([bca87ea](https://github.com/dtlab-tech/ai-toolkit/commit/bca87ea8f8843f6a8a07371eaef072b1fc004453))
+* **FTR-011:** implement US-06 — Add CI Safety Net — Agent Name-to-Filename Alignment Check ([06db318](https://github.com/dtlab-tech/ai-toolkit/commit/06db3180b4867b611a2793bf2c74e8510e66827c))
+* **FTR-011:** Installer Manifest and Orphan Pruning ([764eff4](https://github.com/dtlab-tech/ai-toolkit/commit/764eff4dd3b13ee34e7e4be7159c08168e49fe1d))
+* **FTR-011:** update effort and token estimates, add implementation summary, and log completion details ([ce5660d](https://github.com/dtlab-tech/ai-toolkit/commit/ce5660dec691b75bb501bcadb149c2f4eaabdb5a))
+* **FTR-012:** implement shared infrastructure (INFRA) ([da14ae1](https://github.com/dtlab-tech/ai-toolkit/commit/da14ae15d19301c47231e73872ecba75f180e739))
+* **FTR-012:** implement US-01 — Fresh Installation with Allowlist Opt-In ([803018a](https://github.com/dtlab-tech/ai-toolkit/commit/803018aafe77abb06390849540f7fb214fccbc40))
+* **FTR-012:** implement US-02 — Merge Allowlist into Existing Settings ([9855abc](https://github.com/dtlab-tech/ai-toolkit/commit/9855abc940443d4e75b7a1b3340715d8e1403fcf))
+* **FTR-012:** implement US-03 — Ask-Beats-Allow Conflict Resolution ([9c51984](https://github.com/dtlab-tech/ai-toolkit/commit/9c5198490824647bac7b1850b09e624d9f00e883))
+* **FTR-012:** implement US-04 — Reinstall with Idempotent Merge ([8e9a49f](https://github.com/dtlab-tech/ai-toolkit/commit/8e9a49f69d7bb761a698b2ac7f7a405d5d2d833e))
+* **FTR-012:** implement US-05 — .gitignore Creation and Idempotent Update ([20e19de](https://github.com/dtlab-tech/ai-toolkit/commit/20e19de3c38cbbfcd5dd27c8b8b5ab629036b101))
+* **FTR-012:** Installer Bash Allowlist ([2deb73e](https://github.com/dtlab-tech/ai-toolkit/commit/2deb73ef4ad4189c6eea1ae46ec0f0dc6ece469e))
+* **FTR-012:** mark feature as completed in registry ([ab90d58](https://github.com/dtlab-tech/ai-toolkit/commit/ab90d5878a4091ccaef38863c14634ebd2082623))
+* **FTR-013:** add additional agent entries for US-03 and US-04 in ledger ([6f756ed](https://github.com/dtlab-tech/ai-toolkit/commit/6f756edfaa0d75b48809aa3964261efa65fd69f9))
+* **FTR-013:** add registry entry and update ledger actuals ([23f5138](https://github.com/dtlab-tech/ai-toolkit/commit/23f513801486c36e95782ea513e15fcfcb755d06))
+* **FTR-013:** implement shared infrastructure (INFRA) ([99d564f](https://github.com/dtlab-tech/ai-toolkit/commit/99d564f8ca543b7cd95c5cf1a5687961ef402921))
+* **FTR-013:** implement US-01 — Initialize and Track Ledger in define-feature Agent ([ce0b010](https://github.com/dtlab-tech/ai-toolkit/commit/ce0b010afd40e94f9e9e2618eca1fbcc60ede7ae))
+* **FTR-013:** implement US-01 — Initialize and Track Ledger in define-feature Agent ([ca84538](https://github.com/dtlab-tech/ai-toolkit/commit/ca84538d6980828313d331e4a07e10bde5cb34c7))
+* **FTR-013:** implement US-02 — Track Phase 1 Agent Invocations ([a4e3b10](https://github.com/dtlab-tech/ai-toolkit/commit/a4e3b1001bb0b6201c873c4608c23c94c37ca5e0))
+* **FTR-013:** implement US-02 — Track Phase 1 Agent Invocations ([85d86e4](https://github.com/dtlab-tech/ai-toolkit/commit/85d86e406d9ace96b22214de5aef14a6b0cde0b2))
+* **FTR-013:** implement US-03 — Track Phase 2 Agent Invocations ([819f3c3](https://github.com/dtlab-tech/ai-toolkit/commit/819f3c33a954ce89bb221461ee21092b9429c085))
+* **FTR-013:** implement US-03 — Track Phase 2 Agent Invocations ([7d6f9bb](https://github.com/dtlab-tech/ai-toolkit/commit/7d6f9bba8a794e83a12b31a306e27a5d8505c3f7))
+* **FTR-013:** Ledger Pipeline Activity Tracker ([f1bf49a](https://github.com/dtlab-tech/ai-toolkit/commit/f1bf49a4c7496fba8f0c04c5770fe2ad08a6b4ac))
+* **pm:** add EUR cost columns to Token-Estimate ([b0faf0d](https://github.com/dtlab-tech/ai-toolkit/commit/b0faf0dc15c40358bf64b55a0a34987be8db19a2))
+
+
+### Bug Fixes
+
+* **FTR-011:** remediate review issues ([c34d824](https://github.com/dtlab-tech/ai-toolkit/commit/c34d8246fff5548401cb50cc300043679ede4bba))
+* **FTR-012:** remediate review issues ([f9ea280](https://github.com/dtlab-tech/ai-toolkit/commit/f9ea280c394a6436fa6a0840f0110b1b620b6025))
+* **pm:** commit actuals after write-actuals; restore zero-delta ledger entries on resume ([83bbaec](https://github.com/dtlab-tech/ai-toolkit/commit/83bbaecdbbbbf9aa436af8d56a6e823500868b1b))
+* **pm:** correct write-actuals token estimate output ([d45653a](https://github.com/dtlab-tech/ai-toolkit/commit/d45653a2c9f999ec8478836e01128428295fa95a))
+
 ## [0.7.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.6.0...v0.7.0) (2026-07-29)
 
 
