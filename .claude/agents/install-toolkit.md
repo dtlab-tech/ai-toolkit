@@ -251,6 +251,39 @@ COMPACT_SECTION
 
 ---
 
+## Step 6 — Bash Permission Allowlist opt-in
+
+After the Compact Instructions step, offer an opt-in to create or update `.claude/settings.local.json` in the destination project with a pre-approved Bash command allowlist.
+
+1. **Offer the opt-in** — inform the user and ask:
+
+   > "Would you like to create or update `.claude/settings.local.json` in this project with a pre-approved Bash command allowlist? This lets pm-phase3 worker agents run read-only commands (ls, git status, git log, npm test, dotnet build, etc.) without prompting you. Dangerous commands (git push, gh pr create, rm, git reset, git clean) will always require confirmation."
+   >
+   > Options: "Yes — write allowlist" / "No — skip"
+
+2. If the user selects **No**: skip silently; set `allowlist_status = "skipped (user said No)"`.
+
+3. If the user selects **Yes**:
+
+   a. **Invoke the merge CLI** from the toolkit root directory:
+      ```bash
+      node bin/cli.js merge-allowlist "{dest}"
+      ```
+      Capture stdout and the exit code.
+      - If exit code is non-zero: set `allowlist_status = "failed — see above"` and continue to Step 7 (allowlist is advisory, not blocking).
+      - If exit code is 0: the stdout line will be one of:
+        - `Allowlist: written` → set `allowlist_status = "written"`
+        - `Allowlist: merged (N rules preserved)` → set `allowlist_status = "merged (N rules preserved)"`
+        - `Allowlist: reset` → set `allowlist_status = "reset (file was malformed)"`
+
+   b. **Check and update `.gitignore`**:
+      ```bash
+      node bin/cli.js update-gitignore "{dest}"
+      ```
+      This ensures `.claude/settings.local.json` is gitignored in the destination project. The CLI is idempotent — it appends the line only if it is not already present.
+
+---
+
 ## Step 7 — Report
 
 ```
@@ -262,6 +295,7 @@ Modified/kept:        N  (user chose to keep existing version)
 Unchanged (same):    N  (skipped silently)
 Spawn depth: ✅ CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2+ present / ⚠️ MISSING — see action above
 Compact instructions: {compact_instructions_status}
+Allowlist: {allowlist_status}
 ──────────────────────────────────────────────────
 Next steps:
   1. Run /init-agents to generate AGENTS.md for this project

@@ -53,5 +53,11 @@ describe('Agent .md frontmatter validation', () => {
       }
       // argument-hint is optional — test passes automatically when absent
     });
+
+    test('"name" field matches filename without .md extension', () => {
+      const expectedName = file.replace(/\.md$/, '');
+      expect(parsed.data.name).toBe(expectedName);
+      // failure: check agents/<file> — name field must equal filename without extension
+    });
   });
 });

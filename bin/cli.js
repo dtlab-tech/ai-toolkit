@@ -67,6 +67,92 @@ function askConfirm(question) {
   });
 }
 
+// ── allowlist ─────────────────────────────────────────────────────────────────
+
+// INFRA-T01: Canonical Bash permission lists (FTR-012, AC-11, AC-12).
+// These are fixed baselines — one combined list covering base read-only,
+// .NET, and npm commands. Unused entries in a project are harmless.
+const CANONICAL_ALLOW = [
+  'ls', 'dir', 'cat', 'head', 'tail', 'find', 'grep', 'rg', 'wc', 'echo',
+  'pwd', 'which', 'date',
+  'git status', 'git diff', 'git log', 'git show', 'git branch', 'git rev-parse',
+  'git add', 'git commit',
+  'dotnet build', 'dotnet test', 'dotnet restore',
+  'npm test', 'npm run build',
+];
+
+// Dangerous outward-facing commands that must always surface a human prompt.
+// git checkout stays on ask: it runs only in the implement-feature main loop
+// (Step 5), never inside pm-phase3 worker agents. If pm-phase3 ever gains
+// branch-management steps, this decision must be revisited.
+const CANONICAL_ASK = [
+  'git push', 'gh pr create', 'rm', 'del',
+  'git checkout', 'git reset', 'git clean',
+];
+
+// INFRA-T01: Format a raw command string into a Claude Code permission token.
+// Every command — including no-argument ones like 'pwd' — is formatted as
+// 'Bash(<cmd>:*)' for consistency across all entries.
+function commandToPermission(cmd) {
+  return `Bash(${cmd}:*)`;
+}
+
+// INFRA-T02: Ensure an object parsed from settings.local.json has the expected
+// shape. Mutates and returns the object so callers can chain immediately.
+function normalizeSettings(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) obj = {};
+  if (!obj.permissions || typeof obj.permissions !== 'object') obj.permissions = {};
+  if (!obj.permissions.Bash || typeof obj.permissions.Bash !== 'object') obj.permissions.Bash = {};
+  if (!Array.isArray(obj.permissions.Bash.allow)) obj.permissions.Bash.allow = [];
+  if (!Array.isArray(obj.permissions.Bash.ask)) obj.permissions.Bash.ask = [];
+  return obj;
+}
+
+// INFRA-T03: Return the dedup union of two arrays (preserves insertion order,
+// all elements of a appear before novel elements of b).
+function mergeArrays(a, b) {
+  return [...new Set([...a, ...b])];
+}
+
+// INFRA-T03: Remove from allow every entry that also appears in ask.
+// This enforces the ask-beats-allow invariant: a command that could be
+// dangerous is never silently auto-approved just because it was also listed
+// in an allow array.
+function applyAskBeatsAllow(allow, ask) {
+  const askSet = new Set(ask);
+  return allow.filter(cmd => !askSet.has(cmd));
+}
+
+// INFRA-T04: Read {destDir}/.claude/settings.local.json.
+// Returns a descriptor so callers can distinguish missing vs. malformed.
+//   { exists: false, data: null,  malformed: false }  — file absent
+//   { exists: true,  data: <obj>, malformed: false }  — parsed OK
+//   { exists: true,  data: null,  malformed: true  }  — invalid JSON
+function readSettings(destDir) {
+  const settingsPath = path.join(destDir, '.claude', 'settings.local.json');
+  if (!fs.existsSync(settingsPath)) return { exists: false, data: null, malformed: false };
+  let raw;
+  try { raw = fs.readFileSync(settingsPath, 'utf8'); } catch (err) {
+    console.error(`Warning: could not read settings.local.json — ${err.message}`);
+    return { exists: true, data: null, malformed: true };
+  }
+  try {
+    const data = JSON.parse(raw);
+    return { exists: true, data, malformed: false };
+  } catch {
+    return { exists: true, data: null, malformed: true };
+  }
+}
+
+// INFRA-T04: Write {destDir}/.claude/settings.local.json, creating the
+// .claude/ directory if it does not exist. Throws on I/O failure so callers
+// can catch and report gracefully.
+function writeSettings(destDir, data) {
+  const settingsPath = path.join(destDir, '.claude', 'settings.local.json');
+  ensureDir(settingsPath);
+  fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2), 'utf8');
+}
+
 // ── file enumeration ─────────────────────────────────────────────────────────
 
 function expandMappings(mappings) {
@@ -155,9 +241,71 @@ async function checkVersion(destRoot, force) {
   return true;
 }
 
+// ── manifest ──────────────────────────────────────────────────────────────────
+
+const MANIFEST_FILE = '.ai-toolkit-manifest.json';
+
+function readManifest(destRoot) {
+  const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
+  if (!fs.existsSync(manifestPath)) return { files: [] };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (!parsed || !Array.isArray(parsed.files)) return { files: [] };
+    parsed.files = parsed.files.map(f => f.replace(/\\/g, '/'));
+    return parsed;
+  } catch {
+    console.log(dim('Previous manifest is corrupt; treating as empty'));
+    return { files: [] };
+  }
+}
+
+function computeOrphans(oldFiles, newFiles) {
+  const newSet = new Set(newFiles.map(f => f.replace(/\\/g, '/')));
+  return oldFiles
+    .map(f => f.replace(/\\/g, '/'))
+    .filter(f => !newSet.has(f));
+}
+
+function moveToTrash(destRoot, relativePath) {
+  const source = path.join(destRoot, relativePath);
+  if (!fs.existsSync(source)) return;
+  const trashPath = path.join(destRoot, '.claude', '.ai-toolkit-trash', relativePath);
+  ensureDir(trashPath);
+  try {
+    fs.renameSync(source, trashPath);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      fs.copyFileSync(source, trashPath);
+      fs.unlinkSync(source);
+    } else {
+      throw err;
+    }
+  }
+}
+
+function writeManifest(destRoot, fileList) {
+  const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
+  const trashDir = path.join(destRoot, '.claude', '.ai-toolkit-trash');
+  const filtered = fileList.filter(rel => {
+    const abs = path.join(destRoot, rel);
+    return !abs.startsWith(trashDir + path.sep) && abs !== trashDir;
+  });
+  const manifest = {
+    version: TOOLKIT_VERSION,
+    installedAt: new Date().toISOString(),
+    files: filtered.map(f => f.replace(/\\/g, '/')),
+  };
+  try {
+    ensureDir(manifestPath);
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+  } catch (err) {
+    console.log(dim(`Warning: could not write manifest — ${err.message}`));
+  }
+}
+
 // ── install ───────────────────────────────────────────────────────────────────
 
-async function runInstall(label, mappings, force) {
+async function runInstall(label, mappings, force, destRoot) {
   const files    = expandMappings(mappings);
   const entries  = categorize(files);
 
@@ -165,6 +313,58 @@ async function runInstall(label, mappings, force) {
   const modified = entries.filter(e => e.status === 'modified');
   const same     = entries.filter(e => e.status === 'same');
 
+  // ── prune phase (before file copy) ───────────────────────────────────────────
+  const oldManifest = readManifest(destRoot);
+  const newFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
+  const orphans     = computeOrphans(oldManifest.files, newFileSet);
+
+  const existingOrphans = orphans.filter(o => fs.existsSync(path.join(destRoot, o)));
+
+  if (existingOrphans.length > 0) {
+    console.log();
+    console.log(`${bold('📦 Orphan cleanup')}  ${clr('gray', '→')}  ${clr('red', `${existingOrphans.length} stale file(s) found`)}`);
+    console.log(divider());
+    for (const orphan of existingOrphans) {
+      console.log(`  ${clr('red', '∅')} ${clr('red', 'REMOVED ')}  ${orphan}`);
+    }
+    console.log(divider());
+  }
+
+  let removedCount = 0;
+  let keptCount    = 0;
+
+  if (force) {
+    for (const orphan of existingOrphans) {
+      moveToTrash(destRoot, orphan);
+      removedCount++;
+      console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
+    }
+  } else {
+    for (const orphan of existingOrphans) {
+      const fullPath = path.join(destRoot, orphan);
+      if (!fs.existsSync(fullPath)) continue;
+      const ok = await askConfirm(`  Move to trash  ${clr('red', orphan)}?`);
+      if (ok) {
+        moveToTrash(destRoot, orphan);
+        console.log(`     ${clr('green', '✔')} Moved to trash\n`);
+        removedCount++;
+      } else {
+        console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
+        keptCount++;
+      }
+    }
+  }
+
+  if (existingOrphans.length > 0) {
+    console.log(divider());
+    console.log(
+      `  ${clr('red', `∅ Moved: ${removedCount}`)}` +
+      `  ${clr('gray', `↪ .claude/.ai-toolkit-trash/`)}` +
+      `  ${clr('gray', `✖ Kept: ${keptCount}`)}\n`
+    );
+  }
+
+  // ── install plan display ──────────────────────────────────────────────────────
   console.log();
   console.log(`${bold('📦 Install plan')}  ${clr('gray', '→')}  ${clr('cyan', label)}`);
   console.log(divider());
@@ -186,6 +386,7 @@ async function runInstall(label, mappings, force) {
 
   if (modified.length === 0) {
     console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
+    writeManifest(destRoot, newFileSet);
     return;
   }
 
@@ -196,6 +397,7 @@ async function runInstall(label, mappings, force) {
       fs.copyFileSync(e.src, e.dest);
       console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
+    writeManifest(destRoot, newFileSet);
     return;
   }
 
@@ -223,6 +425,8 @@ async function runInstall(label, mappings, force) {
     `  ${clr('green', `✔ Overwritten: ${overwritten}`)}` +
     `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
   );
+
+  writeManifest(destRoot, newFileSet);
 }
 
 // ── subagent spawn-depth check (verify & advise only — never write) ────────────
@@ -271,6 +475,175 @@ function checkSpawnDepth(destRoot) {
   console.log(`     ${dim('Then restart Claude Code so the variable is loaded.')}\n`);
 }
 
+// ── mergeAllowlist ────────────────────────────────────────────────────────────
+
+// US-01-T01 / US-02-T01 / US-02-T02 / US-03-T01:
+// Core pure function — creates or merges the Bash permission allowlist in
+// {destDir}/.claude/settings.local.json using the canonical lists above.
+//
+// Return values:
+//   { status: 'written' }                     — fresh file created
+//   { status: 'merged', preserved: N }        — merged with N pre-existing rules
+//   { status: 'reset',  reason: 'malformed' } — invalid JSON was replaced
+//   { status: 'error',  message: '...' }      — I/O failure
+function mergeAllowlist(destDir) {
+  if (!destDir || typeof destDir !== 'string') {
+    return { status: 'error', message: 'destDir must be a non-empty string' };
+  }
+  if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+    return { status: 'error', message: `destination does not exist or is not a directory: ${destDir}` };
+  }
+
+  const canonicalAllow = CANONICAL_ALLOW.map(commandToPermission);
+  const canonicalAsk   = CANONICAL_ASK.map(commandToPermission);
+
+  const { exists, data, malformed } = readSettings(destDir);
+
+  // Malformed JSON recovery (AC-05)
+  if (malformed) {
+    console.log('Warning: settings.local.json is not valid JSON; resetting to default');
+    const fresh = normalizeSettings({});
+    fresh.permissions.Bash.allow = canonicalAllow;
+    fresh.permissions.Bash.ask   = canonicalAsk;
+    try {
+      writeSettings(destDir, fresh);
+    } catch (err) {
+      return { status: 'error', message: err.message };
+    }
+    return { status: 'reset', reason: 'malformed' };
+  }
+
+  // Fresh install: no existing file (AC-01)
+  if (!exists) {
+    const fresh = normalizeSettings({});
+    fresh.permissions.Bash.allow = canonicalAllow;
+    fresh.permissions.Bash.ask   = canonicalAsk;
+    try {
+      writeSettings(destDir, fresh);
+    } catch (err) {
+      return { status: 'error', message: err.message };
+    }
+    return { status: 'written' };
+  }
+
+  // Merge path: existing file, valid JSON (AC-02, AC-03, AC-04)
+  const existing = normalizeSettings(data);
+  const existingAllow = existing.permissions.Bash.allow;
+  const existingAsk   = existing.permissions.Bash.ask;
+
+  const countBefore = existingAllow.length + existingAsk.length;
+
+  let mergedAllow = mergeArrays(existingAllow, canonicalAllow);
+  const mergedAsk = mergeArrays(existingAsk,   canonicalAsk);
+
+  // ask-beats-allow: strip from allow any cmd that is now in ask
+  mergedAllow = applyAskBeatsAllow(mergedAllow, mergedAsk);
+
+  existing.permissions.Bash.allow = mergedAllow;
+  existing.permissions.Bash.ask   = mergedAsk;
+
+  try {
+    writeSettings(destDir, existing);
+  } catch (err) {
+    return { status: 'error', message: err.message };
+  }
+
+  const preserved = countBefore;
+  return { status: 'merged', preserved };
+}
+
+// INFRA-T01 (FTR-013):
+// Append a new entry to {featureDir}/{prefix}-token-ledger.json atomically.
+// If the file does not exist it is created. If JSON is malformed the file is
+// overwritten with a single-element array containing the new entry.
+//
+// Algorithm:
+//   1. Read and parse the existing ledger (or start with [])
+//   2. Push the new entry
+//   3. Write the full array back in one synchronous write (atomic)
+function appendLedgerEntry(featureDir, prefix, entry) {
+  const filePath = path.join(featureDir, `${prefix}-token-ledger.json`);
+  let ledger = [];
+  if (fs.existsSync(filePath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      ledger = Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      console.log(`Warning: could not parse token ledger at ${filePath} — starting fresh`);
+      ledger = [];
+    }
+  }
+  ledger.push(entry);
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(ledger, null, 2), 'utf8');
+}
+
+// INFRA-T02 (FTR-013):
+// Find and update an existing entry in {featureDir}/{prefix}-token-ledger.json
+// by agent key, atomically. Searches from the end of the array so that the most
+// recent entry for a given key is updated (handles any accidental duplicates).
+// If the file does not exist or the key is not found the call is a silent no-op.
+//
+// Algorithm:
+//   1. Read and parse the existing ledger (silent return on missing/malformed)
+//   2. Find the last entry where entry.agent === agentKey
+//   3. Object.assign the updates onto that entry
+//   4. Write the full array back in one synchronous write (atomic)
+function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
+  const filePath = path.join(featureDir, `${prefix}-token-ledger.json`);
+  if (!fs.existsSync(filePath)) return;
+  let ledger;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    ledger = Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    console.log(`Warning: could not parse token ledger at ${filePath} — skipping update for "${agentKey}"`);
+    return;
+  }
+  let idx = -1;
+  for (let i = ledger.length - 1; i >= 0; i--) {
+    if (ledger[i] && ledger[i].agent === agentKey) { idx = i; break; }
+  }
+  if (idx === -1) {
+    console.log(`Warning: ledger entry not found for agent key "${agentKey}"`);
+    return;
+  }
+  Object.assign(ledger[idx], updates);
+  fs.writeFileSync(filePath, JSON.stringify(ledger, null, 2), 'utf8');
+}
+
+// US-05-T01:
+// Idempotently append `.claude/settings.local.json` to {destDir}/.gitignore.
+// Creates .gitignore if it does not exist (AC-06, AC-07).
+//
+// Return values:
+//   { status: 'appended' }     — line was added
+//   { status: 'already' }      — line was already present
+//   { status: 'created' }      — .gitignore did not exist; created with line
+//   { status: 'error', message } — I/O failure
+function updateGitignore(destDir) {
+  const GITIGNORE_ENTRY = '.claude/settings.local.json';
+  const gitignorePath   = path.join(destDir, '.gitignore');
+
+  try {
+    if (!fs.existsSync(gitignorePath)) {
+      fs.writeFileSync(gitignorePath, `${GITIGNORE_ENTRY}\n`, 'utf8');
+      return { status: 'created' };
+    }
+
+    const content = fs.readFileSync(gitignorePath, 'utf8');
+    const lines   = content.split('\n').map(l => l.trim());
+    if (lines.includes(GITIGNORE_ENTRY)) return { status: 'already' };
+
+    const trailing = content.endsWith('\n') ? '' : '\n';
+    fs.writeFileSync(gitignorePath, `${content}${trailing}${GITIGNORE_ENTRY}\n`, 'utf8');
+    return { status: 'appended' };
+  } catch (err) {
+    return { status: 'error', message: err.message };
+  }
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force) {
@@ -283,7 +656,7 @@ async function installLocal(targetDir, force) {
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`local project`, mappings, force);
+  await runInstall(`local project`, mappings, force, targetDir);
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
   checkSpawnDepth(targetDir);
@@ -309,7 +682,7 @@ async function installGlobal(force) {
       { src: path.join(packageRoot, 'docs'),                 dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'),    dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force);
+    await runInstall('global Claude folder', mappings, force, target);
     writeInstalledVersion(target);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     checkSpawnDepth(homedir);
@@ -349,6 +722,42 @@ async function main() {
     await installGlobal(force);
   } else if (argv[0] === 'help' || argv[0] === '--help') {
     help();
+  } else if (argv[0] === 'merge-allowlist') {
+    const destDir = argv[1];
+    if (!destDir) {
+      console.error('Error: merge-allowlist requires a destination directory');
+      process.exit(1);
+    }
+    try {
+      const result = mergeAllowlist(destDir);
+      if (result.status === 'error') {
+        console.error(`Error: ${result.message}`);
+        process.exit(1);
+      }
+      console.log(`Allowlist: ${result.status}${result.preserved !== undefined ? ` (${result.preserved} rules preserved)` : ''}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  } else if (argv[0] === 'update-gitignore') {
+    const destDir = argv[1];
+    if (!destDir) {
+      console.error('Error: update-gitignore requires a destination directory');
+      process.exit(1);
+    }
+    try {
+      const result = updateGitignore(destDir);
+      if (result.status === 'error') {
+        console.error(`Error: ${result.message}`);
+        process.exit(1);
+      }
+      console.log(`Gitignore: ${result.status}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force);
   } else {
@@ -371,5 +780,21 @@ if (require.main === module) {
     categorize,
     readInstalledVersion,
     NEVER_COPY,
+    readManifest,
+    computeOrphans,
+    moveToTrash,
+    writeManifest,
+    CANONICAL_ALLOW,
+    CANONICAL_ASK,
+    commandToPermission,
+    normalizeSettings,
+    mergeArrays,
+    applyAskBeatsAllow,
+    readSettings,
+    writeSettings,
+    mergeAllowlist,
+    updateGitignore,
+    appendLedgerEntry,
+    updateLedgerEntry,
   };
 }

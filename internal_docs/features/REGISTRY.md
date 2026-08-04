@@ -76,3 +76,27 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-010-unit-tests/feature.md)
 
 ---
+
+## FTR-011 — Installer Manifest and Orphan Pruning
+**Keywords:** installer, manifest, prune, orphans, trash, bin/cli.js, readManifest, writeManifest, computeOrphans, moveToTrash, ai-toolkit-manifest.json, ai-toolkit-trash, frontmatter-ci, NEVER_COPY, global-install
+**Status:** completed
+**Summary:** Extends the AI Toolkit installer (`bin/cli.js`) with a manifest mechanism and a prune step. On every install/update the installer writes `.claude/.ai-toolkit-manifest.json` recording every file it deposited (version, installedAt ISO 8601, forward-slash destination-relative `files`). On reinstall it reads the previous manifest, computes orphans (files no longer shipped) via set difference, and moves them into a recoverable `.claude/.ai-toolkit-trash/` backup folder rather than hard-deleting — safe in shared destinations like `~/.claude/` since only toolkit-placed files are candidates. Adds pure functions `readManifest`, `writeManifest`, `computeOrphans`, `moveToTrash` (exported via the `require.main` guard) with unit tests in `tests/cli/`, plus a CI safety net asserting each agent's `name` frontmatter matches its filename (AC-22). Path shape differs by install mode (local paths keep the `.claude/` prefix, global paths do not); trash filtering uses absolute-path comparison. Deferred: skill name==folder check (AC-23), no-orphan-references check (AC-24), trash auto-cleanup.
+→ [Detail](FTR-011-installer-manifest-pruning/feature.md)
+
+---
+
+## FTR-012 — Installer Bash Allowlist
+**Keywords:** bash-allowlist, settings.local.json, mergeAllowlist, pm-phase3, permissions, install-toolkit, ask-beats-allow, gitignore, canonical-allow, canonical-ask
+**Status:** completed
+**Summary:** Extends the `install-toolkit` agent with an opt-in Step 6 that creates or merges a Bash permission allowlist into `.claude/settings.local.json` in the destination project. The new pure function `mergeAllowlist` in `bin/cli.js` reads an existing `settings.local.json` (if present), fuses the canonical allow and ask arrays with existing entries, deduplicates, and enforces ask-beats-allow priority. A fixed canonical allow list covers read-only base + .NET + npm commands (`ls`, `dir`, `cat`, `git status`, `git log`, `dotnet build`, `npm test`, etc.); a fixed ask list keeps dangerous commands (`git push`, `gh pr create`, `rm`, `git reset`, `git clean`, `git checkout`) requiring human confirmation. Malformed JSON is reset to the canonical list. `.gitignore` is updated idempotently. Unit-tested in `tests/cli/mergeAllowlist.test.js`. `docs/reference.md` gains a new "Bash Permission Allowlist" section. Deferred: stack detection from `AGENTS.md`, auto-upgrade on reinstall, `npm run` sub-command granularity.
+→ [Detail](FTR-012-installer-bash-allowlist/feature.md)
+
+---
+
+## FTR-013 — Ledger as Full Pipeline Activity Tracker
+**Keywords:** token-ledger, pipeline-tracker, ledger-activity, define-feature, pm-phase1, pm-phase2, pm-phase3, appendLedgerEntry, updateLedgerEntry, resume-safety, liveness, status-running, status-done, timestamps, token-attribution
+**Status:** completed
+**Summary:** Evolves `{PREFIX}-token-ledger.json` from a passive phase-3-only token counter into a full pipeline activity tracker covering every agent from `define-feature` through `pm-phase3`. Each entry records agent identity, phase, model, status (`running | done | failed | skipped`), token delta, and start/end timestamps. Adds `appendLedgerEntry` and `updateLedgerEntry` helper functions in `bin/cli.js` (with unit tests); inline agent()-based equivalents in `pm-phase1.js` and `pm-phase2.js`; and wraps every `agent()` call in `pm-phase3.js` with append-before/update-after pattern. `define-feature.md` writes an initial `status: "running"` entry immediately after directory creation and finalizes it on completion. Enables liveness inspection, deterministic resume detection, and full cost attribution across all pipeline phases. Both repo (`.claude/`) and global (`C:/Users/Tomada D/.claude/`) copies of all four modified files are kept byte-identical.
+→ [Detail](FTR-013-ledger-pipeline-activity-tracker/feature.md)
+
+---

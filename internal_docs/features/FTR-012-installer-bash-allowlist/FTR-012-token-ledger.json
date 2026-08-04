@@ -1,0 +1,82 @@
+[
+  {
+    "agent": "developer-backend:INFRA",
+    "model": "sonnet",
+    "phase_delta_tokens": 0
+  },
+  {
+    "agent": "review-solution:INFRA",
+    "model": "sonnet",
+    "phase_delta_tokens": 0
+  },
+  {
+    "agent": "developer-backend:US-01",
+    "model": "sonnet",
+    "phase_delta_tokens": 3672
+  },
+  {
+    "agent": "developer-testing:US-01",
+    "model": "sonnet",
+    "phase_delta_tokens": 4698
+  },
+  {
+    "agent": "review-solution:US-01",
+    "model": "sonnet",
+    "phase_delta_tokens": 10443
+  },
+  {
+    "agent": "developer-backend:US-02",
+    "model": "sonnet",
+    "phase_delta_tokens": 8879
+  },
+  {
+    "agent": "developer-testing:US-02",
+    "model": "sonnet",
+    "phase_delta_tokens": 10813
+  },
+  {
+    "agent": "developer-backend:US-05",
+    "model": "sonnet",
+    "phase_delta_tokens": 29141
+  },
+  {
+    "agent": "review-solution:US-02",
+    "model": "sonnet",
+    "phase_delta_tokens": 15485
+  },
+  {
+    "agent": "developer-testing:US-05",
+    "model": "sonnet",
+    "phase_delta_tokens": 9025
+  },
+  {
+    "agent": "review-solution:US-05",
+    "model": "sonnet",
+    "phase_delta_tokens": 10197
+  },
+  {
+    "agent": "developer-backend:US-03",
+    "model": "sonnet",
+    "phase_delta_tokens": 5312
+  },
+  {
+    "agent": "developer-testing:US-03",
+    "model": "sonnet",
+    "phase_delta_tokens": 3740
+  },
+  {
+    "agent": "review-solution:US-03",
+    "model": "sonnet",
+    "phase_delta_tokens": 14261
+  },
+  {
+    "agent": "developer-testing:US-04",
+    "model": "sonnet",
+    "phase_delta_tokens": 7642
+  },
+  {
+    "agent": "review-solution:US-04",
+    "model": "sonnet",
+    "phase_delta_tokens": 9162
+  }
+]

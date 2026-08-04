@@ -7,8 +7,37 @@ export const meta = {
   ],
 }
 
+// ── Ledger helper functions ───────────────────────────────────────────────────
+// Route all ledger I/O through agent() — fs is not available in the workflow runtime.
+// Mirrors appendLedgerEntry / updateLedgerEntry from bin/cli.js (same contract).
+
+async function appendLedgerEntry(featureDir, prefix, entry) {
+  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
+  const entryJson = JSON.stringify(entry)
+  await agent(
+    `Append a JSON object to the ledger array at: ${ledgerPath}\n\n1. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n2. Push this object onto the array: ${entryJson}\n3. Write the full array back (JSON, 2-space indent). Return no output.`,
+    { label: 'append-ledger', phase: 'Work Breakdown', model: 'haiku' }
+  )
+}
+
+async function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
+  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
+  const updatesJson = JSON.stringify(updates)
+  await agent(
+    `Update an entry in the ledger array at: ${ledgerPath}\n\n1. Read the file. If it does not exist or cannot be parsed as a JSON array, do nothing.\n2. Search from the end for the last entry where agent === "${agentKey}".\n3. If found, merge these fields into that entry: ${updatesJson}\n4. Write the full array back (JSON, 2-space indent). Return no output.\n5. If not found, do nothing.`,
+    { label: 'update-ledger', phase: 'Work Breakdown', model: 'haiku' }
+  )
+}
+
+// ── Parse args ────────────────────────────────────────────────────────────────
+
 // args: "<path-to-feature.md>"
 const featurePath = (typeof args === 'string' ? args : '').trim().split(/\s+/)[0]
+
+// Derive feature directory and prefix early (needed for ledger writes before metrics agent runs)
+const featureDir  = featurePath.replace(/\/[^/]+$/, '')
+const prefixMatch = featureDir.match(/([A-Z]+-\d+)/)
+const prefix      = prefixMatch ? prefixMatch[1] : 'FTR-000'
 
 // ── generate-work-breakdown ───────────────────────────────────────────────────
 phase('Work Breakdown')
@@ -16,6 +45,16 @@ phase('Work Breakdown')
 const tokenLedger = []
 
 log(`Running generate-work-breakdown for ${featurePath}`)
+const wbStartedAt = new Date().toISOString()
+await appendLedgerEntry(featureDir, prefix, {
+  agent: 'generate-work-breakdown:phase2',
+  phase: 'phase2',
+  model: 'haiku',
+  status: 'running',
+  phase_delta_tokens: 0,
+  started_at: wbStartedAt,
+  completed_at: null,
+})
 const beforeWB = budget.spent()
 await agent(featurePath, {
   agentType: 'generate-work-breakdown',
@@ -23,6 +62,11 @@ await agent(featurePath, {
   phase:     'Work Breakdown',
 })
 const wbTokens = budget.spent() - beforeWB
+await updateLedgerEntry(featureDir, prefix, 'generate-work-breakdown:phase2', {
+  status: 'done',
+  completed_at: new Date().toISOString(),
+  phase_delta_tokens: wbTokens,
+})
 tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
 log(`generate-work-breakdown done — phase delta: ${wbTokens} tokens`)
 
@@ -48,7 +92,34 @@ const PARSE_SCHEMA = {
   required: ['prefix', 'user_stories', 'total_tasks', 'work_breakdown_path'],
 }
 
-const phase1Tokens = wbTokens  // tokens consumed by this phase so far
+// ── Load token pricing ────────────────────────────────────────────────────────
+// Pricing config is read inline (haiku agent) so it survives path-agnostic installs.
+// Cost formula: tokens * (0.8 * input + 0.2 * output) / 1_000_000 * usd_to_eur
+// (80/20 input/output split — no per-agent breakdown available in the ledger)
+const pricingRaw = await agent(
+  `Read the file docs/token-pricing.json and return its raw JSON contents as a string, nothing else.`,
+  { label: 'read-pricing', phase: 'Effort Estimate', model: 'haiku' }
+)
+let pricing = null
+try { pricing = JSON.parse(typeof pricingRaw === 'string' ? pricingRaw.trim() : '{}') } catch (_) {}
+
+function tokenCostEur(tokens, model) {
+  if (!pricing || !pricing.models) return null
+  const m = pricing.models[model] || pricing.models['sonnet']
+  const usdPer1M = 0.8 * m.input_per_1m_usd + 0.2 * m.output_per_1m_usd
+  return (tokens * usdPer1M / 1_000_000) * (pricing.usd_to_eur || 1)
+}
+
+function formatEur(val) {
+  if (val === null || val === undefined) return '—'
+  return '€' + val.toFixed(4)
+}
+
+// NOTE: pm-phase2 is a separate workflow and does NOT receive pm-phase1's token ledger,
+// so the real Phase 1 actuals (generate-requirements/tech-spec/validate) are unknown here.
+// They are written as "—" placeholders below and filled later by the orchestrator (the
+// implement-feature skill Step 7, which holds all three phase ledgers). Do NOT reuse wbTokens
+// as a stand-in for Phase 1 — that mislabels Phase 2's tokens as Phase 1's.
 
 const metrics = await agent(
   `You have four tasks:
@@ -113,46 +184,52 @@ Write {feature_dir}/{PREFIX}-Token-Estimate.md with this format:
 
 ## Phase 1 — Documentation (Actuals)
 
-| Agent | Task | Model | Tokens Est. | Tokens Actual |
-|-------|------|-------|------------|--------------|
-| generate-requirements | Generate requirements from feature.md | haiku | — | {phase1_req_tokens} |
-| generate-tech-spec | Generate tech spec from feature.md | haiku | — | {phase1_spec_tokens} |
-| validate-feature-docs | Validate requirements + tech spec | haiku | — | {phase1_val_tokens} |
-| **Phase 1 total** | | | **—** | **${phase1Tokens}** |
+Phase 1 ran in a separate workflow (pm-phase1); its per-agent token actuals are filled in
+by the orchestrator after implementation. Leave the Tokens Actual cells as "—" here.
+
+| Agent | Task | Model | Tokens Est. | Est. cost € | Tokens Actual | Actual cost € |
+|-------|------|-------|------------|------------|--------------|--------------|
+| generate-requirements | Generate requirements from feature.md | haiku | — | — | — | — |
+| generate-tech-spec | Generate tech spec from feature.md | haiku | — | — | — | — |
+| validate-feature-docs | Validate requirements + tech spec | haiku | — | — | — | — |
+| **Phase 1 total** | | | **—** | **—** | **—** | **—** |
 
 ## Phase 2 — Work Breakdown (Actuals)
 
-| Agent | Task | Model | Tokens Est. | Tokens Actual |
-|-------|------|-------|------------|--------------|
-| generate-work-breakdown | Generate work breakdown from docs | haiku | — | {wbTokens from above} |
-| **Phase 2 total** | | | **—** | **{wbTokens from above}** |
+| Agent | Task | Model | Tokens Est. | Est. cost € | Tokens Actual | Actual cost € |
+|-------|------|-------|------------|------------|--------------|--------------|
+| generate-work-breakdown | Generate work breakdown from docs | haiku | — | — | {wbTokens from above} | ${formatEur(tokenCostEur(wbTokens, 'haiku'))} |
+| **Phase 2 total** | | | **—** | **—** | **{wbTokens from above}** | **${formatEur(tokenCostEur(wbTokens, 'haiku'))}** |
 
 ## Phase 3 — Implementation (Estimates)
 
 Estimates based on {total_tasks} tasks ({domain_breakdown}), {user_stories} User Stories.
 Baseline: ~15,000 tokens/BE task, ~8,000/TEST task, ~5,000/INFRA task.
 
-| Agent | Task | Model | Tokens Est. | Tokens Actual |
-|-------|------|-------|------------|--------------|
-| developer-backend | Implement BE/INFRA tasks | sonnet | {estimated: be_tasks * 15000 + infra_tasks * 5000} | — |
-| developer-testing | Implement TEST tasks | sonnet | {estimated: test_tasks * 8000} | — |
-| review-solution (×{user_stories}) | Architect review per US | sonnet | {estimated: user_stories * 8000} | — |
-| remediation | Fix review issues | sonnet | ~10,000 | — |
-| pr-and-registry | Push branch, create PR | sonnet | ~5,000 | — |
-| write-actuals | Update Token/Effort Estimate | sonnet | ~3,000 | — |
-| **Phase 3 total** | | | **{sum of phase 3 estimates}** | **—** |
+| Agent | Task | Model | Tokens Est. | Est. cost € | Tokens Actual | Actual cost € |
+|-------|------|-------|------------|------------|--------------|--------------|
+| developer-backend | Implement BE/INFRA tasks | sonnet | {estimated: be_tasks * 15000 + infra_tasks * 5000} | {cost for that estimate, sonnet} | — | — |
+| developer-testing | Implement TEST tasks | sonnet | {estimated: test_tasks * 8000} | {cost for that estimate, sonnet} | — | — |
+| review-solution (×{user_stories}) | Architect review per US | sonnet | {estimated: user_stories * 8000} | {cost for that estimate, sonnet} | — | — |
+| remediation | Fix review issues | sonnet | ~10,000 | {cost for 10000, sonnet} | — | — |
+| pr-and-registry | Push branch, create PR | sonnet | ~5,000 | {cost for 5000, sonnet} | — | — |
+| write-actuals | Update Token/Effort Estimate | sonnet | ~3,000 | {cost for 3000, sonnet} | — | — |
+| **Phase 3 total** | | | **{sum of phase 3 token estimates}** | **{sum of phase 3 cost estimates}** | **—** | **—** |
+
+For the "Est. cost €" column in Phase 3: use the formula tokens * (0.8 * 3.00 + 0.2 * 15.00) / 1_000_000 * ${pricing ? pricing.usd_to_eur : 0.92} for sonnet rows. Round to 4 decimal places, prefix with €.
 
 ## Grand Total
 
-| Phase | Tokens Est. | Tokens Actual |
-|-------|------------|--------------|
-| Phase 1 — Documentation | — | ${phase1Tokens} |
-| Phase 2 — Work Breakdown | — | {wbTokens from above} |
-| Phase 3 — Implementation | {sum of phase 3 estimates} | — |
-| **Total** | **{sum of phase 3 estimates}** | **{phase1Tokens + wbTokens} (partial)** |
+| Phase | Tokens Est. | Est. cost € | Tokens Actual | Actual cost € |
+|-------|------------|------------|--------------|--------------|
+| Phase 1 — Documentation | — | — | — (filled by orchestrator) | — |
+| Phase 2 — Work Breakdown | — | — | {wbTokens from above} | ${formatEur(tokenCostEur(wbTokens, 'haiku'))} |
+| Phase 3 — Implementation | {sum of phase 3 token estimates} | {sum of phase 3 cost estimates} | — | — |
+| **Total** | **{sum of phase 3 token estimates}** | **{sum of phase 3 cost estimates}** | **{wbTokens} (partial)** | **${formatEur(tokenCostEur(wbTokens, 'haiku'))} (partial)** |
 
 ---
 *Actuals will be appended by pm-phase3 after implementation completes.*
+*Cost assumes 80% input / 20% output token split. Pricing: sonnet $3.00/$15.00 per 1M, haiku $0.80/$4.00 per 1M (USD). Rate: $1 = €${pricing ? pricing.usd_to_eur : '0.92'} (${pricing ? pricing.usd_to_eur_date : 'see docs/token-pricing.json'}).*
 
 TASK 4 — Set return values.
 Set effort_estimate_path to the full path of the written Effort-Estimate.md.

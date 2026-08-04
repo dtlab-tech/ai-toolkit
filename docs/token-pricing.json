@@ -1,0 +1,21 @@
+{
+  "_comment": "Anthropic API pricing (USD per 1M tokens). Update when prices change. EUR conversion uses the rate below.",
+  "_source": "https://www.anthropic.com/pricing — last updated 2026-07-31",
+  "_split": "No per-agent input/output breakdown available in the ledger. Assume 80% input / 20% output as a reasonable approximation.",
+  "usd_to_eur": 0.92,
+  "usd_to_eur_date": "2026-07-31",
+  "models": {
+    "haiku": {
+      "input_per_1m_usd": 0.80,
+      "output_per_1m_usd": 4.00
+    },
+    "sonnet": {
+      "input_per_1m_usd": 3.00,
+      "output_per_1m_usd": 15.00
+    },
+    "opus": {
+      "input_per_1m_usd": 15.00,
+      "output_per_1m_usd": 75.00
+    }
+  }
+}
