@@ -57,14 +57,13 @@ phase('Work Breakdown')
 const tokenLedger = []
 
 log(`Running generate-work-breakdown for ${featurePath}`)
-const wbStartedAt = new Date().toISOString()
 await appendLedgerEntry(featureDir, prefix, {
   agent: 'generate-work-breakdown:phase2',
   phase: 'phase2',
   model: 'haiku',
   status: 'running',
   phase_delta_tokens: 0,
-  started_at: wbStartedAt,
+  started_at: '__TS__',
   completed_at: null,
 })
 const beforeWB = budget.spent()
@@ -76,7 +75,7 @@ await agent(featurePath, {
 const wbTokens = budget.spent() - beforeWB
 await updateLedgerEntry(featureDir, prefix, 'generate-work-breakdown:phase2', {
   status: 'done',
-  completed_at: new Date().toISOString(),
+  completed_at: '__TS__',
   phase_delta_tokens: wbTokens,
 })
 tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
