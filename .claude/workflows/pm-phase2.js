@@ -13,18 +13,30 @@ export const meta = {
 
 async function appendLedgerEntry(featureDir, prefix, entry) {
   const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  const entryJson = JSON.stringify(entry)
+  // started_at is generated via Bash inside the agent to get a real UTC timestamp with time
+  const entryWithoutTs = JSON.stringify({ ...entry, started_at: '__TS__', completed_at: null })
   await agent(
-    `Append a JSON object to the ledger array at: ${ledgerPath}\n\n1. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n2. Push this object onto the array: ${entryJson}\n3. Write the full array back (JSON, 2-space indent). Return no output.`,
+    `Append a JSON object to the ledger array at: ${ledgerPath}\n\n` +
+    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
+    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n` +
+    `3. Push this object onto the array, replacing "__TS__" in started_at with NOW: ${entryWithoutTs}\n` +
+    `4. Write the full array back (JSON, 2-space indent). Return no output.`,
     { label: 'append-ledger', phase: 'Work Breakdown', model: 'haiku' }
   )
 }
 
 async function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
   const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  const updatesJson = JSON.stringify(updates)
+  // completed_at is generated via Bash inside the agent to get a real UTC timestamp with time
+  const updatesWithoutTs = JSON.stringify({ ...updates, completed_at: '__TS__' })
   await agent(
-    `Update an entry in the ledger array at: ${ledgerPath}\n\n1. Read the file. If it does not exist or cannot be parsed as a JSON array, do nothing.\n2. Search from the end for the last entry where agent === "${agentKey}".\n3. If found, merge these fields into that entry: ${updatesJson}\n4. Write the full array back (JSON, 2-space indent). Return no output.\n5. If not found, do nothing.`,
+    `Update an entry in the ledger array at: ${ledgerPath}\n\n` +
+    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
+    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, do nothing.\n` +
+    `3. Search from the end for the last entry where agent === "${agentKey}".\n` +
+    `4. If found, merge these fields into that entry, replacing "__TS__" in completed_at with NOW: ${updatesWithoutTs}\n` +
+    `5. Write the full array back (JSON, 2-space indent). Return no output.\n` +
+    `6. If not found, do nothing.`,
     { label: 'update-ledger', phase: 'Work Breakdown', model: 'haiku' }
   )
 }
@@ -45,14 +57,13 @@ phase('Work Breakdown')
 const tokenLedger = []
 
 log(`Running generate-work-breakdown for ${featurePath}`)
-const wbStartedAt = new Date().toISOString()
 await appendLedgerEntry(featureDir, prefix, {
   agent: 'generate-work-breakdown:phase2',
   phase: 'phase2',
   model: 'haiku',
   status: 'running',
   phase_delta_tokens: 0,
-  started_at: wbStartedAt,
+  started_at: '__TS__',
   completed_at: null,
 })
 const beforeWB = budget.spent()
@@ -64,7 +75,7 @@ await agent(featurePath, {
 const wbTokens = budget.spent() - beforeWB
 await updateLedgerEntry(featureDir, prefix, 'generate-work-breakdown:phase2', {
   status: 'done',
-  completed_at: new Date().toISOString(),
+  completed_at: '__TS__',
   phase_delta_tokens: wbTokens,
 })
 tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
