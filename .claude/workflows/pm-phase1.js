@@ -120,14 +120,13 @@ const errors      = []
 
 if (discoveryResult.needs_requirements) {
   const reqKey = 'generate-requirements:phase1'
-  const reqStartedAt = new Date().toISOString()
   await appendLedgerEntry(feature_dir, prefix, {
     agent: reqKey,
     phase: 'phase1',
     model: 'haiku',
     status: 'running',
     phase_delta_tokens: 0,
-    started_at: reqStartedAt,
+    started_at: '__TS__',
     completed_at: null,
   })
   const beforeReq = budget.spent()
@@ -135,7 +134,7 @@ if (discoveryResult.needs_requirements) {
   const reqTokens = budget.spent() - beforeReq
   await updateLedgerEntry(feature_dir, prefix, reqKey, {
     status: 'done',
-    completed_at: new Date().toISOString(),
+    completed_at: '__TS__',
     phase_delta_tokens: reqTokens,
   })
   tokenLedger.push({ agent: 'generate-requirements', model: 'haiku', phase_delta_tokens: reqTokens })
@@ -149,14 +148,13 @@ phase('Tech-Spec')
 
 if (discoveryResult.needs_tech_spec) {
   const specKey = 'generate-tech-spec:phase1'
-  const specStartedAt = new Date().toISOString()
   await appendLedgerEntry(feature_dir, prefix, {
     agent: specKey,
     phase: 'phase1',
     model: 'haiku',
     status: 'running',
     phase_delta_tokens: 0,
-    started_at: specStartedAt,
+    started_at: '__TS__',
     completed_at: null,
   })
   const beforeSpec = budget.spent()
@@ -164,7 +162,7 @@ if (discoveryResult.needs_tech_spec) {
   const specTokens = budget.spent() - beforeSpec
   await updateLedgerEntry(feature_dir, prefix, specKey, {
     status: 'done',
-    completed_at: new Date().toISOString(),
+    completed_at: '__TS__',
     phase_delta_tokens: specTokens,
   })
   tokenLedger.push({ agent: 'generate-tech-spec', model: 'haiku', phase_delta_tokens: specTokens })
@@ -183,14 +181,13 @@ const MAX_CYCLES = 3
 for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   log(`validate-feature-docs cycle ${cycle}`)
   const valKey = `validate-feature-docs:phase1:cycle${cycle}`
-  const valStartedAt = new Date().toISOString()
   await appendLedgerEntry(feature_dir, prefix, {
     agent: valKey,
     phase: 'phase1',
     model: 'haiku',
     status: 'running',
     phase_delta_tokens: 0,
-    started_at: valStartedAt,
+    started_at: '__TS__',
     completed_at: null,
   })
   const beforeVal = budget.spent()
@@ -198,7 +195,7 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   const valTokens = budget.spent() - beforeVal
   await updateLedgerEntry(feature_dir, prefix, valKey, {
     status: 'done',
-    completed_at: new Date().toISOString(),
+    completed_at: '__TS__',
     phase_delta_tokens: valTokens,
   })
   tokenLedger.push({ agent: `validate-feature-docs (cycle ${cycle})`, model: 'haiku', phase_delta_tokens: valTokens })

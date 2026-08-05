@@ -16,6 +16,11 @@ export const meta = {
 // for deterministic, atomic ledger I/O instead of routing through agent() calls.
 
 const fs = require('fs')
+const { execSync } = require('child_process')
+
+function getTimestamp() {
+  try { return execSync('date -u +"%Y-%m-%dT%H:%M:%SZ"', { encoding: 'utf8' }).trim() } catch (_) { return '1970-01-01T00:00:00Z' }
+}
 
 function appendLedgerEntry (featureDir, prefix, entry) {
   const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
@@ -65,13 +70,13 @@ const csvPath     = `${featureDir}/${prefix}-Work-Breakdown.csv`
 
 log(`Reading CSV: ${csvPath}`)
 
-appendLedgerEntry(featureDir, prefix, { agent: 'read-wb-csv:phase3', phase: 'phase3', model: 'haiku', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+appendLedgerEntry(featureDir, prefix, { agent: 'read-wb-csv:phase3', phase: 'phase3', model: 'haiku', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
 const beforeCsv = budget.spent()
 const csvContent = await agent(
   `Read the file at path: ${csvPath}\nReturn ONLY the raw file contents, nothing else. No explanation, no formatting, no JSON wrapping — just the raw text of the file.`,
   { label: 'read-wb-csv', phase: 'Parse', model: 'haiku' }
 )
-updateLedgerEntry(featureDir, prefix, 'read-wb-csv:phase3', { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: budget.spent() - beforeCsv })
+updateLedgerEntry(featureDir, prefix, 'read-wb-csv:phase3', { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: budget.spent() - beforeCsv })
 
 // Parse CSV into structured phases — pure JS, no AI
 const rows = csvContent
@@ -186,7 +191,7 @@ const executePhase = async (implPhase) => {
     // Step 1 — impl groups in parallel (INFRA / BE / FE)
     if (implPhase.impl_groups.length > 0) {
       const implKey = `${implPhase.impl_groups.map(g => g.agent_type).join('+')}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`
-      appendLedgerEntry(featureDir, prefix, { agent: implKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+      appendLedgerEntry(featureDir, prefix, { agent: implKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
       const beforeImpl = budget.spent()
       await parallel(implPhase.impl_groups.map(group => () =>
         agent(
@@ -199,7 +204,7 @@ const executePhase = async (implPhase) => {
         )
       ))
       const implTokens = budget.spent() - beforeImpl
-      updateLedgerEntry(featureDir, prefix, implKey, { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: implTokens })
+      updateLedgerEntry(featureDir, prefix, implKey, { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: implTokens })
       tokenLedger.push({ agent: implKey, model: 'sonnet', phase_delta_tokens: implTokens })
       log(`Phase ${implPhase.phase_id} impl groups done — ${implTokens} tokens`)
     }
@@ -207,7 +212,7 @@ const executePhase = async (implPhase) => {
     // Step 2 — test groups in parallel (TEST) — after impl groups
     if (implPhase.test_groups.length > 0) {
       const testKey = `developer-testing:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`
-      appendLedgerEntry(featureDir, prefix, { agent: testKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+      appendLedgerEntry(featureDir, prefix, { agent: testKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
       const beforeTest = budget.spent()
       await parallel(implPhase.test_groups.map(group => () =>
         agent(
@@ -220,14 +225,14 @@ const executePhase = async (implPhase) => {
         )
       ))
       const testTokens = budget.spent() - beforeTest
-      updateLedgerEntry(featureDir, prefix, testKey, { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: testTokens })
+      updateLedgerEntry(featureDir, prefix, testKey, { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: testTokens })
       tokenLedger.push({ agent: testKey, model: 'sonnet', phase_delta_tokens: testTokens })
       log(`Phase ${implPhase.phase_id} test groups done — ${testTokens} tokens`)
     }
 
     // Step 3 — review-solution
     const reviewKey = `review-solution:${implPhase.phase_id}`
-    appendLedgerEntry(featureDir, prefix, { agent: reviewKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+    appendLedgerEntry(featureDir, prefix, { agent: reviewKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
     const beforeReview = budget.spent()
     const review = await agent(
       `${featurePath} --scope ${implPhase.phase_id}`,
@@ -239,7 +244,7 @@ const executePhase = async (implPhase) => {
       }
     )
     const reviewTokens = budget.spent() - beforeReview
-    updateLedgerEntry(featureDir, prefix, reviewKey, { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: reviewTokens })
+    updateLedgerEntry(featureDir, prefix, reviewKey, { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: reviewTokens })
     tokenLedger.push({
       agent: reviewKey,
       model: 'sonnet',
@@ -313,7 +318,7 @@ log(`Implementation complete — ${phasesDone} phases, ${usPassed.length} US pas
 // contention down to a single centralized run with one consolidated failure report.
 phase('Test')
 
-appendLedgerEntry(featureDir, prefix, { agent: 'final-test-run', phase: 'phase3', model: 'haiku', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+appendLedgerEntry(featureDir, prefix, { agent: 'final-test-run', phase: 'phase3', model: 'haiku', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
 const beforeTest = budget.spent()
 await agent(
   `Run the full test suite in the repository root and report the result.
@@ -326,7 +331,7 @@ Do NOT fix failing tests — only report them.`,
   { label: 'final-test-run', phase: 'Test', model: 'haiku' }
 )
 const testTokens = budget.spent() - beforeTest
-updateLedgerEntry(featureDir, prefix, 'final-test-run', { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: testTokens })
+updateLedgerEntry(featureDir, prefix, 'final-test-run', { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: testTokens })
 tokenLedger.push({ agent: 'final-test-run', model: 'haiku', phase_delta_tokens: testTokens })
 log(`Test run complete — ${testTokens} tokens`)
 
@@ -347,7 +352,7 @@ let issuesDeferred = 0
 
 if (issuesOpen > 0 && issuesPath) {
   log(`Remediation: ${issuesOpen} OPEN issues`)
-  appendLedgerEntry(featureDir, prefix, { agent: 'remediation', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+  appendLedgerEntry(featureDir, prefix, { agent: 'remediation', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
   const beforeRem = budget.spent()
 
   const remResult = await agent(
@@ -370,7 +375,7 @@ Update the Issues Register Status column in place for each resolved/deferred iss
   )
 
   const remTokens = budget.spent() - beforeRem
-  updateLedgerEntry(featureDir, prefix, 'remediation', { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: remTokens })
+  updateLedgerEntry(featureDir, prefix, 'remediation', { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: remTokens })
   tokenLedger.push({ agent: 'remediation', model: 'sonnet', phase_delta_tokens: remTokens })
   issuesFixed    = remResult.issues_fixed    || 0
   issuesDeferred = remResult.issues_deferred || 0
@@ -391,7 +396,7 @@ const PR_SCHEMA = {
   required: ['pr_url'],
 }
 
-appendLedgerEntry(featureDir, prefix, { agent: 'pr-and-registry', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+appendLedgerEntry(featureDir, prefix, { agent: 'pr-and-registry', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
 const beforePR = budget.spent()
 
 const prResult = await agent(
@@ -441,7 +446,7 @@ If the PR creation fails, return { "pr_url": "(PR creation failed)", "registry_u
 )
 
 const prTokens = budget.spent() - beforePR
-updateLedgerEntry(featureDir, prefix, 'pr-and-registry', { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: prTokens })
+updateLedgerEntry(featureDir, prefix, 'pr-and-registry', { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: prTokens })
 tokenLedger.push({ agent: 'pr-and-registry', model: 'sonnet', phase_delta_tokens: prTokens })
 log(`PR done: ${prResult.pr_url} — ${prTokens} tokens`)
 
@@ -528,7 +533,7 @@ const ACTUALS_SCHEMA = {
   required: [],
 }
 
-appendLedgerEntry(featureDir, prefix, { agent: 'write-actuals', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: new Date().toISOString(), completed_at: null })
+appendLedgerEntry(featureDir, prefix, { agent: 'write-actuals', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: getTimestamp(), completed_at: null })
 const beforeActuals = budget.spent()
 
 await agent(
@@ -622,7 +627,7 @@ Return { "token_estimate_path": "<path>", "effort_estimate_path": "<path>" }.`,
 )
 
 const actualsTokens = budget.spent() - beforeActuals
-updateLedgerEntry(featureDir, prefix, 'write-actuals', { status: 'done', completed_at: new Date().toISOString(), phase_delta_tokens: actualsTokens })
+updateLedgerEntry(featureDir, prefix, 'write-actuals', { status: 'done', completed_at: getTimestamp(), phase_delta_tokens: actualsTokens })
 tokenLedger.push({ agent: 'write-actuals', model: 'sonnet', phase_delta_tokens: actualsTokens })
 log(`Actuals written — ${actualsTokens} tokens`)
 
