@@ -269,6 +269,69 @@ for (const phase of phases) {
   }
 }
 
+// ── Check 5: Task ID format ──────────────────────────────────────────────────
+
+const INFRA_TASK_ID_RE = /^INFRA-TASK-(BE|FE|DB|DevOps|INFRA|TEST)-\d+$/
+const US_TASK_ID_RE    = /^[A-Z0-9-]+-TASK-(BE|FE|DB|DevOps|INFRA|TEST)-\d+$/
+
+for (const phase of phases) {
+  const isInfraPhase = phase.id === 'INFRA' || phase.type === 'infra'
+  const re = isInfraPhase ? INFRA_TASK_ID_RE : US_TASK_ID_RE
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (task.id == null) continue
+    if (!re.test(task.id)) {
+      report.errors.push({
+        category: ERRORS.INVALID_ID_FORMAT,
+        severity: 'error',
+        taskId: task.id,
+        phaseId: phase.id,
+        field: 'id',
+        message: `Task "${task.id}" in phase "${phase.id}" has an invalid ID format`,
+        details: { taskId: task.id, phaseId: phase.id, expectedPattern: re.toString() },
+      })
+    }
+  }
+}
+
+// ── Check 6: Domain whitelist ────────────────────────────────────────────────
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (task.domain == null) continue
+    if (!VALID_DOMAINS.includes(task.domain)) {
+      report.errors.push({
+        category: ERRORS.INVALID_DOMAIN,
+        severity: 'error',
+        taskId: task.id,
+        field: 'domain',
+        message: `Task "${task.id}" has invalid domain "${task.domain}"; must be one of ${VALID_DOMAINS.join(', ')}`,
+        details: { taskId: task.id, domain: task.domain, validDomains: VALID_DOMAINS },
+      })
+    }
+  }
+}
+
+// ── Check 7: AgentType whitelist ─────────────────────────────────────────────
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (task.agentType == null) continue
+    if (!VALID_AGENT_TYPES.includes(task.agentType)) {
+      report.errors.push({
+        category: ERRORS.INVALID_AGENT_TYPE,
+        severity: 'error',
+        taskId: task.id,
+        field: 'agentType',
+        message: `Task "${task.id}" has invalid agentType "${task.agentType}"; must be one of ${VALID_AGENT_TYPES.join(', ')}`,
+        details: { taskId: task.id, agentType: task.agentType, validAgentTypes: VALID_AGENT_TYPES },
+      })
+    }
+  }
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
