@@ -1,3 +1,8 @@
+'use strict'
+
+const fs = require('fs')
+const path = require('path')
+
 // Schema v2 constants — used by validation checks below
 
 const SCHEMA_VERSION = 2
@@ -69,4 +74,68 @@ const ERRORS = {
   EMPTY_PHASE:                  'empty_phase',                   // check 23
 }
 
-// Validation logic follows in subsequent tasks (US-02-T01..T14)
+// ── Entry point ──────────────────────────────────────────────────────────────
+
+const jsonPath = process.argv[2]
+const requirementsPath = process.argv[3]  // optional; used by AC checks (US-02-T10..T12)
+
+if (!jsonPath) {
+  process.stderr.write('Error: missing required argument <path-to-work-breakdown.json>\n')
+  process.exit(2)
+}
+
+// Read and parse the work breakdown JSON
+let raw
+try {
+  raw = fs.readFileSync(path.resolve(jsonPath), 'utf8')
+} catch (err) {
+  process.stderr.write(`Error: cannot read file "${jsonPath}": ${err.message}\n`)
+  process.exit(2)
+}
+
+let wb
+try {
+  wb = JSON.parse(raw)
+} catch (err) {
+  process.stderr.write(`Error: "${jsonPath}" is not valid JSON: ${err.message}\n`)
+  process.exit(2)
+}
+
+// ── Report structure ─────────────────────────────────────────────────────────
+
+const report = {
+  valid: true,
+  schemaVersion: wb.schemaVersion,
+  taskCount: 0,
+  errors: [],
+  warnings: [],
+  durationBands: {},
+  domainDistribution: {},
+  dependencies: {},
+}
+
+// ── Check 2: Schema version ──────────────────────────────────────────────────
+
+if (wb.schemaVersion !== SCHEMA_VERSION) {
+  report.errors.push({
+    category: ERRORS.SCHEMA_VERSION_INVALID,
+    severity: 'error',
+    taskId: null,
+    field: 'schemaVersion',
+    message: `schemaVersion must be ${SCHEMA_VERSION}, got ${JSON.stringify(wb.schemaVersion)}`,
+    details: { expected: SCHEMA_VERSION, actual: wb.schemaVersion },
+  })
+}
+
+// ── Checks 3–23 follow in subsequent tasks (US-02-T02..T13) ─────────────────
+
+// ── Exit code routing ────────────────────────────────────────────────────────
+
+if (report.errors.length > 0) {
+  report.valid = false
+  process.stdout.write(JSON.stringify(report, null, 2) + '\n')
+  process.exit(1)
+}
+
+process.stdout.write(JSON.stringify(report, null, 2) + '\n')
+process.exit(0)
