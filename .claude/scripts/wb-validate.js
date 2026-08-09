@@ -413,6 +413,78 @@ for (const phase of phases) {
   }
 }
 
+// ── Check 11: Task cycle detection (DFS gray/black coloring) ─────────────────
+
+// Build adjacency map; skip tasks with null IDs; skip refs not in graph and self-deps
+const adjMap = new Map()  // taskId → valid dependsOn[]
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (task.id == null) continue
+    const validDeps = Array.isArray(task.dependsOn)
+      ? task.dependsOn.filter(dep => allTaskIds.has(dep) && dep !== task.id)
+      : []
+    adjMap.set(task.id, validDeps)
+  }
+}
+
+// Three-color DFS: WHITE = unvisited, GRAY = in progress (on current path), BLACK = done
+const WHITE = 0
+const GRAY  = 1
+const BLACK = 2
+
+const colors = new Map()
+for (const taskId of adjMap.keys()) {
+  colors.set(taskId, WHITE)
+}
+
+const detectedCycles = []
+
+function dfsCycle(nodeId, pathStack) {
+  colors.set(nodeId, GRAY)
+  pathStack.push(nodeId)
+
+  for (const dep of adjMap.get(nodeId)) {
+    const color = colors.get(dep)
+    if (color === GRAY) {
+      // Back edge — collect all members of this cycle from the current path stack
+      const cycleStart = pathStack.indexOf(dep)
+      detectedCycles.push(pathStack.slice(cycleStart))
+    } else if (color === WHITE) {
+      dfsCycle(dep, pathStack)
+    }
+    // BLACK: node fully processed — no cycle through it
+  }
+
+  pathStack.pop()
+  colors.set(nodeId, BLACK)
+}
+
+for (const taskId of adjMap.keys()) {
+  if (colors.get(taskId) === WHITE) {
+    dfsCycle(taskId, [])
+  }
+}
+
+// Populate dependencies with task-level graph data
+report.dependencies.taskGraph = {}
+for (const [taskId, deps] of adjMap) {
+  report.dependencies.taskGraph[taskId] = deps
+}
+report.dependencies.taskCycles = detectedCycles
+
+// Report each detected cycle as one error entry
+for (const cycleMembers of detectedCycles) {
+  report.errors.push({
+    category: ERRORS.TASK_CYCLE_DETECTED,
+    severity: 'error',
+    taskId: null,
+    field: null,
+    message: `Dependency cycle detected among tasks: ${cycleMembers.join(' → ')} → ${cycleMembers[0]}`,
+    details: { cycleMembers },
+  })
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
