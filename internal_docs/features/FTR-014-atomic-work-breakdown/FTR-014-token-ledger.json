@@ -1,0 +1,56 @@
+[
+  {
+    "agent": "define-feature:define",
+    "phase": "define",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-04T23:30:16Z",
+    "completed_at": "2026-08-04T23:31:34Z"
+  },
+  {
+    "agent": "generate-requirements:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 10771,
+    "started_at": "2026-08-05T15:08:25Z",
+    "completed_at": "2026-08-05T15:10:38Z"
+  },
+  {
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 15652,
+    "started_at": "2026-08-05T15:10:58Z",
+    "completed_at": "2026-08-05T15:14:29Z"
+  },
+  {
+    "agent": "validate-feature-docs:phase1:cycle1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 6441,
+    "started_at": "2026-08-05T15:14:49Z",
+    "completed_at": "2026-08-05T15:16:29Z"
+  },
+  {
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 16219,
+    "started_at": "2026-08-05T22:57:20Z",
+    "completed_at": "2026-08-08T22:01:22Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 39655,
+    "started_at": "2026-08-09T21:23:18Z",
+    "completed_at": "2026-08-09T21:25:53Z"
+  }
+]
