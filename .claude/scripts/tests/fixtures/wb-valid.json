@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "feature": "FTR-014",
+  "phases": [
+    {
+      "id": "INFRA",
+      "type": "infrastructure",
+      "title": "Shared infrastructure setup",
+      "commit": {
+        "type": "feat",
+        "subject": "add shared infrastructure scaffolding"
+      },
+      "tasks": [
+        {
+          "id": "INFRA-TASK-INFRA-01",
+          "title": "Create scripts directory structure",
+          "outcome": "The .claude/scripts directory exists and is included in installer copy paths",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": ["ls .claude/scripts"]
+          },
+          "estimate": {
+            "agentMinutes": 5,
+            "tokens": 8000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "feat",
+            "subject": "create .claude/scripts directory"
+          }
+        },
+        {
+          "id": "INFRA-TASK-INFRA-02",
+          "title": "Define schema v2 constants in wb-validate.js",
+          "outcome": "Constants block (SCHEMA_VERSION, REQUIRED_PHASE_FIELDS, REQUIRED_TASK_FIELDS, VALID_DOMAINS, VALID_AGENT_TYPES) is present at the top of wb-validate.js",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": ["INFRA-TASK-INFRA-01"],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": ["node -e \"const v = require('./.claude/scripts/wb-validate.js'); console.log('ok')\""]
+          },
+          "estimate": {
+            "agentMinutes": 10,
+            "tokens": 15000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "feat",
+            "subject": "add schema v2 constants to wb-validate.js"
+          }
+        },
+        {
+          "id": "INFRA-TASK-TEST-01",
+          "title": "Create test fixture for AC table parser",
+          "outcome": "tests/fixtures/ac-table-format.md exists with a valid AC table in the Section 3.2 contract format",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": ["ls .claude/scripts/tests/fixtures/ac-table-format.md"]
+          },
+          "estimate": {
+            "agentMinutes": 8,
+            "tokens": 12000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "test",
+            "subject": "add AC table parser fixture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "title": "Implement deterministic structural validator wb-validate.js",
+      "commit": {
+        "type": "feat",
+        "subject": "implement wb-validate.js structural validator"
+      },
+      "tasks": [
+        {
+          "id": "US-01-TASK-BE-01",
+          "title": "Implement wb-validate.js entry point with JSON parse and schema version check",
+          "outcome": "wb-validate.js parses the input JSON file and exits with code 2 if the file is missing or malformed, and exits with code 1 if schemaVersion is not exactly 2",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["INFRA-TASK-INFRA-02"],
+          "acceptanceCriteria": ["AC-05"],
+          "verification": {
+            "commands": [
+              "node .claude/scripts/wb-validate.js --help",
+              "npm test -- tests/cli/wb-validate.test.js --testNamePattern='schema version'"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 10,
+            "tokens": 20000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "feat",
+            "subject": "add wb-validate.js entry point with JSON parse and schema check"
+          }
+        },
+        {
+          "id": "US-01-TASK-BE-02",
+          "title": "Implement unique ID and required field validation in wb-validate.js",
+          "outcome": "wb-validate.js detects duplicate task IDs across all phases and reports missing or null required phase/task fields with category unique_id_violation or missing_field",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["US-01-TASK-BE-01"],
+          "acceptanceCriteria": ["AC-05"],
+          "verification": {
+            "commands": [
+              "npm test -- tests/cli/wb-validate.test.js --testNamePattern='unique ID'",
+              "npm test -- tests/cli/wb-validate.test.js --testNamePattern='required field'"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 8,
+            "tokens": 18000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "feat",
+            "subject": "add unique ID and required field validation to wb-validate.js"
+          }
+        },
+        {
+          "id": "US-01-TASK-TEST-01",
+          "title": "Write Jest tests for wb-validate.js schema version and unique ID checks",
+          "outcome": "tests/cli/wb-validate.test.js exists and all schema version and unique ID test cases pass under npm test",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": ["US-01-TASK-BE-01", "US-01-TASK-BE-02"],
+          "acceptanceCriteria": ["AC-05"],
+          "verification": {
+            "commands": [
+              "npm test -- tests/cli/wb-validate.test.js"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 15,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "test",
+            "subject": "add wb-validate.js schema version and unique ID tests"
+          }
+        }
+      ]
+    }
+  ]
+}
