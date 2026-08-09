@@ -127,7 +127,147 @@ if (wb.schemaVersion !== SCHEMA_VERSION) {
   })
 }
 
-// ── Checks 3–23 follow in subsequent tasks (US-02-T02..T13) ─────────────────
+// ── Check 3: Unique task IDs ─────────────────────────────────────────────────
+
+const phases = Array.isArray(wb.phases) ? wb.phases : []
+const seenTaskIds = new Map()   // taskId → first-seen phaseId
+const duplicateTaskIds = new Set()
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  report.taskCount += tasks.length
+  for (const task of tasks) {
+    if (task.id != null) {
+      if (seenTaskIds.has(task.id)) {
+        duplicateTaskIds.add(task.id)
+      } else {
+        seenTaskIds.set(task.id, phase.id)
+      }
+    }
+  }
+}
+
+for (const taskId of duplicateTaskIds) {
+  report.errors.push({
+    category: ERRORS.UNIQUE_ID_VIOLATION,
+    severity: 'error',
+    taskId,
+    field: 'id',
+    message: `Duplicate task ID "${taskId}" appears in multiple phases`,
+    details: { taskId },
+  })
+}
+
+// ── Check 4: Required phase fields ───────────────────────────────────────────
+
+for (const phase of phases) {
+  const phaseId = phase.id || '(unknown)'
+
+  for (const field of REQUIRED_PHASE_FIELDS) {
+    if (phase[field] == null) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        phaseId,
+        taskId: null,
+        field,
+        message: `Phase "${phaseId}" is missing required field "${field}"`,
+        details: { phaseId, field },
+      })
+    } else if (field === 'tasks' && !Array.isArray(phase[field])) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        phaseId,
+        taskId: null,
+        field,
+        message: `Phase "${phaseId}" field "tasks" must be an array`,
+        details: { phaseId, field },
+      })
+    }
+  }
+
+  // ── Check 4: Required task fields ─────────────────────────────────────────
+
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    const taskId = task.id || '(unknown)'
+
+    const topLevelFields = [
+      'id', 'title', 'outcome', 'domain', 'agentType', 'dependsOn',
+      'acceptanceCriteria', 'outputCount', 'commit',
+    ]
+    for (const field of topLevelFields) {
+      if (task[field] == null) {
+        report.errors.push({
+          category: ERRORS.MISSING_FIELD,
+          severity: 'error',
+          taskId,
+          field,
+          message: `Task "${taskId}" is missing required field "${field}"`,
+          details: { taskId, field },
+        })
+      }
+    }
+
+    // Nested: verification.commands — existence and array type only; emptiness checked later
+    if (task.verification == null || task.verification.commands == null) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        taskId,
+        field: 'verification.commands',
+        message: `Task "${taskId}" is missing required field "verification.commands"`,
+        details: { taskId, field: 'verification.commands' },
+      })
+    } else if (!Array.isArray(task.verification.commands)) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        taskId,
+        field: 'verification.commands',
+        message: `Task "${taskId}" field "verification.commands" must be an array`,
+        details: { taskId, field: 'verification.commands' },
+      })
+    }
+
+    // Nested: estimate.agentMinutes
+    if (task.estimate == null || task.estimate.agentMinutes == null) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        taskId,
+        field: 'estimate.agentMinutes',
+        message: `Task "${taskId}" is missing required field "estimate.agentMinutes"`,
+        details: { taskId, field: 'estimate.agentMinutes' },
+      })
+    }
+
+    // Nested: estimate.tokens
+    if (task.estimate == null || task.estimate.tokens == null) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        taskId,
+        field: 'estimate.tokens',
+        message: `Task "${taskId}" is missing required field "estimate.tokens"`,
+        details: { taskId, field: 'estimate.tokens' },
+      })
+    }
+
+    // commit.subject — commit itself is checked above as a top-level field
+    if (task.commit != null && task.commit.subject == null) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        taskId,
+        field: 'commit.subject',
+        message: `Task "${taskId}" is missing required field "commit.subject"`,
+        details: { taskId, field: 'commit.subject' },
+      })
+    }
+  }
+}
 
 // ── Exit code routing ────────────────────────────────────────────────────────
 
