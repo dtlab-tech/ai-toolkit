@@ -485,6 +485,101 @@ for (const cycleMembers of detectedCycles) {
   })
 }
 
+// ── Check 12 & 13: Phase dependency projection and cycle detection ────────────
+
+// seenTaskIds already maps taskId → ownerPhaseId; alias for clarity
+const taskToPhase = seenTaskIds  // Map<taskId, phaseId>
+
+// All known phase IDs for existence checks (Check 12)
+const phaseIdSet = new Set(phases.map(p => p.id).filter(id => id != null))
+
+// Step 2: Compute phase-level dependsOn projection (same algorithm as wb-render.js)
+// For each phase: union all task dependsOn IDs → map to owner phase → remove self → deduplicate
+const phaseDeps = new Map()  // Map<phaseId, Set<phaseId>>
+
+for (const phase of phases) {
+  if (phase.id == null) continue
+  const deps = new Set()
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (!Array.isArray(task.dependsOn)) continue
+    for (const refId of task.dependsOn) {
+      const ownerPhase = taskToPhase.get(refId)
+      if (ownerPhase == null) continue  // unresolved task dep — already reported in check 8
+      if (ownerPhase === phase.id) continue  // remove self-loops (intra-phase)
+      deps.add(ownerPhase)
+    }
+  }
+  phaseDeps.set(phase.id, deps)
+}
+
+// Check 12: Phase dependency existence (defensive — should not fire if check 8 passed)
+for (const [phaseId, deps] of phaseDeps) {
+  for (const depPhaseId of deps) {
+    if (!phaseIdSet.has(depPhaseId)) {
+      report.errors.push({
+        category: ERRORS.PHASE_DEPENDENCY_NOT_FOUND,
+        severity: 'error',
+        taskId: null,
+        field: 'dependsOn',
+        message: `Phase "${phaseId}" has a projected dependency on phase "${depPhaseId}" which does not exist`,
+        details: { phaseId, missingPhase: depPhaseId },
+      })
+    }
+  }
+}
+
+// Check 13: Phase cycle detection (same DFS gray/black algorithm as check 11)
+const phaseColors = new Map()
+for (const phaseId of phaseDeps.keys()) {
+  phaseColors.set(phaseId, WHITE)
+}
+
+const detectedPhaseCycles = []
+
+function dfsPhaseCycle(nodeId, pathStack) {
+  phaseColors.set(nodeId, GRAY)
+  pathStack.push(nodeId)
+
+  for (const dep of phaseDeps.get(nodeId)) {
+    const color = phaseColors.get(dep)
+    if (color === GRAY) {
+      const cycleStart = pathStack.indexOf(dep)
+      detectedPhaseCycles.push(pathStack.slice(cycleStart))
+    } else if (color === WHITE) {
+      dfsPhaseCycle(dep, pathStack)
+    }
+  }
+
+  pathStack.pop()
+  phaseColors.set(nodeId, BLACK)
+}
+
+for (const phaseId of phaseDeps.keys()) {
+  if (phaseColors.get(phaseId) === WHITE) {
+    dfsPhaseCycle(phaseId, [])
+  }
+}
+
+// Store phase graph in report as plain object for JSON serialization
+report.dependencies.phaseGraph = {}
+for (const [phaseId, deps] of phaseDeps) {
+  report.dependencies.phaseGraph[phaseId] = [...deps].sort()
+}
+report.dependencies.phaseCycles = detectedPhaseCycles
+
+// Report each detected phase cycle as one error entry
+for (const cycleMembers of detectedPhaseCycles) {
+  report.errors.push({
+    category: ERRORS.PHASE_CYCLE_DETECTED,
+    severity: 'error',
+    taskId: null,
+    field: null,
+    message: `Phase dependency cycle detected: ${cycleMembers.join(' → ')} → ${cycleMembers[0]}`,
+    details: { cycleMembers },
+  })
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
