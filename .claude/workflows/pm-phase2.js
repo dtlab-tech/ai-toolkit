@@ -41,6 +41,31 @@ async function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
   )
 }
 
+// Output schemas for wb-validate and wb-render agent invocations (used by US-05)
+const WB_WRAPPER_SCHEMA = {
+  type: 'object',
+  properties: {
+    exitCode: { type: 'number' },
+    stdout:   { type: 'string' },
+    stderr:   { type: 'string' },
+  },
+  required: ['exitCode', 'stdout', 'stderr'],
+}
+
+const WB_RENDER_SCHEMA = {
+  type: 'object',
+  properties: {
+    exitCode:       { type: 'number' },
+    stdout:         { type: 'string' },
+    stderr:         { type: 'string' },
+    markdownPath:   { type: 'string' },
+    csvPath:        { type: 'string' },
+    markdownExists: { type: 'boolean' },
+    csvExists:      { type: 'boolean' },
+  },
+  required: ['exitCode', 'stdout', 'stderr', 'markdownPath', 'csvPath', 'markdownExists', 'csvExists'],
+}
+
 // ── Parse args ────────────────────────────────────────────────────────────────
 
 // args: "<path-to-feature.md>"
