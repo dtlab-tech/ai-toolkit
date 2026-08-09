@@ -332,6 +332,87 @@ for (const phase of phases) {
   }
 }
 
+// ── Check 8: Dependency reference existence ──────────────────────────────────
+
+const allTaskIds = new Set(seenTaskIds.keys())
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (!Array.isArray(task.dependsOn)) continue
+    for (const refId of task.dependsOn) {
+      if (!allTaskIds.has(refId)) {
+        report.errors.push({
+          category: ERRORS.DEPENDENCY_NOT_FOUND,
+          severity: 'error',
+          taskId: task.id,
+          field: 'dependsOn',
+          message: `Task "${task.id}" references non-existent task ID "${refId}" in dependsOn`,
+          details: { taskId: task.id, missingRef: refId },
+        })
+      }
+    }
+  }
+}
+
+// ── Check 9: Self-dependency ─────────────────────────────────────────────────
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (!Array.isArray(task.dependsOn)) continue
+    if (task.dependsOn.includes(task.id)) {
+      report.errors.push({
+        category: ERRORS.SELF_DEPENDENCY,
+        severity: 'error',
+        taskId: task.id,
+        field: 'dependsOn',
+        message: `Task "${task.id}" lists itself in dependsOn (self-dependency)`,
+        details: { taskId: task.id },
+      })
+    }
+  }
+}
+
+// ── Check 10: Phase ID consistency ───────────────────────────────────────────
+
+const INFRA_PREFIX = 'INFRA-TASK-'
+const TASK_SEP     = '-TASK-'
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (task.id == null) continue
+    if (task.id.startsWith(INFRA_PREFIX)) {
+      if (phase.id !== 'INFRA') {
+        report.errors.push({
+          category: ERRORS.PHASE_ID_MISMATCH,
+          severity: 'error',
+          taskId: task.id,
+          field: 'id',
+          message: `Task "${task.id}" has INFRA prefix but is in phase "${phase.id}"; INFRA tasks must be in the INFRA phase`,
+          details: { taskId: task.id, phaseId: phase.id, expectedPhase: 'INFRA' },
+        })
+      }
+    } else {
+      const sepIdx = task.id.indexOf(TASK_SEP)
+      if (sepIdx !== -1) {
+        const extractedPrefix = task.id.substring(0, sepIdx)
+        if (extractedPrefix !== phase.id) {
+          report.errors.push({
+            category: ERRORS.PHASE_ID_MISMATCH,
+            severity: 'error',
+            taskId: task.id,
+            field: 'id',
+            message: `Task "${task.id}" has prefix "${extractedPrefix}" but is in phase "${phase.id}"`,
+            details: { taskId: task.id, phaseId: phase.id, extractedPrefix },
+          })
+        }
+      }
+    }
+  }
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
