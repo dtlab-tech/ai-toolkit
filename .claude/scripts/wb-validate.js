@@ -35,4 +35,9 @@ const VALID_AGENT_TYPES = [
   'review-solution',
 ]
 
+// Duration policy thresholds (agentMinutes) — used by check 15
+const TARGET_MAX = 15   // tasks ≤15 min agent estimate: target band
+const ABOVE_MAX = 20    // tasks 16–20 min: above target (no flag)
+const WARNING_MAX = 30  // tasks 21–30 min: warning band (non-blocking); >30 = splitRequired (blocking)
+
 // Validation logic follows in subsequent tasks (US-02-T01..T14)
