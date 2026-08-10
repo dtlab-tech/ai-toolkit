@@ -905,6 +905,34 @@ if (acMap !== null) {
   }
 }
 
+// ── Check 21: Must AC coverage ───────────────────────────────────────────────
+
+if (acMap !== null) {
+  const coveredAcIds = new Set()
+  for (const phase of phases) {
+    const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+    for (const task of tasks) {
+      if (!Array.isArray(task.acceptanceCriteria)) continue
+      for (const acId of task.acceptanceCriteria) {
+        coveredAcIds.add(acId)
+      }
+    }
+  }
+
+  for (const [acId, acEntry] of acMap) {
+    if (acEntry.priority === 'Must' && !coveredAcIds.has(acId)) {
+      report.errors.push({
+        category: ERRORS.MUST_AC_UNCOVERED,
+        severity: 'error',
+        taskId: null,
+        field: null,
+        message: `AC "${acId}" has Must priority but is not covered by any task's acceptanceCriteria`,
+        details: { acId, priority: 'Must' },
+      })
+    }
+  }
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
