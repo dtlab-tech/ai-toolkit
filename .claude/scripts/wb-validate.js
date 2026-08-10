@@ -74,6 +74,155 @@ const ERRORS = {
   EMPTY_PHASE:                  'empty_phase',                   // check 23
 }
 
+// ── AC table parser (prerequisite for checks 19–21) ─────────────────────────
+
+function parseAcTable(requirementsPath) {
+  if (!requirementsPath) return null
+
+  let text
+  try {
+    text = fs.readFileSync(path.resolve(requirementsPath), 'utf8')
+  } catch (err) {
+    process.stderr.write(`Error: cannot read requirements file "${requirementsPath}": ${err.message}\n`)
+    process.exit(2)
+  }
+
+  const lines = text.split(/\r?\n/)
+
+  // ── Parse UC priorities ────────────────────────────────────────────────────
+  // Scan for ### UC-NN: headings, then look for | Priority | <value> | in the
+  // following metadata table (stop at the next same-or-higher-level heading).
+  const ucPriorityMap = new Map()
+  const UC_HEADING_RE = /^###\s+(UC-\d+):/
+
+  for (let i = 0; i < lines.length; i++) {
+    const headingMatch = lines[i].match(UC_HEADING_RE)
+    if (!headingMatch) continue
+    const ucId = headingMatch[1]
+    for (let j = i + 1; j < lines.length; j++) {
+      if (/^#{1,3}\s/.test(lines[j])) break
+      const priorityMatch = lines[j].match(/^\|\s*Priority\s*\|\s*(\S+)\s*\|/)
+      if (priorityMatch) {
+        ucPriorityMap.set(ucId, priorityMatch[1])
+        break
+      }
+    }
+  }
+
+  // ── Locate ## 7. Acceptance Criteria section ──────────────────────────────
+  let acSectionIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (/^## 7\. Acceptance Criteria\s*$/.test(lines[i])) {
+      acSectionIdx = i
+      break
+    }
+  }
+  if (acSectionIdx === -1) {
+    process.stderr.write('Error: requirements file is missing the "## 7. Acceptance Criteria" section\n')
+    process.exit(2)
+  }
+
+  // ── Find the first Markdown table (header row containing | ID |) ──────────
+  let tableHeaderIdx = -1
+  for (let i = acSectionIdx + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i])) break
+    if (/\|\s*ID\s*\|/.test(lines[i])) {
+      tableHeaderIdx = i
+      break
+    }
+  }
+  if (tableHeaderIdx === -1) {
+    process.stderr.write('Error: no AC table found after "## 7. Acceptance Criteria" (expected a header row containing "| ID |")\n')
+    process.exit(2)
+  }
+
+  // ── Validate column headers ────────────────────────────────────────────────
+  const headerCells = lines[tableHeaderIdx].split('|').slice(1, -1).map(c => c.trim())
+  if (headerCells.length < 3) {
+    process.stderr.write('Error: AC table header has fewer than 3 columns\n')
+    process.exit(2)
+  }
+  if (headerCells[0] !== 'ID' || headerCells[1] !== 'Criterion' || headerCells[2] !== 'Related UC') {
+    process.stderr.write(`Error: AC table columns must be "ID", "Criterion", "Related UC" in order; got "${headerCells[0]}", "${headerCells[1]}", "${headerCells[2]}"\n`)
+    process.exit(2)
+  }
+
+  // ── Parse data rows ────────────────────────────────────────────────────────
+  const PRIORITY_ORDER = ['Must', 'Should', 'Could']
+  const UC_REF_RE = /^UC-\d+$/
+  const acMap = new Map()
+
+  for (let i = tableHeaderIdx + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^##\s/.test(line)) break
+    if (!line.trim().startsWith('|')) break
+
+    // Skip separator rows: every cell is only dashes, colons, or spaces
+    const rawCells = line.split('|').slice(1, -1)
+    if (rawCells.every(c => /^[\s\-:]+$/.test(c))) continue
+
+    const cells = rawCells.map(c => c.trim())
+    if (cells.length < 3) continue
+
+    const acId = cells[0]
+    const relatedUcRaw = cells[2]
+
+    if (!acId) continue
+
+    if (acMap.has(acId)) {
+      process.stderr.write(`Error: duplicate AC ID "${acId}" in AC table\n`)
+      process.exit(2)
+    }
+
+    let unscoped = false
+    let allowedUserStories = []
+    let acPriority
+
+    if (relatedUcRaw.trim().toLowerCase() === 'all ucs') {
+      unscoped = true
+      allowedUserStories = []
+      // Derive strongest priority from all known UCs
+      acPriority = [...ucPriorityMap.values()].reduce((best, p) => {
+        const bestIdx = PRIORITY_ORDER.indexOf(best)
+        const pIdx = PRIORITY_ORDER.indexOf(p)
+        return pIdx !== -1 && pIdx < bestIdx ? p : best
+      }, 'Could')
+    } else {
+      const ucTokens = relatedUcRaw.split(',').map(t => t.trim())
+
+      for (const token of ucTokens) {
+        if (!UC_REF_RE.test(token)) {
+          process.stderr.write(`Error: malformed UC reference "${token}" in AC "${acId}" Related UC field\n`)
+          process.exit(2)
+        }
+      }
+
+      for (const ucRef of ucTokens) {
+        if (!ucPriorityMap.has(ucRef)) {
+          process.stderr.write(`Error: AC "${acId}" references UC "${ucRef}" which does not exist in the requirements\n`)
+          process.exit(1)
+        }
+        if (!ucPriorityMap.get(ucRef)) {
+          process.stderr.write(`Error: ${ucRef} has no declared priority\n`)
+          process.exit(1)
+        }
+        allowedUserStories.push(ucRef.replace('UC-', 'US-'))
+      }
+
+      acPriority = ucTokens.reduce((best, ucRef) => {
+        const p = ucPriorityMap.get(ucRef)
+        const bestIdx = PRIORITY_ORDER.indexOf(best)
+        const pIdx = PRIORITY_ORDER.indexOf(p)
+        return pIdx !== -1 && pIdx < bestIdx ? p : best
+      }, 'Could')
+    }
+
+    acMap.set(acId, { id: acId, priority: acPriority, allowedUserStories, unscoped })
+  }
+
+  return acMap
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 const jsonPath = process.argv[2]
@@ -710,6 +859,10 @@ for (const phase of phases) {
     }
   }
 }
+
+// ── AC table parsing (prerequisite for checks 19–21) ─────────────────────────
+
+const acMap = parseAcTable(requirementsPath)
 
 // ── Exit code routing ────────────────────────────────────────────────────────
 
