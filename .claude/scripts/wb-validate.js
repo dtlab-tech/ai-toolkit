@@ -608,6 +608,49 @@ for (const phaseId of phaseRemaining) {
   })
 }
 
+// ── Check 15: Duration policy ────────────────────────────────────────────────
+
+const durationBands = { target: 0, above_target: 0, warning: 0, split_required: 0 }
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    const minutes = task.estimate?.agentMinutes
+    if (minutes == null) continue  // already caught by check 4; skip here
+
+    let band
+    if (minutes <= TARGET_MAX) {
+      band = 'target'
+    } else if (minutes <= ABOVE_MAX) {
+      band = 'above_target'
+    } else if (minutes <= WARNING_MAX) {
+      band = 'warning'
+      report.warnings.push({
+        category: ERRORS.DURATION_WARNING,
+        severity: 'warning',
+        taskId: task.id,
+        field: 'estimate.agentMinutes',
+        message: `Task "${task.id}" estimate ${minutes}min exceeds target (${TARGET_MAX}min); consider splitting`,
+        details: { taskId: task.id, agentMinutes: minutes, targetMax: TARGET_MAX, warningMax: WARNING_MAX },
+      })
+    } else {
+      band = 'split_required'
+      report.errors.push({
+        category: ERRORS.SPLIT_REQUIRED,
+        severity: 'error',
+        taskId: task.id,
+        field: 'estimate.agentMinutes',
+        message: `Task "${task.id}" estimate ${minutes}min exceeds maximum (${WARNING_MAX}min); must be split`,
+        details: { taskId: task.id, agentMinutes: minutes, warningMax: WARNING_MAX },
+      })
+    }
+
+    durationBands[band]++
+  }
+}
+
+report.durationBands = durationBands
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
