@@ -580,6 +580,34 @@ for (const cycleMembers of detectedPhaseCycles) {
   })
 }
 
+// ── Check 14: Phase schedulability (buildWaves) ──────────────────────────────
+
+const buildWavesDone = new Set()
+const phaseWaves = []
+let phaseRemaining = phases.map(p => p.id).filter(id => id != null)
+while (phaseRemaining.length > 0) {
+  const ready = phaseRemaining.filter(id => [...(phaseDeps.get(id) || [])].every(d => buildWavesDone.has(d)))
+  if (ready.length === 0) break  // deadlock — unschedulable phases remain
+  ready.forEach(id => buildWavesDone.add(id))
+  phaseWaves.push(ready)
+  phaseRemaining = phaseRemaining.filter(id => !buildWavesDone.has(id))
+}
+
+report.dependencies.phaseWaves = phaseWaves
+report.dependencies.phaseUnschedulable = phaseRemaining
+
+for (const phaseId of phaseRemaining) {
+  report.errors.push({
+    category: ERRORS.PHASE_UNSCHEDULABLE,
+    severity: 'error',
+    taskId: null,
+    phaseId,
+    field: null,
+    message: `Phase "${phaseId}" cannot be scheduled: all predecessor phases are unschedulable or form a deadlock`,
+    details: { phaseId },
+  })
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
