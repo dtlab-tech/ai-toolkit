@@ -864,6 +864,47 @@ for (const phase of phases) {
 
 const acMap = parseAcTable(requirementsPath)
 
+// ── Checks 19 & 20: AC existence and scope validation ────────────────────────
+
+if (acMap !== null) {
+  for (const phase of phases) {
+    const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+    for (const task of tasks) {
+      if (!Array.isArray(task.acceptanceCriteria)) continue
+      for (const acId of task.acceptanceCriteria) {
+        const acEntry = acMap.get(acId)
+
+        // ── Check 19: AC existence ───────────────────────────────────────────
+        if (acEntry === undefined) {
+          report.errors.push({
+            category: ERRORS.AC_NOT_FOUND,
+            severity: 'error',
+            taskId: task.id,
+            field: 'acceptanceCriteria',
+            message: `Task "${task.id}" references AC "${acId}" which does not exist in the Requirements AC table`,
+            details: { taskId: task.id, acId },
+          })
+          continue
+        }
+
+        // ── Check 20: AC scope validation ────────────────────────────────────
+        if (acEntry.unscoped === true) continue
+        const phaseId = seenTaskIds.get(task.id)
+        if (!acEntry.allowedUserStories.includes(phaseId)) {
+          report.errors.push({
+            category: ERRORS.AC_WRONG_US,
+            severity: 'error',
+            taskId: task.id,
+            field: 'acceptanceCriteria',
+            message: `Task "${task.id}" (in phase "${phaseId}") references AC "${acId}" which is scoped to ${JSON.stringify(acEntry.allowedUserStories)}, not this phase`,
+            details: { taskId: task.id, phaseId, acId, allowedUserStories: acEntry.allowedUserStories },
+          })
+        }
+      }
+    }
+  }
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
