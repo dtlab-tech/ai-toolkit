@@ -933,6 +933,70 @@ if (acMap !== null) {
   }
 }
 
+// ── Check 22: Text field character validation ─────────────────────────────────
+
+{
+  const INVALID_CHARS_RE = /[|\r\n]/
+
+  for (const phase of wb.phases) {
+    if (typeof phase.title === 'string' && INVALID_CHARS_RE.test(phase.title)) {
+      report.errors.push({
+        category: ERRORS.INVALID_TEXT_FIELD_CHARS,
+        severity: 'error',
+        taskId: null,
+        phaseId: phase.id,
+        field: 'title',
+        message: `Phase "${phase.id}" field "title" contains invalid characters (pipe, CR, or LF)`,
+        details: { phaseId: phase.id, field: 'title' },
+      })
+    }
+
+    if (!Array.isArray(phase.tasks)) continue
+
+    for (const task of phase.tasks) {
+      if (typeof task.title === 'string' && INVALID_CHARS_RE.test(task.title)) {
+        report.errors.push({
+          category: ERRORS.INVALID_TEXT_FIELD_CHARS,
+          severity: 'error',
+          taskId: task.id,
+          field: 'title',
+          message: `Task "${task.id}" field "title" contains invalid characters (pipe, CR, or LF)`,
+          details: { taskId: task.id, field: 'title' },
+        })
+      }
+
+      if (task.commit && typeof task.commit.subject === 'string' && INVALID_CHARS_RE.test(task.commit.subject)) {
+        report.errors.push({
+          category: ERRORS.INVALID_TEXT_FIELD_CHARS,
+          severity: 'error',
+          taskId: task.id,
+          field: 'commit.subject',
+          message: `Task "${task.id}" field "commit.subject" contains invalid characters (pipe, CR, or LF)`,
+          details: { taskId: task.id, field: 'commit.subject' },
+        })
+      }
+    }
+  }
+}
+
+// ── Check 23: Empty phase detection ──────────────────────────────────────────
+
+{
+  for (const phase of wb.phases) {
+    if (Array.isArray(phase.tasks) && phase.tasks.length === 0) {
+      report.errors.push({
+        category: ERRORS.EMPTY_PHASE,
+        severity: 'error',
+        taskId: null,
+        phaseId: phase.id,
+        field: 'tasks',
+        message: `Phase "${phase.id}" has no tasks; each phase must contain at least one task`,
+        details: { phaseId: phase.id },
+      })
+    }
+  }
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
