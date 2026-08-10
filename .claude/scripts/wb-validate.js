@@ -651,6 +651,66 @@ for (const phase of phases) {
 
 report.durationBands = durationBands
 
+// ── Check 16 / 17 / 18: Content-quality checks ───────────────────────────────
+// Check 16: Empty verification.commands array
+// Check 17: Empty or whitespace-only commit.subject
+// Check 18: Empty or whitespace-only groupingRationale
+
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    // Check 16: Empty verification commands
+    if (
+      task.verification != null &&
+      task.verification.commands != null &&
+      Array.isArray(task.verification.commands) &&
+      task.verification.commands.length === 0
+    ) {
+      report.errors.push({
+        category: ERRORS.EMPTY_VERIFICATION_COMMANDS,
+        severity: 'error',
+        taskId: task.id,
+        field: 'verification.commands',
+        message: `Task "${task.id}" has an empty verification.commands array; at least one command is required`,
+        details: { taskId: task.id },
+      })
+    }
+
+    // Check 17: Empty commit subject
+    if (
+      task.commit != null &&
+      task.commit.subject != null &&
+      typeof task.commit.subject === 'string' &&
+      task.commit.subject.trim() === ''
+    ) {
+      report.errors.push({
+        category: ERRORS.EMPTY_COMMIT_SUBJECT,
+        severity: 'error',
+        taskId: task.id,
+        field: 'commit.subject',
+        message: `Task "${task.id}" has an empty commit.subject; a non-empty commit subject is required`,
+        details: { taskId: task.id },
+      })
+    }
+
+    // Check 18: Missing grouping rationale
+    if (
+      task.groupingRationale != null &&
+      typeof task.groupingRationale === 'string' &&
+      task.groupingRationale.trim() === ''
+    ) {
+      report.errors.push({
+        category: ERRORS.MISSING_GROUPING_RATIONALE,
+        severity: 'error',
+        taskId: task.id,
+        field: 'groupingRationale',
+        message: `Task "${task.id}" has an empty groupingRationale; a non-empty rationale is required`,
+        details: { taskId: task.id },
+      })
+    }
+  }
+}
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
