@@ -37,6 +37,46 @@ function makePhase(id, tasks, overrides = {}) {
 function makeWB(phases) { return { schemaVersion: 2, phases } }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// W1 regression guard — checks 22 and 23 must not crash on missing/non-array phases
+// Before fix: both checks iterated wb.phases directly → TypeError: not iterable.
+// After fix:  both use the guarded `phases` constant (same as checks 3-21).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('wb-validate.js — checks 22 and 23 — no crash when wb.phases is absent or non-array', () => {
+
+  test('exits 0 and emits valid JSON when wb.phases is absent (missing field)', () => {
+    // Arrange: valid schemaVersion but no phases field at all
+    const wb = { schemaVersion: 2 }
+    writeFixture(wb)
+    const { exitCode, report } = runValidator(tmpFile)
+    // Assert: no TypeError — exits cleanly and produces a structured report
+    expect(exitCode).toBe(0)
+    expect(report).not.toBeNull()
+    expect(Array.isArray(report.errors)).toBe(true)
+  })
+
+  test('exits 0 and emits valid JSON when wb.phases is null', () => {
+    // Arrange
+    const wb = { schemaVersion: 2, phases: null }
+    writeFixture(wb)
+    const { exitCode, report } = runValidator(tmpFile)
+    expect(exitCode).toBe(0)
+    expect(report).not.toBeNull()
+    expect(Array.isArray(report.errors)).toBe(true)
+  })
+
+  test('exits 0 and emits valid JSON when wb.phases is a non-array object', () => {
+    // Arrange
+    const wb = { schemaVersion: 2, phases: { id: 'US-01' } }
+    writeFixture(wb)
+    const { exitCode, report } = runValidator(tmpFile)
+    expect(exitCode).toBe(0)
+    expect(report).not.toBeNull()
+    expect(Array.isArray(report.errors)).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Check 22 — invalid text field characters (invalid_text_field_chars)
 // Forbidden characters: | (pipe), \r (CR), \n (LF)
 // ─────────────────────────────────────────────────────────────────────────────

@@ -951,7 +951,7 @@ if (acMap !== null) {
 {
   const INVALID_CHARS_RE = /[|\r\n]/
 
-  for (const phase of wb.phases) {
+  for (const phase of phases) {
     if (typeof phase.title === 'string' && INVALID_CHARS_RE.test(phase.title)) {
       report.errors.push({
         category: ERRORS.INVALID_TEXT_FIELD_CHARS,
@@ -995,7 +995,7 @@ if (acMap !== null) {
 // ── Check 23: Empty phase detection ──────────────────────────────────────────
 
 {
-  for (const phase of wb.phases) {
+  for (const phase of phases) {
     if (Array.isArray(phase.tasks) && phase.tasks.length === 0) {
       report.errors.push({
         category: ERRORS.EMPTY_PHASE,

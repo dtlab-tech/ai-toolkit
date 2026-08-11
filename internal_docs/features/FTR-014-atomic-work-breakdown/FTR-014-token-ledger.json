@@ -616,9 +616,19 @@
     "phase": "remediation",
     "model": "sonnet",
     "status": "done",
-    "phase_delta_tokens": 0,
+    "phase_delta_tokens": "not_available",
     "started_at": "2026-08-11T13:36:00Z",
     "completed_at": "2026-08-11T13:42:00Z",
-    "notes": "Pre-existing CRITICAL from FTR-013 rework cycle: pm-phase3-source.test.js asserted fs.*Sync/synchronous helpers but pm-phase3.js correctly uses async agent()-based helpers. Aligned test to actual Workflow runtime contract. 11 failures → 0. No pm-phase3.js changes."
+    "notes": "Pre-existing CRITICAL from FTR-013 rework cycle: pm-phase3-source.test.js asserted fs.*Sync/synchronous helpers but pm-phase3.js correctly uses async agent()-based helpers. Aligned test to actual Workflow runtime contract. 11 failures → 0. No pm-phase3.js changes. Token count not available — inline edits, no subagent dispatched."
+  }
+  ,{
+    "agent": "remediation:W1:wb-validate-phases-guard",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T13:45:00Z",
+    "completed_at": "2026-08-11T13:50:00Z",
+    "notes": "W1: checks 22 and 23 iterated wb.phases directly — TypeError on missing/non-array. Fixed both to use the guarded `phases` constant (same as checks 3-21). Added 3 regression tests. 594→597 tests pass."
   }
 ]
