@@ -860,6 +860,19 @@ for (const phase of phases) {
   }
 }
 
+// ── Domain distribution ───────────────────────────────────────────────────────
+
+const domainDist = { BE: 0, FE: 0, DB: 0, DevOps: 0, INFRA: 0, TEST: 0 }
+for (const phase of phases) {
+  const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+  for (const task of tasks) {
+    if (task.domain != null && domainDist[task.domain] !== undefined) {
+      domainDist[task.domain]++
+    }
+  }
+}
+report.domainDistribution = domainDist
+
 // ── AC table parsing (prerequisite for checks 19–21) ─────────────────────────
 
 const acMap = parseAcTable(requirementsPath)
