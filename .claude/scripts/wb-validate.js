@@ -185,11 +185,11 @@ function parseAcTable(requirementsPath) {
       for (const ucRef of ucTokens) {
         if (!ucPriorityMap.has(ucRef)) {
           process.stderr.write(`Error: AC "${acId}" references UC "${ucRef}" which does not exist in the requirements\n`)
-          process.exit(1)
+          process.exit(2)
         }
         if (!ucPriorityMap.get(ucRef)) {
           process.stderr.write(`Error: ${ucRef} has no declared priority\n`)
-          process.exit(1)
+          process.exit(2)
         }
         allowedUserStories.push(ucRef.replace('UC-', 'US-'))
       }

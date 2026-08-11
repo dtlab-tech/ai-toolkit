@@ -651,4 +651,14 @@
     "completed_at": "2026-08-11T14:08:00Z",
     "notes": "W3: groupingRationale was in REQUIRED_TASK_FIELDS (dead constant) but omitted from topLevelFields in check 4. A task without the field passed with exit 0. Fixed: added groupingRationale to topLevelFields; removed REQUIRED_TASK_FIELDS constant (single source of truth). Updated wb-valid.json fixture (all 6 tasks lacked the field). Added 2 tests: absent→exit 1, present→exit 0. 599→601 tests pass."
   }
+  ,{
+    "agent": "remediation:I5:parseAcTable-exit-code-consistency",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T14:12:00Z",
+    "completed_at": "2026-08-11T14:18:00Z",
+    "notes": "I5: Two parseAcTable paths used exit(1) without emitting JSON on stdout. pm-phase2 treats exit 1 as 'JSON report on stdout' — these paths would cause JSON.parse failure masked as 'empty stdout'. Changed both to exit(2) (fatal/parse error, stderr only). Note: the '!get(ucRef)' path is structurally unreachable by parser construction. Added 2 contract tests in wb-validate.checks-19-21: unknown UC ref→exit 2, UC with no Priority row→exit 2. 601→603 tests pass."
+  }
 ]

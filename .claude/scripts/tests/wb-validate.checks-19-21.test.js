@@ -290,3 +290,73 @@ describe('wb-validate.js — check 21 — Must AC coverage (must_ac_uncovered)',
     expect(acErrors).toHaveLength(0);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// I5 contract-pinning — parseAcTable fatal errors must use exit 2 (not exit 1)
+//
+// Exit 1 means "validation completed, JSON report on stdout".
+// Exit 2 means "fatal/parse error, no JSON on stdout (stderr only)".
+//
+// Before fix: two parseAcTable paths used exit(1) without emitting a JSON
+// report — pm-phase2 would see empty stdout and throw "wb-validate returned
+// empty stdout" masking the real cause. Fixed to exit(2).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('wb-validate.js — parseAcTable fatal errors exit with code 2 and no JSON on stdout (I5)', () => {
+
+  function writeTmpReq(content) {
+    tmpReqFile = path.join(os.tmpdir(), `req-i5-${Date.now()}.md`);
+    fs.writeFileSync(tmpReqFile, content);
+    return tmpReqFile;
+  }
+
+  test('exits 2 and emits only stderr (no JSON on stdout) when AC row references a UC that does not exist in the requirements', () => {
+    // Arrange: requirements declares UC-01 but AC-01 references UC-02 (missing)
+    const reqContent = makeReqMd(
+      { 'UC-01': 'Must' },
+      [['AC-01', 'UC-02']],   // UC-02 not declared → parseAcTable exit(1) before fix, exit(2) after
+    );
+    writeTmpReq(reqContent);
+    const wb = makeWB([makePhase('US-01', [makeTask('US-01-TASK-BE-01', ['AC-01'])])]);
+    writeWB(wb);
+
+    // Act
+    const result = spawnSync('node', [VALIDATE, tmpFile, tmpReqFile], { encoding: 'utf8' });
+
+    // Assert: exit 2 = fatal/parse error; stdout must NOT be parseable JSON
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(/does not exist/i);
+    let parsed = null;
+    try { parsed = JSON.parse(result.stdout); } catch (_) {}
+    expect(parsed).toBeNull();
+  });
+
+  test('exits 2 and emits only stderr (no JSON on stdout) when a UC heading exists but has no Priority row (parser never adds it to the map, so the "does not exist" guard fires)', () => {
+    // Arrange: UC-01 heading exists but no "| Priority | ... |" metadata row.
+    // ucPriorityMap never adds UC-01 → !has(ucRef) → exit 2, "does not exist".
+    // Note: the !get(ucRef) ("no declared priority") guard is structurally unreachable
+    // by construction — the parser only adds a UC to the map when it finds a non-empty
+    // priority value via \S+ regex, so has(ucRef) being true implies get(ucRef) is truthy.
+    // Both exit(1)→exit(2) fixes are correctness guards; this test verifies that the
+    // "missing priority" scenario always resolves through exit 2 in practice.
+    const reqContent =
+      '## 5. Use Cases\n\n' +
+      '### UC-01: Description\n| Field | Value |\n|-------|-------|\n| Other | x |\n\n' +
+      '## 7. Acceptance Criteria\n\n' +
+      '| ID | Criterion | Related UC |\n|----|-----------|------------|\n' +
+      '| AC-01 | A criterion | UC-01 |\n';
+    writeTmpReq(reqContent);
+    const wb = makeWB([makePhase('US-01', [makeTask('US-01-TASK-BE-01', ['AC-01'])])]);
+    writeWB(wb);
+
+    // Act
+    const result = spawnSync('node', [VALIDATE, tmpFile, tmpReqFile], { encoding: 'utf8' });
+
+    // Assert: exit 2 = fatal/parse error; stdout must NOT be parseable JSON
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(/does not exist/i);
+    let parsed = null;
+    try { parsed = JSON.parse(result.stdout); } catch (_) {}
+    expect(parsed).toBeNull();
+  });
+});
