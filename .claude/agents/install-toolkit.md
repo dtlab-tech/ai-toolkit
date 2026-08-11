@@ -44,7 +44,7 @@ The user provides:
 
 ## Step 2 — Plan what to copy
 
-Five source directories to install:
+Six source directories to install:
 
 | Source (toolkit) | Destination | Purpose |
 |------------------|-------------|---------|
@@ -52,6 +52,7 @@ Five source directories to install:
 | `.claude/skills/` | `{dest}/.claude/skills/` | All user-invocable skills (except `install-toolkit/`) |
 | `.claude/commands/` | `{dest}/.claude/commands/` | All slash commands |
 | `.claude/workflows/` | `{dest}/.claude/workflows/` | Claude Code Workflow scripts for orchestrated pipelines |
+| `.claude/scripts/` | `{dest}/.claude/scripts/` | CLI scripts for work breakdown validation and rendering |
 | `docs/procedures/` | `{dest}/docs/procedures/` | Generic procedures (only if destination has no override) |
 
 For each file, compare source content against destination using an MD5/hash check and determine status:
@@ -79,6 +80,10 @@ Build and display the plan before executing:
   ✅ NEW       pm-phase3.js
   ✅ NEW       am-phase1.js
   ✅ NEW       am-phase2.js
+
+.claude/scripts/
+  ✅ NEW       wb-validate.js
+  ✅ NEW       wb-render.js
 
 docs/procedures/
   ✅ NEW       code-generation.md
