@@ -279,8 +279,24 @@ function renderMarkdown(wb, prefix, phaseDepsMap) {
 }
 
 function renderCsv(wb, prefix, phaseDepsMap) {
-  // TODO: implemented in T05
-  return ''
+  const rows = ['phase_id|phase_title|commit_message|depends_on|task_id|task_title|domain|agent_type']
+  for (const phase of wb.phases) {
+    const phaseId    = sanitizeField(phase.id ?? '')
+    const phaseTitle = sanitizeField(phase.title ?? '')
+    const commitMsg  = phase.commit && typeof phase.commit === 'object'
+      ? sanitizeField(phase.commit.type ?? 'chore') + '(' + sanitizeField(prefix) + '): ' + sanitizeField(phase.commit.subject ?? '')
+      : `chore(${sanitizeField(prefix)}): implement phase`
+    const dependsOn  = sanitizeField(phaseDepsMap.get(phase.id) ?? '')
+    const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+    for (const task of tasks) {
+      const taskId    = sanitizeField(task.id ?? '')
+      const taskTitle = sanitizeField(task.title ?? '')
+      const domain    = sanitizeField(task.domain ?? '')
+      const agentType = sanitizeField(task.agentType ?? '')
+      rows.push(`${phaseId}|${phaseTitle}|${commitMsg}|${dependsOn}|${taskId}|${taskTitle}|${domain}|${agentType}`)
+    }
+  }
+  return rows.join('\n') + '\n'
 }
 
 // ── Write files and exit ──────────────────────────────────────────────────────
