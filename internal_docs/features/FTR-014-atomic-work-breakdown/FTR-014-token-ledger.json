@@ -381,9 +381,9 @@
     "agent": "developer-backend:US-04-T02:attempt1",
     "phase": "phase3",
     "model": "sonnet",
-    "status": "running",
-    "phase_delta_tokens": 0,
+    "status": "done",
+    "phase_delta_tokens": 25351,
     "started_at": "2026-08-11T11:20:00Z",
-    "completed_at": null
+    "completed_at": "2026-08-11T11:26:00Z"
   }
 ]

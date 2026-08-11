@@ -52,22 +52,64 @@ if (!Array.isArray(wb.phases)) {
 const mdPath  = path.join(destDir, `${prefix}-Work-Breakdown.md`)
 const csvPath = path.join(destDir, `${prefix}-Work-Breakdown.csv`)
 
-// ── Render stubs (implemented in T02–T05) ─────────────────────────────────────
+// ── Phase-level depends_on aggregation ───────────────────────────────────────
 
-function renderMarkdown(wb, prefix) {
-  // TODO: implemented in T02-T04
+function computePhaseDependsOn(wb) {
+  // Build taskId → phaseId index
+  const taskToPhase = new Map()
+  for (const phase of wb.phases) {
+    const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+    for (const task of tasks) {
+      if (task.id != null) taskToPhase.set(task.id, phase.id)
+    }
+  }
+
+  // For each phase, compute external phase dependencies
+  const result = new Map()
+  for (const phase of wb.phases) {
+    if (phase.id == null) continue
+    const extPhases = new Set()
+    const tasks = Array.isArray(phase.tasks) ? phase.tasks : []
+    for (const task of tasks) {
+      if (!Array.isArray(task.dependsOn)) continue
+      for (const depId of task.dependsOn) {
+        const ownerPhase = taskToPhase.get(depId)
+        if (ownerPhase == null) continue          // unresolved — skip
+        if (ownerPhase === phase.id) continue     // intra-phase — remove
+        extPhases.add(ownerPhase)
+      }
+    }
+    result.set(phase.id, [...extPhases].sort().join(' '))
+  }
+  return result
+}
+
+// ── Compute phase dependencies ────────────────────────────────────────────────
+
+let phaseDepsMap
+try {
+  phaseDepsMap = computePhaseDependsOn(wb)
+} catch (err) {
+  process.stderr.write(`Error: phase dependency aggregation failed: ${err.message}\n`)
+  process.exit(3)
+}
+
+// ── Render stubs (implemented in T03–T05) ─────────────────────────────────────
+
+function renderMarkdown(wb, prefix, phaseDepsMap) {
+  // TODO: implemented in T03-T04
   return ''
 }
 
-function renderCsv(wb, prefix) {
-  // TODO: implemented in T02, T05
+function renderCsv(wb, prefix, phaseDepsMap) {
+  // TODO: implemented in T05
   return ''
 }
 
 // ── Write files and exit ──────────────────────────────────────────────────────
 
-const md  = renderMarkdown(wb, prefix)
-const csv = renderCsv(wb, prefix)
+const md  = renderMarkdown(wb, prefix, phaseDepsMap)
+const csv = renderCsv(wb, prefix, phaseDepsMap)
 fs.writeFileSync(mdPath, md, 'utf8')
 fs.writeFileSync(csvPath, csv, 'utf8')
 process.stdout.write(JSON.stringify({ exitCode: 0, markdownPath: mdPath, csvPath }) + '\n')
