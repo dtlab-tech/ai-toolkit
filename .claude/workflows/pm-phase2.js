@@ -13,13 +13,15 @@ export const meta = {
 
 async function appendLedgerEntry(featureDir, prefix, entry) {
   const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  // started_at is generated via Bash inside the agent to get a real UTC timestamp with time
-  const entryWithoutTs = JSON.stringify({ ...entry, started_at: '__TS__', completed_at: null })
+  // Defaults come first so the caller can override started_at/completed_at.
+  // Skipped entries pass completed_at: '__TS__' to get a real timestamp; running entries
+  // pass completed_at: null to keep it null. Both are replaced/kept by the agent below.
+  const entryWithoutTs = JSON.stringify({ started_at: '__TS__', completed_at: null, ...entry })
   await agent(
     `Append a JSON object to the ledger array at: ${ledgerPath}\n\n` +
     `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
     `2. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n` +
-    `3. Push this object onto the array, replacing "__TS__" in started_at with NOW: ${entryWithoutTs}\n` +
+    `3. Push this object onto the array, replacing every "__TS__" string value in the object with NOW: ${entryWithoutTs}\n` +
     `4. Write the full array back (JSON, 2-space indent). Return no output.`,
     { label: 'append-ledger', phase: 'Work Breakdown', model: 'haiku' }
   )

@@ -661,4 +661,14 @@
     "completed_at": "2026-08-11T14:18:00Z",
     "notes": "I5: Two parseAcTable paths used exit(1) without emitting JSON on stdout. pm-phase2 treats exit 1 as 'JSON report on stdout' — these paths would cause JSON.parse failure masked as 'empty stdout'. Changed both to exit(2) (fatal/parse error, stderr only). Note: the '!get(ucRef)' path is structurally unreachable by parser construction. Added 2 contract tests in wb-validate.checks-19-21: unknown UC ref→exit 2, UC with no Priority row→exit 2. 601→603 tests pass."
   }
+  ,{
+    "agent": "remediation:I6:completed_at-skipped-ledger-entries",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T14:25:00Z",
+    "completed_at": "2026-08-11T14:38:00Z",
+    "notes": "I6: appendLedgerEntry in pm-phase2.js spread `{ ...entry, started_at: '__TS__', completed_at: null }` — hardcoded null AFTER entry spread, silently overwriting completed_at: '__TS__' that skipped call sites pass. Fix: changed to defaults-first spread `{ started_at: '__TS__', completed_at: null, ...entry }` so caller-supplied completed_at wins. Also updated agent prompt from 'replacing __TS__ in started_at' to 'replacing every __TS__ string value' so both fields get real timestamps for skipped entries. Added 3 source-level tests: defaults-first spread, skipped call sites pass completed_at:'__TS__', prompt replaces all __TS__ values. 603→606 tests pass."
+  }
 ]
