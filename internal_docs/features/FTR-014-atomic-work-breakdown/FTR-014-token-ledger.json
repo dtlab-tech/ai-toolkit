@@ -494,4 +494,13 @@
     "started_at": "2026-08-11T12:28:00Z",
     "completed_at": "2026-08-11T12:28:00Z"
   }
+  ,{
+    "agent": "developer-backend:US-05-T07:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 30781,
+    "started_at": "2026-08-11T12:30:00Z",
+    "completed_at": "2026-08-11T12:35:00Z"
+  }
 ]
