@@ -119,8 +119,163 @@ function buildCommitSubject(task) {
 // ── Render stubs (implemented in T03–T05) ─────────────────────────────────────
 
 function renderMarkdown(wb, prefix, phaseDepsMap) {
-  // TODO: implemented in T03-T04
-  return ''
+  const DOMAINS = ['BE', 'FE', 'DB', 'DevOps', 'INFRA', 'TEST']
+
+  function getAgentMinutes(task) {
+    const m = task.agentMinutes ?? task.estimate?.agentMinutes
+    return (m !== undefined && m !== null) ? Number(m) : null
+  }
+
+  function getDurationBand(mins) {
+    if (mins === null) return null
+    if (mins <= 15) return 'target'
+    if (mins <= 20) return 'above'
+    if (mins <= 30) return 'warning'
+    return 'split'
+  }
+
+  const allTasks = wb.phases.flatMap(p => Array.isArray(p.tasks) ? p.tasks : [])
+
+  // Summary duration totals — across all tasks
+  let summaryTarget = 0, summaryAbove = 0, summaryWarning = 0, summarySplit = 0
+  for (const task of allTasks) {
+    const band = getDurationBand(getAgentMinutes(task))
+    if (band === 'target')  summaryTarget++
+    else if (band === 'above')   summaryAbove++
+    else if (band === 'warning') summaryWarning++
+    else if (band === 'split')   summarySplit++
+  }
+
+  // Per-domain stats — for Statistics table and domain distribution string
+  const domainStats = {}
+  for (const d of DOMAINS) domainStats[d] = { count: 0, target: 0, above: 0, warning: 0, split: 0 }
+  for (const task of allTasks) {
+    const d = task.domain
+    if (!d || !DOMAINS.includes(d)) continue
+    const band = getDurationBand(getAgentMinutes(task))
+    domainStats[d].count++
+    if (band) domainStats[d][band]++
+  }
+
+  const domainDistStr = DOMAINS.map(d => `${d}: ${domainStats[d].count}`).join(', ')
+
+  const statTotals = DOMAINS.reduce(
+    (acc, d) => {
+      acc.count   += domainStats[d].count
+      acc.target  += domainStats[d].target
+      acc.above   += domainStats[d].above
+      acc.warning += domainStats[d].warning
+      acc.split   += domainStats[d].split
+      return acc
+    },
+    { count: 0, target: 0, above: 0, warning: 0, split: 0 }
+  )
+
+  function phaseCommit(phase) {
+    if (!phase.commit || typeof phase.commit !== 'object') {
+      return `chore(${sanitizeField(prefix)}): implement phase`
+    }
+    const type    = sanitizeField(phase.commit.type    ?? 'chore')
+    const subject = sanitizeField(phase.commit.subject ?? '')
+    return `${type}(${sanitizeField(prefix)}): ${subject}`
+  }
+
+  function taskRow(task) {
+    const id       = sanitizeField(task.id ?? '—')
+    const title    = sanitizeField(task.title ?? '')
+    const outcome  = sanitizeField(task.outcome ?? '')
+    const domain   = sanitizeField(task.domain ?? '—')
+    const mins     = getAgentMinutes(task)
+    const est      = mins !== null ? String(mins) : '—'
+    const depArr   = Array.isArray(task.dependsOn) && task.dependsOn.length > 0 ? task.dependsOn : null
+    const deps     = depArr ? depArr.join(', ') : '—'
+    const verifArr = task.verificationCommands ?? task.verification?.commands ?? []
+    const verif    = verifArr.length > 0 ? sanitizeField(verifArr.join('; ')) : '—'
+    return `| ${id} | ${title} | ${outcome} | ${domain} | ${est} | ${deps} | ${verif} |`
+  }
+
+  const title     = wb.title ?? wb.feature ?? prefix
+  const generated = new Date().toISOString()
+  const L         = []
+
+  // ── Title ──
+  L.push(`# Work Breakdown — ${title}`)
+  L.push('')
+
+  // ── Document Info ──
+  L.push('## Document Info')
+  L.push('| Field | Value |')
+  L.push('|-------|-------|')
+  L.push(`| Feature | ${sanitizeField(prefix)} |`)
+  L.push('| Schema | v2 |')
+  L.push(`| Generated | ${generated} |`)
+  L.push('')
+
+  // ── Summary ──
+  L.push('## Summary')
+  L.push('| Metric | Value |')
+  L.push('|--------|-------|')
+  L.push(`| Total tasks | ${allTasks.length} |`)
+  L.push(`| Total phases | ${wb.phases.length} |`)
+  L.push(`| Within target (≤15 min) | ${summaryTarget} |`)
+  L.push(`| Above target (16–20 min) | ${summaryAbove} |`)
+  L.push(`| Warning (21–30 min) | ${summaryWarning} |`)
+  L.push(`| Split required (>30 min) | ${summarySplit} |`)
+  L.push(`| Domain distribution | ${domainDistStr} |`)
+  L.push('')
+
+  // ── Infrastructure Phase ──
+  const infraPhases     = wb.phases.filter(p => p.id === 'INFRA')
+  const userStoryPhases = wb.phases.filter(p => p.id !== 'INFRA')
+
+  for (const phase of infraPhases) {
+    L.push('## Infrastructure Phase (INFRA)')
+    L.push('')
+    L.push('### Commit')
+    L.push(phaseCommit(phase))
+    L.push('')
+    L.push('### Tasks')
+    L.push('| ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |')
+    L.push('|---|---|---|---|---|---|---|')
+    for (const task of (Array.isArray(phase.tasks) ? phase.tasks : [])) {
+      L.push(taskRow(task))
+    }
+    L.push('')
+  }
+
+  // ── User Story Phases ──
+  if (userStoryPhases.length > 0) {
+    L.push('## User Story Phases')
+    L.push('')
+    for (const phase of userStoryPhases) {
+      L.push(`### ${sanitizeField(phase.id ?? '')}: ${sanitizeField(phase.title ?? '')}`)
+      L.push('')
+      L.push('### Commit')
+      L.push(phaseCommit(phase))
+      L.push('')
+      L.push('### Tasks')
+      L.push('| ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |')
+      L.push('|---|---|---|---|---|---|---|')
+      for (const task of (Array.isArray(phase.tasks) ? phase.tasks : [])) {
+        L.push(taskRow(task))
+      }
+      L.push('')
+    }
+  }
+
+  // ── Statistics ──
+  L.push('## Statistics')
+  L.push('')
+  L.push('| Domain | Count | Target | Above | Warning | Split |')
+  L.push('|--------|-------|--------|-------|---------|-------|')
+  for (const d of DOMAINS) {
+    const s = domainStats[d]
+    L.push(`| ${d} | ${s.count} | ${s.target} | ${s.above} | ${s.warning} | ${s.split} |`)
+  }
+  L.push(`| **Total** | **${statTotals.count}** | **${statTotals.target}** | **${statTotals.above}** | **${statTotals.warning}** | **${statTotals.split}** |`)
+  L.push('')
+
+  return L.join('\n')
 }
 
 function renderCsv(wb, prefix, phaseDepsMap) {
