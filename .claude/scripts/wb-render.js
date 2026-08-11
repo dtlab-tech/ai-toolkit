@@ -94,6 +94,28 @@ try {
   process.exit(3)
 }
 
+// ── Field helpers ─────────────────────────────────────────────────────────────
+
+function sanitizeField(str) {
+  const s = typeof str === 'string' ? str : String(str ?? '')
+  return s
+    .replace(/\|/g, ' ')
+    .replace(/\r/g, '')
+    .replace(/\n/g, ' ')
+    .trim()
+}
+
+function buildCommitSubject(task) {
+  if (!task.commit || typeof task.commit !== 'object') {
+    return 'chore: implement task'
+  }
+  const type    = sanitizeField(task.commit.type    ?? '')
+  const scope   = sanitizeField(task.commit.scope   ?? '')
+  const subject = sanitizeField(task.commit.subject ?? '')
+  const full = `${type}(${scope}): ${subject}`
+  return full.length > 72 ? full.slice(0, 72) + '…' : full
+}
+
 // ── Render stubs (implemented in T03–T05) ─────────────────────────────────────
 
 function renderMarkdown(wb, prefix, phaseDepsMap) {
