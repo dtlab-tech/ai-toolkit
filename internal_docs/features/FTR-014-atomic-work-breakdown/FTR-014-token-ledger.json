@@ -367,5 +367,23 @@
     "phase_delta_tokens": 41814,
     "started_at": "2026-08-11T11:00:00Z",
     "completed_at": "2026-08-11T11:09:33Z"
+  },
+  {
+    "agent": "developer-backend:US-04-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 44271,
+    "started_at": "2026-08-11T11:15:00Z",
+    "completed_at": "2026-08-11T11:18:27Z"
+  },
+  {
+    "agent": "developer-backend:US-04-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "running",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T11:20:00Z",
+    "completed_at": null
   }
 ]
