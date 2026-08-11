@@ -28,12 +28,12 @@ function buildGate2Payload(options) {
     warning_band_tasks:  wbValidatorReport
       ? (wbValidatorReport.warnings || [])
           .filter(w => w.category === 'duration_warning')
-          .map(w => ({ taskId: w.taskId, estimateMinutes: w.details ? w.details.estimateMinutes : null }))
+          .map(w => ({ taskId: w.taskId, agentMinutes: w.details ? w.details.agentMinutes : null }))
       : [],
     split_required_tasks: wbValidatorReport
       ? (wbValidatorReport.errors || [])
           .filter(e => e.category === 'split_required')
-          .map(e => ({ taskId: e.taskId, estimateMinutes: e.details ? e.details.estimateMinutes : null }))
+          .map(e => ({ taskId: e.taskId, agentMinutes: e.details ? e.details.agentMinutes : null }))
       : [],
     must_ac_uncovered: wbValidatorReport
       ? (wbValidatorReport.errors || [])

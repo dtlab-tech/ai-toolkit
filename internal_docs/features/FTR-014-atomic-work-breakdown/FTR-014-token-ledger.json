@@ -631,4 +631,14 @@
     "completed_at": "2026-08-11T13:50:00Z",
     "notes": "W1: checks 22 and 23 iterated wb.phases directly — TypeError on missing/non-array. Fixed both to use the guarded `phases` constant (same as checks 3-21). Added 3 regression tests. 594→597 tests pass."
   }
+  ,{
+    "agent": "remediation:W2:agentMinutes-field-alignment",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T13:52:00Z",
+    "completed_at": "2026-08-11T13:58:00Z",
+    "notes": "W2: pm-phase2.js read estimateMinutes but wb-validate.js emits agentMinutes in check 15 details. Fixed pm-phase2.js (lines 323,327), pm-phase2-gate2.js helper (lines 31,36), gate2-payload test fixtures/assertions. Added 2 contract-pinning tests in wb-validate.checks-15-18 that run real validator and assert field name. 597→599 tests pass."
+  }
 ]

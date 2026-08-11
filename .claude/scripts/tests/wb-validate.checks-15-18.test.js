@@ -310,3 +310,50 @@ describe('wb-validate.js — check 18 — missing grouping rationale (missing_gr
     expect(report.errors.find(e => e.category === 'missing_grouping_rationale')).toBeUndefined();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// W2 contract-pinning — check 15 details field name must be agentMinutes
+//
+// Pins the field name contract between wb-validate.js (producer) and pm-phase2.js
+// (consumer). If wb-validate.js ever renames the field, this test breaks before
+// the consumer silently returns undefined at runtime.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('wb-validate.js — check 15 — details field contract: agentMinutes (not estimateMinutes)', () => {
+
+  test('duration_warning entry details contains agentMinutes (not estimateMinutes) when task exceeds target band', () => {
+    // Arrange: task with 25 min estimate → warning band (21-30 min)
+    const wb = makeWB([
+      makePhase('US-01', [makeTask('US-01-TASK-BE-01', { estimate: { agentMinutes: 25, tokens: 5000 } })]),
+    ]);
+    writeFixture(wb);
+
+    // Act
+    const { exitCode, report } = runValidator(tmpFile);
+
+    // Assert
+    expect(exitCode).toBe(0);  // warning band is non-blocking
+    const warning = (report.warnings || []).find(w => w.category === 'duration_warning');
+    expect(warning).toBeDefined();
+    expect(warning.details).toHaveProperty('agentMinutes', 25);
+    expect(warning.details).not.toHaveProperty('estimateMinutes');
+  });
+
+  test('split_required entry details contains agentMinutes (not estimateMinutes) when task exceeds split band', () => {
+    // Arrange: task with 35 min estimate → split_required band (>30 min)
+    const wb = makeWB([
+      makePhase('US-01', [makeTask('US-01-TASK-BE-01', { estimate: { agentMinutes: 35, tokens: 5000 } })]),
+    ]);
+    writeFixture(wb);
+
+    // Act
+    const { exitCode, report } = runValidator(tmpFile);
+
+    // Assert
+    expect(exitCode).toBe(1);  // split_required is a blocking error
+    const error = report.errors.find(e => e.category === 'split_required');
+    expect(error).toBeDefined();
+    expect(error.details).toHaveProperty('agentMinutes', 35);
+    expect(error.details).not.toHaveProperty('estimateMinutes');
+  });
+});

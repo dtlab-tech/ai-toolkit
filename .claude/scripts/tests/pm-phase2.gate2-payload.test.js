@@ -135,14 +135,14 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
 
   describe('warning_band_tasks derivation', () => {
 
-    test('has one entry with correct taskId and estimateMinutes when report has one duration_warning', () => {
-      // Arrange
+    test('has one entry with correct taskId and agentMinutes when report has one duration_warning', () => {
+      // Arrange — fixture uses agentMinutes: the canonical field name emitted by wb-validate.js check 15
       const options = {
         wbValidatorReport: {
           valid:   true,
           errors:  [],
           warnings: [
-            { category: 'duration_warning', taskId: 'US-01-T03', details: { estimateMinutes: 110 } },
+            { category: 'duration_warning', taskId: 'US-01-T03', details: { agentMinutes: 110, targetMax: 15, warningMax: 30 } },
           ],
         },
         validateFailed: false,
@@ -151,7 +151,7 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
       const payload = buildGate2Payload(options);
       // Assert
       expect(payload.warning_band_tasks).toHaveLength(1);
-      expect(payload.warning_band_tasks[0]).toEqual({ taskId: 'US-01-T03', estimateMinutes: 110 });
+      expect(payload.warning_band_tasks[0]).toEqual({ taskId: 'US-01-T03', agentMinutes: 110 });
     });
 
     test('is an empty array when report has no warnings', () => {
@@ -184,13 +184,13 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
 
   describe('split_required_tasks derivation', () => {
 
-    test('has one entry with taskId and estimateMinutes when report has one split_required error', () => {
-      // Arrange
+    test('has one entry with taskId and agentMinutes when report has one split_required error', () => {
+      // Arrange — fixture uses agentMinutes: the canonical field name emitted by wb-validate.js check 15
       const options = {
         wbValidatorReport: {
           valid: false,
           errors: [
-            { category: 'split_required', taskId: 'US-02-T01', details: { estimateMinutes: 200 } },
+            { category: 'split_required', taskId: 'US-02-T01', details: { agentMinutes: 200, warningMax: 30 } },
           ],
         },
         validateFailed: false,
@@ -199,7 +199,7 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
       const payload = buildGate2Payload(options);
       // Assert
       expect(payload.split_required_tasks).toHaveLength(1);
-      expect(payload.split_required_tasks[0]).toEqual({ taskId: 'US-02-T01', estimateMinutes: 200 });
+      expect(payload.split_required_tasks[0]).toEqual({ taskId: 'US-02-T01', agentMinutes: 200 });
     });
 
     test('is an empty array when report errors have no split_required category entries', () => {
