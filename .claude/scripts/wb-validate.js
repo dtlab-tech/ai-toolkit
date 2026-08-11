@@ -15,21 +15,6 @@ const REQUIRED_PHASE_FIELDS = [
   'tasks',
 ]
 
-const REQUIRED_TASK_FIELDS = [
-  'id',
-  'title',
-  'outcome',
-  'domain',
-  'agentType',
-  'dependsOn',
-  'acceptanceCriteria',
-  'verification',
-  'estimate',
-  'outputCount',
-  'groupingRationale',
-  'commit',
-]
-
 const VALID_DOMAINS = ['BE', 'FE', 'DB', 'DevOps', 'INFRA', 'TEST']
 
 const VALID_AGENT_TYPES = [
@@ -344,7 +329,7 @@ for (const phase of phases) {
 
     const topLevelFields = [
       'id', 'title', 'outcome', 'domain', 'agentType', 'dependsOn',
-      'acceptanceCriteria', 'outputCount', 'commit',
+      'acceptanceCriteria', 'outputCount', 'groupingRationale', 'commit',
     ]
     for (const field of topLevelFields) {
       if (task[field] == null) {

@@ -175,6 +175,37 @@ describe('wb-validate.js — checks 1–7', () => {
       expect(report.valid).toBe(true);
       expect(report.errors.filter(e => e.category === 'missing_field')).toHaveLength(0);
     });
+
+    // W3 regression guard — groupingRationale must be enforced by check 4
+    // Before fix: groupingRationale was in REQUIRED_TASK_FIELDS but absent from
+    // topLevelFields, so a task without the field passed check 4 with exit 0.
+
+    test('W3: exits 1 and missing_field with field "groupingRationale" is reported when groupingRationale is absent from a task', () => {
+      const { groupingRationale: _drop, ...taskWithoutRationale } = MINIMAL_VALID_WB.phases[0].tasks[0];
+      const wb = {
+        ...MINIMAL_VALID_WB,
+        phases: [{ ...MINIMAL_VALID_WB.phases[0], tasks: [taskWithoutRationale] }],
+      };
+      const tmpPath = path.join(os.tmpdir(), `wb-w3-${Date.now()}.json`);
+      writeTmp(tmpPath, wb);
+      try {
+        const { exitCode, report } = runValidator(tmpPath);
+        expect(exitCode).toBe(1);
+        expect(report.valid).toBe(false);
+        const err = report.errors.find(e => e.category === 'missing_field' && e.field === 'groupingRationale');
+        expect(err).toBeDefined();
+      } finally {
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+      }
+    });
+
+    test('W3: exits 0 and no missing_field for groupingRationale when the field is present and non-empty', () => {
+      // MINIMAL_VALID_WB already includes groupingRationale — use it directly
+      const wbPath = path.join(FIXTURES, 'wb-valid.json');
+      const { exitCode, report } = runValidator(wbPath);
+      expect(exitCode).toBe(0);
+      expect(report.errors.filter(e => e.category === 'missing_field' && e.field === 'groupingRationale')).toHaveLength(0);
+    });
   });
 
   // ── Check 5: task ID format ──────────────────────────────────────────────────

@@ -20,14 +20,16 @@
           "dependsOn": [],
           "acceptanceCriteria": [],
           "verification": {
-            "commands": ["ls .claude/scripts"]
+            "commands": [
+              "ls .claude/scripts"
+            ]
           },
           "estimate": {
             "agentMinutes": 5,
             "tokens": 8000
           },
           "outputCount": 1,
-          "groupingRationale": null,
+          "groupingRationale": "Single responsibility",
           "commit": {
             "type": "feat",
             "subject": "create .claude/scripts directory"
@@ -39,17 +41,21 @@
           "outcome": "Constants block (SCHEMA_VERSION, REQUIRED_PHASE_FIELDS, REQUIRED_TASK_FIELDS, VALID_DOMAINS, VALID_AGENT_TYPES) is present at the top of wb-validate.js",
           "domain": "INFRA",
           "agentType": "developer-backend",
-          "dependsOn": ["INFRA-TASK-INFRA-01"],
+          "dependsOn": [
+            "INFRA-TASK-INFRA-01"
+          ],
           "acceptanceCriteria": [],
           "verification": {
-            "commands": ["node -e \"const v = require('./.claude/scripts/wb-validate.js'); console.log('ok')\""]
+            "commands": [
+              "node -e \"const v = require('./.claude/scripts/wb-validate.js'); console.log('ok')\""
+            ]
           },
           "estimate": {
             "agentMinutes": 10,
             "tokens": 15000
           },
           "outputCount": 1,
-          "groupingRationale": null,
+          "groupingRationale": "Single responsibility",
           "commit": {
             "type": "feat",
             "subject": "add schema v2 constants to wb-validate.js"
@@ -64,14 +70,16 @@
           "dependsOn": [],
           "acceptanceCriteria": [],
           "verification": {
-            "commands": ["ls .claude/scripts/tests/fixtures/ac-table-format.md"]
+            "commands": [
+              "ls .claude/scripts/tests/fixtures/ac-table-format.md"
+            ]
           },
           "estimate": {
             "agentMinutes": 8,
             "tokens": 12000
           },
           "outputCount": 1,
-          "groupingRationale": null,
+          "groupingRationale": "Single responsibility",
           "commit": {
             "type": "test",
             "subject": "add AC table parser fixture"
@@ -94,8 +102,12 @@
           "outcome": "wb-validate.js parses the input JSON file and exits with code 2 if the file is missing or malformed, and exits with code 1 if schemaVersion is not exactly 2",
           "domain": "BE",
           "agentType": "developer-backend",
-          "dependsOn": ["INFRA-TASK-INFRA-02"],
-          "acceptanceCriteria": ["AC-05"],
+          "dependsOn": [
+            "INFRA-TASK-INFRA-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
           "verification": {
             "commands": [
               "node .claude/scripts/wb-validate.js --help",
@@ -107,7 +119,7 @@
             "tokens": 20000
           },
           "outputCount": 1,
-          "groupingRationale": null,
+          "groupingRationale": "Single responsibility",
           "commit": {
             "type": "feat",
             "subject": "add wb-validate.js entry point with JSON parse and schema check"
@@ -119,8 +131,12 @@
           "outcome": "wb-validate.js detects duplicate task IDs across all phases and reports missing or null required phase/task fields with category unique_id_violation or missing_field",
           "domain": "BE",
           "agentType": "developer-backend",
-          "dependsOn": ["US-01-TASK-BE-01"],
-          "acceptanceCriteria": ["AC-05"],
+          "dependsOn": [
+            "US-01-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
           "verification": {
             "commands": [
               "npm test -- tests/cli/wb-validate.test.js --testNamePattern='unique ID'",
@@ -132,7 +148,7 @@
             "tokens": 18000
           },
           "outputCount": 1,
-          "groupingRationale": null,
+          "groupingRationale": "Single responsibility",
           "commit": {
             "type": "feat",
             "subject": "add unique ID and required field validation to wb-validate.js"
@@ -144,8 +160,13 @@
           "outcome": "tests/cli/wb-validate.test.js exists and all schema version and unique ID test cases pass under npm test",
           "domain": "TEST",
           "agentType": "developer-testing",
-          "dependsOn": ["US-01-TASK-BE-01", "US-01-TASK-BE-02"],
-          "acceptanceCriteria": ["AC-05"],
+          "dependsOn": [
+            "US-01-TASK-BE-01",
+            "US-01-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
           "verification": {
             "commands": [
               "npm test -- tests/cli/wb-validate.test.js"
@@ -156,7 +177,7 @@
             "tokens": 30000
           },
           "outputCount": 1,
-          "groupingRationale": null,
+          "groupingRationale": "Single responsibility",
           "commit": {
             "type": "test",
             "subject": "add wb-validate.js schema version and unique ID tests"
