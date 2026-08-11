@@ -66,6 +66,23 @@ const WB_RENDER_SCHEMA = {
   required: ['exitCode', 'stdout', 'stderr', 'markdownPath', 'csvPath', 'markdownExists', 'csvExists'],
 }
 
+const WB_SEMANTIC_SCHEMA = {
+  type: 'object',
+  properties: {
+    valid:    { type: 'boolean' },
+    findings: { type: 'array' },
+  },
+  required: ['valid', 'findings'],
+}
+
+function normalizeError(err) {
+  if (!err) return '<unknown error>'
+  if (typeof err === 'string') return err
+  if (err.message) return err.message
+  if (err.stderr) return err.stderr
+  try { return JSON.stringify(err) } catch (_) { return '<unknown error>' }
+}
+
 // ── Parse args ────────────────────────────────────────────────────────────────
 
 // args: "<path-to-feature.md>"
@@ -105,6 +122,225 @@ await updateLedgerEntry(featureDir, prefix, 'generate-work-breakdown:phase2', {
 })
 tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
 log(`generate-work-breakdown done — phase delta: ${wbTokens} tokens`)
+
+// ── Step 2: wb-validate.js (deterministic structural validator) ───────────────
+let wbValidatorReport = null
+let validateFailed = false
+let validateExitCode = null
+await appendLedgerEntry(featureDir, prefix, {
+  agent: 'wb-validate:phase2',
+  phase: 'phase2', model: 'haiku', status: 'running',
+  phase_delta_tokens: 0, started_at: '__TS__', completed_at: null,
+})
+const beforeValidate = budget.spent()
+try {
+  const validateWrapper = await agent(
+    `Run this command and return the result as structured output:\n` +
+    `node .claude/scripts/wb-validate.js "${featureDir}/${prefix}-Work-Breakdown.json" "${featureDir}/${prefix}-Requirements.md"\n\n` +
+    `Capture exitCode (integer), stdout (string), stderr (string). Return all three.`,
+    {
+      label:  'wb-validate',
+      phase:  'Work Breakdown',
+      model:  'haiku',
+      schema: WB_WRAPPER_SCHEMA,
+    }
+  )
+  validateExitCode = validateWrapper.exitCode
+  if (validateWrapper.stderr?.trim()) {
+    log(`wb-validate stderr: ${validateWrapper.stderr.trim()}`)
+  }
+  if (validateWrapper.exitCode === 2) {
+    throw Object.assign(
+      new Error(validateWrapper.stderr?.trim() || 'wb-validate runtime error (exit 2)'),
+      { _exitCode: validateWrapper.exitCode }
+    )
+  }
+  if (![0, 1].includes(validateWrapper.exitCode)) {
+    throw Object.assign(
+      new Error(`wb-validate unexpected exit code: ${validateWrapper.exitCode}`),
+      { _exitCode: validateWrapper.exitCode }
+    )
+  }
+  if (!validateWrapper.stdout?.trim()) {
+    throw new Error('wb-validate returned empty stdout')
+  }
+  wbValidatorReport = JSON.parse(validateWrapper.stdout)
+  if (validateWrapper.exitCode === 0 && !wbValidatorReport.valid) {
+    throw new Error('Inconsistent wb-validate result: exit 0 with valid=false')
+  }
+  if (validateWrapper.exitCode === 1 && wbValidatorReport.valid) {
+    throw new Error('Inconsistent wb-validate result: exit 1 with valid=true')
+  }
+  await updateLedgerEntry(featureDir, prefix, 'wb-validate:phase2', {
+    status: 'done', completed_at: '__TS__',
+    phase_delta_tokens: budget.spent() - beforeValidate,
+  })
+} catch (err) {
+  validateFailed = true
+  await updateLedgerEntry(featureDir, prefix, 'wb-validate:phase2', {
+    status: 'failed', completed_at: '__TS__',
+    phase_delta_tokens: budget.spent() - beforeValidate,
+    error_summary: normalizeError(err),
+    exit_code: err._exitCode ?? validateExitCode ?? null,
+  })
+}
+const validateTokens = budget.spent() - beforeValidate
+const wbValidatorPassed = !validateFailed && wbValidatorReport !== null
+  && wbValidatorReport.valid === true && wbValidatorReport.errors.length === 0
+log(`wb-validate: ${wbValidatorPassed ? 'passed' : 'failed/errors'} — ${validateTokens} tokens`)
+
+// ── Step 3: Semantic validator (only if wb-validate passed) ───────────────────
+let semanticResult = null
+let semanticFailed = false
+let semanticTokens = 0
+if (!wbValidatorPassed) {
+  await appendLedgerEntry(featureDir, prefix, {
+    agent: 'validate-work-breakdown-semantic:phase2',
+    phase: 'phase2', model: 'sonnet', status: 'skipped',
+    phase_delta_tokens: 0, started_at: '__TS__', completed_at: '__TS__',
+  })
+} else {
+  await appendLedgerEntry(featureDir, prefix, {
+    agent: 'validate-work-breakdown-semantic:phase2',
+    phase: 'phase2', model: 'sonnet', status: 'running',
+    phase_delta_tokens: 0, started_at: '__TS__', completed_at: null,
+  })
+  const beforeSemantic = budget.spent()
+  try {
+    semanticResult = await agent(
+      `${featureDir}/${prefix}-Work-Breakdown.json\n${featureDir}/${prefix}-Requirements.md`,
+      {
+        label:     'validate-work-breakdown-semantic',
+        phase:     'Work Breakdown',
+        agentType: 'validate-work-breakdown-semantic',
+        schema:    WB_SEMANTIC_SCHEMA,
+      }
+    )
+    semanticTokens = budget.spent() - beforeSemantic
+    await updateLedgerEntry(featureDir, prefix, 'validate-work-breakdown-semantic:phase2', {
+      status: 'done', completed_at: '__TS__', phase_delta_tokens: semanticTokens,
+    })
+  } catch (err) {
+    semanticFailed = true
+    semanticTokens = budget.spent() - beforeSemantic
+    await updateLedgerEntry(featureDir, prefix, 'validate-work-breakdown-semantic:phase2', {
+      status: 'failed', completed_at: '__TS__', phase_delta_tokens: semanticTokens,
+      error_summary: normalizeError(err), exit_code: null,
+    })
+  }
+}
+log(`semantic validator: ${semanticFailed ? 'failed' : semanticResult ? 'done' : 'skipped'}`)
+
+// ── Step 4: wb-render.js (only if wb-validate passed and semantic did not fail) ─
+const canRender = wbValidatorPassed && !semanticFailed
+let renderFailed = false
+let renderResult = null
+if (!canRender) {
+  await appendLedgerEntry(featureDir, prefix, {
+    agent: 'wb-render:phase2',
+    phase: 'phase2', model: 'haiku', status: 'skipped',
+    phase_delta_tokens: 0, started_at: '__TS__', completed_at: '__TS__',
+  })
+} else {
+  await appendLedgerEntry(featureDir, prefix, {
+    agent: 'wb-render:phase2',
+    phase: 'phase2', model: 'haiku', status: 'running',
+    phase_delta_tokens: 0, started_at: '__TS__', completed_at: null,
+  })
+  const beforeRender = budget.spent()
+  try {
+    renderResult = await agent(
+      `Run this command and return the result as structured output:\n` +
+      `node .claude/scripts/wb-render.js "${featureDir}/${prefix}-Work-Breakdown.json" "${prefix}"\n\n` +
+      `Capture exitCode (integer), stdout (string), stderr (string).\n` +
+      `Resolve the expected output paths:\n` +
+      `  markdownPath = "${featureDir}/${prefix}-Work-Breakdown.md"\n` +
+      `  csvPath      = "${featureDir}/${prefix}-Work-Breakdown.csv"\n` +
+      `Check whether each file exists on disk and return:\n` +
+      `  markdownExists (boolean), csvExists (boolean).\n` +
+      `Return all seven fields.`,
+      {
+        label:  'wb-render',
+        phase:  'Work Breakdown',
+        model:  'haiku',
+        schema: WB_RENDER_SCHEMA,
+      }
+    )
+    if (renderResult.stderr?.trim()) {
+      log(`wb-render stderr: ${renderResult.stderr.trim()}`)
+    }
+    if (renderResult.exitCode !== 0) {
+      throw Object.assign(
+        new Error(`wb-render exited ${renderResult.exitCode}: ${renderResult.stderr?.trim() || renderResult.stdout?.trim()}`),
+        { _exitCode: renderResult.exitCode }
+      )
+    }
+    if (!renderResult.markdownPath?.trim()) throw new Error('wb-render did not return markdownPath')
+    if (!renderResult.csvPath?.trim()) throw new Error('wb-render did not return csvPath')
+    if (!renderResult.markdownExists) {
+      throw Object.assign(
+        new Error(`wb-render output file not found: ${renderResult.markdownPath}`),
+        { _exitCode: renderResult.exitCode }
+      )
+    }
+    if (!renderResult.csvExists) {
+      throw Object.assign(
+        new Error(`wb-render output file not found: ${renderResult.csvPath}`),
+        { _exitCode: renderResult.exitCode }
+      )
+    }
+    await updateLedgerEntry(featureDir, prefix, 'wb-render:phase2', {
+      status: 'done', completed_at: '__TS__',
+      phase_delta_tokens: budget.spent() - beforeRender,
+    })
+  } catch (err) {
+    renderFailed = true
+    await updateLedgerEntry(featureDir, prefix, 'wb-render:phase2', {
+      status: 'failed', completed_at: '__TS__',
+      phase_delta_tokens: budget.spent() - beforeRender,
+      error_summary: normalizeError(err),
+      exit_code: err._exitCode ?? renderResult?.exitCode ?? null,
+    })
+  }
+  tokenLedger.push({ agent: 'wb-render', model: 'haiku', phase_delta_tokens: budget.spent() - beforeRender })
+}
+
+tokenLedger.push({ agent: 'wb-validate', model: 'haiku', phase_delta_tokens: validateTokens })
+tokenLedger.push({ agent: 'validate-work-breakdown-semantic', model: 'sonnet', phase_delta_tokens: semanticTokens })
+
+// ── Step 5: Assemble gate2_payload ────────────────────────────────────────────
+const gate2_payload = {
+  js_validator_report:       wbValidatorReport,
+  js_validator_failed:       validateFailed,
+  semantic_validator_result: semanticResult,
+  semantic_validator_failed: semanticFailed,
+  renderer_result:           renderResult,
+  renderer_failed:           renderFailed,
+  duration_bands:      wbValidatorReport ? wbValidatorReport.durationBands : null,
+  domain_distribution: wbValidatorReport ? wbValidatorReport.domainDistribution : null,
+  warning_band_tasks:  wbValidatorReport
+    ? wbValidatorReport.warnings.filter(w => w.category === 'duration_warning')
+        .map(w => ({ taskId: w.taskId, estimateMinutes: w.details ? w.details.estimateMinutes : null }))
+    : [],
+  split_required_tasks: wbValidatorReport
+    ? wbValidatorReport.errors.filter(e => e.category === 'split_required')
+        .map(e => ({ taskId: e.taskId, estimateMinutes: e.details ? e.details.estimateMinutes : null }))
+    : [],
+  must_ac_uncovered: wbValidatorReport
+    ? wbValidatorReport.errors.filter(e => e.category === 'must_ac_uncovered')
+        .map(e => ({ acId: e.details ? e.details.acId : null }))
+    : [],
+  phase_unschedulable: wbValidatorReport
+    ? (wbValidatorReport.dependencies ? wbValidatorReport.dependencies.phaseUnschedulable || [] : [])
+    : [],
+  gate2_blocked:
+    validateFailed ||
+    !wbValidatorPassed ||
+    semanticFailed ||
+    renderFailed ||
+    Boolean(semanticResult && semanticResult.findings && semanticResult.findings.some(f => f.blocking)),
+}
+log(`gate2_payload assembled — gate2_blocked: ${gate2_payload.gate2_blocked}`)
 
 // ── Parse WB + write Effort-Estimate + Token-Estimate ────────────────────────
 phase('Effort Estimate')
@@ -160,30 +396,27 @@ function formatEur(val) {
 const metrics = await agent(
   `You have four tasks:
 
-TASK 1 — Read the Work Breakdown file.
+TASK 1 — Read the Work Breakdown JSON file.
 The feature.md is at: ${featurePath}
-The directory containing feature.md also contains the Work Breakdown file named {PREFIX}-Work-Breakdown.md,
-where PREFIX matches the pattern [A-Z]+-[0-9]+ from the directory name (e.g. FTR-009).
-Use Glob or Read to find and read that file.
+The JSON work breakdown is at: ${featureDir}/${prefix}-Work-Breakdown.json
+Read the JSON file and extract:
+- prefix (e.g. "FTR-009") — use "${prefix}"
+- feature_dir (directory containing feature.md) — use "${featureDir}"
+- feature_title — from wb.title or wb.feature field
+- total_tasks (integer) — count all tasks across all phases
+- user_stories (integer) — count phases whose id starts with "US-"
+- domain_breakdown (string) — e.g. "BE: N, FE: N, DB: N, INFRA: N, TEST: N"
+- implementation_phases (integer) — total number of phases
+- human_estimate — compute as: (BE_tasks * 120 + TEST_tasks * 60 + INFRA_tasks * 30 + FE_tasks * 90 + DB_tasks * 90) minutes, format as "~Xh Ymin"
+- agent_estimate — human_estimate / 4 (parallel dispatch), format as "~Xmin" or "~Xh Ymin"
+- work_breakdown_path — ${featureDir}/${prefix}-Work-Breakdown.json
 
-Extract from the Summary table:
-- prefix (e.g. "FTR-009")
-- feature_dir (directory containing feature.md)
-- feature_title (full feature title from the Work Breakdown header)
-- user_stories (integer)
-- total_tasks (integer)
-- domain_breakdown (e.g. "DB:0, BE:11, FE:0, INFRA:4, TEST:0")
-- implementation_phases (integer)
-- human_estimate (e.g. "~34h")
-- agent_estimate (e.g. "~2h 6min")
-- work_breakdown_path (full path to the Work Breakdown file)
-
-Also read Section 4 of the Work Breakdown to extract per-User-Story details:
-- US ID (e.g. US-01)
-- US title
-- task count
-- domains involved
-- estimated hours (from the Work Breakdown if present, otherwise estimate based on task count: ~2h per BE task, ~1h per TEST task, ~30min per INFRA task)
+Also extract per-User-Story details for the Effort-Estimate:
+- US ID (phase.id where it starts with "US-")
+- US title (phase.title)
+- task count (phase.tasks.length)
+- domains involved (unique task.domain values in the phase)
+- estimated hours (per the formula above)
 
 TASK 2 — Write the Effort-Estimate.md file.
 Write {feature_dir}/{PREFIX}-Effort-Estimate.md with this format:
@@ -270,7 +503,7 @@ For the "Est. cost €" column in Phase 3: use the formula tokens * (0.8 * 3.00 
 TASK 4 — Set return values.
 Set effort_estimate_path to the full path of the written Effort-Estimate.md.
 Set token_estimate_path to the full path of the written Token-Estimate.md.
-Set tasks_csv_path to the full path of the {PREFIX}-Work-Breakdown.csv file (written by generate-work-breakdown in the same directory as feature.md).
+Set tasks_csv_path to "${featureDir}/${prefix}-Work-Breakdown.csv" (written by wb-render in the same directory as feature.md).
 
 Return the extracted metrics as structured output.`,
   {
@@ -312,7 +545,7 @@ ${phase2Events}`,
 )
 
 return {
-  prefix:                metrics.prefix,
+  prefix:                metrics.prefix || prefix,
   feature_path:          featurePath,
   user_stories:          metrics.user_stories,
   total_tasks:           metrics.total_tasks,
@@ -326,4 +559,5 @@ return {
   tasks_csv_path:        metrics.tasks_csv_path        || '',
   token_ledger:          tokenLedger,
   errors:                [],
+  gate2_payload,
 }
