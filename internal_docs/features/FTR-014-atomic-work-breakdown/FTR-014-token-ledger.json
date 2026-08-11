@@ -579,9 +579,27 @@
     "agent": "developer-testing:US-07-T03:attempt1",
     "phase": "phase3",
     "model": "sonnet",
-    "status": "running",
-    "phase_delta_tokens": 0,
+    "status": "done",
+    "phase_delta_tokens": 52025,
     "started_at": "2026-08-11T13:08:00Z",
-    "completed_at": null
+    "completed_at": "2026-08-11T13:15:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-07-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T13:15:00Z",
+    "completed_at": "2026-08-11T13:15:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-07-T05:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T13:15:00Z",
+    "completed_at": "2026-08-11T13:15:00Z"
   }
 ]
