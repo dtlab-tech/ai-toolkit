@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.10.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.10.0...v0.10.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* **installer:** exclude .claude/scripts/tests from distribution and npm pack ([9ac27c8](https://github.com/dtlab-tech/ai-toolkit/commit/9ac27c8bfe84707f177325afbf71843865a0aa7d))
+* **installer:** exclude .claude/scripts/tests from distribution and npm pack ([3489618](https://github.com/dtlab-tech/ai-toolkit/commit/34896181a873daa17495c0682bd11fd529a11330))
+
 ## [0.10.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.9.0...v0.10.0) (2026-08-12)
 
 
