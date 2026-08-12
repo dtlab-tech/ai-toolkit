@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 2,
+  "feature": "TEST-001",
+  "phases": [
+    {
+      "id": "INFRA",
+      "type": "infrastructure",
+      "title": "Shared infrastructure setup for JWT authentication",
+      "commit": { "type": "feat", "subject": "shared infrastructure for JWT auth" },
+      "tasks": [
+        {
+          "id": "INFRA-TASK-DB-01",
+          "title": "Register database context and User entity",
+          "outcome": "User entity is mapped in the database context; schema includes users table with id, email, passwordHash columns",
+          "domain": "DB",
+          "agentType": "developer-database",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 8, "tokens": 18000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add User entity and database context registration" }
+        },
+        {
+          "id": "INFRA-TASK-DB-02",
+          "title": "Create RefreshToken entity and migration",
+          "outcome": "RefreshToken entity is mapped; migration creates refresh_tokens table with token, userId, expiresAt columns",
+          "domain": "DB",
+          "agentType": "developer-database",
+          "dependsOn": ["INFRA-TASK-DB-01"],
+          "acceptanceCriteria": [],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 8, "tokens": 18000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add RefreshToken entity and migration" }
+        },
+        {
+          "id": "INFRA-TASK-BE-01",
+          "title": "Configure JWT signing secret and token expiry constants",
+          "outcome": "JWT_SECRET, ACCESS_TOKEN_EXPIRY (15m), and REFRESH_TOKEN_EXPIRY (7d) constants are loaded from environment variables and exported",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 5, "tokens": 10000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add JWT signing secret and expiry config constants" }
+        },
+        {
+          "id": "INFRA-TASK-BE-02",
+          "title": "Implement JwtService — sign and verify helpers",
+          "outcome": "JwtService class exists with signAccessToken(userId) and verifyToken(token) methods; uses INFRA-TASK-BE-01 constants",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["INFRA-TASK-BE-01"],
+          "acceptanceCriteria": [],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 10, "tokens": 22000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add JwtService sign and verify helpers" }
+        },
+        {
+          "id": "INFRA-TASK-BE-03",
+          "title": "Implement PasswordService — hash and compare helpers",
+          "outcome": "PasswordService class exists with hashPassword(plain) and comparePassword(plain, hash) methods using bcrypt",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 8, "tokens": 15000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add PasswordService bcrypt helpers" }
+        }
+      ]
+    },
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "title": "As an anonymous user, I want to register with email and password, so that I can access the system",
+      "commit": { "type": "feat", "subject": "implement US-01 user registration" },
+      "tasks": [
+        {
+          "id": "US-01-TASK-BE-01",
+          "title": "Implement RegisterUserService",
+          "outcome": "RegisterUserService class exists with register(email, password) method; validates uniqueness, hashes password via PasswordService, persists User, returns user id and email",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["INFRA-TASK-DB-01", "INFRA-TASK-BE-03"],
+          "acceptanceCriteria": ["AC-01", "AC-02", "AC-03"],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 13, "tokens": 30000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add RegisterUserService with uniqueness and hash validation" }
+        },
+        {
+          "id": "US-01-TASK-BE-02",
+          "title": "Implement POST /auth/register endpoint",
+          "outcome": "POST /auth/register controller action exists; validates request body (email, password), delegates to RegisterUserService, returns 201 on success or 409 on duplicate email",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["US-01-TASK-BE-01"],
+          "acceptanceCriteria": ["AC-01", "AC-02"],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 10, "tokens": 22000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add POST /auth/register endpoint" }
+        },
+        {
+          "id": "US-01-TASK-TEST-01",
+          "title": "Tests: user registration — success, duplicate email, password hashing",
+          "outcome": "Jest test suite for RegisterUserService and POST /auth/register covering 201 success, 409 conflict, and bcrypt hash verification",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": ["US-01-TASK-BE-01", "US-01-TASK-BE-02"],
+          "acceptanceCriteria": ["AC-01", "AC-02", "AC-03"],
+          "verification": { "commands": ["npx jest --testPathPattern=register"] },
+          "estimate": { "agentMinutes": 15, "tokens": 35000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "test", "subject": "add registration unit and integration tests" }
+        }
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "title": "As a registered user, I want to log in with my credentials, so that I receive JWT access and refresh tokens",
+      "commit": { "type": "feat", "subject": "implement US-02 user login" },
+      "tasks": [
+        {
+          "id": "US-02-TASK-BE-01",
+          "title": "Implement LoginService",
+          "outcome": "LoginService class exists with login(email, password) method; validates credentials via PasswordService, signs access and refresh tokens via JwtService, persists RefreshToken, returns both tokens",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["INFRA-TASK-DB-01", "INFRA-TASK-DB-02", "INFRA-TASK-BE-02", "INFRA-TASK-BE-03"],
+          "acceptanceCriteria": ["AC-04", "AC-05"],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 14, "tokens": 32000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add LoginService with credential validation and token issuance" }
+        },
+        {
+          "id": "US-02-TASK-BE-02",
+          "title": "Implement POST /auth/login endpoint",
+          "outcome": "POST /auth/login controller action exists; validates request body, delegates to LoginService, returns 200 with accessToken and refreshToken or 401 on invalid credentials",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["US-02-TASK-BE-01"],
+          "acceptanceCriteria": ["AC-04", "AC-05"],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 9, "tokens": 20000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add POST /auth/login endpoint" }
+        },
+        {
+          "id": "US-02-TASK-TEST-01",
+          "title": "Tests: user login — success, invalid password, unknown email",
+          "outcome": "Jest test suite for LoginService and POST /auth/login covering 200 with tokens, 401 on bad password, and 401 on unknown email",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": ["US-02-TASK-BE-01", "US-02-TASK-BE-02"],
+          "acceptanceCriteria": ["AC-04", "AC-05"],
+          "verification": { "commands": ["npx jest --testPathPattern=login"] },
+          "estimate": { "agentMinutes": 14, "tokens": 32000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "test", "subject": "add login unit and integration tests" }
+        }
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "title": "As an authenticated client, I want to refresh my access token, so that I stay logged in without re-entering credentials",
+      "commit": { "type": "feat", "subject": "implement US-03 token refresh" },
+      "tasks": [
+        {
+          "id": "US-03-TASK-BE-01",
+          "title": "Implement TokenRefreshService",
+          "outcome": "TokenRefreshService class exists with refresh(refreshToken) method; validates token via JwtService, invalidates old RefreshToken, issues new access and refresh tokens, persists new RefreshToken",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["INFRA-TASK-DB-02", "INFRA-TASK-BE-02"],
+          "acceptanceCriteria": ["AC-06", "AC-07"],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 13, "tokens": 30000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add TokenRefreshService with rotation logic" }
+        },
+        {
+          "id": "US-03-TASK-BE-02",
+          "title": "Implement POST /auth/refresh endpoint",
+          "outcome": "POST /auth/refresh controller action exists; validates request body, delegates to TokenRefreshService, returns 200 with new accessToken and refreshToken or 401 on invalid/expired token",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": ["US-03-TASK-BE-01"],
+          "acceptanceCriteria": ["AC-06", "AC-07"],
+          "verification": { "commands": ["npx tsc --noEmit"] },
+          "estimate": { "agentMinutes": 9, "tokens": 20000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "feat", "subject": "add POST /auth/refresh endpoint" }
+        },
+        {
+          "id": "US-03-TASK-TEST-01",
+          "title": "Tests: token refresh — success with rotation, expired token, reuse of invalidated token",
+          "outcome": "Jest test suite for TokenRefreshService and POST /auth/refresh covering 200 with rotated tokens, 401 on expired token, and 401 on reuse of already-invalidated token",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": ["US-03-TASK-BE-01", "US-03-TASK-BE-02"],
+          "acceptanceCriteria": ["AC-06", "AC-07"],
+          "verification": { "commands": ["npx jest --testPathPattern=refresh"] },
+          "estimate": { "agentMinutes": 15, "tokens": 35000 },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": { "type": "test", "subject": "add token refresh unit and integration tests" }
+        }
+      ]
+    }
+  ]
+}

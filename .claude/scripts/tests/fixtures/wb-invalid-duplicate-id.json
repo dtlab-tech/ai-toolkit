@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "feature": "FTR-014",
+  "phases": [
+    {
+      "id": "INFRA",
+      "type": "infrastructure",
+      "title": "Shared infrastructure setup",
+      "commit": {
+        "type": "feat",
+        "subject": "add shared infrastructure"
+      },
+      "tasks": [
+        {
+          "id": "INFRA-TASK-INFRA-01",
+          "title": "Create scripts directory",
+          "outcome": "The .claude/scripts directory exists",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": ["ls .claude/scripts"]
+          },
+          "estimate": {
+            "agentMinutes": 5,
+            "tokens": 8000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "feat",
+            "subject": "create .claude/scripts directory"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "title": "Implement validator entry point",
+      "commit": {
+        "type": "feat",
+        "subject": "implement validator entry point"
+      },
+      "tasks": [
+        {
+          "id": "INFRA-TASK-INFRA-01",
+          "title": "Duplicate task ID — same as INFRA-TASK-INFRA-01 above",
+          "outcome": "This task intentionally reuses INFRA-TASK-INFRA-01 to trigger unique_id_violation",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": ["npm test"]
+          },
+          "estimate": {
+            "agentMinutes": 8,
+            "tokens": 12000
+          },
+          "outputCount": 1,
+          "groupingRationale": null,
+          "commit": {
+            "type": "feat",
+            "subject": "add duplicate task"
+          }
+        }
+      ]
+    }
+  ]
+}

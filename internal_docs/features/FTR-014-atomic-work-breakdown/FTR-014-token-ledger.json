@@ -1,0 +1,674 @@
+[
+  {
+    "agent": "define-feature:define",
+    "phase": "define",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-04T23:30:16Z",
+    "completed_at": "2026-08-04T23:31:34Z"
+  },
+  {
+    "agent": "generate-requirements:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 10771,
+    "started_at": "2026-08-05T15:08:25Z",
+    "completed_at": "2026-08-05T15:10:38Z"
+  },
+  {
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 15652,
+    "started_at": "2026-08-05T15:10:58Z",
+    "completed_at": "2026-08-05T15:14:29Z"
+  },
+  {
+    "agent": "validate-feature-docs:phase1:cycle1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 6441,
+    "started_at": "2026-08-05T15:14:49Z",
+    "completed_at": "2026-08-05T15:16:29Z"
+  },
+  {
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 16219,
+    "started_at": "2026-08-05T22:57:20Z",
+    "completed_at": "2026-08-08T22:01:22Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 39655,
+    "started_at": "2026-08-09T21:23:18Z",
+    "completed_at": "2026-08-09T21:25:53Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 66132,
+    "started_at": "2026-08-09T21:26:16Z",
+    "completed_at": "2026-08-09T21:30:11Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 65892,
+    "started_at": "2026-08-09T21:30:32Z",
+    "completed_at": "2026-08-09T21:36:02Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 69400,
+    "started_at": "2026-08-09T21:36:24Z",
+    "completed_at": "2026-08-09T21:38:41Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T05:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 69390,
+    "started_at": "2026-08-09T21:39:04Z",
+    "completed_at": "2026-08-09T21:43:44Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T06:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 21933,
+    "started_at": "2026-08-09T21:44:07Z",
+    "completed_at": "2026-08-09T21:46:40Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T07:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 19321,
+    "started_at": "2026-08-09T21:47:06Z",
+    "completed_at": "2026-08-09T21:50:57Z"
+  },
+  {
+    "agent": "developer-backend:INFRA-T08:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 58641,
+    "started_at": "2026-08-09T21:51:20Z",
+    "completed_at": "2026-08-09T21:56:37Z"
+  },
+  {
+    "agent": "developer-backend:US-01-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 76206,
+    "started_at": "2026-08-09T22:03:02Z",
+    "completed_at": "2026-08-09T22:09:27Z"
+  },
+  {
+    "agent": "developer-backend:US-01-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 46117,
+    "started_at": "2026-08-09T22:09:49Z",
+    "completed_at": "2026-08-09T22:17:22Z"
+  },
+  {
+    "agent": "developer-testing:US-01-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 48264,
+    "started_at": "2026-08-09T22:17:45Z",
+    "completed_at": "2026-08-09T22:21:25Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 71572,
+    "started_at": "2026-08-09T22:21:52Z",
+    "completed_at": "2026-08-09T22:28:11Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 50955,
+    "started_at": "2026-08-09T22:28:35Z",
+    "completed_at": "2026-08-09T22:32:49Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 50971,
+    "started_at": "2026-08-09T22:33:13Z",
+    "completed_at": "2026-08-09T22:40:59Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 52282,
+    "started_at": "2026-08-09T22:41:24Z",
+    "completed_at": "2026-08-09T22:50:04Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T05:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 56960,
+    "started_at": "2026-08-09T22:50:27Z",
+    "completed_at": "2026-08-09T22:55:33Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T06:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 53675,
+    "started_at": "2026-08-09T22:55:56Z",
+    "completed_at": "2026-08-09T23:00:34Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T07:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 95916,
+    "started_at": "2026-08-10T16:18:53Z",
+    "completed_at": "2026-08-10T16:30:31Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T08:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 26896,
+    "started_at": "2026-08-10T17:00:00Z",
+    "completed_at": "2026-08-10T17:02:11Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T09:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 29120,
+    "started_at": "2026-08-10T17:05:00Z",
+    "completed_at": "2026-08-10T17:06:00Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T10:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 34962,
+    "started_at": "2026-08-10T17:10:00Z",
+    "completed_at": "2026-08-10T17:19:33Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T11:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 23787,
+    "started_at": "2026-08-10T17:22:00Z",
+    "completed_at": "2026-08-10T17:23:22Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T12:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 21956,
+    "started_at": "2026-08-10T17:26:00Z",
+    "completed_at": "2026-08-10T17:27:51Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T13:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 20821,
+    "started_at": "2026-08-10T17:30:00Z",
+    "completed_at": "2026-08-10T17:32:29Z"
+  },
+  {
+    "agent": "developer-backend:US-02-T14:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 15000,
+    "started_at": "2026-08-10T17:35:00Z",
+    "completed_at": "2026-08-11T08:00:00Z"
+  },
+  {
+    "agent": "developer-testing:US-02-T15:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 73689,
+    "started_at": "2026-08-11T09:30:00Z",
+    "completed_at": "2026-08-11T09:40:33Z"
+  },
+  {
+    "agent": "developer-testing:US-02-T16:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 50491,
+    "started_at": "2026-08-11T09:43:00Z",
+    "completed_at": "2026-08-11T09:45:34Z"
+  },
+  {
+    "agent": "developer-testing:US-02-T17:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 55995,
+    "started_at": "2026-08-11T09:47:00Z",
+    "completed_at": "2026-08-11T09:50:03Z"
+  },
+  {
+    "agent": "developer-testing:US-02-T18:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 60445,
+    "started_at": "2026-08-11T09:52:00Z",
+    "completed_at": "2026-08-11T09:57:20Z"
+  },
+  {
+    "agent": "developer-testing:US-02-T19:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 50348,
+    "started_at": "2026-08-11T09:59:00Z",
+    "completed_at": "2026-08-11T10:02:02Z"
+  },
+  {
+    "agent": "developer-testing:US-02-T20:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 69321,
+    "started_at": "2026-08-11T10:04:00Z",
+    "completed_at": "2026-08-11T10:28:55Z"
+  },
+  {
+    "agent": "developer-testing:US-02-T21:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 61886,
+    "started_at": "2026-08-11T10:31:00Z",
+    "completed_at": "2026-08-11T10:41:22Z"
+  },
+  {
+    "agent": "developer-backend:US-03-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T10:50:00Z",
+    "completed_at": "2026-08-11T10:55:00Z"
+  },
+  {
+    "agent": "developer-backend:US-03-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T10:58:00Z",
+    "completed_at": "2026-08-11T10:58:00Z"
+  },
+  {
+    "agent": "developer-backend:US-03-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T10:58:00Z",
+    "completed_at": "2026-08-11T10:58:00Z"
+  },
+  {
+    "agent": "developer-testing:US-03-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 41814,
+    "started_at": "2026-08-11T11:00:00Z",
+    "completed_at": "2026-08-11T11:09:33Z"
+  },
+  {
+    "agent": "developer-backend:US-04-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 44271,
+    "started_at": "2026-08-11T11:15:00Z",
+    "completed_at": "2026-08-11T11:18:27Z"
+  },
+  {
+    "agent": "developer-backend:US-04-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 25351,
+    "started_at": "2026-08-11T11:20:00Z",
+    "completed_at": "2026-08-11T11:26:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-04-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 22264,
+    "started_at": "2026-08-11T11:27:00Z",
+    "completed_at": "2026-08-11T11:32:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-04-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 34223,
+    "started_at": "2026-08-11T11:33:00Z",
+    "completed_at": "2026-08-11T11:37:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-04-T05:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 25282,
+    "started_at": "2026-08-11T11:38:00Z",
+    "completed_at": "2026-08-11T11:42:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-04-T06:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 64295,
+    "started_at": "2026-08-11T11:43:00Z",
+    "completed_at": "2026-08-11T11:55:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-04-T07:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 73727,
+    "started_at": "2026-08-11T11:56:00Z",
+    "completed_at": "2026-08-11T12:08:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-04-T08:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 54142,
+    "started_at": "2026-08-11T12:10:00Z",
+    "completed_at": "2026-08-11T12:17:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-05-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 50843,
+    "started_at": "2026-08-11T12:20:00Z",
+    "completed_at": "2026-08-11T12:28:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-05-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:28:00Z",
+    "completed_at": "2026-08-11T12:28:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-05-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:28:00Z",
+    "completed_at": "2026-08-11T12:28:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-05-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:28:00Z",
+    "completed_at": "2026-08-11T12:28:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-05-T05:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:28:00Z",
+    "completed_at": "2026-08-11T12:28:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-05-T06:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:28:00Z",
+    "completed_at": "2026-08-11T12:28:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-05-T07:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 30781,
+    "started_at": "2026-08-11T12:30:00Z",
+    "completed_at": "2026-08-11T12:35:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-05-T08:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 36991,
+    "started_at": "2026-08-11T12:37:00Z",
+    "completed_at": "2026-08-11T12:42:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-05-T09:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 38320,
+    "started_at": "2026-08-11T12:43:00Z",
+    "completed_at": "2026-08-11T12:50:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-06-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:52:00Z",
+    "completed_at": "2026-08-11T12:52:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-06-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:52:00Z",
+    "completed_at": "2026-08-11T12:52:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-06-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T12:52:00Z",
+    "completed_at": "2026-08-11T12:52:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-06-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 42021,
+    "started_at": "2026-08-11T12:53:00Z",
+    "completed_at": "2026-08-11T13:00:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-07-T01:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 26307,
+    "started_at": "2026-08-11T13:02:00Z",
+    "completed_at": "2026-08-11T13:07:00Z"
+  }
+  ,{
+    "agent": "developer-backend:US-07-T02:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T13:07:00Z",
+    "completed_at": "2026-08-11T13:07:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-07-T03:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 52025,
+    "started_at": "2026-08-11T13:08:00Z",
+    "completed_at": "2026-08-11T13:15:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-07-T04:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T13:15:00Z",
+    "completed_at": "2026-08-11T13:15:00Z"
+  }
+  ,{
+    "agent": "developer-testing:US-07-T05:attempt1",
+    "phase": "phase3",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-11T13:15:00Z",
+    "completed_at": "2026-08-11T13:15:00Z"
+  }
+  ,{
+    "agent": "review-solution:FTR-014:post-implementation",
+    "phase": "review",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 105767,
+    "started_at": "2026-08-11T13:20:00Z",
+    "completed_at": "2026-08-11T13:35:57Z"
+  }
+  ,{
+    "agent": "remediation:critical:pm-phase3-source-test-misalignment",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T13:36:00Z",
+    "completed_at": "2026-08-11T13:42:00Z",
+    "notes": "Pre-existing CRITICAL from FTR-013 rework cycle: pm-phase3-source.test.js asserted fs.*Sync/synchronous helpers but pm-phase3.js correctly uses async agent()-based helpers. Aligned test to actual Workflow runtime contract. 11 failures → 0. No pm-phase3.js changes. Token count not available — inline edits, no subagent dispatched."
+  }
+  ,{
+    "agent": "remediation:W1:wb-validate-phases-guard",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T13:45:00Z",
+    "completed_at": "2026-08-11T13:50:00Z",
+    "notes": "W1: checks 22 and 23 iterated wb.phases directly — TypeError on missing/non-array. Fixed both to use the guarded `phases` constant (same as checks 3-21). Added 3 regression tests. 594→597 tests pass."
+  }
+  ,{
+    "agent": "remediation:W2:agentMinutes-field-alignment",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T13:52:00Z",
+    "completed_at": "2026-08-11T13:58:00Z",
+    "notes": "W2: pm-phase2.js read estimateMinutes but wb-validate.js emits agentMinutes in check 15 details. Fixed pm-phase2.js (lines 323,327), pm-phase2-gate2.js helper (lines 31,36), gate2-payload test fixtures/assertions. Added 2 contract-pinning tests in wb-validate.checks-15-18 that run real validator and assert field name. 597→599 tests pass."
+  }
+  ,{
+    "agent": "remediation:W3:groupingRationale-enforcement",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T14:00:00Z",
+    "completed_at": "2026-08-11T14:08:00Z",
+    "notes": "W3: groupingRationale was in REQUIRED_TASK_FIELDS (dead constant) but omitted from topLevelFields in check 4. A task without the field passed with exit 0. Fixed: added groupingRationale to topLevelFields; removed REQUIRED_TASK_FIELDS constant (single source of truth). Updated wb-valid.json fixture (all 6 tasks lacked the field). Added 2 tests: absent→exit 1, present→exit 0. 599→601 tests pass."
+  }
+  ,{
+    "agent": "remediation:I5:parseAcTable-exit-code-consistency",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T14:12:00Z",
+    "completed_at": "2026-08-11T14:18:00Z",
+    "notes": "I5: Two parseAcTable paths used exit(1) without emitting JSON on stdout. pm-phase2 treats exit 1 as 'JSON report on stdout' — these paths would cause JSON.parse failure masked as 'empty stdout'. Changed both to exit(2) (fatal/parse error, stderr only). Note: the '!get(ucRef)' path is structurally unreachable by parser construction. Added 2 contract tests in wb-validate.checks-19-21: unknown UC ref→exit 2, UC with no Priority row→exit 2. 601→603 tests pass."
+  }
+  ,{
+    "agent": "remediation:I6:completed_at-skipped-ledger-entries",
+    "phase": "remediation",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": "not_available",
+    "started_at": "2026-08-11T14:25:00Z",
+    "completed_at": "2026-08-11T14:38:00Z",
+    "notes": "I6: appendLedgerEntry in pm-phase2.js spread `{ ...entry, started_at: '__TS__', completed_at: null }` — hardcoded null AFTER entry spread, silently overwriting completed_at: '__TS__' that skipped call sites pass. Fix: changed to defaults-first spread `{ started_at: '__TS__', completed_at: null, ...entry }` so caller-supplied completed_at wins. Also updated agent prompt from 'replacing __TS__ in started_at' to 'replacing every __TS__ string value' so both fields get real timestamps for skipped entries. Added 3 source-level tests: defaults-first spread, skipped call sites pass completed_at:'__TS__', prompt replaces all __TS__ values. 603→606 tests pass."
+  }
+]
