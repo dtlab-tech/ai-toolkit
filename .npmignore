@@ -3,3 +3,4 @@ dist
 .git
 .vscode
 *.log
+.claude/scripts/tests

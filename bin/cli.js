@@ -44,6 +44,20 @@ function banner() {
 // and advise on these — copying would clobber the user's existing settings.
 const NEVER_COPY = new Set(['settings.json', 'settings.local.json']);
 
+// Path segments that identify non-distributable source files. Applied by
+// isDistributable() inside expandMappings() — the single source of truth for
+// whether a file enters the install plan, copy, manifest, and orphan pipeline.
+// Tests, fixtures, and helpers live under .claude/scripts/tests/ and must never
+// be shipped to destination projects (FTR-015 will move them to tests/**).
+const NEVER_DIST_SEGMENTS = ['.claude/scripts/tests/'];
+
+function isDistributable(srcPath) {
+  const n = srcPath.replace(/\\/g, '/');
+  if (NEVER_DIST_SEGMENTS.some(seg => n.includes(seg))) return false;
+  if (path.basename(srcPath).endsWith('.test.js') && n.includes('.claude/scripts/')) return false;
+  return true;
+}
+
 function fileHash(filePath) {
   return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
 }
@@ -162,11 +176,13 @@ function expandMappings(mappings) {
     if (fs.statSync(src).isDirectory()) {
       for (const entry of walkDir(src)) {
         if (NEVER_COPY.has(path.basename(entry))) continue; // never clobber user config
+        if (!isDistributable(entry)) continue;
         const rel = path.relative(src, entry);
         files.push({ src: entry, dest: path.join(dest, rel) });
       }
     } else {
       if (NEVER_COPY.has(path.basename(src))) continue;
+      if (!isDistributable(src)) continue;
       files.push({ src, dest });
     }
   }
