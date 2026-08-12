@@ -100,3 +100,15 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-013-ledger-pipeline-activity-tracker/feature.md)
 
 ---
+
+## FTR-014 — Atomic Work Breakdown
+
+**Keywords:** work-breakdown, wb-validate, wb-render, pm-phase2, generate-work-breakdown, validate-work-breakdown-semantic, JSON-schema, ac-table, groupingRationale, wave-scheduling, isDistributable, expandMappings, NEVER_DIST_SEGMENTS, installer-exclusion
+
+**Status:** completed
+
+**Summary:** Adds structural validation and rendering to the Work Breakdown phase. Introduces `wb-validate.js` (23 deterministic checks: JSON schema, domain values, task-id uniqueness, dependency cycles, wave scheduling, AC table format, estimate bounds, groupingRationale, phase completeness) and `wb-render.js` (generates `{PREFIX}-Work-Breakdown.md` and `.csv` from validated JSON). Adds `validate-work-breakdown-semantic` agent for semantic coherence and scope-alignment review. Updates `pm-phase2.js` to run the full validation pipeline (wb-validate → semantic → wb-render) using the append-before/update-after ledger pattern from FTR-013. Updates `generate-work-breakdown` agent with the new JSON schema (`groupingRationale`, `acTable`, `waveScheduling` fields). Distributes `wb-validate.js` and `wb-render.js` via the installer (local and global). **Post-implementation CRITICAL fix:** installer was distributing `.claude/scripts/tests/**` to destination projects; fixed by adding `isDistributable()` to `expandMappings()` as the single source of truth (covers local install, global install, plan, manifest, and orphan detection), and narrowing `package.json` `files[]` to exclude the tests subtree from npm publish; 25 regression tests added to `installer.scripts-distribution.test.js` (Groups 5–9). Full structural migration of tests to `tests/**` deferred to FTR-015.
+
+→ [Detail](FTR-014-atomic-work-breakdown/feature.md)
+
+---
