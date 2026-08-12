@@ -12,19 +12,18 @@
  *
  * This file provides source-level structural tests that read pm-phase3.js as text and
  * assert the structural properties that the proxy-only tests in pm-phase3-ledger.test.js
- * cannot catch. These tests will FAIL until pm-phase3.js is actually changed.
+ * cannot catch.
  *
  * Testing strategy:
- * pm-phase3.js runs inside the Claude Code Workflow runtime, which is an external
- * process that does NOT expose Node.js globals such as `require` or `module`.
- * However, unlike pm-phase1.js (which routes I/O through agent() calls), pm-phase3.js
- * has access to `fs` — the same pattern used by pm-phase2.js. The helper functions
- * must therefore use fs.*Sync directly (deterministic, no LLM overhead).
+ * pm-phase3.js runs inside the Claude Code Workflow runtime, which does NOT expose
+ * Node.js globals such as `require`, `module`, or `fs`. All file I/O must be routed
+ * through await agent() calls — the same pattern used by pm-phase2.js. The helpers
+ * are therefore async functions that delegate persistence to agent(), not fs.*Sync.
  *
  * Assertions:
- *   1. appendLedgerEntry is defined as a synchronous function using fs.*Sync
- *   2. updateLedgerEntry is defined as a synchronous function using fs.*Sync
- *   3. Helpers are defined before the first call site and use fs, not agent()
+ *   1. appendLedgerEntry is defined as an async function using await agent()
+ *   2. updateLedgerEntry is defined as an async function using await agent()
+ *   3. Helpers are defined before the first call site; use agent(), not fs.*Sync/require
  *   4. Correct agent keys are present for all critical call sites
  *   5. appendLedgerEntry/updateLedgerEntry are called symmetrically (one wrap per agent)
  *   6. The old persist-ledger agent call pattern is removed or not present
@@ -35,7 +34,7 @@
  *   AC-07: liveness — running entry is visible on disk between append and update
  *   AC-09: in-memory tokenLedger accumulation preserved
  *   AC-12: appendLedgerEntry and updateLedgerEntry helpers exist at top of file
- *   AC-13: mid-phase JSON is valid (guaranteed by synchronous atomic writes)
+ *   AC-13: mid-phase JSON is valid (guaranteed by agent()-based atomic writes)
  */
 
 const fs   = require('fs');
@@ -90,100 +89,91 @@ describe('pm-phase3.js — appendLedgerEntry and updateLedgerEntry defined (AC-1
   });
 });
 
-// ── Helpers use fs for I/O (not agent()) ─────────────────────────────────────
-// pm-phase3.js is a workflow script with access to `fs` (like pm-phase2.js).
-// Using agent() for atomic read-modify-write is non-deterministic and can drop
-// ledger entries. The helpers must use fs.*Sync directly.
+// ── Helpers use agent() for file I/O (not fs.*Sync) ──────────────────────────
+// The Workflow runtime does not expose fs or require. All ledger persistence is
+// routed through await agent() — the same pattern used by pm-phase2.js.
 
-describe('pm-phase3.js — helper functions use fs for file I/O (not agent())', () => {
-  test('appendLedgerEntry body uses fs.existsSync', () => {
-    // Arrange: extract the appendLedgerEntry function body
-    const appendStart = source.indexOf('function appendLedgerEntry');
-    const updateStart = source.indexOf('function updateLedgerEntry');
+describe('pm-phase3.js — helper functions use agent() for file I/O (not fs.*Sync)', () => {
+  test('appendLedgerEntry body uses await agent()', () => {
+    const appendStart = source.indexOf('async function appendLedgerEntry');
+    const updateStart = source.indexOf('async function updateLedgerEntry');
     expect(appendStart).toBeGreaterThan(-1);
     expect(updateStart).toBeGreaterThan(appendStart);
     const funcBody = source.slice(appendStart, updateStart);
 
-    // Assert: reads existing ledger via fs
-    expect(funcBody).toMatch(/\bfs\s*\.\s*existsSync\b/);
+    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
   });
 
-  test('appendLedgerEntry body uses fs.readFileSync', () => {
-    const appendStart = source.indexOf('function appendLedgerEntry');
-    const updateStart = source.indexOf('function updateLedgerEntry');
-    const funcBody = source.slice(appendStart, updateStart);
-
-    expect(funcBody).toMatch(/\bfs\s*\.\s*readFileSync\b/);
-  });
-
-  test('appendLedgerEntry body uses fs.writeFileSync', () => {
-    const appendStart = source.indexOf('function appendLedgerEntry');
-    const updateStart = source.indexOf('function updateLedgerEntry');
-    const funcBody = source.slice(appendStart, updateStart);
-
-    expect(funcBody).toMatch(/\bfs\s*\.\s*writeFileSync\b/);
-  });
-
-  test('appendLedgerEntry body does not delegate to await agent()', () => {
-    // Arrange: extract body of appendLedgerEntry up to updateLedgerEntry definition
-    const appendStart = source.indexOf('function appendLedgerEntry');
-    const updateStart = source.indexOf('function updateLedgerEntry');
-    const funcBody = source.slice(appendStart, updateStart);
-
-    // Assert: must NOT use LLM agent calls for deterministic file I/O
-    expect(funcBody).not.toMatch(/\bawait\s+agent\s*\(/);
-  });
-
-  test('updateLedgerEntry body uses fs.existsSync', () => {
-    // Arrange: extract updateLedgerEntry body — ends at featureDir parsing
-    const updateStart    = source.indexOf('function updateLedgerEntry');
+  test('updateLedgerEntry body uses await agent()', () => {
+    const updateStart     = source.indexOf('async function updateLedgerEntry');
     const parseArgsMarker = source.indexOf('const featureDir');
     expect(updateStart).toBeGreaterThan(-1);
     expect(parseArgsMarker).toBeGreaterThan(updateStart);
     const funcBody = source.slice(updateStart, parseArgsMarker);
 
-    expect(funcBody).toMatch(/\bfs\s*\.\s*existsSync\b/);
+    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
   });
 
-  test('updateLedgerEntry body uses fs.readFileSync', () => {
-    const updateStart    = source.indexOf('function updateLedgerEntry');
+  test('appendLedgerEntry body uses label "append-ledger"', () => {
+    const appendStart = source.indexOf('async function appendLedgerEntry');
+    const updateStart = source.indexOf('async function updateLedgerEntry');
+    const funcBody = source.slice(appendStart, updateStart);
+
+    expect(funcBody).toMatch(/label:\s*['"]append-ledger['"]/);
+  });
+
+  test('updateLedgerEntry body uses label "update-ledger"', () => {
+    const updateStart     = source.indexOf('async function updateLedgerEntry');
     const parseArgsMarker = source.indexOf('const featureDir');
     const funcBody = source.slice(updateStart, parseArgsMarker);
 
-    expect(funcBody).toMatch(/\bfs\s*\.\s*readFileSync\b/);
+    expect(funcBody).toMatch(/label:\s*['"]update-ledger['"]/);
   });
 
-  test('updateLedgerEntry body uses fs.writeFileSync', () => {
-    const updateStart    = source.indexOf('function updateLedgerEntry');
+  test('appendLedgerEntry body does not use fs.*Sync', () => {
+    const appendStart = source.indexOf('async function appendLedgerEntry');
+    const updateStart = source.indexOf('async function updateLedgerEntry');
+    const funcBody = source.slice(appendStart, updateStart);
+
+    expect(funcBody).not.toMatch(/\bfs\s*\.\s*\w+Sync\b/);
+  });
+
+  test('updateLedgerEntry body does not use fs.*Sync', () => {
+    const updateStart     = source.indexOf('async function updateLedgerEntry');
     const parseArgsMarker = source.indexOf('const featureDir');
     const funcBody = source.slice(updateStart, parseArgsMarker);
 
-    expect(funcBody).toMatch(/\bfs\s*\.\s*writeFileSync\b/);
+    expect(funcBody).not.toMatch(/\bfs\s*\.\s*\w+Sync\b/);
   });
 
-  test('updateLedgerEntry body does not delegate to await agent()', () => {
-    const updateStart    = source.indexOf('function updateLedgerEntry');
+  test('appendLedgerEntry body does not use require()', () => {
+    const appendStart = source.indexOf('async function appendLedgerEntry');
+    const updateStart = source.indexOf('async function updateLedgerEntry');
+    const funcBody = source.slice(appendStart, updateStart);
+
+    expect(funcBody).not.toMatch(/\brequire\s*\(/);
+  });
+
+  test('updateLedgerEntry body does not use require()', () => {
+    const updateStart     = source.indexOf('async function updateLedgerEntry');
     const parseArgsMarker = source.indexOf('const featureDir');
     const funcBody = source.slice(updateStart, parseArgsMarker);
 
-    expect(funcBody).not.toMatch(/\bawait\s+agent\s*\(/);
+    expect(funcBody).not.toMatch(/\brequire\s*\(/);
   });
 });
 
-// ── Helpers are synchronous (not async) ──────────────────────────────────────
-// pm-phase2.js helpers are plain (non-async) functions that use fs.*Sync.
-// pm-phase3.js must follow the same pattern: no async keyword on the helpers.
+// ── Helpers are async ────────────────────────────────────────────────────────
+// The Workflow runtime requires await agent() for file I/O. Helpers must be
+// declared async to support await inside them.
 
-describe('pm-phase3.js — helper functions are synchronous (non-async)', () => {
-  test('appendLedgerEntry is defined as a plain (non-async) function', () => {
-    // A synchronous helper must NOT be prefixed with the async keyword.
-    expect(source).toMatch(/(?<!async\s)function\s+appendLedgerEntry\s*\(/);
-    expect(source).not.toMatch(/async\s+function\s+appendLedgerEntry\s*\(/);
+describe('pm-phase3.js — helper functions are async', () => {
+  test('appendLedgerEntry is defined as an async function', () => {
+    expect(source).toMatch(/async\s+function\s+appendLedgerEntry\s*\(/);
   });
 
-  test('updateLedgerEntry is defined as a plain (non-async) function', () => {
-    expect(source).toMatch(/(?<!async\s)function\s+updateLedgerEntry\s*\(/);
-    expect(source).not.toMatch(/async\s+function\s+updateLedgerEntry\s*\(/);
+  test('updateLedgerEntry is defined as an async function', () => {
+    expect(source).toMatch(/async\s+function\s+updateLedgerEntry\s*\(/);
   });
 });
 
@@ -272,7 +262,8 @@ describe('pm-phase3.js — append-before / update-after call sites present (AC-0
   test('updateLedgerEntry call site for read-wb-csv appears after the agent dispatch', () => {
     // Arrange
     const dispatchIdx = source.indexOf("label: 'read-wb-csv'");
-    const updateIdx   = source.indexOf("updateLedgerEntry(");
+    // Use "await updateLedgerEntry(" to find call sites only, not the function definition
+    const updateIdx   = source.indexOf("await updateLedgerEntry(");
 
     // Assert: update follows dispatch
     expect(dispatchIdx).toBeGreaterThan(-1);

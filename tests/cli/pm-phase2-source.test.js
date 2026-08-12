@@ -141,11 +141,14 @@ describe('pm-phase2.js — append-before / update-after call ordering (AC-07, AC
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('appendLedgerEntry call-count equals updateLedgerEntry call-count (symmetric wrapping)', () => {
+  test('updateLedgerEntry call-count is >= appendLedgerEntry call-count (try+catch pattern for fallible dispatches)', () => {
     const appendCount = (source.match(/\bappendLedgerEntry\s*\(/g) || []).length;
     const updateCount = (source.match(/\bupdateLedgerEntry\s*\(/g) || []).length;
 
-    expect(appendCount).toBe(updateCount);
+    // Fallible activities (wb-validate, semantic, wb-render) each have 2 update call sites
+    // (done in try + failed in catch) but only 1 append call site. Skipped entries use only
+    // appendLedgerEntry. Both effects make updateCount >= appendCount.
+    expect(updateCount).toBeGreaterThanOrEqual(appendCount);
   });
 
   test('await appendLedgerEntry call site appears before generate-work-breakdown dispatch in source', () => {
@@ -165,5 +168,59 @@ describe('pm-phase2.js — append-before / update-after call ordering (AC-07, AC
     expect(dispatchIdx).toBeGreaterThan(-1);
     expect(updateCallIdx).toBeGreaterThan(-1);
     expect(updateCallIdx).toBeGreaterThan(dispatchIdx);
+  });
+});
+
+// ── I6: completed_at contract for skipped, running, and done ledger entries ───
+//
+// appendLedgerEntry used to hardcode `completed_at: null` AFTER the spread, silently
+// overwriting caller-supplied values. Skipped entries pass `completed_at: '__TS__'`
+// and rely on the agent prompt replacing it with a real UTC timestamp.
+//
+// Three invariants that prevent regression:
+//   1. Defaults-first spread — `{ started_at: '__TS__', completed_at: null, ...entry }` so
+//      callers can override both fields.
+//   2. Skipped call sites pass `completed_at: '__TS__'` — confirmed by inspecting every
+//      `status: 'skipped'` append call site in the source.
+//   3. Agent prompt replaces every `__TS__` — not just in started_at — so skipped entries
+//      get a real completed_at timestamp at runtime.
+
+describe('pm-phase2.js — I6: completed_at contract for running / skipped / done entries', () => {
+  test('appendLedgerEntry uses defaults-first spread so caller-supplied completed_at is preserved', () => {
+    // Extract the body of appendLedgerEntry (between its definition and updateLedgerEntry).
+    const appendDefStart = source.indexOf('async function appendLedgerEntry');
+    const updateDefStart = source.indexOf('async function updateLedgerEntry');
+    expect(appendDefStart).toBeGreaterThan(-1);
+    expect(updateDefStart).toBeGreaterThan(appendDefStart);
+    const funcBody = source.slice(appendDefStart, updateDefStart);
+
+    // The spread must be defaults-first: '{ started_at: ..., completed_at: null, ...entry }'
+    // so that caller-supplied completed_at (e.g. '__TS__' for skipped) wins.
+    expect(funcBody).toMatch(/\{\s*started_at\s*:\s*'__TS__'\s*,\s*completed_at\s*:\s*null\s*,\s*\.\.\.entry\s*\}/);
+  });
+
+  test('all status: "skipped" appendLedgerEntry call sites include completed_at: \'__TS__\'', () => {
+    // Find every occurrence of appendLedgerEntry call that includes status: 'skipped'.
+    // Each skipped call site must also supply completed_at: '__TS__' so the agent
+    // replaces it with a real UTC timestamp.
+    const callSiteRegex = /await appendLedgerEntry\([^)]*?(?:\([^)]*\)[^)]*?)*\)/gs;
+    const callSites = source.match(callSiteRegex) || [];
+    const skippedSites = callSites.filter(site => /status:\s*['"]skipped['"]/.test(site));
+
+    expect(skippedSites.length).toBeGreaterThan(0);
+    for (const site of skippedSites) {
+      expect(site).toMatch(/completed_at\s*:\s*'__TS__'/);
+    }
+  });
+
+  test('appendLedgerEntry agent prompt replaces every "__TS__" value (not only started_at)', () => {
+    const appendDefStart = source.indexOf('async function appendLedgerEntry');
+    const updateDefStart = source.indexOf('async function updateLedgerEntry');
+    const funcBody = source.slice(appendDefStart, updateDefStart);
+
+    // The prompt must say "every" or "all" __TS__ — NOT "in started_at" (which would
+    // leave completed_at = '__TS__' on disk for skipped entries).
+    expect(funcBody).toMatch(/every\s+"__TS__"|all\s+"__TS__"|every\s+['"]__TS__['"]|all\s+['"]__TS__['"]/);
+    expect(funcBody).not.toMatch(/"__TS__"\s+in\s+started_at/);
   });
 });
