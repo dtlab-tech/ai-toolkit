@@ -1,4 +1,19 @@
 ## 0.1.4 (2026-07-21)
+## [0.9.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.8.0...v0.9.0) (2026-08-05)
+
+
+### Features
+
+* **FTR-020:** add initial documentation for Atomic Work Breakdown, Execution Ledger, and Task Checkpoints and Resume ([c5f724a](https://github.com/dtlab-tech/ai-toolkit/commit/c5f724af068e003d36ec196cdec3502fe0c47333))
+
+
+### Bug Fixes
+
+* **pm-phase3:** replace require/fs/execSync with agent()-based ledger helpers ([1166d6f](https://github.com/dtlab-tech/ai-toolkit/commit/1166d6f17e913405ea737e74236742569740cd0a))
+* **pm-phase3:** replace require/fs/execSync with agent()-based ledger helpers ([bf4077c](https://github.com/dtlab-tech/ai-toolkit/commit/bf4077cca28920876185535aa553ec91c6ffc08b))
+* **pm-phase3:** replace require/fs/execSync with agent()-based ledger helpers ([bb4c88d](https://github.com/dtlab-tech/ai-toolkit/commit/bb4c88df20c62db09de327975ab57e045247dc51))
+* **workflows:** remove new Date() from all workflow call sites ([343b604](https://github.com/dtlab-tech/ai-toolkit/commit/343b604dba2d4d0b12e5590c1b5323b2a9e888f2))
+
 ## [0.8.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.7.0...v0.8.0) (2026-08-04)
 
 
