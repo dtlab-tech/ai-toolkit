@@ -660,6 +660,240 @@ function updateGitignore(destDir) {
   }
 }
 
+// ── resolveClaudeRuntimeAsset ─────────────────────────────────────────────────
+
+// INFRA-TASK-BE-02 (FTR-015):
+// Resolve a runtime asset path using a six-phase algorithm:
+//   Phase 0: Input validation (no filesystem access)
+//   Phase A: Presence detection — local vs global installation
+//   Phase B: Mode decision — local-only | global-only | both (error) | none (error)
+//   Phase C: Metadata warnings — manifest, version stamp; emit to stderr; never abort
+//   Phase D: Catalog membership + completeness check
+//   Phase E: Confinement check + return absolute path
+//
+// Parameters:
+//   relativePath (string): path relative to .claude/, e.g. 'agents/agent-name.md'
+//   options (object): { projectDir, home }
+//     projectDir — target project directory (defaults to process.cwd())
+//     home       — override for os.homedir() to enable test isolation
+//
+// Returns: absolute path string
+// Throws: Error with diagnostics on validation failure, ambiguity, or incompleteness
+function resolveClaudeRuntimeAsset(relativePath, options) {
+  const os = require('os');
+  const { getAssetCategories } = require('../lib/asset-catalog');
+
+  const opts = options || {};
+  const effectiveHome       = opts.home       !== undefined ? opts.home       : os.homedir();
+  const effectiveProjectDir = opts.projectDir !== undefined ? opts.projectDir : process.cwd();
+
+  // ── Phase 0: Input validation (no filesystem access) ──────────────────────
+  // 0a: reject null / undefined / empty
+  if (relativePath === null || relativePath === undefined || relativePath === '') {
+    throw new Error('relativePath must be a non-empty string');
+  }
+  if (typeof relativePath !== 'string') {
+    throw new Error('relativePath must be a non-empty string');
+  }
+  // 0b: reject null bytes
+  if (relativePath.includes('\0')) {
+    throw new Error('relativePath must not contain null bytes');
+  }
+  // 0c: normalize backslashes to forward slashes
+  relativePath = relativePath.replace(/\\/g, '/');
+  // 0d: reject absolute paths
+  if (relativePath.startsWith('/')) {
+    throw new Error('relativePath must be relative (got Unix absolute path)');
+  }
+  if (/^[A-Za-z]:[/\\]/.test(relativePath)) {
+    throw new Error('relativePath must be relative (got Windows absolute path)');
+  }
+  // 0e: reject .. segments
+  if (relativePath.split('/').includes('..')) {
+    throw new Error('relativePath must not contain path traversal (..)');
+  }
+
+  // ── Runtime root definitions ───────────────────────────────────────────────
+  const localRuntimeRoot  = path.join(effectiveProjectDir, '.claude');
+  const globalRuntimeRoot = path.join(effectiveHome, '.claude');
+
+  // Strip the '.claude/' prefix so catRelDir gives the sub-directory relative to runtimeRoot.
+  // e.g. '.claude/agents' → 'agents'
+  function catRelDir(cat) {
+    return cat.runtimeDir.replace(/^\.claude\//, '');
+  }
+
+  // condC: at least one catalog category directory has files at this runtimeRoot
+  function hasPayloadFiles(runtimeRoot) {
+    for (const cat of getAssetCategories()) {
+      const catDir = path.join(runtimeRoot, catRelDir(cat));
+      if (!fs.existsSync(catDir)) continue;
+      try {
+        if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true;
+      } catch (_) { /* ignore unreadable dirs */ }
+    }
+    return false;
+  }
+
+  // A toolkit installation is PRESENT at runtimeRoot when any of the following hold:
+  //   condA: .ai-toolkit-manifest.json exists (content may be corrupt; file presence is enough)
+  //   condB: .ai-toolkit-version exists
+  //   condC: at least one catalog category dir contains one or more files
+  // settings.json / settings.local.json alone do NOT satisfy any condition.
+  function isToolkitPresent(runtimeRoot) {
+    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-manifest.json'))) return true;
+    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-version'))) return true;
+    return hasPayloadFiles(runtimeRoot);
+  }
+
+  // ── Phase A: Presence detection ────────────────────────────────────────────
+  const localPresent  = isToolkitPresent(localRuntimeRoot);
+  const globalPresent = isToolkitPresent(globalRuntimeRoot);
+
+  // ── Phase B: Mode decision ─────────────────────────────────────────────────
+  if (!localPresent && !globalPresent) {
+    throw new Error(
+      "No toolkit installation found. Run 'npm run toolkit:dev-install-global' to install globally, or the installer in your project."
+    );
+  }
+  if (localPresent && globalPresent) {
+    throw new Error(
+      `Ambiguous: toolkit installations detected at both ${localRuntimeRoot} and ` +
+      `${globalRuntimeRoot}. The error is raised even if one installation has corrupt ` +
+      'metadata — presence is established regardless of metadata validity.'
+    );
+  }
+
+  const effectiveRoot = localPresent ? localRuntimeRoot : globalRuntimeRoot;
+  const effectiveMode = localPresent ? 'local' : 'global';
+
+  // ── Phase C: Metadata warnings (emit to stderr; never abort) ──────────────
+  const manifestPath = path.join(effectiveRoot, '.ai-toolkit-manifest.json');
+  let manifest = null;
+  let manifestSchemaValid = false;
+
+  if (!fs.existsSync(manifestPath)) {
+    process.stderr.write('Warning: No manifest found; installation may be manual or manifest was lost\n');
+  } else {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch (_) {
+      process.stderr.write(`Warning: Manifest is corrupt (invalid JSON) at ${manifestPath}\n`);
+    }
+    if (parsed !== null) {
+      const required      = ['version', 'installedAt', 'installationMode', 'files'];
+      const missingFields = required.filter(f => parsed[f] === undefined);
+      if (missingFields.length > 0) {
+        process.stderr.write(`Warning: Manifest schema invalid: missing fields ${missingFields.join(', ')}\n`);
+      } else {
+        manifestSchemaValid = true;
+        manifest = parsed;
+        if (parsed.installationMode !== effectiveMode) {
+          process.stderr.write(
+            `Warning: Manifest installationMode='${parsed.installationMode}' mismatches effective mode '${effectiveMode}'\n`
+          );
+        }
+      }
+    }
+  }
+
+  const versionStampPath = path.join(effectiveRoot, '.ai-toolkit-version');
+  if (!fs.existsSync(versionStampPath)) {
+    process.stderr.write(`Warning: No version stamp at ${versionStampPath}\n`);
+  } else {
+    const stampVersion    = fs.readFileSync(versionStampPath, 'utf8').trim();
+    const resolverVersion = require('../package.json').version;
+    if (stampVersion !== resolverVersion) {
+      process.stderr.write(
+        `Warning: Version mismatch: installed=${stampVersion}, resolver=${resolverVersion}; ` +
+        'run toolkit:dev-install-global to update\n'
+      );
+    }
+  }
+
+  // ── Phase D: Catalog membership + completeness check ──────────────────────
+  // Build expectedPayload: every runtime asset path derived from the package source catalog.
+  // Files are enumerated from packageRoot/cat.sourceDir and mapped to their runtime destinations.
+  const categories      = getAssetCategories();
+  const expectedPayload = new Set();
+
+  for (const cat of categories) {
+    const srcDir = path.join(packageRoot, cat.sourceDir);
+    if (!fs.existsSync(srcDir)) continue;
+    try {
+      for (const f of walkDir(srcDir)) {
+        const relFile    = path.relative(srcDir, f);
+        const runtimeAbs = path.resolve(path.join(effectiveRoot, catRelDir(cat), relFile));
+        expectedPayload.add(runtimeAbs);
+      }
+    } catch (_) { /* ignore unreadable source dirs */ }
+  }
+
+  // Step 6e: warn about stale manifest entries (in manifest but no longer in catalog)
+  if (manifestSchemaValid && manifest && Array.isArray(manifest.files)) {
+    const parentDir = path.join(effectiveRoot, '..');
+    const stale     = manifest.files.filter(f => !expectedPayload.has(path.resolve(path.join(parentDir, f))));
+    if (stale.length > 0) {
+      process.stderr.write(
+        `Warning: Manifest has ${stale.length} stale entries not in current catalog: ${stale.join(', ')}\n`
+      );
+    }
+  }
+
+  // Step 8a: catalog membership — requested asset must be in expectedPayload
+  const absoluteRequested = path.resolve(path.join(effectiveRoot, relativePath));
+  if (!expectedPayload.has(absoluteRequested)) {
+    throw new Error(
+      `Requested asset '${relativePath}' is not a registered catalog asset (mode: ${effectiveMode}). ` +
+      'Only toolkit-installed catalog assets may be resolved; arbitrary files under .claude/ are ' +
+      'not resolvable via this function.'
+    );
+  }
+
+  // Step 9: warn about expected assets absent from manifest (metadata-staleness; disk is authoritative)
+  if (manifestSchemaValid && manifest && Array.isArray(manifest.files)) {
+    const parentDir      = path.join(effectiveRoot, '..');
+    const manifestAbsSet = new Set(
+      manifest.files.map(f => path.resolve(path.join(parentDir, f)))
+    );
+    for (const f of expectedPayload) {
+      if (!manifestAbsSet.has(f)) {
+        process.stderr.write(`Warning: Expected asset missing from manifest: ${f}\n`);
+      }
+    }
+  }
+
+  // Step 10: disk completeness — every expected catalog asset must exist on disk;
+  // a stale manifest cannot suppress this error — disk truth is the only authority.
+  const missingFiles = [...expectedPayload].filter(f => !fs.existsSync(f));
+  if (missingFiles.length > 0) {
+    throw new Error(
+      `Installation incomplete (${effectiveMode}). Missing files:\n  ${missingFiles.join('\n  ')}\n` +
+      'Run the installer.'
+    );
+  }
+
+  // ── Phase E: Return path ───────────────────────────────────────────────────
+  // Step 11: resolve absolute path (effectiveRoot already ends at .claude/)
+  const absolutePath = path.resolve(path.join(effectiveRoot, relativePath));
+
+  // Step 11a: confinement check — belt-and-suspenders after Phase 0 traversal rejection;
+  // catches edge cases introduced by OS-level normalization or symlink resolution.
+  const resolvedRoot = path.resolve(effectiveRoot);
+  if (!absolutePath.startsWith(resolvedRoot + path.sep) && absolutePath !== resolvedRoot) {
+    throw new Error('Resolved path escapes installation root (confinement violation)');
+  }
+
+  // Step 12: final existence check
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`Asset not found at ${absolutePath} (mode: ${effectiveMode})`);
+  }
+
+  // Step 13: return
+  return absolutePath;
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force) {
@@ -813,5 +1047,6 @@ if (require.main === module) {
     updateGitignore,
     appendLedgerEntry,
     updateLedgerEntry,
+    resolveClaudeRuntimeAsset,
   };
 }
