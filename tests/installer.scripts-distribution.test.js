@@ -9,7 +9,7 @@ const path = require('path');
 // subprocess installs and `npm pack`, which can take several seconds each.
 jest.setTimeout(60000);
 
-const ROOT = path.resolve(__dirname, '../../..'); // toolkit root
+const ROOT = path.resolve(__dirname, '..'); // toolkit root
 const CLI_PATH        = path.join(ROOT, 'bin', 'cli.js');
 const SCRIPTS         = path.join(ROOT, '.claude', 'scripts');
 const WB_VALIDATE     = path.join(SCRIPTS, 'wb-validate.js');
