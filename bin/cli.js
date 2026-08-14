@@ -1486,13 +1486,15 @@ async function main() {
     }
   } else if (argv[0] === 'list-assets') {
     // list-assets [--category <name>] [--format json|plain] [--project <dir>] [--home <dir>]
-    // exit 0 always (including when empty); exit 1 on unknown category.
-    // Lists files from the installed runtime root (.claude/<category>/).
+    // Default format: json. Exit 0 (empty list) when not installed; exit 1 for unknown
+    // category or mixed (both local + global) installation.
+    // Uses the same 3-condition presence detection as resolveClaudeRuntimeAsset():
+    //   condA: manifest file present; condB: version stamp present; condC: payload files present.
     const { getAssetCategories, getCategoryByName } = require('../lib/asset-catalog');
     const os         = require('os');
     const remaining  = argv.slice(1);
     let category     = null;
-    let format       = 'plain';
+    let format       = 'json';
     let projectDir   = process.cwd();
     let home;
     for (let i = 0; i < remaining.length; i++) {
@@ -1509,16 +1511,43 @@ async function main() {
         process.exit(1);
       }
     }
-    // Resolve runtime root: prefer local install if manifest present, else global
+    // 3-condition presence detection (mirrors resolveClaudeRuntimeAsset Phase A).
     const effectiveHome    = home       ? path.resolve(home)       : os.homedir();
     const effectiveProject = path.resolve(projectDir);
     const localClaude      = path.join(effectiveProject, '.claude');
     const globalClaude     = path.join(effectiveHome,    '.claude');
-    const runtimeRoot = fs.existsSync(path.join(localClaude, '.ai-toolkit-manifest.json'))
-      ? localClaude
-      : fs.existsSync(path.join(globalClaude, '.ai-toolkit-manifest.json'))
-        ? globalClaude
-        : localClaude;  // fallback when not installed — returns empty list
+
+    function listAssetsHasPayload(claudeDir) {
+      for (const cat of getAssetCategories()) {
+        const catDir = path.join(claudeDir, cat.name);
+        if (!fs.existsSync(catDir)) continue;
+        try { if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true; } catch (_) {}
+      }
+      return false;
+    }
+    function listAssetsIsPresent(claudeDir) {
+      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-manifest.json'))) return true;
+      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-version')))       return true;
+      return listAssetsHasPayload(claudeDir);
+    }
+
+    const localPresent  = listAssetsIsPresent(localClaude);
+    const globalPresent = listAssetsIsPresent(globalClaude);
+
+    if (localPresent && globalPresent) {
+      process.stderr.write(
+        'Error: mixed installation — toolkit is present in both local (.claude/) and global ' +
+        `(${globalClaude}) locations. Remove one before listing assets.\n`
+      );
+      process.exit(1);
+    }
+
+    // Determine the runtime root to enumerate. When neither is present, runtimeRoot points
+    // nowhere meaningful — the walk finds nothing and an empty list is returned (exit 0).
+    const runtimeRoot = localPresent  ? localClaude
+                      : globalPresent ? globalClaude
+                      : localClaude;   // fallback: not installed — returns empty list, exit 0
+
     const cats = category ? [getCategoryByName(category)] : getAssetCategories();
     const results = [];
     for (const cat of cats) {
