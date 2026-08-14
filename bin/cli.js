@@ -300,7 +300,7 @@ function writeManifest(destRoot, fileList) {
 
 // ── install ───────────────────────────────────────────────────────────────────
 
-async function runInstall(label, mappings, force, destRoot) {
+async function runInstall(label, mappings, force, destRoot, dryRun = false) {
   const files    = expandMappings(mappings);
   const entries  = categorize(files);
 
@@ -317,10 +317,14 @@ async function runInstall(label, mappings, force, destRoot) {
 
   if (existingOrphans.length > 0) {
     console.log();
-    console.log(`${bold('📦 Orphan cleanup')}  ${clr('gray', '→')}  ${clr('red', `${existingOrphans.length} stale file(s) found`)}`);
+    const orphanLabel = dryRun
+      ? clr('red', `${existingOrphans.length} stale file(s) would be removed`)
+      : clr('red', `${existingOrphans.length} stale file(s) found`);
+    console.log(`${bold('📦 Orphan cleanup')}  ${clr('gray', '→')}  ${orphanLabel}`);
     console.log(divider());
     for (const orphan of existingOrphans) {
-      console.log(`  ${clr('red', '∅')} ${clr('red', 'REMOVED ')}  ${orphan}`);
+      const marker = dryRun ? clr('red', 'WOULD REMOVE') : clr('red', 'REMOVED ');
+      console.log(`  ${clr('red', '∅')} ${marker}  ${orphan}`);
     }
     console.log(divider());
   }
@@ -328,40 +332,43 @@ async function runInstall(label, mappings, force, destRoot) {
   let removedCount = 0;
   let keptCount    = 0;
 
-  if (force) {
-    for (const orphan of existingOrphans) {
-      moveToTrash(destRoot, orphan);
-      removedCount++;
-      console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
-    }
-  } else {
-    for (const orphan of existingOrphans) {
-      const fullPath = path.join(destRoot, orphan);
-      if (!fs.existsSync(fullPath)) continue;
-      const ok = await askConfirm(`  Move to trash  ${clr('red', orphan)}?`);
-      if (ok) {
+  if (!dryRun) {
+    if (force) {
+      for (const orphan of existingOrphans) {
         moveToTrash(destRoot, orphan);
-        console.log(`     ${clr('green', '✔')} Moved to trash\n`);
         removedCount++;
-      } else {
-        console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
-        keptCount++;
+        console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
+      }
+    } else {
+      for (const orphan of existingOrphans) {
+        const fullPath = path.join(destRoot, orphan);
+        if (!fs.existsSync(fullPath)) continue;
+        const ok = await askConfirm(`  Move to trash  ${clr('red', orphan)}?`);
+        if (ok) {
+          moveToTrash(destRoot, orphan);
+          console.log(`     ${clr('green', '✔')} Moved to trash\n`);
+          removedCount++;
+        } else {
+          console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
+          keptCount++;
+        }
       }
     }
-  }
 
-  if (existingOrphans.length > 0) {
-    console.log(divider());
-    console.log(
-      `  ${clr('red', `∅ Moved: ${removedCount}`)}` +
-      `  ${clr('gray', `↪ .claude/.ai-toolkit-trash/`)}` +
-      `  ${clr('gray', `✖ Kept: ${keptCount}`)}\n`
-    );
+    if (existingOrphans.length > 0) {
+      console.log(divider());
+      console.log(
+        `  ${clr('red', `∅ Moved: ${removedCount}`)}` +
+        `  ${clr('gray', `↪ .claude/.ai-toolkit-trash/`)}` +
+        `  ${clr('gray', `✖ Kept: ${keptCount}`)}\n`
+      );
+    }
   }
 
   // ── install plan display ──────────────────────────────────────────────────────
   console.log();
-  console.log(`${bold('📦 Install plan')}  ${clr('gray', '→')}  ${clr('cyan', label)}`);
+  const planTitle = dryRun ? bold('📦 Dry run — install plan') : bold('📦 Install plan');
+  console.log(`${planTitle}  ${clr('gray', '→')}  ${clr('cyan', label)}`);
   console.log(divider());
   for (const e of newFiles)  console.log(`  ${clr('green',  '✚')} ${clr('green',  'NEW     ')}  ${dim(path.relative(process.cwd(), e.dest))}`);
   for (const e of modified)  console.log(`  ${clr('yellow', '~')} ${clr('yellow', 'MODIFIED')}  ${path.relative(process.cwd(), e.dest)}`);
@@ -373,6 +380,11 @@ async function runInstall(label, mappings, force, destRoot) {
     `  ${clr('gray', `= Unchanged: ${same.length}`)}`
   );
   console.log();
+
+  if (dryRun) {
+    console.log(`  ${clr('cyan', 'ℹ')}  Dry run — no files were written.\n`);
+    return;
+  }
 
   for (const e of newFiles) {
     ensureDir(e.dest);
@@ -1234,11 +1246,11 @@ function runValidatePurity(sourceDir) {
 
 // ── entry points ──────────────────────────────────────────────────────────────
 
-async function installLocal(targetDir, force) {
+async function installLocal(targetDir, force, dryRun = false) {
   banner();
   targetDir = path.resolve(process.cwd(), targetDir || '.');
   console.log(`  ${clr('cyan', '▸')}  Target: ${bold(targetDir)}\n`);
-  await checkVersion(targetDir, force);
+  if (!dryRun) await checkVersion(targetDir, force);
   // Build mappings from asset catalog: each category copies src/claude/<cat> → .claude/<cat>
   const { getAssetCategories } = require('../lib/asset-catalog');
   const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
@@ -1250,7 +1262,8 @@ async function installLocal(targetDir, force) {
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`local project`, mappings, force, targetDir);
+  await runInstall(`local project`, mappings, force, targetDir, dryRun);
+  if (dryRun) return;
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
   checkSpawnDepth(targetDir);
@@ -1261,13 +1274,13 @@ async function installLocal(targetDir, force) {
   console.log();
 }
 
-async function installGlobal(force) {
+async function installGlobal(force, dryRun = false) {
   banner();
   try {
     const homedir = require('os').homedir();
     const target  = path.join(homedir, '.claude');
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
-    await checkVersion(target, force);
+    if (!dryRun) await checkVersion(target, force);
     // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
     const { getAssetCategories } = require('../lib/asset-catalog');
     const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
@@ -1279,7 +1292,8 @@ async function installGlobal(force) {
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force, target);
+    await runInstall('global Claude folder', mappings, force, target, dryRun);
+    if (dryRun) return;
     writeInstalledVersion(target);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     checkSpawnDepth(homedir);
@@ -1301,22 +1315,24 @@ function help() {
   console.log(`    ${clr('cyan', 'ai-toolkit')} ${clr('yellow', '--local <dir>')}       Install into target directory`);
   console.log(`    ${clr('cyan', 'ai-toolkit')} ${clr('yellow', '--global')}             Install into ~/.claude (global)`);
   console.log(`    ${clr('gray',  '                     --force')}       Overwrite all files without prompting`);
+  console.log(`    ${clr('gray',  '                     --dry-run')}     Preview what would change — no files written`);
   console.log();
 }
 
 async function main() {
-  const argv  = process.argv.slice(2);
-  const force = argv.includes('--force');
+  const argv   = process.argv.slice(2);
+  const force  = argv.includes('--force');
+  const dryRun = argv.includes('--dry-run');
 
-  if (argv.length === 0 || (argv.length === 1 && argv[0] === '--force')) {
-    await installLocal('.', force);
+  if (argv.length === 0 || argv.every(a => a === '--force' || a === '--dry-run')) {
+    await installLocal('.', force, dryRun);
     return;
   }
 
   if (argv[0] === '--local') {
-    await installLocal(argv[1] || '.', force);
+    await installLocal(argv[1] || '.', force, dryRun);
   } else if (argv[0] === '--global') {
-    await installGlobal(force);
+    await installGlobal(force, dryRun);
   } else if (argv[0] === 'help' || argv[0] === '--help') {
     help();
   } else if (argv[0] === 'merge-allowlist') {
@@ -1497,7 +1513,7 @@ async function main() {
     }
     process.exit(0);
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
-    await installLocal(argv[0], force);
+    await installLocal(argv[0], force, dryRun);
   } else {
     help();
     process.exit(1);
