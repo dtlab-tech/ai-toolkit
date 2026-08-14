@@ -6,7 +6,7 @@ model: sonnet
 
 # Install Toolkit
 
-Copies the toolkit's agents, skills, commands, and procedures into a destination project so it can use `/implement-feature`, `/init-agents`, all developer agents, and all slash commands without needing the toolkit repo locally.
+Installs the ai-toolkit into a destination project so it can use `/implement-feature`, `/init-agents`, all developer agents, and all slash commands without needing the toolkit repo locally.
 
 ---
 
@@ -15,130 +15,57 @@ Copies the toolkit's agents, skills, commands, and procedures into a destination
 The user provides:
 1. **Path to the destination project root** (optional) — defaults to the current working directory if not specified
 2. **`--force`** flag (optional) — overwrite files that already exist in the destination
+3. **`--global`** flag (optional) — install into the global Claude Code config directory (`~/.claude/`) instead of a project
 
 ---
 
-## Step 1 — Validate inputs and check version
+## Step 1 — Validate inputs
 
-1. Determine the **toolkit root**: the current working directory (this agent runs from the toolkit repo).
-2. Verify the toolkit root contains `.claude/agents/` — if not, abort: "Error: must be run from the ai-toolkit directory."
-3. Verify the destination path exists — if not, abort: "Error: destination path not found: {path}"
-4. Check if destination is a git repository (look for `.git/`) — warn if not, but continue.
-5. **Version check**:
-   - Read `package.json` from the toolkit root to get the current version (e.g. `0.2.0`)
-   - Check if `.claude/.ai-toolkit-version` exists in the destination:
-     - **File missing** → first install, no prompt needed, continue
-     - **Same version** → inform the user and ask: "Toolkit v{x} is already installed. Re-install anyway?"
-       - If No: abort cleanly
-     - **Different version** → show both versions and ask:
-       ```
-       Version check:
-         Installed : v{installed}
-         Available : v{current}
-
-       Proceed and update from v{installed} to v{current}?
-       ```
-       - If No: abort cleanly with "Your current installation was not changed."
+1. Determine destination:
+   - If `--global` was passed: destination is `~/.claude/` (user-global config dir)
+   - Otherwise: destination is the path provided, or the current working directory if omitted
+2. Verify the destination path exists — if not, abort: "Error: destination path not found: {path}"
+3. Check if destination is a git repository (look for `.git/`) — warn if not, but continue.
 
 ---
 
-## Step 2 — Plan what to copy
+## Step 2 — Run installer
 
-Six source directories to install:
+Invoke the ai-toolkit CLI installer. The CLI handles source resolution (no CWD assumption), version checking, asset catalog enumeration, and file copy:
 
-| Source (toolkit) | Destination | Purpose |
-|------------------|-------------|---------|
-| `.claude/agents/` | `{dest}/.claude/agents/` | All spawnable subagents |
-| `.claude/skills/` | `{dest}/.claude/skills/` | All user-invocable skills (except `install-toolkit/`) |
-| `.claude/commands/` | `{dest}/.claude/commands/` | All slash commands |
-| `.claude/workflows/` | `{dest}/.claude/workflows/` | Claude Code Workflow scripts for orchestrated pipelines |
-| `.claude/scripts/` | `{dest}/.claude/scripts/` | CLI scripts for work breakdown validation and rendering |
-| `docs/procedures/` | `{dest}/docs/procedures/` | Generic procedures (only if destination has no override) |
-
-For each file, compare source content against destination using an MD5/hash check and determine status:
-- **NEW** — file does not exist in destination → copy automatically, no prompt
-- **SAME** — file exists and content is identical → skip silently, no prompt
-- **MODIFIED** — file exists but content differs → show to user, ask per-file
-
-Build and display the plan before executing:
-
-```
-📦 Install Plan  →  {destination}
-──────────────────────────────────────────────────
-.claude/agents/
-  ✅ NEW       generate-requirements.md
-  ⚠️  MODIFIED  developer-backend.md    ← content differs
-  ⏭  SAME      review-solution.md
-
-.claude/skills/
-  ✅ NEW       implement-feature/SKILL.md
-  ⏭  SAME      init-agents/SKILL.md
-
-.claude/workflows/
-  ✅ NEW       pm-phase1.js
-  ✅ NEW       pm-phase2.js
-  ✅ NEW       pm-phase3.js
-  ✅ NEW       am-phase1.js
-  ✅ NEW       am-phase2.js
-
-.claude/scripts/
-  ✅ NEW       wb-validate.js
-  ✅ NEW       wb-render.js
-
-docs/procedures/
-  ✅ NEW       code-generation.md
-  ⏭  SAME      testing.md
-──────────────────────────────────────────────────
-New: N  |  Modified: N  |  Unchanged: N
-```
-
----
-
-## Step 3 — Execute
-
-**Phase A — New files** (no prompt needed): copy all NEW files, creating directories as needed.
-
-**Phase B — Modified files** (per-file prompt):
-
-For each MODIFIED file, show:
-```
-  ⚠️  MODIFIED: .claude/agents/developer-backend.md
-  The toolkit version differs from the one already in your project.
-  Overwrite? (y/N):
-```
-
-Wait for the user's response before moving to the next file. If `--force` was passed, overwrite all modified files without prompting.
-
-**Phase C — Same files**: skip silently (no output for these).
-
-Use shell commands appropriate for the OS. On Windows with bash:
 ```bash
-mkdir -p "{dest_dir}"
-cp "{source_file}" "{dest_file}"
+ai-toolkit install --project "{dest}"   # for a project install
+# or
+ai-toolkit install --global             # for a global install
 ```
 
-**Never copy the `install-toolkit/` skill directory** — this skill is toolkit-internal and has no use in a destination project.
+If `--force` was passed:
+```bash
+ai-toolkit install --project "{dest}" --force
+```
 
-**Never copy `.claude/settings.json` or `.claude/settings.local.json`** — these are user-owned configuration. Copying them would clobber the destination's existing settings. The toolkit's own `settings.json` exists only to configure this repo; it is verified and advised on (Step 4b), never installed.
+The installer will:
+- Compare installed version vs available version and ask for confirmation if already installed at the same version
+- Enumerate all installable assets from the asset catalog (`src/claude/`)
+- Copy NEW files automatically; prompt for MODIFIED files (or overwrite silently if `--force`)
+- Skip SAME files silently
+- Never copy `install-toolkit` skill or `settings.json` / `settings.local.json`
+- Never clobber `docs/procedures/` overrides that exist in the destination
+- Stamp the installed version in `{dest}/.claude/.ai-toolkit-version`
 
-**For `docs/procedures/`**: copy only files that don't already exist in the destination (regardless of `--force`) — project-specific procedure overrides must never be clobbered.
-
----
-
-## Step 4 — Verify and stamp version
-
-After copying:
-1. Verify all expected files are present in the destination
-2. Verify no files are zero bytes
-3. Write the installed version to `.claude/.ai-toolkit-version` in the destination:
-   ```bash
-   echo "{current_version}" > "{dest}/.claude/.ai-toolkit-version"
-   ```
-   This file is read on future installs to show the version comparison prompt.
+Show the installer's output to the user without modification.
 
 ---
 
-## Step 4b — Verify subagent spawn depth (verify & advise ONLY — never write)
+## Step 3 — Verify result
+
+After the installer exits:
+1. Confirm exit code was 0 — if non-zero, report the error and stop
+2. Verify `.claude/.ai-toolkit-version` was written in the destination
+
+---
+
+## Step 4 — Verify subagent spawn depth (verify & advise ONLY — never write)
 
 The orchestrated pipelines (`/implement-feature`, `/assess-codebase`) require the
 environment variable `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` to be set to `2` or higher.
