@@ -76,12 +76,12 @@ describe('installer.scripts-distribution — Group 1: source files exist', () =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('installer.scripts-distribution — Group 2: local install includes scripts', () => {
-  test('installLocal maps .claude as source root; expandMappings filters it to distributable files only', () => {
-    // The local install maps { src: path.join(packageRoot, '.claude'), dest: ... } and
-    // passes the mapping to runInstall → expandMappings, which applies isDistributable()
-    // to every resolved file. The source-root mapping does NOT mean everything is shipped.
+  test('installLocal derives mappings from asset catalog (src/claude/ categories)', () => {
+    // After FTR-015 migration, installLocal reads from getAssetCategories() to build
+    // src/claude/<cat> → .claude/<cat> mappings, not from a hardcoded .claude/ root.
     const localBody = extractInstallLocalBody();
-    expect(localBody).toContain("path.join(packageRoot, '.claude')");
+    expect(localBody).toContain("getAssetCategories");
+    expect(localBody).toContain("src', 'claude");
   });
 
   test('src/claude/scripts/ directory contains wb-validate.js and wb-render.js', () => {
@@ -108,13 +108,16 @@ describe('installer.scripts-distribution — Group 2: local install includes scr
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('installer.scripts-distribution — Group 3: global install mapping includes scripts', () => {
-  test('installGlobal in bin/cli.js contains a mapping entry for .claude/scripts', () => {
+  test('installGlobal derives mappings from asset catalog (getAssetCategories)', () => {
+    // After FTR-015 migration, installGlobal uses getAssetCategories() to enumerate
+    // src/claude/<cat> → ~/.claude/<cat> mappings, not hardcoded per-category entries.
     const globalBody = extractInstallGlobalBody();
-    expect(globalBody).toContain("'scripts'");
+    expect(globalBody).toContain("getAssetCategories");
   });
 
-  test('global install destination path for scripts is derived from target + scripts', () => {
-    expect(CLI_SRC).toContain("path.join(target, 'scripts')");
+  test('installGlobal uses src/claude/ as source directory for asset categories', () => {
+    const globalBody = extractInstallGlobalBody();
+    expect(globalBody).toContain("src', 'claude");
   });
 });
 
@@ -122,21 +125,25 @@ describe('installer.scripts-distribution — Group 3: global install mapping inc
 // Group 4: install-toolkit.md agent mentions scripts (static verification)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('installer.scripts-distribution — Group 4: install-toolkit.md mentions scripts', () => {
-  test('install-toolkit.md contains the string .claude/scripts/', () => {
-    expect(INSTALL_TOOLKIT_SRC).toContain('.claude/scripts/');
+describe('installer.scripts-distribution — Group 4: install-toolkit.md delegates to ai-toolkit install', () => {
+  // After FTR-015 US-08-TASK-BE-02: install-toolkit.md no longer hardcodes source directories.
+  // It delegates to `ai-toolkit install --project {dest}` for the file copy operation.
+
+  test('install-toolkit.md delegates to ai-toolkit install', () => {
+    expect(INSTALL_TOOLKIT_SRC).toContain('ai-toolkit install');
   });
 
-  test('install-toolkit.md contains wb-validate.js', () => {
-    expect(INSTALL_TOOLKIT_SRC).toContain('wb-validate.js');
+  test('install-toolkit.md does not hardcode .claude/ as versioned source directory', () => {
+    // The old agent listed Six source directories from .claude/. Now it delegates to the CLI.
+    expect(INSTALL_TOOLKIT_SRC).not.toContain('Six source directories');
   });
 
-  test('install-toolkit.md contains wb-render.js', () => {
-    expect(INSTALL_TOOLKIT_SRC).toContain('wb-render.js');
+  test('install-toolkit.md documents --project flag for local project installs', () => {
+    expect(INSTALL_TOOLKIT_SRC).toContain('--project');
   });
 
-  test('install-toolkit.md mentions "Six source directories" (confirming the scripts table row was added)', () => {
-    expect(INSTALL_TOOLKIT_SRC).toContain('Six source directories');
+  test('install-toolkit.md documents --global flag for global installs', () => {
+    expect(INSTALL_TOOLKIT_SRC).toContain('--global');
   });
 });
 

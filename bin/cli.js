@@ -1260,8 +1260,14 @@ async function installLocal(targetDir, force) {
   targetDir = path.resolve(process.cwd(), targetDir || '.');
   console.log(`  ${clr('cyan', '▸')}  Target: ${bold(targetDir)}\n`);
   await checkVersion(targetDir, force);
+  // Build mappings from asset catalog: each category copies src/claude/<cat> → .claude/<cat>
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
   const mappings = [
-    { src: path.join(packageRoot, '.claude'),   dest: path.join(targetDir, '.claude') },
+    ...getAssetCategories().map(cat => ({
+      src:  path.join(srcClaudeDir, cat.name),
+      dest: path.join(targetDir, '.claude', cat.name),
+    })),
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
@@ -1283,14 +1289,16 @@ async function installGlobal(force) {
     const target  = path.join(homedir, '.claude');
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
     await checkVersion(target, force);
+    // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
+    const { getAssetCategories } = require('../lib/asset-catalog');
+    const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
     const mappings = [
-      { src: path.join(packageRoot, '.claude', 'agents'),    dest: path.join(target, 'agents') },
-      { src: path.join(packageRoot, '.claude', 'skills'),    dest: path.join(target, 'skills') },
-      { src: path.join(packageRoot, '.claude', 'commands'),  dest: path.join(target, 'commands') },
-      { src: path.join(packageRoot, '.claude', 'workflows'), dest: path.join(target, 'workflows') },
-      { src: path.join(packageRoot, '.claude', 'scripts'),   dest: path.join(target, 'scripts') },
-      { src: path.join(packageRoot, 'docs'),                 dest: path.join(target, 'docs') },
-      { src: path.join(packageRoot, 'CLAUDE.global.md'),    dest: path.join(target, 'CLAUDE.md') },
+      ...getAssetCategories().map(cat => ({
+        src:  path.join(srcClaudeDir, cat.name),
+        dest: path.join(target, cat.name),
+      })),
+      { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
+      { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
     await runInstall('global Claude folder', mappings, force, target);
     writeInstalledVersion(target);
