@@ -4,7 +4,7 @@ const fs     = require('fs');
 const path   = require('path');
 const matter = require('gray-matter');
 
-const AGENTS_DIR   = path.join(__dirname, '..', '..', '.claude', 'agents');
+const AGENTS_DIR   = path.join(__dirname, '..', '..', 'src', 'claude', 'agents');
 const VALID_MODELS = new Set(['haiku', 'sonnet', 'opus']);
 
 // Build the test table synchronously so describe.each can consume it.

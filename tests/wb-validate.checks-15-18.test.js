@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const VALIDATE = path.resolve(__dirname, '../.claude/scripts/wb-validate.js');
+const VALIDATE = path.resolve(__dirname, '../src/claude/scripts/wb-validate.js');
 
 function runValidator(wbPath) {
   const result = spawnSync('node', [VALIDATE, wbPath], { encoding: 'utf8' });

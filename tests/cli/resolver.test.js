@@ -5,9 +5,10 @@
 // INFRA-TASK-TEST-02 / FTR-015
 //
 // The resolver reads catalog source dirs (src/claude/<category>) to build the
-// expected payload. src/claude/scripts/wb-validate.js is the single stub file
-// that seeds expectedPayload in these tests. All other catalog categories have
-// no source dir yet (pre-migration), so they contribute nothing.
+// expected payload. After US-03, all 5 runtime asset categories are present
+// under src/claude/ (agents, commands, skills, workflows, scripts).
+// makeCompleteInstall() enumerates the real catalog to produce a complete
+// installation in the temp dir; all Phase D completeness checks will pass.
 //
 // All tests pass explicit { projectDir, home } options so they never consult
 // the real os.homedir() or process.cwd().
@@ -78,20 +79,44 @@ function putPayloadFile(rootDir, relPath) {
 /**
  * Create a fully valid, complete runtime installation under rootDir.
  * After this call, isToolkitPresent() returns true via condA + condB + condC,
- * and Phase D passes because scripts/wb-validate.js is on disk.
+ * and Phase D passes because all catalog-registered source files are on disk.
+ *
+ * Enumerates the real asset catalog from src/claude/ so this helper stays
+ * correct across catalog changes without manual maintenance.
  *
  * opts.mode    — installationMode in the manifest ('local' or 'global')
  * opts.version — version written to manifest and stamp (defaults to TOOLKIT_VERSION)
- * opts.manifestFiles — array of relative paths for manifest.files
+ * opts.manifestFiles — array of relative paths for manifest.files (defaults to full catalog)
  */
 function makeCompleteInstall(rootDir, opts = {}) {
+  const { getAssetCategories } = require('../../lib/asset-catalog');
+  const TOOLKIT_ROOT = path.resolve(__dirname, '..', '..');
   const mode    = opts.mode    || 'local';
   const version = opts.version || TOOLKIT_VERSION;
-  const files   = opts.manifestFiles !== undefined
-    ? opts.manifestFiles
-    : ['.claude/scripts/wb-validate.js'];
 
-  putPayloadFile(rootDir, 'scripts/wb-validate.js');
+  // Enumerate every file in src/claude/<category>/ and install it into <rootDir>/.claude/<category>/
+  const catalogFiles = [];
+  for (const cat of getAssetCategories()) {
+    const srcDir = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    if (!fs.existsSync(srcDir)) continue;
+    const stack = [srcDir];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      for (const entry of fs.readdirSync(dir)) {
+        const full = path.join(dir, entry);
+        if (fs.statSync(full).isDirectory()) {
+          stack.push(full);
+        } else {
+          const rel = path.relative(srcDir, full).replace(/\\/g, '/');
+          const runtimeRel = `${cat.name}/${rel}`;
+          putPayloadFile(rootDir, runtimeRel);
+          catalogFiles.push(`.claude/${runtimeRel}`);
+        }
+      }
+    }
+  }
+
+  const files = opts.manifestFiles !== undefined ? opts.manifestFiles : catalogFiles;
   putVersionStamp(rootDir, version);
   putManifest(rootDir, {
     version,
@@ -99,6 +124,37 @@ function makeCompleteInstall(rootDir, opts = {}) {
     installationMode: mode,
     files,
   });
+}
+
+/**
+ * Install all catalog-registered files into <rootDir>/.claude/<category>/ without
+ * writing a manifest or version stamp. Useful for tests that set those independently.
+ * Returns the list of '.claude/<runtimeRel>' strings that were installed.
+ */
+function putFullCatalogPayload(rootDir) {
+  const { getAssetCategories } = require('../../lib/asset-catalog');
+  const TOOLKIT_ROOT = path.resolve(__dirname, '..', '..');
+  const catalogFiles = [];
+  for (const cat of getAssetCategories()) {
+    const srcDir = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    if (!fs.existsSync(srcDir)) continue;
+    const stack = [srcDir];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      for (const entry of fs.readdirSync(dir)) {
+        const full = path.join(dir, entry);
+        if (fs.statSync(full).isDirectory()) {
+          stack.push(full);
+        } else {
+          const rel = path.relative(srcDir, full).replace(/\\/g, '/');
+          const runtimeRel = `${cat.name}/${rel}`;
+          putPayloadFile(rootDir, runtimeRel);
+          catalogFiles.push(`.claude/${runtimeRel}`);
+        }
+      }
+    }
+  }
+  return catalogFiles;
 }
 
 /** Capture all process.stderr.write() calls during fn(). */
@@ -207,9 +263,9 @@ describe('Phase A — Presence detection', () => {
   test('condC: catalog payload file alone satisfies presence', () => {
     const local = mktmp('proj');
     const home  = mktmp('home');
-    putPayloadFile(local, 'scripts/wb-validate.js');
-    // condC: scripts/ dir has files. Phase A: localPresent = true.
-    // Phase D step 10 passes (the file is there). Phase E: returns path.
+    putFullCatalogPayload(local);
+    // condC: catalog dirs have files. Phase A: localPresent = true.
+    // Phase D step 10 passes (all catalog files are on disk). Phase E: returns path.
     const result = (() => {
       const messages = [];
       jest.spyOn(process.stderr, 'write').mockImplementation((m) => { messages.push(m); return true; });
@@ -233,9 +289,9 @@ describe('Phase A — Presence detection', () => {
     const local = mktmp('proj');
     const home  = mktmp('home');
     // Manifest file exists with garbage content — condA = true.
-    // Full payload on disk so Phase D passes.
+    // Full catalog payload on disk so Phase D passes.
     putManifest(local, 'NOT-JSON!!!');
-    putPayloadFile(local, 'scripts/wb-validate.js');
+    putFullCatalogPayload(local);
     putVersionStamp(local, TOOLKIT_VERSION);
     // Should NOT throw "No toolkit installation found" — detection works.
     const { threw } = captureStderr(() =>
@@ -351,7 +407,7 @@ describe('Phase C — Metadata warnings (warns on stderr, does not abort)', () =
     const local = mktmp('proj');
     const home  = mktmp('home');
     putVersionStamp(local, TOOLKIT_VERSION);
-    putPayloadFile(local, 'scripts/wb-validate.js');
+    putFullCatalogPayload(local);
     const { result, threw } = captureStderr(() =>
       resolveClaudeRuntimeAsset(VALID_ASSET, { projectDir: local, home })
     );
@@ -673,10 +729,10 @@ describe('Integration — combined phase scenarios', () => {
   test('corrupt manifest + full payload on disk — warns but still returns path', () => {
     const local = mktmp('proj');
     const home  = mktmp('home');
-    // condA satisfied (manifest file exists, even if corrupt); condC via payload.
+    // condA satisfied (manifest file exists, even if corrupt); full catalog payload on disk.
     putManifest(local, 'CORRUPT!');
     putVersionStamp(local, TOOLKIT_VERSION);
-    putPayloadFile(local, 'scripts/wb-validate.js');
+    putFullCatalogPayload(local);
     const { result, messages, threw } = captureStderr(() =>
       resolveClaudeRuntimeAsset(VALID_ASSET, { projectDir: local, home })
     );
@@ -689,13 +745,13 @@ describe('Integration — combined phase scenarios', () => {
   test('valid manifest, no version stamp, full payload — warns about stamp, returns path', () => {
     const local = mktmp('proj');
     const home  = mktmp('home');
+    const catalogFiles = putFullCatalogPayload(local);
     putManifest(local, {
       version: TOOLKIT_VERSION,
       installedAt: '2026-01-01T00:00:00.000Z',
       installationMode: 'local',
-      files: ['.claude/scripts/wb-validate.js'],
+      files: catalogFiles,
     });
-    putPayloadFile(local, 'scripts/wb-validate.js');
     // No version stamp.
     const { result, messages, threw } = captureStderr(() =>
       resolveClaudeRuntimeAsset(VALID_ASSET, { projectDir: local, home })

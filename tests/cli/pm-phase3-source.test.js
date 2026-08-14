@@ -40,7 +40,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const PM_PHASE3_PATH = path.join(__dirname, '..', '..', '.claude', 'workflows', 'pm-phase3.js');
+const PM_PHASE3_PATH = path.join(__dirname, '..', '..', 'src', 'claude', 'workflows', 'pm-phase3.js');
 
 let source;
 

@@ -4,7 +4,7 @@ const fs     = require('fs');
 const path   = require('path');
 const matter = require('gray-matter');
 
-const SKILLS_DIR = path.join(__dirname, '..', '..', '.claude', 'skills');
+const SKILLS_DIR = path.join(__dirname, '..', '..', 'src', 'claude', 'skills');
 
 /**
  * Recursively find all SKILL.md files under a directory.

@@ -11,12 +11,12 @@ jest.setTimeout(60000);
 
 const ROOT = path.resolve(__dirname, '..'); // toolkit root
 const CLI_PATH        = path.join(ROOT, 'bin', 'cli.js');
-const SCRIPTS         = path.join(ROOT, '.claude', 'scripts');
+const SCRIPTS         = path.join(ROOT, 'src', 'claude', 'scripts');
 const WB_VALIDATE     = path.join(SCRIPTS, 'wb-validate.js');
 const WB_RENDER       = path.join(SCRIPTS, 'wb-render.js');
 const CLI_SRC         = fs.readFileSync(CLI_PATH, 'utf8');
 const INSTALL_TOOLKIT_SRC = fs.readFileSync(
-  path.join(ROOT, '.claude', 'agents', 'install-toolkit.md'), 'utf8'
+  path.join(ROOT, 'src', 'claude', 'agents', 'install-toolkit.md'), 'utf8'
 );
 
 // Helper: extract the body of installLocal from CLI_SRC (up to installGlobal)
@@ -52,11 +52,11 @@ function walkDirSync(dir) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('installer.scripts-distribution — Group 1: source files exist', () => {
-  test('wb-validate.js exists at .claude/scripts/wb-validate.js in the toolkit root', () => {
+  test('wb-validate.js exists at src/claude/scripts/wb-validate.js in the toolkit root', () => {
     expect(fs.existsSync(WB_VALIDATE)).toBe(true);
   });
 
-  test('wb-render.js exists at .claude/scripts/wb-render.js in the toolkit root', () => {
+  test('wb-render.js exists at src/claude/scripts/wb-render.js in the toolkit root', () => {
     expect(fs.existsSync(WB_RENDER)).toBe(true);
   });
 
@@ -84,7 +84,7 @@ describe('installer.scripts-distribution — Group 2: local install includes scr
     expect(localBody).toContain("path.join(packageRoot, '.claude')");
   });
 
-  test('.claude/scripts/ directory contains wb-validate.js and wb-render.js', () => {
+  test('src/claude/scripts/ directory contains wb-validate.js and wb-render.js', () => {
     const files = fs.readdirSync(SCRIPTS);
     expect(files).toContain('wb-validate.js');
     expect(files).toContain('wb-render.js');

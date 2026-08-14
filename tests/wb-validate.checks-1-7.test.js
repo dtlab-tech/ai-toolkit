@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const VALIDATE = path.resolve(__dirname, '../.claude/scripts/wb-validate.js');
+const VALIDATE = path.resolve(__dirname, '../src/claude/scripts/wb-validate.js');
 const FIXTURES = path.resolve(__dirname, 'fixtures');
 
 /**

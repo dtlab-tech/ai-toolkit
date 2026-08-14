@@ -5,7 +5,7 @@ const os   = require('os')
 const fs   = require('fs')
 const path = require('path')
 
-const RENDER  = path.resolve(__dirname, '../.claude/scripts/wb-render.js')
+const RENDER  = path.resolve(__dirname, '../src/claude/scripts/wb-render.js')
 const FIXTURE = path.resolve(__dirname, 'fixtures/wb-valid.json')
 const TMPDIR  = os.tmpdir()
 const PREFIX  = 'REG-TEST'
