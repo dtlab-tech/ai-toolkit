@@ -1679,5 +1679,7 @@ if (require.main === module) {
     resolveClaudeRuntimeAsset,
     runDoctorResolution,
     validatePurityGuard,
+    TOOLKIT_INTERNAL_ASSETS,
+    buildCategoryMappings,
   };
 }

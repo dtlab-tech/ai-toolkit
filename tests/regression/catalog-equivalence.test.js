@@ -17,8 +17,8 @@ const { spawnSync } = require('child_process');
 const fs            = require('fs');
 const os            = require('os');
 const path          = require('path');
-const { getAssetCategories }   = require('../../lib/asset-catalog');
-const { expandMappings }        = require('../../bin/cli');
+const { getAssetCategories }             = require('../../lib/asset-catalog');
+const { expandMappings, TOOLKIT_INTERNAL_ASSETS } = require('../../bin/cli');
 
 const TOOLKIT_ROOT = path.resolve(__dirname, '../..');
 
@@ -116,11 +116,16 @@ describe('catalog-equivalence — Group 3: installed manifest matches catalog so
     const manifestPath = path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json');
     manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
-    // Collect all files from all catalog source directories.
+    // Collect all files from all catalog source directories, excluding toolkit-internal
+    // assets that are intentionally not distributed to consumer projects.
     sourcePaths = new Set();
     for (const cat of CATEGORIES) {
       const srcDir = path.join(TOOLKIT_ROOT, cat.sourceDir);
+      const internalItems = TOOLKIT_INTERNAL_ASSETS[cat.name] || new Set();
       for (const f of walkDirSync(srcDir)) {
+        // Skip files/dirs whose top-level item name is in the internal set.
+        const topItem = path.relative(srcDir, f).split(path.sep)[0];
+        if (internalItems.has(topItem)) continue;
         const rel = path.relative(srcDir, f).replace(/\\/g, '/');
         sourcePaths.add(`.claude/${cat.name}/${rel}`);
       }
