@@ -40,23 +40,6 @@ function banner() {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// User-owned config that must NEVER be copied into a destination. We only verify
-// and advise on these — copying would clobber the user's existing settings.
-const NEVER_COPY = new Set(['settings.json', 'settings.local.json']);
-
-// Path segments that identify non-distributable source files. Applied by
-// isDistributable() inside expandMappings() — the single source of truth for
-// whether a file enters the install plan, copy, manifest, and orphan pipeline.
-// Tests, fixtures, and helpers live under .claude/scripts/tests/ and must never
-// be shipped to destination projects (FTR-015 will move them to tests/**).
-const NEVER_DIST_SEGMENTS = ['.claude/scripts/tests/'];
-
-function isDistributable(srcPath) {
-  const n = srcPath.replace(/\\/g, '/');
-  if (NEVER_DIST_SEGMENTS.some(seg => n.includes(seg))) return false;
-  if (path.basename(srcPath).endsWith('.test.js') && n.includes('.claude/scripts/')) return false;
-  return true;
-}
 
 function fileHash(filePath) {
   return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
@@ -175,14 +158,10 @@ function expandMappings(mappings) {
     if (!fs.existsSync(src)) continue;
     if (fs.statSync(src).isDirectory()) {
       for (const entry of walkDir(src)) {
-        if (NEVER_COPY.has(path.basename(entry))) continue; // never clobber user config
-        if (!isDistributable(entry)) continue;
         const rel = path.relative(src, entry);
         files.push({ src: entry, dest: path.join(dest, rel) });
       }
     } else {
-      if (NEVER_COPY.has(path.basename(src))) continue;
-      if (!isDistributable(src)) continue;
       files.push({ src, dest });
     }
   }
@@ -282,10 +261,20 @@ function computeOrphans(oldFiles, newFiles) {
     .filter(f => !newSet.has(f));
 }
 
+// Timestamp used for the current install/upgrade session — set once so all orphans
+// from the same run land in the same subdirectory, making the trash auditable.
+let _trashTimestamp = null;
+function trashTimestamp() {
+  if (!_trashTimestamp) _trashTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return _trashTimestamp;
+}
+
 function moveToTrash(destRoot, relativePath) {
   const source = path.join(destRoot, relativePath);
   if (!fs.existsSync(source)) return;
-  const trashPath = path.join(destRoot, '.claude', '.ai-toolkit-trash', relativePath);
+  // Each upgrade session gets its own timestamped subdirectory so repeated upgrades
+  // never overwrite previously trashed files. The timestamp is stable for the session.
+  const trashPath = path.join(destRoot, '.claude', '.ai-toolkit-trash', trashTimestamp(), relativePath);
   ensureDir(trashPath);
   try {
     fs.renameSync(source, trashPath);
@@ -321,7 +310,7 @@ function writeManifest(destRoot, fileList) {
 
 // ── install ───────────────────────────────────────────────────────────────────
 
-async function runInstall(label, mappings, force, destRoot) {
+async function runInstall(label, mappings, force, destRoot, dryRun = false) {
   const files    = expandMappings(mappings);
   const entries  = categorize(files);
 
@@ -338,10 +327,14 @@ async function runInstall(label, mappings, force, destRoot) {
 
   if (existingOrphans.length > 0) {
     console.log();
-    console.log(`${bold('📦 Orphan cleanup')}  ${clr('gray', '→')}  ${clr('red', `${existingOrphans.length} stale file(s) found`)}`);
+    const orphanLabel = dryRun
+      ? clr('red', `${existingOrphans.length} stale file(s) would be removed`)
+      : clr('red', `${existingOrphans.length} stale file(s) found`);
+    console.log(`${bold('📦 Orphan cleanup')}  ${clr('gray', '→')}  ${orphanLabel}`);
     console.log(divider());
     for (const orphan of existingOrphans) {
-      console.log(`  ${clr('red', '∅')} ${clr('red', 'REMOVED ')}  ${orphan}`);
+      const marker = dryRun ? clr('red', 'WOULD REMOVE') : clr('red', 'REMOVED ');
+      console.log(`  ${clr('red', '∅')} ${marker}  ${orphan}`);
     }
     console.log(divider());
   }
@@ -349,40 +342,43 @@ async function runInstall(label, mappings, force, destRoot) {
   let removedCount = 0;
   let keptCount    = 0;
 
-  if (force) {
-    for (const orphan of existingOrphans) {
-      moveToTrash(destRoot, orphan);
-      removedCount++;
-      console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
-    }
-  } else {
-    for (const orphan of existingOrphans) {
-      const fullPath = path.join(destRoot, orphan);
-      if (!fs.existsSync(fullPath)) continue;
-      const ok = await askConfirm(`  Move to trash  ${clr('red', orphan)}?`);
-      if (ok) {
+  if (!dryRun) {
+    if (force) {
+      for (const orphan of existingOrphans) {
         moveToTrash(destRoot, orphan);
-        console.log(`     ${clr('green', '✔')} Moved to trash\n`);
         removedCount++;
-      } else {
-        console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
-        keptCount++;
+        console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
+      }
+    } else {
+      for (const orphan of existingOrphans) {
+        const fullPath = path.join(destRoot, orphan);
+        if (!fs.existsSync(fullPath)) continue;
+        const ok = await askConfirm(`  Move to trash  ${clr('red', orphan)}?`);
+        if (ok) {
+          moveToTrash(destRoot, orphan);
+          console.log(`     ${clr('green', '✔')} Moved to trash\n`);
+          removedCount++;
+        } else {
+          console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
+          keptCount++;
+        }
       }
     }
-  }
 
-  if (existingOrphans.length > 0) {
-    console.log(divider());
-    console.log(
-      `  ${clr('red', `∅ Moved: ${removedCount}`)}` +
-      `  ${clr('gray', `↪ .claude/.ai-toolkit-trash/`)}` +
-      `  ${clr('gray', `✖ Kept: ${keptCount}`)}\n`
-    );
+    if (existingOrphans.length > 0) {
+      console.log(divider());
+      console.log(
+        `  ${clr('red', `∅ Moved: ${removedCount}`)}` +
+        `  ${clr('gray', `↪ .claude/.ai-toolkit-trash/`)}` +
+        `  ${clr('gray', `✖ Kept: ${keptCount}`)}\n`
+      );
+    }
   }
 
   // ── install plan display ──────────────────────────────────────────────────────
   console.log();
-  console.log(`${bold('📦 Install plan')}  ${clr('gray', '→')}  ${clr('cyan', label)}`);
+  const planTitle = dryRun ? bold('📦 Dry run — install plan') : bold('📦 Install plan');
+  console.log(`${planTitle}  ${clr('gray', '→')}  ${clr('cyan', label)}`);
   console.log(divider());
   for (const e of newFiles)  console.log(`  ${clr('green',  '✚')} ${clr('green',  'NEW     ')}  ${dim(path.relative(process.cwd(), e.dest))}`);
   for (const e of modified)  console.log(`  ${clr('yellow', '~')} ${clr('yellow', 'MODIFIED')}  ${path.relative(process.cwd(), e.dest)}`);
@@ -394,6 +390,11 @@ async function runInstall(label, mappings, force, destRoot) {
     `  ${clr('gray', `= Unchanged: ${same.length}`)}`
   );
   console.log();
+
+  if (dryRun) {
+    console.log(`  ${clr('cyan', 'ℹ')}  Dry run — no files were written.\n`);
+    return;
+  }
 
   for (const e of newFiles) {
     ensureDir(e.dest);
@@ -660,19 +661,619 @@ function updateGitignore(destDir) {
   }
 }
 
+// ── resolveClaudeRuntimeAsset ─────────────────────────────────────────────────
+
+// INFRA-TASK-BE-02 (FTR-015):
+// Resolve a runtime asset path using a six-phase algorithm:
+//   Phase 0: Input validation (no filesystem access)
+//   Phase A: Presence detection — local vs global installation
+//   Phase B: Mode decision — local-only | global-only | both (error) | none (error)
+//   Phase C: Metadata warnings — manifest, version stamp; emit to stderr; never abort
+//   Phase D: Catalog membership + completeness check
+//   Phase E: Confinement check + return absolute path
+//
+// Parameters:
+//   relativePath (string): path relative to .claude/, e.g. 'agents/agent-name.md'
+//   options (object): { projectDir, home }
+//     projectDir — target project directory (defaults to process.cwd())
+//     home       — override for os.homedir() to enable test isolation
+//
+// Returns: absolute path string
+// Throws: Error with diagnostics on validation failure, ambiguity, or incompleteness
+function resolveClaudeRuntimeAsset(relativePath, options) {
+  const os = require('os');
+  const { getAssetCategories } = require('../lib/asset-catalog');
+
+  const opts = options || {};
+  const effectiveHome       = opts.home       !== undefined ? opts.home       : os.homedir();
+  const effectiveProjectDir = opts.projectDir !== undefined ? opts.projectDir : process.cwd();
+
+  // ── Phase 0: Input validation (no filesystem access) ──────────────────────
+  // 0a: reject null / undefined / empty
+  if (relativePath === null || relativePath === undefined || relativePath === '') {
+    throw new Error('relativePath must be a non-empty string');
+  }
+  if (typeof relativePath !== 'string') {
+    throw new Error('relativePath must be a non-empty string');
+  }
+  // 0b: reject null bytes
+  if (relativePath.includes('\0')) {
+    throw new Error('relativePath must not contain null bytes');
+  }
+  // 0c: normalize backslashes to forward slashes
+  relativePath = relativePath.replace(/\\/g, '/');
+  // 0d: reject absolute paths
+  if (relativePath.startsWith('/')) {
+    throw new Error('relativePath must be relative (got Unix absolute path)');
+  }
+  if (/^[A-Za-z]:[/\\]/.test(relativePath)) {
+    throw new Error('relativePath must be relative (got Windows absolute path)');
+  }
+  // 0e: reject .. segments
+  if (relativePath.split('/').includes('..')) {
+    throw new Error('relativePath must not contain path traversal (..)');
+  }
+
+  // ── Runtime root definitions ───────────────────────────────────────────────
+  const localRuntimeRoot  = path.join(effectiveProjectDir, '.claude');
+  const globalRuntimeRoot = path.join(effectiveHome, '.claude');
+
+  // Strip the '.claude/' prefix so catRelDir gives the sub-directory relative to runtimeRoot.
+  // e.g. '.claude/agents' → 'agents'
+  function catRelDir(cat) {
+    return cat.runtimeDir.replace(/^\.claude\//, '');
+  }
+
+  // condC: at least one catalog category directory has files at this runtimeRoot
+  function hasPayloadFiles(runtimeRoot) {
+    for (const cat of getAssetCategories()) {
+      const catDir = path.join(runtimeRoot, catRelDir(cat));
+      if (!fs.existsSync(catDir)) continue;
+      try {
+        if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true;
+      } catch (_) { /* ignore unreadable dirs */ }
+    }
+    return false;
+  }
+
+  // A toolkit installation is PRESENT at runtimeRoot when any of the following hold:
+  //   condA: .ai-toolkit-manifest.json exists (content may be corrupt; file presence is enough)
+  //   condB: .ai-toolkit-version exists
+  //   condC: at least one catalog category dir contains one or more files
+  // settings.json / settings.local.json alone do NOT satisfy any condition.
+  function isToolkitPresent(runtimeRoot) {
+    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-manifest.json'))) return true;
+    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-version'))) return true;
+    return hasPayloadFiles(runtimeRoot);
+  }
+
+  // ── Phase A: Presence detection ────────────────────────────────────────────
+  const localPresent  = isToolkitPresent(localRuntimeRoot);
+  const globalPresent = isToolkitPresent(globalRuntimeRoot);
+
+  // ── Phase B: Mode decision ─────────────────────────────────────────────────
+  if (!localPresent && !globalPresent) {
+    throw new Error(
+      "No toolkit installation found. Run 'npm run toolkit:dev-install-global' to install globally, or the installer in your project."
+    );
+  }
+  if (localPresent && globalPresent) {
+    throw new Error(
+      `Ambiguous: toolkit installations detected at both ${localRuntimeRoot} and ` +
+      `${globalRuntimeRoot}. The error is raised even if one installation has corrupt ` +
+      'metadata — presence is established regardless of metadata validity.'
+    );
+  }
+
+  const effectiveRoot = localPresent ? localRuntimeRoot : globalRuntimeRoot;
+  const effectiveMode = localPresent ? 'local' : 'global';
+
+  // ── Phase C: Metadata warnings (emit to stderr; never abort) ──────────────
+  const manifestPath = path.join(effectiveRoot, '.ai-toolkit-manifest.json');
+  let manifest = null;
+  let manifestSchemaValid = false;
+
+  if (!fs.existsSync(manifestPath)) {
+    process.stderr.write('Warning: No manifest found; installation may be manual or manifest was lost\n');
+  } else {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch (_) {
+      process.stderr.write(`Warning: Manifest is corrupt (invalid JSON) at ${manifestPath}\n`);
+    }
+    if (parsed !== null) {
+      const required      = ['version', 'installedAt', 'installationMode', 'files'];
+      const missingFields = required.filter(f => parsed[f] === undefined);
+      if (missingFields.length > 0) {
+        process.stderr.write(`Warning: Manifest schema invalid: missing fields ${missingFields.join(', ')}\n`);
+      } else {
+        manifestSchemaValid = true;
+        manifest = parsed;
+        if (parsed.installationMode !== effectiveMode) {
+          process.stderr.write(
+            `Warning: Manifest installationMode='${parsed.installationMode}' mismatches effective mode '${effectiveMode}'\n`
+          );
+        }
+      }
+    }
+  }
+
+  const versionStampPath = path.join(effectiveRoot, '.ai-toolkit-version');
+  if (!fs.existsSync(versionStampPath)) {
+    process.stderr.write(`Warning: No version stamp at ${versionStampPath}\n`);
+  } else {
+    const stampVersion    = fs.readFileSync(versionStampPath, 'utf8').trim();
+    const resolverVersion = require('../package.json').version;
+    if (stampVersion !== resolverVersion) {
+      process.stderr.write(
+        `Warning: Version mismatch: installed=${stampVersion}, resolver=${resolverVersion}; ` +
+        'run toolkit:dev-install-global to update\n'
+      );
+    }
+  }
+
+  // ── Phase D: Catalog membership + completeness check ──────────────────────
+  // Build expectedPayload: every runtime asset path derived from the package source catalog.
+  // Files are enumerated from packageRoot/cat.sourceDir and mapped to their runtime destinations.
+  const categories      = getAssetCategories();
+  const expectedPayload = new Set();
+
+  for (const cat of categories) {
+    const srcDir = path.join(packageRoot, cat.sourceDir);
+    if (!fs.existsSync(srcDir)) continue;
+    try {
+      for (const f of walkDir(srcDir)) {
+        const relFile    = path.relative(srcDir, f);
+        const runtimeAbs = path.resolve(path.join(effectiveRoot, catRelDir(cat), relFile));
+        expectedPayload.add(runtimeAbs);
+      }
+    } catch (_) { /* ignore unreadable source dirs */ }
+  }
+
+  // Step 6e: warn about stale manifest entries (in manifest but no longer in catalog)
+  if (manifestSchemaValid && manifest && Array.isArray(manifest.files)) {
+    const parentDir = path.join(effectiveRoot, '..');
+    const stale     = manifest.files.filter(f => !expectedPayload.has(path.resolve(path.join(parentDir, f))));
+    if (stale.length > 0) {
+      process.stderr.write(
+        `Warning: Manifest has ${stale.length} stale entries not in current catalog: ${stale.join(', ')}\n`
+      );
+    }
+  }
+
+  // Step 8a: catalog membership — requested asset must be in expectedPayload
+  const absoluteRequested = path.resolve(path.join(effectiveRoot, relativePath));
+  if (!expectedPayload.has(absoluteRequested)) {
+    throw new Error(
+      `Requested asset '${relativePath}' is not a registered catalog asset (mode: ${effectiveMode}). ` +
+      'Only toolkit-installed catalog assets may be resolved; arbitrary files under .claude/ are ' +
+      'not resolvable via this function.'
+    );
+  }
+
+  // Step 9: warn about expected assets absent from manifest (metadata-staleness; disk is authoritative)
+  if (manifestSchemaValid && manifest && Array.isArray(manifest.files)) {
+    const parentDir      = path.join(effectiveRoot, '..');
+    const manifestAbsSet = new Set(
+      manifest.files.map(f => path.resolve(path.join(parentDir, f)))
+    );
+    for (const f of expectedPayload) {
+      if (!manifestAbsSet.has(f)) {
+        process.stderr.write(`Warning: Expected asset missing from manifest: ${f}\n`);
+      }
+    }
+  }
+
+  // Step 10: disk completeness — every expected catalog asset must exist on disk;
+  // a stale manifest cannot suppress this error — disk truth is the only authority.
+  const missingFiles = [...expectedPayload].filter(f => !fs.existsSync(f));
+  if (missingFiles.length > 0) {
+    throw new Error(
+      `Installation incomplete (${effectiveMode}). Missing files:\n  ${missingFiles.join('\n  ')}\n` +
+      'Run the installer.'
+    );
+  }
+
+  // ── Phase E: Return path ───────────────────────────────────────────────────
+  // Step 11: resolve absolute path (effectiveRoot already ends at .claude/)
+  const absolutePath = path.resolve(path.join(effectiveRoot, relativePath));
+
+  // Step 11a: confinement check — belt-and-suspenders after Phase 0 traversal rejection;
+  // catches edge cases introduced by OS-level normalization or symlink resolution.
+  const resolvedRoot = path.resolve(effectiveRoot);
+  if (!absolutePath.startsWith(resolvedRoot + path.sep) && absolutePath !== resolvedRoot) {
+    throw new Error('Resolved path escapes installation root (confinement violation)');
+  }
+
+  // Step 12: final existence check
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`Asset not found at ${absolutePath} (mode: ${effectiveMode})`);
+  }
+
+  // Step 13: return
+  return absolutePath;
+}
+
+// ── runDoctorResolution ───────────────────────────────────────────────────────
+
+// US-07-TASK-BE-01 (FTR-015):
+// Human-readable diagnostics of runtime installation mode, asset resolution,
+// and potential conflicts. Read-only — never modifies or deletes any file.
+//
+// Parameters (via options object):
+//   projectDir (string): target project directory (defaults to process.cwd())
+//   home       (string): override for os.homedir() to enable test isolation
+//
+// Output: writes to stdout; always exits 0 (reports, does not fail).
+function runDoctorResolution(options) {
+  const os = require('os');
+  const { getAssetCategories } = require('../lib/asset-catalog');
+
+  const opts              = options || {};
+  const effectiveHome     = opts.home       !== undefined ? path.resolve(opts.home)       : os.homedir();
+  const effectiveProject  = opts.projectDir !== undefined ? path.resolve(opts.projectDir) : process.cwd();
+
+  const categories        = getAssetCategories();
+  const localRuntimeRoot  = path.join(effectiveProject, '.claude');
+  const globalRuntimeRoot = path.join(effectiveHome,    '.claude');
+
+  // ── Internal helpers ────────────────────────────────────────────────────────
+
+  function catRelDir(cat) {
+    return cat.runtimeDir.replace(/^\.claude\//, '');
+  }
+
+  function hasPayloadFiles(runtimeRoot) {
+    for (const cat of categories) {
+      const catDir = path.join(runtimeRoot, catRelDir(cat));
+      if (!fs.existsSync(catDir)) continue;
+      try {
+        if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true;
+      } catch (_) { /* ignore unreadable dirs */ }
+    }
+    return false;
+  }
+
+  // Mirrors the same three-condition presence check as resolveClaudeRuntimeAsset().
+  // condA: manifest file exists (any content); condB: version stamp exists;
+  // condC: at least one catalog category dir has files.
+  function isToolkitPresent(runtimeRoot) {
+    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-manifest.json'))) return true;
+    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-version')))       return true;
+    return hasPayloadFiles(runtimeRoot);
+  }
+
+  function countCategoryFiles(runtimeRoot, cat) {
+    const catDir = path.join(runtimeRoot, catRelDir(cat));
+    if (!fs.existsSync(catDir)) return 0;
+    try { return walkDir(catDir).length; } catch (_) { return 0; }
+  }
+
+  function readVersionStamp(runtimeRoot) {
+    const vFile = path.join(runtimeRoot, '.ai-toolkit-version');
+    if (!fs.existsSync(vFile)) return null;
+    try { return fs.readFileSync(vFile, 'utf8').trim(); } catch (_) { return null; }
+  }
+
+  // Returns { status: 'present'|'missing'|'corrupt', data: parsed|null, path: string }
+  function readManifestInfo(runtimeRoot) {
+    const manifestPath = path.join(runtimeRoot, '.ai-toolkit-manifest.json');
+    if (!fs.existsSync(manifestPath)) return { status: 'missing', data: null, path: manifestPath };
+    let raw;
+    try { raw = fs.readFileSync(manifestPath, 'utf8'); } catch (_) {
+      return { status: 'missing', data: null, path: manifestPath };
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return { status: 'present', data: parsed, path: manifestPath };
+    } catch (_) {
+      return { status: 'corrupt', data: null, path: manifestPath };
+    }
+  }
+
+  // Return category files present under runtimeRoot that are NOT in manifest.files.
+  // Only meaningful when manifestData exists with a files array; returns [] otherwise.
+  function findResiduals(runtimeRoot, manifestData) {
+    if (!manifestData || !Array.isArray(manifestData.files)) return [];
+    const tracked = new Set(manifestData.files.map(f => f.replace(/\\/g, '/')));
+    const residuals = [];
+    const parentDir = path.dirname(runtimeRoot); // e.g. /proj (parent of .claude)
+    for (const cat of categories) {
+      const catDir = path.join(runtimeRoot, catRelDir(cat));
+      if (!fs.existsSync(catDir)) continue;
+      try {
+        for (const f of walkDir(catDir)) {
+          const rel = path.relative(parentDir, f).replace(/\\/g, '/');
+          if (!tracked.has(rel)) residuals.push(rel);
+        }
+      } catch (_) { /* ignore */ }
+    }
+    return residuals;
+  }
+
+  // ── Detect installations ────────────────────────────────────────────────────
+  const localPresent  = isToolkitPresent(localRuntimeRoot);
+  const globalPresent = isToolkitPresent(globalRuntimeRoot);
+
+  let mode, modeStatus;
+  if      (localPresent && globalPresent) { mode = 'both';        modeStatus = 'AMBIGUOUS';    }
+  else if (localPresent)                  { mode = 'local-only';  modeStatus = 'VALID';         }
+  else if (globalPresent)                 { mode = 'global-only'; modeStatus = 'VALID';         }
+  else                                    { mode = 'none';        modeStatus = 'NOT INSTALLED'; }
+
+  const presentRoots = [];
+  if (localPresent)  presentRoots.push({ label: 'Local',  root: localRuntimeRoot  });
+  if (globalPresent) presentRoots.push({ label: 'Global', root: globalRuntimeRoot });
+
+  // ── Output helpers ──────────────────────────────────────────────────────────
+  const L     = (line = '') => console.log(line);
+  const H     = (title)    => { L(bold(title)); L(divider('─', 68)); };
+  const tick  = clr('green',  '✔');
+  const cross = clr('red',    '✖');
+  const warnS = clr('yellow', '⚠');
+
+  // ── Header ──────────────────────────────────────────────────────────────────
+  L('');
+  L(clr('cyan', '╔══════════════════════════════════════════════════════════════════════╗'));
+  L(clr('cyan', '║') + bold(clr('white', '          Claude Runtime Resolution Diagnostics                      ')) + clr('cyan', '║'));
+  L(clr('cyan', '╚══════════════════════════════════════════════════════════════════════╝'));
+  L('');
+
+  // ── Toolkit Source ──────────────────────────────────────────────────────────
+  H('Toolkit Source');
+  L(`  Repository root:  ${dim(packageRoot)}`);
+  L(`  Source directory: ${dim(path.join(packageRoot, 'src', 'claude'))}`);
+  L('');
+
+  // ── Installation Detection ──────────────────────────────────────────────────
+  H('Installation Detection');
+  L(`  Local runtime present:  ${localPresent  ? `${tick}  ${dim(localRuntimeRoot)}`  : `${cross}  ${dim('not found')}`}`);
+  L(`  Global runtime present: ${globalPresent ? `${tick}  ${dim(globalRuntimeRoot)}` : `${cross}  ${dim('not found')}`}`);
+  L('');
+
+  // ── Effective Runtime Mode ──────────────────────────────────────────────────
+  H('Effective Runtime Mode');
+  const modeColors   = { 'local-only': 'green', 'global-only': 'green', 'both': 'yellow', 'none': 'red' };
+  const statusColors = { 'VALID': 'green', 'AMBIGUOUS': 'yellow', 'NOT INSTALLED': 'red' };
+  L(`  Mode:   ${clr(modeColors[mode],     mode)}`);
+  L(`  Status: ${clr(statusColors[modeStatus] || 'gray', modeStatus)}`);
+  L('');
+
+  // ── Runtime Inventory ───────────────────────────────────────────────────────
+  for (const { label, root } of presentRoots) {
+    H(`Runtime Inventory (${label})`);
+    for (const cat of categories) {
+      const count = countCategoryFiles(root, cat);
+      const name  = (cat.name.charAt(0).toUpperCase() + cat.name.slice(1)).padEnd(12);
+      L(`  ${name} ${clr(count > 0 ? 'cyan' : 'gray', String(count).padStart(3))} file${count !== 1 ? 's' : ' '}`);
+    }
+    L('');
+  }
+
+  // ── Version Stamps ──────────────────────────────────────────────────────────
+  H('Version Stamps');
+  L(`  Toolkit source version:  ${clr('cyan', TOOLKIT_VERSION)}  ${dim('(from package.json)')}`);
+  if (localPresent) {
+    const lv = readVersionStamp(localRuntimeRoot);
+    const lvDisplay = lv || dim('not found');
+    const lvColor   = lv === TOOLKIT_VERSION ? 'green' : lv ? 'yellow' : 'gray';
+    L(`  Local installed version:  ${lv ? clr(lvColor, lv) : lvDisplay}  ${dim('(from .claude/.ai-toolkit-version)')}`);
+  }
+  if (globalPresent) {
+    const gv = readVersionStamp(globalRuntimeRoot);
+    const gvDisplay = gv || dim('not found');
+    const gvColor   = gv === TOOLKIT_VERSION ? 'green' : gv ? 'yellow' : 'gray';
+    L(`  Global installed version: ${gv ? clr(gvColor, gv) : gvDisplay}  ${dim('(from ~/.claude/.ai-toolkit-version)')}`);
+  }
+  if (localPresent && globalPresent) {
+    const lv = readVersionStamp(localRuntimeRoot);
+    const gv = readVersionStamp(globalRuntimeRoot);
+    const match = lv !== null && gv !== null && lv === gv;
+    L(`  Match: ${match ? tick : `${cross}  ${clr('yellow', `local=${lv || '?'}, global=${gv || '?'}`)}`}`);
+  }
+  L('');
+
+  // ── Duplicate Files (only when both installations present) ──────────────────
+  if (mode === 'both') {
+    H('Duplicate Files (local vs global)');
+    const dupes = [];
+    for (const cat of categories) {
+      const relDir       = catRelDir(cat);
+      const localCatDir  = path.join(localRuntimeRoot,  relDir);
+      const globalCatDir = path.join(globalRuntimeRoot, relDir);
+      if (!fs.existsSync(localCatDir) || !fs.existsSync(globalCatDir)) continue;
+      try {
+        const localFiles = walkDir(localCatDir).map(f => path.relative(localCatDir, f).replace(/\\/g, '/'));
+        const globalSet  = new Set(walkDir(globalCatDir).map(f => path.relative(globalCatDir, f).replace(/\\/g, '/')));
+        for (const f of localFiles) {
+          if (!globalSet.has(f)) continue;
+          const lp   = path.join(localCatDir,  f);
+          const gp   = path.join(globalCatDir, f);
+          const same = fileHash(lp) === fileHash(gp);
+          dupes.push({ relPath: `${relDir}/${f}`, same });
+        }
+      } catch (_) { /* ignore */ }
+    }
+    if (dupes.length === 0) {
+      L(`  ${dim('(no files appear in both installations)')}`);
+    } else {
+      for (const d of dupes) {
+        L(`  ${dim(d.relPath)}: ${d.same ? `${tick} content matches` : `${cross} content differs`}`);
+      }
+    }
+    L('');
+  }
+
+  // ── Manifest Consistency ────────────────────────────────────────────────────
+  H('Manifest Consistency');
+  if (presentRoots.length === 0) {
+    L(`  ${dim('(no installation to check)')}`);
+  } else {
+    for (const { label, root } of presentRoots) {
+      const mInfo        = readManifestInfo(root);
+      const mSymbol      = { present: tick, missing: warnS, corrupt: cross }[mInfo.status];
+      const mStatusColor = { present: 'green', missing: 'yellow', corrupt: 'red' }[mInfo.status];
+      L(`  ${bold(label)} manifest:`);
+      L(`    File:   ${dim(mInfo.path)}`);
+      L(`    Status: ${mSymbol}  ${clr(mStatusColor, mInfo.status)}`);
+      if (mInfo.status === 'present' && mInfo.data) {
+        const fCount = Array.isArray(mInfo.data.files) ? mInfo.data.files.length : '?';
+        L(`    Files:  ${fCount}`);
+        if (mInfo.data.version)          L(`    Version:           ${mInfo.data.version}`);
+        if (mInfo.data.installationMode) L(`    Installation mode: ${mInfo.data.installationMode}`);
+      }
+    }
+  }
+  L('');
+
+  // ── Residual .claude/ Assets ────────────────────────────────────────────────
+  H('Residual .claude/ Assets');
+  if (presentRoots.length === 0) {
+    L(`  ${dim('(no installation to check)')}`);
+  } else {
+    for (const { label, root } of presentRoots) {
+      const mInfo = readManifestInfo(root);
+      if (mInfo.status !== 'present') {
+        L(`  ${label}: ${warnS}  ${dim('cannot check residuals — manifest missing or corrupt')}`);
+      } else {
+        const residuals = findResiduals(root, mInfo.data);
+        if (residuals.length === 0) {
+          L(`  ${label}: ${tick}  ${clr('green', 'CLEAN')}  ${dim('(all category files tracked in manifest)')}`);
+        } else {
+          L(`  ${label}: ${warnS}  ${clr('yellow', 'WARNING')}  — ${residuals.length} untracked file(s):`);
+          for (const r of residuals.slice(0, 10)) L(`    ${dim(r)}`);
+          if (residuals.length > 10) L(`    ${dim(`... and ${residuals.length - 10} more`)}`);
+        }
+      }
+    }
+  }
+  L('');
+
+  // ── Action Items ────────────────────────────────────────────────────────────
+  H('Action Items');
+  const actions = [];
+  if (mode === 'both') {
+    actions.push(`${warnS}  Choose one: delete local or global installation to resolve ambiguity`);
+  }
+  if (mode === 'none') {
+    actions.push(`${cross}  No installation found. Run 'npm run toolkit:dev-install-global' or the local installer`);
+  }
+  if (mode === 'local-only' || mode === 'global-only') {
+    const effectiveRoot = mode === 'local-only' ? localRuntimeRoot : globalRuntimeRoot;
+    const iv = readVersionStamp(effectiveRoot);
+    if (iv && iv !== TOOLKIT_VERSION) {
+      actions.push(`${warnS}  Version mismatch: run 'npm run toolkit:dev-install-global' to update`);
+    }
+    const mInfo = readManifestInfo(effectiveRoot);
+    if (mInfo.status !== 'present') {
+      actions.push(`${warnS}  Manifest is ${mInfo.status}. Run the installer to regenerate.`);
+    }
+  }
+  if (actions.length === 0) {
+    L(`  ${tick}  ${clr('green', 'runtime ready for pipelines')}`);
+  } else {
+    for (const a of actions) L(`  • ${a}`);
+  }
+  L('');
+
+  // ── Summary ─────────────────────────────────────────────────────────────────
+  H('Summary');
+  const overallOk     = mode === 'local-only' || mode === 'global-only';
+  const overallStatus = overallOk ? 'READY' : 'PROBLEMATIC';
+  L(`  Status: ${clr(overallOk ? 'green' : 'red', overallStatus)}`);
+  let recommendation;
+  if (mode === 'none')      recommendation = "Run 'npm run toolkit:dev-install-global' to install globally, or use the local installer.";
+  else if (mode === 'both') recommendation = 'Remove one installation to resolve ambiguity before running pipelines.';
+  else                      recommendation = `Installation is operational in ${mode} mode.`;
+  L(`  Recommendation: ${dim(recommendation)}`);
+  L('');
+  L(clr('gray', '═'.repeat(72)));
+  L('');
+}
+
+// ── validatePurityGuard ───────────────────────────────────────────────────────
+
+// US-05-TASK-BE-03 (FTR-015):
+// Rejects any *.test.js files or blocked directory segments under sourceDir.
+// Called by the installer before copying and by the prepack lifecycle hook.
+//
+// Blocked file patterns: *.test.js
+// Blocked directory names: tests, fixtures, mocks, helpers
+//
+// Returns an array of violation strings (empty = clean).
+// Never modifies the filesystem.
+const PURITY_BLOCKED_DIRS  = new Set(['tests', 'fixtures', 'mocks', 'helpers']);
+const PURITY_BLOCKED_EXTS  = ['.test.js'];
+
+function validatePurityGuard(sourceDir) {
+  const violations = [];
+
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    let entries;
+    try { entries = fs.readdirSync(dir); } catch (_) { return; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry);
+      let stat;
+      try { stat = fs.statSync(full); } catch (_) { continue; }
+      if (stat.isDirectory()) {
+        if (PURITY_BLOCKED_DIRS.has(entry)) {
+          violations.push(`Blocked directory: ${full}`);
+        } else {
+          walk(full);
+        }
+      } else {
+        if (PURITY_BLOCKED_EXTS.some(ext => entry.endsWith(ext))) {
+          violations.push(`Blocked file: ${full}`);
+        }
+      }
+    }
+  }
+
+  walk(sourceDir);
+  return violations;
+}
+
+// validate-purity CLI command entry point.
+// Scans sourceDir (defaults to src/claude/) for test or fixture contamination.
+// Exit 0 = clean. Exit 1 = violations found. Violations written to stderr.
+function runValidatePurity(sourceDir) {
+  const effectiveDir = sourceDir
+    ? path.resolve(sourceDir)
+    : path.join(packageRoot, 'src', 'claude');
+
+  const violations = validatePurityGuard(effectiveDir);
+  if (violations.length === 0) {
+    process.stdout.write(`Purity guard: PASS — no test files or blocked dirs under ${effectiveDir}\n`);
+    process.exit(0);
+  } else {
+    process.stderr.write(`Purity guard: FAIL — ${violations.length} violation(s) under ${effectiveDir}:\n`);
+    for (const v of violations) process.stderr.write(`  ${v}\n`);
+    process.exit(1);
+  }
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
-async function installLocal(targetDir, force) {
+async function installLocal(targetDir, force, dryRun = false) {
   banner();
   targetDir = path.resolve(process.cwd(), targetDir || '.');
   console.log(`  ${clr('cyan', '▸')}  Target: ${bold(targetDir)}\n`);
-  await checkVersion(targetDir, force);
+  if (!dryRun) await checkVersion(targetDir, force);
+  // Build mappings from asset catalog: each category copies src/claude/<cat> → .claude/<cat>
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
   const mappings = [
-    { src: path.join(packageRoot, '.claude'),   dest: path.join(targetDir, '.claude') },
+    ...getAssetCategories().map(cat => ({
+      src:  path.join(srcClaudeDir, cat.name),
+      dest: path.join(targetDir, '.claude', cat.name),
+    })),
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`local project`, mappings, force, targetDir);
+  await runInstall(`local project`, mappings, force, targetDir, dryRun);
+  if (dryRun) return;
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
   checkSpawnDepth(targetDir);
@@ -683,23 +1284,26 @@ async function installLocal(targetDir, force) {
   console.log();
 }
 
-async function installGlobal(force) {
+async function installGlobal(force, dryRun = false) {
   banner();
   try {
     const homedir = require('os').homedir();
     const target  = path.join(homedir, '.claude');
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
-    await checkVersion(target, force);
+    if (!dryRun) await checkVersion(target, force);
+    // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
+    const { getAssetCategories } = require('../lib/asset-catalog');
+    const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
     const mappings = [
-      { src: path.join(packageRoot, '.claude', 'agents'),    dest: path.join(target, 'agents') },
-      { src: path.join(packageRoot, '.claude', 'skills'),    dest: path.join(target, 'skills') },
-      { src: path.join(packageRoot, '.claude', 'commands'),  dest: path.join(target, 'commands') },
-      { src: path.join(packageRoot, '.claude', 'workflows'), dest: path.join(target, 'workflows') },
-      { src: path.join(packageRoot, '.claude', 'scripts'),   dest: path.join(target, 'scripts') },
-      { src: path.join(packageRoot, 'docs'),                 dest: path.join(target, 'docs') },
-      { src: path.join(packageRoot, 'CLAUDE.global.md'),    dest: path.join(target, 'CLAUDE.md') },
+      ...getAssetCategories().map(cat => ({
+        src:  path.join(srcClaudeDir, cat.name),
+        dest: path.join(target, cat.name),
+      })),
+      { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
+      { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force, target);
+    await runInstall('global Claude folder', mappings, force, target, dryRun);
+    if (dryRun) return;
     writeInstalledVersion(target);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     checkSpawnDepth(homedir);
@@ -721,22 +1325,24 @@ function help() {
   console.log(`    ${clr('cyan', 'ai-toolkit')} ${clr('yellow', '--local <dir>')}       Install into target directory`);
   console.log(`    ${clr('cyan', 'ai-toolkit')} ${clr('yellow', '--global')}             Install into ~/.claude (global)`);
   console.log(`    ${clr('gray',  '                     --force')}       Overwrite all files without prompting`);
+  console.log(`    ${clr('gray',  '                     --dry-run')}     Preview what would change — no files written`);
   console.log();
 }
 
 async function main() {
-  const argv  = process.argv.slice(2);
-  const force = argv.includes('--force');
+  const argv   = process.argv.slice(2);
+  const force  = argv.includes('--force');
+  const dryRun = argv.includes('--dry-run');
 
-  if (argv.length === 0 || (argv.length === 1 && argv[0] === '--force')) {
-    await installLocal('.', force);
+  if (argv.length === 0 || argv.every(a => a === '--force' || a === '--dry-run')) {
+    await installLocal('.', force, dryRun);
     return;
   }
 
   if (argv[0] === '--local') {
-    await installLocal(argv[1] || '.', force);
+    await installLocal(argv[1] || '.', force, dryRun);
   } else if (argv[0] === '--global') {
-    await installGlobal(force);
+    await installGlobal(force, dryRun);
   } else if (argv[0] === 'help' || argv[0] === '--help') {
     help();
   } else if (argv[0] === 'merge-allowlist') {
@@ -775,8 +1381,149 @@ async function main() {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
+  } else if (argv[0] === 'doctor' && argv[1] === 'resolution') {
+    const remaining  = argv.slice(2);
+    const projectIdx = remaining.indexOf('--project');
+    const homeIdx    = remaining.indexOf('--home');
+    const projectDir = projectIdx !== -1 ? remaining[projectIdx + 1] : process.cwd();
+    const home       = homeIdx    !== -1 ? remaining[homeIdx    + 1] : undefined;
+    runDoctorResolution({ projectDir, home });
+    process.exit(0);
+  } else if (argv[0] === 'validate-purity') {
+    runValidatePurity(argv[1]);
+  } else if (argv[0] === 'resolve-asset') {
+    // resolve-asset <relativePath> [--project <dir>] [--home <dir>]
+    // Three-tier model: Tier 1 = exit 0 + stdout=path + stderr="";
+    //   Tier 2 = exit 0 + stdout=path + stderr=warnings (emitted by resolver);
+    //   Tier 3 = exit 1 + stdout="" + stderr=error.
+    const remaining = argv.slice(1);
+    let relativePath = null;
+    let projectDir   = process.cwd();
+    let home;
+    for (let i = 0; i < remaining.length; i++) {
+      if      (remaining[i] === '--project' && remaining[i + 1]) { projectDir = remaining[++i]; }
+      else if (remaining[i] === '--home'    && remaining[i + 1]) { home       = remaining[++i]; }
+      else if (!remaining[i].startsWith('-'))                     { relativePath = remaining[i]; }
+    }
+    if (!relativePath) {
+      process.stderr.write('Error: resolve-asset requires a relative path argument\n');
+      process.exit(1);
+    }
+    try {
+      const resolved = resolveClaudeRuntimeAsset(relativePath, { projectDir, home });
+      process.stdout.write(resolved + '\n');
+      process.exit(0);
+    } catch (err) {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
+  } else if (argv[0] === 'run-asset') {
+    // run-asset <relativePath> [--project <dir>] [--home <dir>] [-- ...scriptArgs]
+    // Security constraints: scripts category only; .js extension only; spawnSync shell:false.
+    const remaining   = argv.slice(1);
+    const dashDashIdx = remaining.indexOf('--');
+    const scriptArgs  = dashDashIdx !== -1 ? remaining.slice(dashDashIdx + 1) : [];
+    const beforeDash  = dashDashIdx !== -1 ? remaining.slice(0, dashDashIdx) : remaining;
+    let relativePath  = null;
+    let projectDir    = process.cwd();
+    let home;
+    for (let i = 0; i < beforeDash.length; i++) {
+      if      (beforeDash[i] === '--project' && beforeDash[i + 1]) { projectDir = beforeDash[++i]; }
+      else if (beforeDash[i] === '--home'    && beforeDash[i + 1]) { home       = beforeDash[++i]; }
+      else if (!beforeDash[i].startsWith('-'))                      { relativePath = beforeDash[i]; }
+    }
+    if (!relativePath) {
+      process.stderr.write('Error: run-asset requires a relative path argument\n');
+      process.exit(1);
+    }
+    // Security: only the scripts category is executable
+    if (!relativePath.startsWith('scripts/')) {
+      process.stderr.write(`Error: run-asset is restricted to the scripts category (got: ${relativePath})\n`);
+      process.exit(1);
+    }
+    // Security: .js extension only
+    if (!relativePath.endsWith('.js')) {
+      process.stderr.write(`Error: run-asset only executes .js files (got: ${relativePath})\n`);
+      process.exit(1);
+    }
+    try {
+      const scriptPath = resolveClaudeRuntimeAsset(relativePath, { projectDir, home });
+      const { spawnSync } = require('child_process');
+      const result = spawnSync(process.execPath, [scriptPath, ...scriptArgs], {
+        stdio: 'inherit',
+        shell: false,
+      });
+      if (result.error) {
+        process.stderr.write(`Error spawning script: ${result.error.message}\n`);
+        process.exit(1);
+      }
+      process.exit(result.status || 0);
+    } catch (err) {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
+  } else if (argv[0] === 'list-assets') {
+    // list-assets [--category <name>] [--format json|plain] [--project <dir>] [--home <dir>]
+    // exit 0 always (including when empty); exit 1 on unknown category.
+    // Lists files from the installed runtime root (.claude/<category>/).
+    const { getAssetCategories, getCategoryByName } = require('../lib/asset-catalog');
+    const os         = require('os');
+    const remaining  = argv.slice(1);
+    let category     = null;
+    let format       = 'plain';
+    let projectDir   = process.cwd();
+    let home;
+    for (let i = 0; i < remaining.length; i++) {
+      if      (remaining[i] === '--category' && remaining[i + 1]) { category   = remaining[++i]; }
+      else if (remaining[i] === '--format'   && remaining[i + 1]) { format     = remaining[++i]; }
+      else if (remaining[i] === '--project'  && remaining[i + 1]) { projectDir = remaining[++i]; }
+      else if (remaining[i] === '--home'     && remaining[i + 1]) { home       = remaining[++i]; }
+    }
+    if (category) {
+      const cat = getCategoryByName(category);
+      if (!cat) {
+        const valid = getAssetCategories().map(c => c.name).join(', ');
+        process.stderr.write(`Error: unknown category '${category}'. Valid: ${valid}\n`);
+        process.exit(1);
+      }
+    }
+    // Resolve runtime root: prefer local install if manifest present, else global
+    const effectiveHome    = home       ? path.resolve(home)       : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+    const localClaude      = path.join(effectiveProject, '.claude');
+    const globalClaude     = path.join(effectiveHome,    '.claude');
+    const runtimeRoot = fs.existsSync(path.join(localClaude, '.ai-toolkit-manifest.json'))
+      ? localClaude
+      : fs.existsSync(path.join(globalClaude, '.ai-toolkit-manifest.json'))
+        ? globalClaude
+        : localClaude;  // fallback when not installed — returns empty list
+    const cats = category ? [getCategoryByName(category)] : getAssetCategories();
+    const results = [];
+    for (const cat of cats) {
+      const catDir = path.join(runtimeRoot, cat.name);
+      if (!fs.existsSync(catDir)) continue;
+      const stack = [catDir];
+      while (stack.length > 0) {
+        const dir = stack.pop();
+        for (const entry of fs.readdirSync(dir)) {
+          const full = path.join(dir, entry);
+          if (fs.statSync(full).isDirectory()) {
+            stack.push(full);
+          } else {
+            results.push(path.relative(runtimeRoot, full).replace(/\\/g, '/'));
+          }
+        }
+      }
+    }
+    results.sort();
+    if (format === 'json') {
+      process.stdout.write(JSON.stringify(results, null, 2) + '\n');
+    } else {
+      for (const r of results) process.stdout.write(r + '\n');
+    }
+    process.exit(0);
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
-    await installLocal(argv[0], force);
+    await installLocal(argv[0], force, dryRun);
   } else {
     help();
     process.exit(1);
@@ -796,10 +1543,10 @@ if (require.main === module) {
     expandMappings,
     categorize,
     readInstalledVersion,
-    NEVER_COPY,
     readManifest,
     computeOrphans,
     moveToTrash,
+    trashTimestamp,
     writeManifest,
     CANONICAL_ALLOW,
     CANONICAL_ASK,
@@ -813,5 +1560,8 @@ if (require.main === module) {
     updateGitignore,
     appendLedgerEntry,
     updateLedgerEntry,
+    resolveClaudeRuntimeAsset,
+    runDoctorResolution,
+    validatePurityGuard,
   };
 }

@@ -1,0 +1,11 @@
+[
+  {
+    "agent": "define-feature:define",
+    "phase": "define",
+    "model": "sonnet",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "started_at": "2026-08-12T14:13:50Z",
+    "completed_at": "2026-08-12T14:21:31Z"
+  }
+]

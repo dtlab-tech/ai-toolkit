@@ -22,8 +22,10 @@ describe('expandMappings()', () => {
     expect(result).toEqual([]);
   });
 
-  test('skips files whose basename is in NEVER_COPY (e.g. settings.json)', () => {
-    // Create a directory with settings.json and a regular file
+  test('includes all files in a directory without any exclusion filter (no NEVER_COPY)', () => {
+    // After FTR-015 US-05-BE-02, expandMappings has no exclusion list. The catalog
+    // positive-list (src/claude/<cat>) is the only guard — purity guard enforces it
+    // at the source level, not at copy time.
     const srcDir = path.join(tmpDir, 'src');
     fs.mkdirSync(srcDir);
     fs.writeFileSync(path.join(srcDir, 'settings.json'), '{}');
@@ -33,15 +35,19 @@ describe('expandMappings()', () => {
     const result = expandMappings([{ src: srcDir, dest: destDir }]);
 
     const destPaths = result.map(e => path.basename(e.dest));
-    expect(destPaths).not.toContain('settings.json');
+    expect(destPaths).toContain('settings.json');
     expect(destPaths).toContain('allowed.md');
   });
 
-  test('skips a file-level mapping when src basename is settings.json', () => {
+  test('includes a single-file mapping unconditionally (no NEVER_COPY filter)', () => {
+    // File-level mappings pass through without any basename check.
     const settingsFile = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(settingsFile, '{}');
-    const result = expandMappings([{ src: settingsFile, dest: path.join(tmpDir, 'dest', 'settings.json') }]);
-    expect(result).toEqual([]);
+    const dest = path.join(tmpDir, 'dest', 'settings.json');
+    const result = expandMappings([{ src: settingsFile, dest }]);
+    expect(result).toHaveLength(1);
+    expect(result[0].src).toBe(settingsFile);
+    expect(result[0].dest).toBe(dest);
   });
 
   test('expands a directory mapping into individual file pairs with correct dest paths', () => {

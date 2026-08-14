@@ -2,12 +2,15 @@
 
 ## Sequenza
 
-Questa è la prima di tre idee dipendenti:
+Questa è la prima di sei idee dipendenti dedicate all'esecuzione resiliente:
 
 ```text
 1. Atomic Work Breakdown
-2. Execution Ledger
-3. Task Checkpoints and Resume
+2. Claude Source Layout and Runtime Resolution
+3. Deterministic Estimate Generation
+4. Execution Ledger
+5. Task Checkpoints and Resume
+6. Isolated Parallel Task Execution
 ```
 
 Deve essere implementata per prima perché definisce il task come unità minima, stabile e machine-readable che le feature successive utilizzeranno per tracking, commit e recovery.
@@ -371,4 +374,9 @@ L'obiettivo non è minimizzare il numero di chiamate, ma minimizzare il costo to
 
 ## Dipendenze successive
 
-L'Execution Ledger utilizzerà gli ID e il contratto dei task definiti qui. Task Checkpoints and Resume utilizzerà entrambi.
+Claude Source Layout and Runtime Resolution separerà i sorgenti del toolkit dal runtime
+`.claude` prima delle ulteriori evoluzioni. Deterministic Estimate Generation utilizzerà il
+JSON autorevole prodotto qui. L'Execution Ledger utilizzerà gli ID e il contratto dei task;
+Task Checkpoints and Resume li renderà eseguibili e recuperabili singolarmente. Isolated
+Parallel Task Execution userà lo stesso grafo task-level per selezionare più task ready senza
+perdere checkpoint e tracciabilità.

@@ -32,7 +32,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const PM_PHASE2_PATH = path.join(__dirname, '..', '..', '.claude', 'workflows', 'pm-phase2.js');
+const PM_PHASE2_PATH = path.join(__dirname, '..', '..', 'src', 'claude', 'workflows', 'pm-phase2.js');
 
 let source;
 
