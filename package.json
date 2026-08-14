@@ -8,12 +8,8 @@
     "CHANGELOG.md",
     "README.md",
     "CLAUDE.global.md",
-    ".claude/agents",
-    ".claude/commands",
-    ".claude/workflows",
-    ".claude/skills",
-    ".claude/scripts/*.js",
-    ".claude/scripts/.gitkeep",
+    "src/claude",
+    "lib",
     "bin"
   ],
   "bin": {
