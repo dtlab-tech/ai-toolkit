@@ -1404,6 +1404,51 @@ async function main() {
       process.stderr.write(err.message + '\n');
       process.exit(1);
     }
+  } else if (argv[0] === 'run-asset') {
+    // run-asset <relativePath> [--project <dir>] [--home <dir>] [-- ...scriptArgs]
+    // Security constraints: scripts category only; .js extension only; spawnSync shell:false.
+    const remaining   = argv.slice(1);
+    const dashDashIdx = remaining.indexOf('--');
+    const scriptArgs  = dashDashIdx !== -1 ? remaining.slice(dashDashIdx + 1) : [];
+    const beforeDash  = dashDashIdx !== -1 ? remaining.slice(0, dashDashIdx) : remaining;
+    let relativePath  = null;
+    let projectDir    = process.cwd();
+    let home;
+    for (let i = 0; i < beforeDash.length; i++) {
+      if      (beforeDash[i] === '--project' && beforeDash[i + 1]) { projectDir = beforeDash[++i]; }
+      else if (beforeDash[i] === '--home'    && beforeDash[i + 1]) { home       = beforeDash[++i]; }
+      else if (!beforeDash[i].startsWith('-'))                      { relativePath = beforeDash[i]; }
+    }
+    if (!relativePath) {
+      process.stderr.write('Error: run-asset requires a relative path argument\n');
+      process.exit(1);
+    }
+    // Security: only the scripts category is executable
+    if (!relativePath.startsWith('scripts/')) {
+      process.stderr.write(`Error: run-asset is restricted to the scripts category (got: ${relativePath})\n`);
+      process.exit(1);
+    }
+    // Security: .js extension only
+    if (!relativePath.endsWith('.js')) {
+      process.stderr.write(`Error: run-asset only executes .js files (got: ${relativePath})\n`);
+      process.exit(1);
+    }
+    try {
+      const scriptPath = resolveClaudeRuntimeAsset(relativePath, { projectDir, home });
+      const { spawnSync } = require('child_process');
+      const result = spawnSync(process.execPath, [scriptPath, ...scriptArgs], {
+        stdio: 'inherit',
+        shell: false,
+      });
+      if (result.error) {
+        process.stderr.write(`Error spawning script: ${result.error.message}\n`);
+        process.exit(1);
+      }
+      process.exit(result.status || 0);
+    } catch (err) {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force);
   } else {
