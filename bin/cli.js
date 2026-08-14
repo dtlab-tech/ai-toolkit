@@ -1290,7 +1290,9 @@ async function installGlobal(force, dryRun = false) {
     const homedir = require('os').homedir();
     const target  = path.join(homedir, '.claude');
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
-    if (!dryRun) await checkVersion(target, force);
+    // destRoot is homedir so helpers (manifest, version stamp, trash) resolve to
+    // ~/.claude/... rather than ~/.claude/.claude/... (FIX: global install root path)
+    if (!dryRun) await checkVersion(homedir, force);
     // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
     const { getAssetCategories } = require('../lib/asset-catalog');
     const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
@@ -1302,9 +1304,9 @@ async function installGlobal(force, dryRun = false) {
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force, target, dryRun);
+    await runInstall('global Claude folder', mappings, force, homedir, dryRun);
     if (dryRun) return;
-    writeInstalledVersion(target);
+    writeInstalledVersion(homedir);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     checkSpawnDepth(homedir);
     console.log(divider());
