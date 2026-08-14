@@ -2,15 +2,20 @@
 
 ## Sequenza
 
-Questa è la terza di tre idee dipendenti:
+Questa è la quinta di sei idee dipendenti:
 
 ```text
 1. Atomic Work Breakdown
-2. Execution Ledger
-3. Task Checkpoints and Resume
+2. Claude Source Layout and Runtime Resolution
+3. Deterministic Estimate Generation
+4. Execution Ledger
+5. Task Checkpoints and Resume
+6. Isolated Parallel Task Execution
 ```
 
-Dipende dal contratto strutturato dei task e dal modulo execution ledger. Introduce l'esecuzione seriale, la verifica, il commit e il recovery al livello del singolo task.
+Dipende dal contratto strutturato dei task e dal modulo execution ledger. Introduce
+l'esecuzione task-by-task, la verifica, il commit e il recovery al livello del singolo task.
+La prima versione utilizza un solo worker, ma il contratto dell'executor nasce concurrency-aware.
 
 ## Contesto
 
@@ -38,7 +43,19 @@ La perdita massima dopo un'interruzione deve essere limitata al solo task `activ
 
 ## Decisione sul parallelismo
 
-La prima versione esegue i task sequenzialmente nello stesso worktree.
+L'esecuzione è task-by-task, non necessariamente seriale. La concorrenza è governata da un
+parametro deterministico:
+
+```json
+{
+  "execution": {
+    "maxConcurrency": 1,
+    "isolationStrategy": "shared-worktree"
+  }
+}
+```
+
+La prima versione implementa `maxConcurrency: 1` nello stesso worktree:
 
 ```text
 Task 1 → verifica → review → commit
@@ -46,7 +63,7 @@ Task 2 → verifica → review → commit
 Task 3 → verifica → review → commit
 ```
 
-Questa scelta sacrifica throughput ma garantisce:
+Questa baseline garantisce:
 
 - attribuzione non ambigua delle modifiche;
 - staging atomico;
@@ -56,7 +73,18 @@ Questa scelta sacrifica throughput ma garantisce:
 - recovery deterministico;
 - assenza di scritture concorrenti sul ledger.
 
-Il parallelismo potrà essere reintrodotto in futuro tramite worktree Git isolati.
+L'interface dell'executor deve tuttavia accettare fin dall'inizio `maxConcurrency` e registrare
+nel ledger valore richiesto ed effettivo. In questa feature:
+
+- il default è `1`;
+- l'unico valore effettivamente supportato è `1`;
+- un valore maggiore di `1` produce un errore esplicito `parallel-isolation-not-available`;
+- il valore non viene ignorato, ridotto o reinterpretato silenziosamente;
+- l'LLM non può modificare la concorrenza;
+- la selezione del prossimo task è deterministica e basata sul grafo `dependsOn`.
+
+Isolated Parallel Task Execution abiliterà valori maggiori di `1` tramite worktree Git
+isolati, mantenendo invariato il protocollo task-level descritto qui.
 
 ## Modello di stato
 
@@ -88,7 +116,9 @@ Lo stato viene ricostruito dagli eventi dell'execution ledger e, per `resolved` 
 
 ### 1. Selezione
 
-L'orchestratore seleziona il primo task `pending` con dipendenze soddisfatte.
+L'orchestratore JavaScript costruisce deterministicamente la ready queue e seleziona il primo
+task `pending` con dipendenze soddisfatte. La funzione di selezione riceve
+`maxConcurrency`, anche se in questa feature lo slot disponibile è sempre uno.
 
 ### 2. Presa in carico
 
@@ -384,6 +414,7 @@ const {
   checkpointTask,
   closePhase,
   recover,
+  executeReadyTasks,
 } = require('../lib/task-checkpoints');
 ```
 
@@ -396,6 +427,17 @@ Il modulo nasconde:
 - riconciliazione con Git;
 - gestione degli stati intermedi;
 - diagnosi del worktree.
+- ready queue deterministica e applicazione del limite di concorrenza.
+
+Interface indicativa dell'executor:
+
+```javascript
+executeReadyTasks({
+  featureDir,
+  maxConcurrency: 1,
+  isolationStrategy: 'shared-worktree'
+});
+```
 
 L'orchestratore utilizza l'interface senza reimplementare queste regole.
 
@@ -421,7 +463,7 @@ Push configurabile ogni `N` checkpoint o backup remoto appartengono a un'evoluzi
 ## Criteri di accettazione
 
 1. Ogni task viene eseguito mediante una sola invocazione agente.
-2. I task vengono eseguiti sequenzialmente nel worktree condiviso.
+2. Il contratto dell'executor espone `maxConcurrency`, con default `1`.
 3. `task_activated` viene persistito prima dello spawn.
 4. Ogni attempt registra stato, token e durata.
 5. Verifica e review mirate avvengono prima del commit.
@@ -440,10 +482,15 @@ Push configurabile ogni `N` checkpoint o backup remoto appartengono a un'evoluzi
 18. Nessun LLM decide lo stato Git o scrive direttamente il ledger.
 19. Non viene eseguito push automatico per task.
 20. I test coprono commit, trailer, recovery, replan e worktree sporco.
+21. La prima versione rifiuta esplicitamente `maxConcurrency > 1`.
+22. Concorrenza richiesta ed effettiva vengono registrate nell'execution ledger.
+23. La ready queue è deterministica e rispetta tutte le dipendenze task-level.
+24. Nessun agente LLM può modificare ordine, stato o limite di concorrenza.
 
 ## Incluso
 
-- esecuzione seriale per task;
+- esecuzione task-by-task con un worker effettivo;
+- contratto concurrency-aware e `maxConcurrency` con default `1`;
 - una invocazione per task;
 - verifica e review mirate;
 - commit per task;
@@ -462,6 +509,7 @@ Push configurabile ogni `N` checkpoint o backup remoto appartengono a un'evoluzi
 ## Escluso
 
 - worktree paralleli;
+- supporto effettivo a `maxConcurrency > 1`;
 - push per task;
 - backup remoto;
 - checkpoint intermedi dentro un task;
@@ -475,3 +523,4 @@ Push configurabile ogni `N` checkpoint o backup remoto appartengono a un'evoluzi
 - utilizza `{PREFIX}-Work-Breakdown.json` prodotto da Atomic Work Breakdown;
 - utilizza `{PREFIX}-execution-ledger.jsonl` e il relativo modulo;
 - ricava il dossier da `feature.md`, senza dipendere obbligatoriamente dal resolver gerarchico.
+- prepara il contratto utilizzato da Isolated Parallel Task Execution.

@@ -93,9 +93,19 @@ Configurazione iniziale proposta:
     "currentDirectory": "current",
     "ideasDirectory": "ideas",
     "language": "en"
+  },
+  "execution": {
+    "maxConcurrency": 1,
+    "isolationStrategy": "shared-worktree"
   }
 }
 ```
+
+`execution.maxConcurrency` esprime il limite richiesto di task contemporaneamente attivi.
+Il default `1` abilita il worktree condiviso e l'esecuzione task-by-task seriale. Valori
+maggiori richiedono la capability Isolated Parallel Task Execution e la strategia
+`git-worktree`; se la capability non è disponibile, la configurazione deve fallire in modo
+esplicito senza ridurre silenziosamente il valore.
 
 ### Configurazione globale
 
@@ -151,6 +161,8 @@ documentation.featuresDirectory = features       ← default
 documentation.currentDirectory  = current        ← default
 documentation.ideasDirectory    = ideas          ← default
 documentation.language          = en             ← default/global
+execution.maxConcurrency        = 1              ← default
+execution.isolationStrategy     = shared-worktree ← default
 ```
 
 Percorsi derivati:
@@ -167,6 +179,17 @@ In un progetto senza override:
 docs/features
 docs/current
 docs/ideas
+```
+
+Esempio di override per un progetto abilitato all'esecuzione parallela isolata:
+
+```json
+{
+  "execution": {
+    "maxConcurrency": 3,
+    "isolationStrategy": "git-worktree"
+  }
+}
 ```
 
 ## Resolver JavaScript
@@ -303,6 +326,10 @@ La prima versione deve validare almeno:
 - assenza di segmenti `..`;
 - assenza di path assoluti;
 - contenimento dei percorsi risultanti nel progetto.
+- `execution.maxConcurrency` intero positivo;
+- `execution.isolationStrategy` in `shared-worktree | git-worktree`;
+- `shared-worktree` compatibile soltanto con `maxConcurrency = 1`;
+- `maxConcurrency > 1` compatibile soltanto con la capability `git-worktree` disponibile.
 
 Esempio di errore:
 
@@ -491,6 +518,8 @@ Casi minimi:
 - preservazione degli altri override;
 - nessuna scrittura durante `resolveConfig`;
 - serializzazione stabile e rilettura dopo la scrittura.
+- validazione di `execution.maxConcurrency` e della strategia di isolamento;
+- rifiuto di `maxConcurrency > 1` quando la capability parallela non è disponibile.
 
 ## Criteri di accettazione iniziali
 
@@ -508,6 +537,8 @@ La prima implementazione può considerarsi completata quando:
 10. i normali progetti continuano a utilizzare `docs` senza configurazione aggiuntiva;
 11. i test coprono risoluzione, validazione e aggiornamento degli override;
 12. nessun modello LLM viene utilizzato per risolvere, validare o scrivere la configurazione.
+13. `execution.maxConcurrency` ha default globale `1` ed è sovrascrivibile per progetto.
+14. combinazioni non sicure tra concorrenza e isolamento vengono rifiutate esplicitamente.
 
 ## Perimetro della prima feature
 
@@ -518,6 +549,7 @@ La prima implementazione può considerarsi completata quando:
 - configurazione di progetto opzionale;
 - merge gerarchico;
 - configurazione iniziale dei percorsi documentali;
+- configurazione dell'esecuzione con `maxConcurrency` e `isolationStrategy`;
 - provenienza dei valori;
 - validazione dei path;
 - resolver JavaScript/CommonJS;
