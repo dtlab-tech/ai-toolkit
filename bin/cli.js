@@ -1272,6 +1272,13 @@ async function installLocal(targetDir, force, dryRun = false) {
   // Build mappings from asset catalog: each category copies src/claude/<cat> → .claude/<cat>
   const { getAssetCategories } = require('../lib/asset-catalog');
   const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
+  // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+  const purityViolations = validatePurityGuard(srcClaudeDir);
+  if (purityViolations.length > 0) {
+    process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
+    for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
+    process.exit(1);
+  }
   const mappings = [
     ...getAssetCategories().map(cat => ({
       src:  path.join(srcClaudeDir, cat.name),
@@ -1304,6 +1311,13 @@ async function installGlobal(force, dryRun = false) {
     // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
     const { getAssetCategories } = require('../lib/asset-catalog');
     const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
+    // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+    const purityViolations = validatePurityGuard(srcClaudeDir);
+    if (purityViolations.length > 0) {
+      process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
+      for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
+      process.exit(1);
+    }
     const mappings = [
       ...getAssetCategories().map(cat => ({
         src:  path.join(srcClaudeDir, cat.name),
