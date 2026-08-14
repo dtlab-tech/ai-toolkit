@@ -261,10 +261,20 @@ function computeOrphans(oldFiles, newFiles) {
     .filter(f => !newSet.has(f));
 }
 
+// Timestamp used for the current install/upgrade session — set once so all orphans
+// from the same run land in the same subdirectory, making the trash auditable.
+let _trashTimestamp = null;
+function trashTimestamp() {
+  if (!_trashTimestamp) _trashTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return _trashTimestamp;
+}
+
 function moveToTrash(destRoot, relativePath) {
   const source = path.join(destRoot, relativePath);
   if (!fs.existsSync(source)) return;
-  const trashPath = path.join(destRoot, '.claude', '.ai-toolkit-trash', relativePath);
+  // Each upgrade session gets its own timestamped subdirectory so repeated upgrades
+  // never overwrite previously trashed files. The timestamp is stable for the session.
+  const trashPath = path.join(destRoot, '.claude', '.ai-toolkit-trash', trashTimestamp(), relativePath);
   ensureDir(trashPath);
   try {
     fs.renameSync(source, trashPath);
@@ -1536,6 +1546,7 @@ if (require.main === module) {
     readManifest,
     computeOrphans,
     moveToTrash,
+    trashTimestamp,
     writeManifest,
     CANONICAL_ALLOW,
     CANONICAL_ASK,

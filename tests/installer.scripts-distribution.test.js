@@ -340,8 +340,11 @@ describe('installer.scripts-distribution — Group 8: upgrade from contaminated 
   });
 
   test('stale test file is moved to trash (orphan detected and removed)', () => {
-    const trashPath = path.join(tmpDir, '.claude', '.ai-toolkit-trash', STALE_REL);
-    expect(fs.existsSync(trashPath)).toBe(true);
+    // moveToTrash places files under .ai-toolkit-trash/<ISO-timestamp>/<relative-path>.
+    // Walk the trash tree to find the file without hard-coding the timestamp.
+    const trashBase = path.join(tmpDir, '.claude', '.ai-toolkit-trash');
+    const trashFiles = walkDirSync(trashBase);
+    expect(trashFiles.some(f => f.replace(/\\/g, '/').endsWith('legacy.test.js'))).toBe(true);
   });
 
   test('stale test file is no longer at its original installed location', () => {
