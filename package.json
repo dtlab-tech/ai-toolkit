@@ -17,6 +17,8 @@
   },
   "scripts": {
     "prepublishOnly": "npm pack --dry-run",
+    "prepack": "node bin/cli.js validate-purity",
+    "toolkit:validate-purity": "node bin/cli.js validate-purity",
     "test": "jest --bail",
     "test:coverage": "jest --coverage"
   },
