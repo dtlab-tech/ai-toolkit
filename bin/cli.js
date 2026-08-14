@@ -1281,6 +1281,32 @@ function runValidatePurity(sourceDir) {
   }
 }
 
+// ── distributable asset mapping ───────────────────────────────────────────────
+
+// Assets that are toolkit-internal and must NEVER be distributed to consumer
+// projects. Keyed by category name; value is a Set of item names to skip.
+// See AGENTS.md hard constraints.
+const TOOLKIT_INTERNAL_ASSETS = {
+  agents: new Set(['install-toolkit.md']),
+  skills: new Set(['install-toolkit']),
+};
+
+// Build per-item mappings for a single category, skipping any items listed in
+// TOOLKIT_INTERNAL_ASSETS. For categories without internal items the mapping
+// covers the whole source directory (identical to the previous whole-dir approach).
+function buildCategoryMappings(srcCatDir, destCatDir, catName) {
+  if (!fs.existsSync(srcCatDir)) return [];
+  const internalItems = TOOLKIT_INTERNAL_ASSETS[catName];
+  if (!internalItems) {
+    // No exclusions for this category — map the whole directory as before.
+    return [{ src: srcCatDir, dest: destCatDir }];
+  }
+  // Enumerate items individually so we can exclude toolkit-internal entries.
+  return fs.readdirSync(srcCatDir)
+    .filter(item => !internalItems.has(item))
+    .map(item => ({ src: path.join(srcCatDir, item), dest: path.join(destCatDir, item) }));
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force, dryRun = false) {
@@ -1299,10 +1325,13 @@ async function installLocal(targetDir, force, dryRun = false) {
     process.exit(1);
   }
   const mappings = [
-    ...getAssetCategories().map(cat => ({
-      src:  path.join(srcClaudeDir, cat.name),
-      dest: path.join(targetDir, '.claude', cat.name),
-    })),
+    ...getAssetCategories().flatMap(cat =>
+      buildCategoryMappings(
+        path.join(srcClaudeDir, cat.name),
+        path.join(targetDir, '.claude', cat.name),
+        cat.name
+      )
+    ),
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
@@ -1338,10 +1367,13 @@ async function installGlobal(force, dryRun = false) {
       process.exit(1);
     }
     const mappings = [
-      ...getAssetCategories().map(cat => ({
-        src:  path.join(srcClaudeDir, cat.name),
-        dest: path.join(target, cat.name),
-      })),
+      ...getAssetCategories().flatMap(cat =>
+        buildCategoryMappings(
+          path.join(srcClaudeDir, cat.name),
+          path.join(target, cat.name),
+          cat.name
+        )
+      ),
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];

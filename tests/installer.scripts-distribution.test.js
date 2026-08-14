@@ -407,3 +407,75 @@ describe('installer.scripts-distribution — Group 9: npm pack excludes test fil
     expect(packOutput).toContain('wb-render.js');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group 10: install-toolkit excluded from distributed assets
+//
+// Per AGENTS.md hard constraints and FTR-015 FIX-7:
+//   - install-toolkit agent (agents/install-toolkit.md) is toolkit-internal and
+//     must NOT be distributed to consumer projects.
+//   - install-toolkit skill (skills/install-toolkit/) is toolkit-internal and
+//     must NOT be distributed to consumer projects.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('installer.scripts-distribution — Group 10: install-toolkit excluded from distribution', () => {
+  let tmpDir;
+  let installResult;
+
+  beforeAll(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-toolkit-no-itk-'));
+    installResult = spawnSync(
+      process.execPath,
+      [CLI_PATH, '--local', tmpDir, '--force'],
+      { encoding: 'utf8', cwd: ROOT }
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('install exits with code 0', () => {
+    expect(installResult.status).toBe(0);
+  });
+
+  test('install-toolkit agent (agents/install-toolkit.md) is NOT installed to destination', () => {
+    expect(
+      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'install-toolkit.md'))
+    ).toBe(false);
+  });
+
+  test('install-toolkit skill directory (skills/install-toolkit/) is NOT installed to destination', () => {
+    expect(
+      fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'install-toolkit'))
+    ).toBe(false);
+  });
+
+  test('install-toolkit agent is absent from the installed manifest', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json'), 'utf8')
+    );
+    const hasAgent = manifest.files.some(f => f.includes('agents/install-toolkit.md'));
+    expect(hasAgent).toBe(false);
+  });
+
+  test('install-toolkit skill is absent from the installed manifest', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json'), 'utf8')
+    );
+    const hasSkill = manifest.files.some(f => f.includes('skills/install-toolkit'));
+    expect(hasSkill).toBe(false);
+  });
+
+  test('other agents are still installed (exclusion is targeted)', () => {
+    expect(
+      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'developer-backend.md'))
+    ).toBe(true);
+  });
+
+  test('other skills are still installed (exclusion is targeted)', () => {
+    expect(
+      fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'implement-feature', 'SKILL.md'))
+    ).toBe(true);
+  });
+});
