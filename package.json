@@ -19,7 +19,7 @@
     "prepublishOnly": "npm pack --dry-run",
     "prepack": "node bin/cli.js validate-purity",
     "toolkit:validate-purity": "node bin/cli.js validate-purity",
-    "toolkit:dev-install-global": "node bin/cli.js --global --dry-run && node bin/cli.js --global",
+    "toolkit:dev-install-global": "node bin/cli.js --global --dry-run && node bin/cli.js --global && node bin/cli.js doctor resolution",
     "test": "jest --bail",
     "test:cli": "jest --bail --testPathPattern=tests/cli/",
     "test:frontmatter": "jest --bail --testPathPattern=tests/frontmatter/",
