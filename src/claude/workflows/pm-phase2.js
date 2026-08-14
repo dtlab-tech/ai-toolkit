@@ -138,7 +138,7 @@ const beforeValidate = budget.spent()
 try {
   const validateWrapper = await agent(
     `Run this command and return the result as structured output:\n` +
-    `node .claude/scripts/wb-validate.js "${featureDir}/${prefix}-Work-Breakdown.json" "${featureDir}/${prefix}-Requirements.md"\n\n` +
+    `ai-toolkit run-asset scripts/wb-validate.js -- "${featureDir}/${prefix}-Work-Breakdown.json" "${featureDir}/${prefix}-Requirements.md"\n\n` +
     `Capture exitCode (integer), stdout (string), stderr (string). Return all three.`,
     {
       label:  'wb-validate',
@@ -253,7 +253,7 @@ if (!canRender) {
   try {
     renderResult = await agent(
       `Run this command and return the result as structured output:\n` +
-      `node .claude/scripts/wb-render.js "${featureDir}/${prefix}-Work-Breakdown.json" "${prefix}"\n\n` +
+      `ai-toolkit run-asset scripts/wb-render.js -- "${featureDir}/${prefix}-Work-Breakdown.json" "${prefix}"\n\n` +
       `Capture exitCode (integer), stdout (string), stderr (string).\n` +
       `Resolve the expected output paths:\n` +
       `  markdownPath = "${featureDir}/${prefix}-Work-Breakdown.md"\n` +
