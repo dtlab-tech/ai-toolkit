@@ -148,49 +148,40 @@ describe('installer.scripts-distribution — Group 4: install-toolkit.md delegat
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Group 5: isDistributable — source structure (static)
+// Group 5: no exclusion filters — catalog positive-list only (static)
 //
-// Verifies that the single-source-of-truth filter (isDistributable / NEVER_DIST_SEGMENTS)
-// is correctly wired into expandMappings for both the directory-walk branch and the
-// single-file branch. A regression here would mean expandMappings ships test files
-// again without any test turning red.
+// After FTR-015 US-05-TASK-BE-02, isDistributable(), NEVER_DIST_SEGMENTS, and
+// NEVER_COPY have been removed. The purity guard on src/claude/ (validatePurityGuard)
+// prevents test files from ever entering the source tree, making runtime exclusion
+// filters redundant. These tests are regression guards: if an exclusion filter is
+// re-introduced, one of the tests below will fail.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('installer.scripts-distribution — Group 5: isDistributable source structure', () => {
-  test('source defines isDistributable function', () => {
-    expect(CLI_SRC).toMatch(/function isDistributable\s*\(/);
+describe('installer.scripts-distribution — Group 5: no exclusion filters (catalog positive-list only)', () => {
+  test('isDistributable function has been removed from the CLI source', () => {
+    expect(CLI_SRC).not.toMatch(/function isDistributable\s*\(/);
   });
 
-  test('NEVER_DIST_SEGMENTS is defined and includes the tests/ path segment', () => {
-    expect(CLI_SRC).toMatch(/NEVER_DIST_SEGMENTS\s*=\s*\[/);
-    expect(CLI_SRC).toContain("'.claude/scripts/tests/'");
+  test('NEVER_DIST_SEGMENTS constant has been removed from the CLI source', () => {
+    expect(CLI_SRC).not.toMatch(/NEVER_DIST_SEGMENTS/);
   });
 
-  test('isDistributable body excludes *.test.js files under .claude/scripts/', () => {
-    const fnStart = CLI_SRC.indexOf('function isDistributable');
-    const fnEnd   = CLI_SRC.indexOf('\n}', fnStart) + 2;
-    const fnBody  = CLI_SRC.slice(fnStart, fnEnd);
-    expect(fnBody).toContain('.test.js');
-    expect(fnBody).toContain('.claude/scripts/');
+  test('NEVER_COPY constant has been removed from the CLI source', () => {
+    expect(CLI_SRC).not.toMatch(/\bNEVER_COPY\b/);
   });
 
-  test('expandMappings calls isDistributable for directory-walk entries', () => {
-    const fnStart = CLI_SRC.indexOf('function expandMappings');
-    const fnEnd   = CLI_SRC.indexOf('\n}', fnStart) + 2;
-    const dirBranchStart = CLI_SRC.indexOf('for (const entry of walkDir', fnStart);
-    const dirBranchEnd   = fnEnd;
-    const dirBranch = CLI_SRC.slice(dirBranchStart, dirBranchEnd);
-    expect(dirBranch).toContain('isDistributable');
-  });
-
-  test('expandMappings calls isDistributable for single-file entries (else branch)', () => {
-    // Both the directory branch and the else/single-file branch must call isDistributable;
-    // missing either one leaves a gap that allows test files to slip through.
+  test('expandMappings does not call isDistributable (no exclusion filter in directory branch)', () => {
     const fnStart = CLI_SRC.indexOf('function expandMappings');
     const fnEnd   = CLI_SRC.indexOf('\n}', fnStart) + 2;
     const fnBody  = CLI_SRC.slice(fnStart, fnEnd);
-    const callCount = (fnBody.match(/isDistributable/g) || []).length;
-    expect(callCount).toBeGreaterThanOrEqual(2);
+    expect(fnBody).not.toContain('isDistributable');
+  });
+
+  test('expandMappings does not reference NEVER_COPY (no exclusion filter in single-file branch)', () => {
+    const fnStart = CLI_SRC.indexOf('function expandMappings');
+    const fnEnd   = CLI_SRC.indexOf('\n}', fnStart) + 2;
+    const fnBody  = CLI_SRC.slice(fnStart, fnEnd);
+    expect(fnBody).not.toContain('NEVER_COPY');
   });
 });
 
