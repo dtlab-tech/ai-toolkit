@@ -1353,6 +1353,18 @@ async function main() {
     await installLocal(argv[1] || '.', force, dryRun);
   } else if (argv[0] === '--global') {
     await installGlobal(force, dryRun);
+  } else if (argv[0] === 'install') {
+    // Subcommand aliases: `install --project <dir>` ≡ `--local <dir>`
+    //                     `install --global`         ≡ `--global`
+    const sub = argv[1];
+    if (sub === '--project') {
+      await installLocal(argv[2] || '.', force, dryRun);
+    } else if (sub === '--global') {
+      await installGlobal(force, dryRun);
+    } else {
+      // No sub-flag: install into current directory (same as bare invocation)
+      await installLocal(sub && !sub.startsWith('-') ? sub : '.', force, dryRun);
+    }
   } else if (argv[0] === 'help' || argv[0] === '--help') {
     help();
   } else if (argv[0] === 'merge-allowlist') {
