@@ -1191,6 +1191,68 @@ function runDoctorResolution(options) {
   L('');
 }
 
+// ── validatePurityGuard ───────────────────────────────────────────────────────
+
+// US-05-TASK-BE-03 (FTR-015):
+// Rejects any *.test.js files or blocked directory segments under sourceDir.
+// Called by the installer before copying and by the prepack lifecycle hook.
+//
+// Blocked file patterns: *.test.js
+// Blocked directory names: tests, fixtures, mocks, helpers
+//
+// Returns an array of violation strings (empty = clean).
+// Never modifies the filesystem.
+const PURITY_BLOCKED_DIRS  = new Set(['tests', 'fixtures', 'mocks', 'helpers']);
+const PURITY_BLOCKED_EXTS  = ['.test.js'];
+
+function validatePurityGuard(sourceDir) {
+  const violations = [];
+
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    let entries;
+    try { entries = fs.readdirSync(dir); } catch (_) { return; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry);
+      let stat;
+      try { stat = fs.statSync(full); } catch (_) { continue; }
+      if (stat.isDirectory()) {
+        if (PURITY_BLOCKED_DIRS.has(entry)) {
+          violations.push(`Blocked directory: ${full}`);
+        } else {
+          walk(full);
+        }
+      } else {
+        if (PURITY_BLOCKED_EXTS.some(ext => entry.endsWith(ext))) {
+          violations.push(`Blocked file: ${full}`);
+        }
+      }
+    }
+  }
+
+  walk(sourceDir);
+  return violations;
+}
+
+// validate-purity CLI command entry point.
+// Scans sourceDir (defaults to src/claude/) for test or fixture contamination.
+// Exit 0 = clean. Exit 1 = violations found. Violations written to stderr.
+function runValidatePurity(sourceDir) {
+  const effectiveDir = sourceDir
+    ? path.resolve(sourceDir)
+    : path.join(packageRoot, 'src', 'claude');
+
+  const violations = validatePurityGuard(effectiveDir);
+  if (violations.length === 0) {
+    process.stdout.write(`Purity guard: PASS — no test files or blocked dirs under ${effectiveDir}\n`);
+    process.exit(0);
+  } else {
+    process.stderr.write(`Purity guard: FAIL — ${violations.length} violation(s) under ${effectiveDir}:\n`);
+    for (const v of violations) process.stderr.write(`  ${v}\n`);
+    process.exit(1);
+  }
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force) {
@@ -1314,6 +1376,8 @@ async function main() {
     const home       = homeIdx    !== -1 ? remaining[homeIdx    + 1] : undefined;
     runDoctorResolution({ projectDir, home });
     process.exit(0);
+  } else if (argv[0] === 'validate-purity') {
+    runValidatePurity(argv[1]);
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force);
   } else {
@@ -1354,5 +1418,6 @@ if (require.main === module) {
     updateLedgerEntry,
     resolveClaudeRuntimeAsset,
     runDoctorResolution,
+    validatePurityGuard,
   };
 }
