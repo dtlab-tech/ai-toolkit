@@ -20,6 +20,9 @@
     "prepack": "node bin/cli.js validate-purity",
     "toolkit:validate-purity": "node bin/cli.js validate-purity",
     "test": "jest --bail",
+    "test:cli": "jest --bail --testPathPattern=tests/cli/",
+    "test:frontmatter": "jest --bail --testPathPattern=tests/frontmatter/",
+    "test:regression": "jest --bail --testPathPattern=tests/regression/",
     "test:coverage": "jest --coverage"
   },
   "devDependencies": {
