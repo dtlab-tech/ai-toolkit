@@ -288,7 +288,7 @@ function moveToTrash(destRoot, relativePath) {
   }
 }
 
-function writeManifest(destRoot, fileList) {
+function writeManifest(destRoot, fileList, installationMode) {
   const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
   const trashDir = path.join(destRoot, '.claude', '.ai-toolkit-trash');
   const filtered = fileList.filter(rel => {
@@ -298,6 +298,7 @@ function writeManifest(destRoot, fileList) {
   const manifest = {
     version: TOOLKIT_VERSION,
     installedAt: new Date().toISOString(),
+    installationMode: installationMode,
     files: filtered.map(f => f.replace(/\\/g, '/')),
   };
   try {
@@ -310,7 +311,12 @@ function writeManifest(destRoot, fileList) {
 
 // ── install ───────────────────────────────────────────────────────────────────
 
-async function runInstall(label, mappings, force, destRoot, dryRun = false) {
+async function runInstall(label, mappings, force, destRoot, dryRun = false, installationMode) {
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  // Catalog runtime-dir prefixes (e.g. '.claude/agents/') — only these paths
+  // belong in the manifest. Documentation and CLAUDE.md are excluded.
+  const catalogPrefixes = getAssetCategories().map(c => c.runtimeDir.replace(/\\/g, '/') + '/');
+
   const files    = expandMappings(mappings);
   const entries  = categorize(files);
 
@@ -320,7 +326,9 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
 
   // ── prune phase (before file copy) ───────────────────────────────────────────
   const oldManifest = readManifest(destRoot);
-  const newFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
+  const allFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
+  // Restrict manifest entries to catalog runtime assets only (no docs, no CLAUDE.md).
+  const newFileSet  = allFileSet.filter(rel => catalogPrefixes.some(p => rel.startsWith(p)));
   const orphans     = computeOrphans(oldManifest.files, newFileSet);
 
   const existingOrphans = orphans.filter(o => fs.existsSync(path.join(destRoot, o)));
@@ -403,7 +411,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
 
   if (modified.length === 0) {
     console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
-    writeManifest(destRoot, newFileSet);
+    writeManifest(destRoot, newFileSet, installationMode);
     return;
   }
 
@@ -414,7 +422,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
       fs.copyFileSync(e.src, e.dest);
       console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
-    writeManifest(destRoot, newFileSet);
+    writeManifest(destRoot, newFileSet, installationMode);
     return;
   }
 
@@ -443,7 +451,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
     `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
   );
 
-  writeManifest(destRoot, newFileSet);
+  writeManifest(destRoot, newFileSet, installationMode);
 }
 
 // ── subagent spawn-depth check (verify & advise only — never write) ────────────
@@ -1153,6 +1161,8 @@ function runDoctorResolution(options) {
   // ── Action Items ────────────────────────────────────────────────────────────
   H('Action Items');
   const actions = [];
+  let manifestSchemaProblematic = false;
+
   if (mode === 'both') {
     actions.push(`${warnS}  Choose one: delete local or global installation to resolve ambiguity`);
   }
@@ -1166,8 +1176,23 @@ function runDoctorResolution(options) {
       actions.push(`${warnS}  Version mismatch: run 'npm run toolkit:dev-install-global' to update`);
     }
     const mInfo = readManifestInfo(effectiveRoot);
-    if (mInfo.status !== 'present') {
+    if (mInfo.status === 'corrupt') {
+      manifestSchemaProblematic = true;
+      actions.push(`${cross}  Manifest schema invalid: file is corrupt (invalid JSON)`);
+    } else if (mInfo.status === 'missing') {
+      manifestSchemaProblematic = true;
       actions.push(`${warnS}  Manifest is ${mInfo.status}. Run the installer to regenerate.`);
+    } else if (mInfo.status === 'present' && mInfo.data) {
+      // Check required manifest fields (including installationMode).
+      const required = ['version', 'installedAt', 'installationMode', 'files'];
+      const missing = required.filter(f => mInfo.data[f] === undefined);
+      if (missing.length > 0) {
+        manifestSchemaProblematic = true;
+        for (const f of missing) {
+          actions.push(`${cross}  Manifest schema invalid: missing required field '${f}'`);
+        }
+        actions.push(`${warnS}  Run the installer to regenerate the manifest with all required fields.`);
+      }
     }
   }
   if (actions.length === 0) {
@@ -1179,12 +1204,14 @@ function runDoctorResolution(options) {
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   H('Summary');
-  const overallOk     = mode === 'local-only' || mode === 'global-only';
+  // READY only when installation mode is valid (single installation) AND manifest is schema-valid.
+  const overallOk     = (mode === 'local-only' || mode === 'global-only') && !manifestSchemaProblematic;
   const overallStatus = overallOk ? 'READY' : 'PROBLEMATIC';
   L(`  Status: ${clr(overallOk ? 'green' : 'red', overallStatus)}`);
   let recommendation;
   if (mode === 'none')      recommendation = "Run 'npm run toolkit:dev-install-global' to install globally, or use the local installer.";
   else if (mode === 'both') recommendation = 'Remove one installation to resolve ambiguity before running pipelines.';
+  else if (manifestSchemaProblematic) recommendation = 'Run the installer to repair the manifest before running pipelines.';
   else                      recommendation = `Installation is operational in ${mode} mode.`;
   L(`  Recommendation: ${dim(recommendation)}`);
   L('');
@@ -1254,6 +1281,32 @@ function runValidatePurity(sourceDir) {
   }
 }
 
+// ── distributable asset mapping ───────────────────────────────────────────────
+
+// Assets that are toolkit-internal and must NEVER be distributed to consumer
+// projects. Keyed by category name; value is a Set of item names to skip.
+// See AGENTS.md hard constraints.
+const TOOLKIT_INTERNAL_ASSETS = {
+  agents: new Set(['install-toolkit.md']),
+  skills: new Set(['install-toolkit']),
+};
+
+// Build per-item mappings for a single category, skipping any items listed in
+// TOOLKIT_INTERNAL_ASSETS. For categories without internal items the mapping
+// covers the whole source directory (identical to the previous whole-dir approach).
+function buildCategoryMappings(srcCatDir, destCatDir, catName) {
+  if (!fs.existsSync(srcCatDir)) return [];
+  const internalItems = TOOLKIT_INTERNAL_ASSETS[catName];
+  if (!internalItems) {
+    // No exclusions for this category — map the whole directory as before.
+    return [{ src: srcCatDir, dest: destCatDir }];
+  }
+  // Enumerate items individually so we can exclude toolkit-internal entries.
+  return fs.readdirSync(srcCatDir)
+    .filter(item => !internalItems.has(item))
+    .map(item => ({ src: path.join(srcCatDir, item), dest: path.join(destCatDir, item) }));
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force, dryRun = false) {
@@ -1264,15 +1317,25 @@ async function installLocal(targetDir, force, dryRun = false) {
   // Build mappings from asset catalog: each category copies src/claude/<cat> → .claude/<cat>
   const { getAssetCategories } = require('../lib/asset-catalog');
   const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
+  // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+  const purityViolations = validatePurityGuard(srcClaudeDir);
+  if (purityViolations.length > 0) {
+    process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
+    for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
+    process.exit(1);
+  }
   const mappings = [
-    ...getAssetCategories().map(cat => ({
-      src:  path.join(srcClaudeDir, cat.name),
-      dest: path.join(targetDir, '.claude', cat.name),
-    })),
+    ...getAssetCategories().flatMap(cat =>
+      buildCategoryMappings(
+        path.join(srcClaudeDir, cat.name),
+        path.join(targetDir, '.claude', cat.name),
+        cat.name
+      )
+    ),
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`local project`, mappings, force, targetDir, dryRun);
+  await runInstall(`local project`, mappings, force, targetDir, dryRun, 'local');
   if (dryRun) return;
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
@@ -1290,21 +1353,33 @@ async function installGlobal(force, dryRun = false) {
     const homedir = require('os').homedir();
     const target  = path.join(homedir, '.claude');
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
-    if (!dryRun) await checkVersion(target, force);
+    // destRoot is homedir so helpers (manifest, version stamp, trash) resolve to
+    // ~/.claude/... rather than ~/.claude/.claude/... (FIX: global install root path)
+    if (!dryRun) await checkVersion(homedir, force);
     // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
     const { getAssetCategories } = require('../lib/asset-catalog');
     const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
+    // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+    const purityViolations = validatePurityGuard(srcClaudeDir);
+    if (purityViolations.length > 0) {
+      process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
+      for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
+      process.exit(1);
+    }
     const mappings = [
-      ...getAssetCategories().map(cat => ({
-        src:  path.join(srcClaudeDir, cat.name),
-        dest: path.join(target, cat.name),
-      })),
+      ...getAssetCategories().flatMap(cat =>
+        buildCategoryMappings(
+          path.join(srcClaudeDir, cat.name),
+          path.join(target, cat.name),
+          cat.name
+        )
+      ),
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force, target, dryRun);
+    await runInstall('global Claude folder', mappings, force, homedir, dryRun, 'global');
     if (dryRun) return;
-    writeInstalledVersion(target);
+    writeInstalledVersion(homedir);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
     checkSpawnDepth(homedir);
     console.log(divider());
@@ -1343,6 +1418,18 @@ async function main() {
     await installLocal(argv[1] || '.', force, dryRun);
   } else if (argv[0] === '--global') {
     await installGlobal(force, dryRun);
+  } else if (argv[0] === 'install') {
+    // Subcommand aliases: `install --project <dir>` ≡ `--local <dir>`
+    //                     `install --global`         ≡ `--global`
+    const sub = argv[1];
+    if (sub === '--project') {
+      await installLocal(argv[2] || '.', force, dryRun);
+    } else if (sub === '--global') {
+      await installGlobal(force, dryRun);
+    } else {
+      // No sub-flag: install into current directory (same as bare invocation)
+      await installLocal(sub && !sub.startsWith('-') ? sub : '.', force, dryRun);
+    }
   } else if (argv[0] === 'help' || argv[0] === '--help') {
     help();
   } else if (argv[0] === 'merge-allowlist') {
@@ -1464,13 +1551,15 @@ async function main() {
     }
   } else if (argv[0] === 'list-assets') {
     // list-assets [--category <name>] [--format json|plain] [--project <dir>] [--home <dir>]
-    // exit 0 always (including when empty); exit 1 on unknown category.
-    // Lists files from the installed runtime root (.claude/<category>/).
+    // Default format: json. Exit 0 (empty list) when not installed; exit 1 for unknown
+    // category or mixed (both local + global) installation.
+    // Uses the same 3-condition presence detection as resolveClaudeRuntimeAsset():
+    //   condA: manifest file present; condB: version stamp present; condC: payload files present.
     const { getAssetCategories, getCategoryByName } = require('../lib/asset-catalog');
     const os         = require('os');
     const remaining  = argv.slice(1);
     let category     = null;
-    let format       = 'plain';
+    let format       = 'json';
     let projectDir   = process.cwd();
     let home;
     for (let i = 0; i < remaining.length; i++) {
@@ -1487,16 +1576,43 @@ async function main() {
         process.exit(1);
       }
     }
-    // Resolve runtime root: prefer local install if manifest present, else global
+    // 3-condition presence detection (mirrors resolveClaudeRuntimeAsset Phase A).
     const effectiveHome    = home       ? path.resolve(home)       : os.homedir();
     const effectiveProject = path.resolve(projectDir);
     const localClaude      = path.join(effectiveProject, '.claude');
     const globalClaude     = path.join(effectiveHome,    '.claude');
-    const runtimeRoot = fs.existsSync(path.join(localClaude, '.ai-toolkit-manifest.json'))
-      ? localClaude
-      : fs.existsSync(path.join(globalClaude, '.ai-toolkit-manifest.json'))
-        ? globalClaude
-        : localClaude;  // fallback when not installed — returns empty list
+
+    function listAssetsHasPayload(claudeDir) {
+      for (const cat of getAssetCategories()) {
+        const catDir = path.join(claudeDir, cat.name);
+        if (!fs.existsSync(catDir)) continue;
+        try { if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true; } catch (_) {}
+      }
+      return false;
+    }
+    function listAssetsIsPresent(claudeDir) {
+      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-manifest.json'))) return true;
+      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-version')))       return true;
+      return listAssetsHasPayload(claudeDir);
+    }
+
+    const localPresent  = listAssetsIsPresent(localClaude);
+    const globalPresent = listAssetsIsPresent(globalClaude);
+
+    if (localPresent && globalPresent) {
+      process.stderr.write(
+        'Error: mixed installation — toolkit is present in both local (.claude/) and global ' +
+        `(${globalClaude}) locations. Remove one before listing assets.\n`
+      );
+      process.exit(1);
+    }
+
+    // Determine the runtime root to enumerate. When neither is present, runtimeRoot points
+    // nowhere meaningful — the walk finds nothing and an empty list is returned (exit 0).
+    const runtimeRoot = localPresent  ? localClaude
+                      : globalPresent ? globalClaude
+                      : localClaude;   // fallback: not installed — returns empty list, exit 0
+
     const cats = category ? [getCategoryByName(category)] : getAssetCategories();
     const results = [];
     for (const cat of cats) {
@@ -1563,5 +1679,7 @@ if (require.main === module) {
     resolveClaudeRuntimeAsset,
     runDoctorResolution,
     validatePurityGuard,
+    TOOLKIT_INTERNAL_ASSETS,
+    buildCategoryMappings,
   };
 }
