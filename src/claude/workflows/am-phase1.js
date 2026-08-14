@@ -2,7 +2,7 @@ export const meta = {
   name: 'am-phase1',
   description: 'Assessment pipeline phase 1: discover assessment agents → scope filter → parallel assessment → intervention-documentation-standard → Token-Estimate → Effort-Estimate → findings_gate_payload.',
   phases: [
-    { title: 'Discovery',      detail: 'Scan .claude/agents/ for assessment agents, apply scope filter' },
+    { title: 'Discovery',      detail: 'Run ai-toolkit list-assets --category agents --format json, apply scope filter' },
     { title: 'Assessment',     detail: 'Dispatch all assessment agents in parallel' },
     { title: 'Interventions',  detail: 'Run intervention-documentation-standard on all findings' },
     { title: 'Estimates',      detail: 'Write Token-Estimate and Effort-Estimate files' },
@@ -66,17 +66,14 @@ const SCOPE_AGENT_MAP = {
 }
 
 const discovery = await agent(
-  `Scan .claude/agents/ and list all assessment agents.
-
-An assessment agent is a .md file whose name or description contains one of: "assessment", "audit", "analysis".
-Exclude orchestrators (files containing "manager" in their name).
-Exclude remediation-only agents (files containing "refactoring", "hardening", "decomposition" in their name UNLESS they also contain "assessment" or "audit").
-
-For each matching agent, read its frontmatter and extract:
-- name (from the name: field in frontmatter)
-- description (from the description: field)
-
-Return { "assessment_agents": [ { "name": "...", "description": "..." }, ... ] }`,
+  `Run this command and parse its output:\n` +
+  `ai-toolkit list-assets --category agents --format json\n\n` +
+  `The command outputs a JSON array of installed agent file paths (e.g. [".claude/agents/foo.md", ...]).\n` +
+  `For each path in the array, read the file and extract the YAML frontmatter fields: name, description.\n\n` +
+  `An assessment agent is one whose file name or description contains one of: "assessment", "audit", "analysis".\n` +
+  `Exclude orchestrators (files containing "manager" in their name).\n` +
+  `Exclude remediation-only agents (files containing "refactoring", "hardening", "decomposition" in their name UNLESS they also contain "assessment" or "audit").\n\n` +
+  `Return { "assessment_agents": [ { "name": "...", "description": "..." }, ... ] }`,
   {
     label:  'discover-assessment-agents',
     phase:  'Discovery',
