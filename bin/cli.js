@@ -1161,6 +1161,8 @@ function runDoctorResolution(options) {
   // ── Action Items ────────────────────────────────────────────────────────────
   H('Action Items');
   const actions = [];
+  let manifestSchemaProblematic = false;
+
   if (mode === 'both') {
     actions.push(`${warnS}  Choose one: delete local or global installation to resolve ambiguity`);
   }
@@ -1174,8 +1176,23 @@ function runDoctorResolution(options) {
       actions.push(`${warnS}  Version mismatch: run 'npm run toolkit:dev-install-global' to update`);
     }
     const mInfo = readManifestInfo(effectiveRoot);
-    if (mInfo.status !== 'present') {
+    if (mInfo.status === 'corrupt') {
+      manifestSchemaProblematic = true;
+      actions.push(`${cross}  Manifest schema invalid: file is corrupt (invalid JSON)`);
+    } else if (mInfo.status === 'missing') {
+      manifestSchemaProblematic = true;
       actions.push(`${warnS}  Manifest is ${mInfo.status}. Run the installer to regenerate.`);
+    } else if (mInfo.status === 'present' && mInfo.data) {
+      // Check required manifest fields (including installationMode).
+      const required = ['version', 'installedAt', 'installationMode', 'files'];
+      const missing = required.filter(f => mInfo.data[f] === undefined);
+      if (missing.length > 0) {
+        manifestSchemaProblematic = true;
+        for (const f of missing) {
+          actions.push(`${cross}  Manifest schema invalid: missing required field '${f}'`);
+        }
+        actions.push(`${warnS}  Run the installer to regenerate the manifest with all required fields.`);
+      }
     }
   }
   if (actions.length === 0) {
@@ -1187,12 +1204,14 @@ function runDoctorResolution(options) {
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   H('Summary');
-  const overallOk     = mode === 'local-only' || mode === 'global-only';
+  // READY only when installation mode is valid (single installation) AND manifest is schema-valid.
+  const overallOk     = (mode === 'local-only' || mode === 'global-only') && !manifestSchemaProblematic;
   const overallStatus = overallOk ? 'READY' : 'PROBLEMATIC';
   L(`  Status: ${clr(overallOk ? 'green' : 'red', overallStatus)}`);
   let recommendation;
   if (mode === 'none')      recommendation = "Run 'npm run toolkit:dev-install-global' to install globally, or use the local installer.";
   else if (mode === 'both') recommendation = 'Remove one installation to resolve ambiguity before running pipelines.';
+  else if (manifestSchemaProblematic) recommendation = 'Run the installer to repair the manifest before running pipelines.';
   else                      recommendation = `Installation is operational in ${mode} mode.`;
   L(`  Recommendation: ${dim(recommendation)}`);
   L('');
