@@ -1449,6 +1449,66 @@ async function main() {
       process.stderr.write(err.message + '\n');
       process.exit(1);
     }
+  } else if (argv[0] === 'list-assets') {
+    // list-assets [--category <name>] [--format json|plain] [--project <dir>] [--home <dir>]
+    // exit 0 always (including when empty); exit 1 on unknown category.
+    // Lists files from the installed runtime root (.claude/<category>/).
+    const { getAssetCategories, getCategoryByName } = require('../lib/asset-catalog');
+    const os         = require('os');
+    const remaining  = argv.slice(1);
+    let category     = null;
+    let format       = 'plain';
+    let projectDir   = process.cwd();
+    let home;
+    for (let i = 0; i < remaining.length; i++) {
+      if      (remaining[i] === '--category' && remaining[i + 1]) { category   = remaining[++i]; }
+      else if (remaining[i] === '--format'   && remaining[i + 1]) { format     = remaining[++i]; }
+      else if (remaining[i] === '--project'  && remaining[i + 1]) { projectDir = remaining[++i]; }
+      else if (remaining[i] === '--home'     && remaining[i + 1]) { home       = remaining[++i]; }
+    }
+    if (category) {
+      const cat = getCategoryByName(category);
+      if (!cat) {
+        const valid = getAssetCategories().map(c => c.name).join(', ');
+        process.stderr.write(`Error: unknown category '${category}'. Valid: ${valid}\n`);
+        process.exit(1);
+      }
+    }
+    // Resolve runtime root: prefer local install if manifest present, else global
+    const effectiveHome    = home       ? path.resolve(home)       : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+    const localClaude      = path.join(effectiveProject, '.claude');
+    const globalClaude     = path.join(effectiveHome,    '.claude');
+    const runtimeRoot = fs.existsSync(path.join(localClaude, '.ai-toolkit-manifest.json'))
+      ? localClaude
+      : fs.existsSync(path.join(globalClaude, '.ai-toolkit-manifest.json'))
+        ? globalClaude
+        : localClaude;  // fallback when not installed — returns empty list
+    const cats = category ? [getCategoryByName(category)] : getAssetCategories();
+    const results = [];
+    for (const cat of cats) {
+      const catDir = path.join(runtimeRoot, cat.name);
+      if (!fs.existsSync(catDir)) continue;
+      const stack = [catDir];
+      while (stack.length > 0) {
+        const dir = stack.pop();
+        for (const entry of fs.readdirSync(dir)) {
+          const full = path.join(dir, entry);
+          if (fs.statSync(full).isDirectory()) {
+            stack.push(full);
+          } else {
+            results.push(path.relative(runtimeRoot, full).replace(/\\/g, '/'));
+          }
+        }
+      }
+    }
+    results.sort();
+    if (format === 'json') {
+      process.stdout.write(JSON.stringify(results, null, 2) + '\n');
+    } else {
+      for (const r of results) process.stdout.write(r + '\n');
+    }
+    process.exit(0);
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force);
   } else {
