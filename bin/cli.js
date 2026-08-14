@@ -1378,6 +1378,32 @@ async function main() {
     process.exit(0);
   } else if (argv[0] === 'validate-purity') {
     runValidatePurity(argv[1]);
+  } else if (argv[0] === 'resolve-asset') {
+    // resolve-asset <relativePath> [--project <dir>] [--home <dir>]
+    // Three-tier model: Tier 1 = exit 0 + stdout=path + stderr="";
+    //   Tier 2 = exit 0 + stdout=path + stderr=warnings (emitted by resolver);
+    //   Tier 3 = exit 1 + stdout="" + stderr=error.
+    const remaining = argv.slice(1);
+    let relativePath = null;
+    let projectDir   = process.cwd();
+    let home;
+    for (let i = 0; i < remaining.length; i++) {
+      if      (remaining[i] === '--project' && remaining[i + 1]) { projectDir = remaining[++i]; }
+      else if (remaining[i] === '--home'    && remaining[i + 1]) { home       = remaining[++i]; }
+      else if (!remaining[i].startsWith('-'))                     { relativePath = remaining[i]; }
+    }
+    if (!relativePath) {
+      process.stderr.write('Error: resolve-asset requires a relative path argument\n');
+      process.exit(1);
+    }
+    try {
+      const resolved = resolveClaudeRuntimeAsset(relativePath, { projectDir, home });
+      process.stdout.write(resolved + '\n');
+      process.exit(0);
+    } catch (err) {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force);
   } else {
