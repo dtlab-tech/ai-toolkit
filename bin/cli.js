@@ -288,7 +288,7 @@ function moveToTrash(destRoot, relativePath) {
   }
 }
 
-function writeManifest(destRoot, fileList) {
+function writeManifest(destRoot, fileList, installationMode) {
   const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
   const trashDir = path.join(destRoot, '.claude', '.ai-toolkit-trash');
   const filtered = fileList.filter(rel => {
@@ -298,6 +298,7 @@ function writeManifest(destRoot, fileList) {
   const manifest = {
     version: TOOLKIT_VERSION,
     installedAt: new Date().toISOString(),
+    installationMode: installationMode,
     files: filtered.map(f => f.replace(/\\/g, '/')),
   };
   try {
@@ -310,7 +311,12 @@ function writeManifest(destRoot, fileList) {
 
 // ── install ───────────────────────────────────────────────────────────────────
 
-async function runInstall(label, mappings, force, destRoot, dryRun = false) {
+async function runInstall(label, mappings, force, destRoot, dryRun = false, installationMode) {
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  // Catalog runtime-dir prefixes (e.g. '.claude/agents/') — only these paths
+  // belong in the manifest. Documentation and CLAUDE.md are excluded.
+  const catalogPrefixes = getAssetCategories().map(c => c.runtimeDir.replace(/\\/g, '/') + '/');
+
   const files    = expandMappings(mappings);
   const entries  = categorize(files);
 
@@ -320,7 +326,9 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
 
   // ── prune phase (before file copy) ───────────────────────────────────────────
   const oldManifest = readManifest(destRoot);
-  const newFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
+  const allFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
+  // Restrict manifest entries to catalog runtime assets only (no docs, no CLAUDE.md).
+  const newFileSet  = allFileSet.filter(rel => catalogPrefixes.some(p => rel.startsWith(p)));
   const orphans     = computeOrphans(oldManifest.files, newFileSet);
 
   const existingOrphans = orphans.filter(o => fs.existsSync(path.join(destRoot, o)));
@@ -403,7 +411,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
 
   if (modified.length === 0) {
     console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
-    writeManifest(destRoot, newFileSet);
+    writeManifest(destRoot, newFileSet, installationMode);
     return;
   }
 
@@ -414,7 +422,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
       fs.copyFileSync(e.src, e.dest);
       console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
-    writeManifest(destRoot, newFileSet);
+    writeManifest(destRoot, newFileSet, installationMode);
     return;
   }
 
@@ -443,7 +451,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false) {
     `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
   );
 
-  writeManifest(destRoot, newFileSet);
+  writeManifest(destRoot, newFileSet, installationMode);
 }
 
 // ── subagent spawn-depth check (verify & advise only — never write) ────────────
@@ -1272,7 +1280,7 @@ async function installLocal(targetDir, force, dryRun = false) {
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`local project`, mappings, force, targetDir, dryRun);
+  await runInstall(`local project`, mappings, force, targetDir, dryRun, 'local');
   if (dryRun) return;
   writeInstalledVersion(targetDir);
   console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
@@ -1304,7 +1312,7 @@ async function installGlobal(force, dryRun = false) {
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force, homedir, dryRun);
+    await runInstall('global Claude folder', mappings, force, homedir, dryRun, 'global');
     if (dryRun) return;
     writeInstalledVersion(homedir);
     console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
