@@ -76,11 +76,11 @@ describe('installer.scripts-distribution — Group 1: source files exist', () =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('installer.scripts-distribution — Group 2: local install includes scripts', () => {
-  test('installLocal derives mappings from asset catalog (src/claude/ categories)', () => {
-    // After FTR-015 migration, installLocal reads from getAssetCategories() to build
-    // src/claude/<cat> → .claude/<cat> mappings, not from a hardcoded .claude/ root.
+  test('installLocal derives mappings from asset catalog (buildPayloadFileMappings)', () => {
+    // After FTR-015 P1-A refactor, installLocal calls buildPayloadFileMappings() as the
+    // single canonical source; it no longer calls getAssetCategories() directly.
     const localBody = extractInstallLocalBody();
-    expect(localBody).toContain("getAssetCategories");
+    expect(localBody).toContain("buildPayloadFileMappings");
     expect(localBody).toContain("src', 'claude");
   });
 
@@ -108,11 +108,11 @@ describe('installer.scripts-distribution — Group 2: local install includes scr
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('installer.scripts-distribution — Group 3: global install mapping includes scripts', () => {
-  test('installGlobal derives mappings from asset catalog (getAssetCategories)', () => {
-    // After FTR-015 migration, installGlobal uses getAssetCategories() to enumerate
-    // src/claude/<cat> → ~/.claude/<cat> mappings, not hardcoded per-category entries.
+  test('installGlobal derives mappings from asset catalog (buildPayloadFileMappings)', () => {
+    // After FTR-015 P1-A refactor, installGlobal calls buildPayloadFileMappings() as the
+    // single canonical source; it no longer calls getAssetCategories() directly.
     const globalBody = extractInstallGlobalBody();
-    expect(globalBody).toContain("getAssetCategories");
+    expect(globalBody).toContain("buildPayloadFileMappings");
   });
 
   test('installGlobal uses src/claude/ as source directory for asset categories', () => {

@@ -23,25 +23,31 @@ const { spawnSync } = require('child_process');
 const CLI          = path.join(__dirname, '..', '..', 'bin', 'cli.js');
 const TOOLKIT_ROOT = path.join(__dirname, '..', '..');
 const { getAssetCategories } = require('../../lib/asset-catalog');
+const { TOOLKIT_INTERNAL_ASSETS } = require('../../bin/cli');
 
+// Applies TOOLKIT_INTERNAL_ASSETS exclusions so the manifest matches what the real
+// installer writes, preventing spurious stale-entry warnings.
 function makeCompleteInstall(projectDir) {
   const clauDir = path.join(projectDir, '.claude');
   fs.mkdirSync(clauDir, { recursive: true });
   const files = [];
   for (const cat of getAssetCategories()) {
-    const srcDir = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const srcDir      = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const internalSet = TOOLKIT_INTERNAL_ASSETS[cat.name];
     if (!fs.existsSync(srcDir)) continue;
-    const stack = [srcDir];
-    while (stack.length > 0) {
-      const dir = stack.pop();
-      for (const entry of fs.readdirSync(dir)) {
-        const full = path.join(dir, entry);
-        if (fs.statSync(full).isDirectory()) { stack.push(full); }
-        else {
-          const rel      = path.relative(srcDir, full).replace(/\\/g, '/');
+    for (const topEntry of fs.readdirSync(srcDir)) {
+      if (internalSet && internalSet.has(topEntry)) continue;
+      const topFull = path.join(srcDir, topEntry);
+      const stack   = [topFull];
+      while (stack.length > 0) {
+        const cur = stack.pop();
+        if (fs.statSync(cur).isDirectory()) {
+          for (const sub of fs.readdirSync(cur)) stack.push(path.join(cur, sub));
+        } else {
+          const rel      = path.relative(srcDir, cur).replace(/\\/g, '/');
           const destPath = path.join(clauDir, cat.name, rel);
           fs.mkdirSync(path.dirname(destPath), { recursive: true });
-          fs.copyFileSync(full, destPath);
+          fs.copyFileSync(cur, destPath);
           files.push(`.claude/${cat.name}/${rel}`);
         }
       }
@@ -299,5 +305,62 @@ describe('list-assets CLI — valid category with no files installed', () => {
       fs.rmSync(projDir,  { recursive: true, force: true });
       fs.rmSync(fakeHome, { recursive: true, force: true });
     }
+  });
+});
+
+describe('list-assets CLI — foreign file exclusion (P1-A)', () => {
+  let projDir;
+  let fakeHome;
+
+  beforeAll(() => {
+    projDir  = fs.mkdtempSync(path.join(os.tmpdir(), 'list-foreign-'));
+    fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'list-foreign-h-'));
+    // Use the real CLI installer to get a complete, correct installation.
+    spawnSync(
+      process.execPath,
+      [CLI, '--local', projDir, '--force'],
+      { encoding: 'utf8' }
+    );
+    // Inject a foreign file directly into .claude/agents/ (not from the toolkit source).
+    fs.writeFileSync(
+      path.join(projDir, '.claude', 'agents', 'user-created-agent.md'),
+      '# user-created foreign agent',
+      'utf8'
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(projDir,  { recursive: true, force: true });
+    fs.rmSync(fakeHome, { recursive: true, force: true });
+  });
+
+  test('foreign file under .claude/agents/ is NOT returned by list-assets', () => {
+    const result = runCLI([
+      'list-assets', '--category', 'agents', '--format', 'json',
+      '--project', projDir, '--home', fakeHome,
+    ]);
+    expect(result.status).toBe(0);
+    const files = JSON.parse(result.stdout);
+    expect(files.some(f => f.includes('user-created-agent.md'))).toBe(false);
+  });
+
+  test('foreign file exclusion: legitimate catalog agent IS returned', () => {
+    const result = runCLI([
+      'list-assets', '--category', 'agents', '--format', 'json',
+      '--project', projDir, '--home', fakeHome,
+    ]);
+    expect(result.status).toBe(0);
+    const files = JSON.parse(result.stdout);
+    expect(files.some(f => f.includes('developer-backend.md'))).toBe(true);
+  });
+
+  test('install-toolkit.md is NOT returned by list-assets (excluded from distribution)', () => {
+    const result = runCLI([
+      'list-assets', '--category', 'agents', '--format', 'json',
+      '--project', projDir, '--home', fakeHome,
+    ]);
+    expect(result.status).toBe(0);
+    const files = JSON.parse(result.stdout);
+    expect(files.some(f => f.includes('install-toolkit.md'))).toBe(false);
   });
 });

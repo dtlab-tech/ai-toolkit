@@ -672,40 +672,72 @@ function updateGitignore(destDir) {
   }
 }
 
-// ── buildExpectedPayload ──────────────────────────────────────────────────────
+// ── payload & detection ───────────────────────────────────────────────────────
 
-// Returns the Set of absolute runtime paths that the installer distributes to
-// effectiveRoot (.claude/ directory), applying TOOLKIT_INTERNAL_ASSETS exclusions.
-// Single source of truth shared by the resolver, doctor, and list-assets so all
-// three agree on exactly what a valid installation contains.
-function buildExpectedPayload(effectiveRoot) {
+// Returns file-level {src, dest} mappings (absolute paths) for ALL distributable
+// catalog assets, applying TOOLKIT_INTERNAL_ASSETS exclusions.
+// This is the single authoritative source used by the installer (copy plan),
+// resolver, doctor, and list-assets so that ALL four agree on exactly what a valid
+// installation contains. effectiveRoot must be the .claude/ runtime directory.
+function buildPayloadFileMappings(effectiveRoot) {
   const { getAssetCategories } = require('../lib/asset-catalog');
-  const payload = new Set();
+  const mappings = [];
   for (const cat of getAssetCategories()) {
-    const srcDir = path.join(packageRoot, cat.sourceDir);
+    const srcDir      = path.join(packageRoot, cat.sourceDir);
     if (!fs.existsSync(srcDir)) continue;
     const internalItems = TOOLKIT_INTERNAL_ASSETS[cat.name];
-    const catSubDir = cat.runtimeDir.replace(/^\.claude\//, '');
+    const catSubDir   = cat.runtimeDir.replace(/^\.claude\//, '');
+    const destCatDir  = path.join(effectiveRoot, catSubDir);
     let entries;
     try { entries = fs.readdirSync(srcDir); } catch (_) { continue; }
     for (const item of entries) {
       if (internalItems && internalItems.has(item)) continue;
-      const itemSrcPath = path.join(srcDir, item);
+      const itemSrc = path.join(srcDir, item);
       let stat;
-      try { stat = fs.statSync(itemSrcPath); } catch (_) { continue; }
+      try { stat = fs.statSync(itemSrc); } catch (_) { continue; }
       if (stat.isDirectory()) {
         try {
-          for (const f of walkDir(itemSrcPath)) {
-            const relFile = path.relative(srcDir, f);
-            payload.add(path.resolve(path.join(effectiveRoot, catSubDir, relFile)));
+          for (const f of walkDir(itemSrc)) {
+            const rel = path.relative(itemSrc, f);
+            mappings.push({ src: f, dest: path.join(destCatDir, item, rel) });
           }
         } catch (_) { /* ignore */ }
       } else {
-        payload.add(path.resolve(path.join(effectiveRoot, catSubDir, item)));
+        mappings.push({ src: itemSrc, dest: path.join(destCatDir, item) });
       }
     }
   }
-  return payload;
+  return mappings;
+}
+
+// Returns the Set of absolute runtime dest-paths derived from buildPayloadFileMappings.
+// Used by resolver, doctor, and list-assets for completeness checks.
+function buildExpectedPayload(effectiveRoot) {
+  return new Set(buildPayloadFileMappings(effectiveRoot).map(m => path.resolve(m.dest)));
+}
+
+// Shared presence-detection helpers — used by resolver, doctor, and list-assets.
+// condC: at least one catalog category directory inside claudeDir has files.
+function hasToolkitPayloadFiles(claudeDir) {
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  for (const cat of getAssetCategories()) {
+    const catDir = path.join(claudeDir, cat.runtimeDir.replace(/^\.claude\//, ''));
+    if (!fs.existsSync(catDir)) continue;
+    try { if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true; }
+    catch (_) { /* ignore unreadable dirs */ }
+  }
+  return false;
+}
+
+// A toolkit installation is PRESENT at claudeDir when any of:
+//   condA: .ai-toolkit-manifest.json exists (content may be corrupt)
+//   condB: .ai-toolkit-version exists
+//   condC: at least one catalog category dir contains one or more files
+// settings.json / settings.local.json alone do NOT satisfy any condition.
+function isToolkitInstalled(claudeDir) {
+  if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-manifest.json'))) return true;
+  if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-version')))       return true;
+  return hasToolkitPayloadFiles(claudeDir);
 }
 
 // ── resolveClaudeRuntimeAsset ─────────────────────────────────────────────────
@@ -765,38 +797,9 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   const localRuntimeRoot  = path.join(effectiveProjectDir, '.claude');
   const globalRuntimeRoot = path.join(effectiveHome, '.claude');
 
-  // Strip the '.claude/' prefix so catRelDir gives the sub-directory relative to runtimeRoot.
-  // e.g. '.claude/agents' → 'agents'
-  function catRelDir(cat) {
-    return cat.runtimeDir.replace(/^\.claude\//, '');
-  }
-
-  // condC: at least one catalog category directory has files at this runtimeRoot
-  function hasPayloadFiles(runtimeRoot) {
-    for (const cat of getAssetCategories()) {
-      const catDir = path.join(runtimeRoot, catRelDir(cat));
-      if (!fs.existsSync(catDir)) continue;
-      try {
-        if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true;
-      } catch (_) { /* ignore unreadable dirs */ }
-    }
-    return false;
-  }
-
-  // A toolkit installation is PRESENT at runtimeRoot when any of the following hold:
-  //   condA: .ai-toolkit-manifest.json exists (content may be corrupt; file presence is enough)
-  //   condB: .ai-toolkit-version exists
-  //   condC: at least one catalog category dir contains one or more files
-  // settings.json / settings.local.json alone do NOT satisfy any condition.
-  function isToolkitPresent(runtimeRoot) {
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-manifest.json'))) return true;
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-version'))) return true;
-    return hasPayloadFiles(runtimeRoot);
-  }
-
   // ── Phase A: Presence detection ────────────────────────────────────────────
-  const localPresent  = isToolkitPresent(localRuntimeRoot);
-  const globalPresent = isToolkitPresent(globalRuntimeRoot);
+  const localPresent  = isToolkitInstalled(localRuntimeRoot);
+  const globalPresent = isToolkitInstalled(globalRuntimeRoot);
 
   // ── Phase B: Mode decision ─────────────────────────────────────────────────
   if (!localPresent && !globalPresent) {
@@ -958,26 +961,6 @@ function runDoctorResolution(options) {
     return cat.runtimeDir.replace(/^\.claude\//, '');
   }
 
-  function hasPayloadFiles(runtimeRoot) {
-    for (const cat of categories) {
-      const catDir = path.join(runtimeRoot, catRelDir(cat));
-      if (!fs.existsSync(catDir)) continue;
-      try {
-        if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true;
-      } catch (_) { /* ignore unreadable dirs */ }
-    }
-    return false;
-  }
-
-  // Mirrors the same three-condition presence check as resolveClaudeRuntimeAsset().
-  // condA: manifest file exists (any content); condB: version stamp exists;
-  // condC: at least one catalog category dir has files.
-  function isToolkitPresent(runtimeRoot) {
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-manifest.json'))) return true;
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-version')))       return true;
-    return hasPayloadFiles(runtimeRoot);
-  }
-
   function countCategoryFiles(runtimeRoot, cat) {
     const catDir = path.join(runtimeRoot, catRelDir(cat));
     if (!fs.existsSync(catDir)) return 0;
@@ -1027,8 +1010,8 @@ function runDoctorResolution(options) {
   }
 
   // ── Detect installations ────────────────────────────────────────────────────
-  const localPresent  = isToolkitPresent(localRuntimeRoot);
-  const globalPresent = isToolkitPresent(globalRuntimeRoot);
+  const localPresent  = isToolkitInstalled(localRuntimeRoot);
+  const globalPresent = isToolkitInstalled(globalRuntimeRoot);
 
   let mode, modeStatus;
   if      (localPresent && globalPresent) { mode = 'both';        modeStatus = 'AMBIGUOUS';    }
@@ -1418,24 +1401,18 @@ async function installLocal(targetDir, force, dryRun = false) {
   targetDir = path.resolve(process.cwd(), targetDir || '.');
   console.log(`  ${clr('cyan', '▸')}  Target: ${bold(targetDir)}\n`);
   if (!dryRun) await checkVersion(targetDir, force);
-  // Build mappings from asset catalog: each category copies src/claude/<cat> → .claude/<cat>
-  const { getAssetCategories } = require('../lib/asset-catalog');
-  const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
   // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+  const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
   const purityViolations = validatePurityGuard(srcClaudeDir);
   if (purityViolations.length > 0) {
     process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
     for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
     process.exit(1);
   }
+  // Build copy plan from the single canonical source (buildPayloadFileMappings) so
+  // installer, resolver, doctor, and list-assets all use the same distributable set.
   const mappings = [
-    ...getAssetCategories().flatMap(cat =>
-      buildCategoryMappings(
-        path.join(srcClaudeDir, cat.name),
-        path.join(targetDir, '.claude', cat.name),
-        cat.name
-      )
-    ),
+    ...buildPayloadFileMappings(path.join(targetDir, '.claude')),
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
@@ -1460,24 +1437,17 @@ async function installGlobal(force, dryRun = false, homeOverride = undefined) {
     // destRoot is homedir so helpers (manifest, version stamp, trash) resolve to
     // ~/.claude/... rather than ~/.claude/.claude/... (FIX: global install root path)
     if (!dryRun) await checkVersion(homedir, force);
-    // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
-    const { getAssetCategories } = require('../lib/asset-catalog');
-    const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
     // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+    const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
     const purityViolations = validatePurityGuard(srcClaudeDir);
     if (purityViolations.length > 0) {
       process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
       for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
       process.exit(1);
     }
+    // Build copy plan from the single canonical source (buildPayloadFileMappings).
     const mappings = [
-      ...getAssetCategories().flatMap(cat =>
-        buildCategoryMappings(
-          path.join(srcClaudeDir, cat.name),
-          path.join(target, cat.name),
-          cat.name
-        )
-      ),
+      ...buildPayloadFileMappings(target),
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
@@ -1662,10 +1632,9 @@ async function main() {
     }
   } else if (argv[0] === 'list-assets') {
     // list-assets [--category <name>] [--format json|plain] [--project <dir>] [--home <dir>]
-    // Default format: json. Exit 0 (empty list) when not installed; exit 1 for unknown
-    // category or mixed (both local + global) installation.
-    // Uses the same 3-condition presence detection as resolveClaudeRuntimeAsset():
-    //   condA: manifest file present; condB: version stamp present; condC: payload files present.
+    // Returns exclusively assets from the distributable payload (buildExpectedPayload).
+    // Foreign/user-created files under .claude/ are never returned.
+    // Exit 0 + result for installed single-mode; exit 1 for no-install or mixed install.
     const { getAssetCategories, getCategoryByName } = require('../lib/asset-catalog');
     const os         = require('os');
     const remaining  = argv.slice(1);
@@ -1687,28 +1656,14 @@ async function main() {
         process.exit(1);
       }
     }
-    // 3-condition presence detection (mirrors resolveClaudeRuntimeAsset Phase A).
+    // Shared 3-condition presence detection (same as resolver and doctor).
     const effectiveHome    = home       ? path.resolve(home)       : os.homedir();
     const effectiveProject = path.resolve(projectDir);
     const localClaude      = path.join(effectiveProject, '.claude');
     const globalClaude     = path.join(effectiveHome,    '.claude');
 
-    function listAssetsHasPayload(claudeDir) {
-      for (const cat of getAssetCategories()) {
-        const catDir = path.join(claudeDir, cat.name);
-        if (!fs.existsSync(catDir)) continue;
-        try { if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true; } catch (_) {}
-      }
-      return false;
-    }
-    function listAssetsIsPresent(claudeDir) {
-      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-manifest.json'))) return true;
-      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-version')))       return true;
-      return listAssetsHasPayload(claudeDir);
-    }
-
-    const localPresent  = listAssetsIsPresent(localClaude);
-    const globalPresent = listAssetsIsPresent(globalClaude);
+    const localPresent  = isToolkitInstalled(localClaude);
+    const globalPresent = isToolkitInstalled(globalClaude);
 
     if (localPresent && globalPresent) {
       process.stderr.write(
@@ -1725,25 +1680,20 @@ async function main() {
     }
     const runtimeRoot = localPresent ? localClaude : globalClaude;
 
-    const cats = category ? [getCategoryByName(category)] : getAssetCategories();
-    const results = [];
-    for (const cat of cats) {
-      const catDir = path.join(runtimeRoot, cat.name);
-      if (!fs.existsSync(catDir)) continue;
-      const stack = [catDir];
-      while (stack.length > 0) {
-        const dir = stack.pop();
-        for (const entry of fs.readdirSync(dir)) {
-          const full = path.join(dir, entry);
-          if (fs.statSync(full).isDirectory()) {
-            stack.push(full);
-          } else {
-            results.push(full);
-          }
-        }
-      }
+    // Return only catalog-defined assets (no foreign files).
+    // Filter to the requested category if given; include only files that exist on disk.
+    const allExpected = [...buildExpectedPayload(runtimeRoot)].sort();
+    let results;
+    if (category) {
+      const cat    = getCategoryByName(category);
+      const catDir = path.resolve(path.join(runtimeRoot, cat.name));
+      results = allExpected.filter(f => f.startsWith(catDir + path.sep) || f.startsWith(catDir + '/'));
+    } else {
+      results = allExpected;
     }
-    results.sort();
+    // Only return files that are actually present on disk.
+    results = results.filter(f => fs.existsSync(f));
+
     if (format === 'json') {
       process.stdout.write(JSON.stringify(results, null, 2) + '\n');
     } else {
@@ -1792,8 +1742,10 @@ if (require.main === module) {
     runDoctorResolution,
     validatePurityGuard,
     TOOLKIT_INTERNAL_ASSETS,
-    buildCategoryMappings,
+    buildPayloadFileMappings,
     buildExpectedPayload,
+    hasToolkitPayloadFiles,
+    isToolkitInstalled,
     runVerifyInstall,
   };
 }
