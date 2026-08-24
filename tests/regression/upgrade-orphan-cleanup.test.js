@@ -233,19 +233,37 @@ describe('upgrade-orphan-cleanup — Group 3b: docs/CLAUDE.md from legacy manife
   });
 
   test('docs/ files are not moved to trash during upgrade from legacy manifest', () => {
-    const trashBase = path.join(tmpDir, '.claude', '.ai-toolkit-trash');
+    const trashBase  = path.join(tmpDir, '.claude', '.ai-toolkit-trash');
     const trashFiles = walkDirSync(trashBase);
-    expect(
-      trashFiles.some(f => f.replace(/\\/g, '/').includes('reference.md'))
-    ).toBe(false);
+    expect(trashFiles.some(f => f.replace(/\\/g, '/').includes('reference.md'))).toBe(false);
   });
 
   test('CLAUDE.md is not moved to trash during upgrade from legacy manifest', () => {
-    const trashBase = path.join(tmpDir, '.claude', '.ai-toolkit-trash');
+    const trashBase  = path.join(tmpDir, '.claude', '.ai-toolkit-trash');
     const trashFiles = walkDirSync(trashBase);
-    expect(
-      trashFiles.some(f => path.basename(f) === 'CLAUDE.md')
-    ).toBe(false);
+    expect(trashFiles.some(f => path.basename(f) === 'CLAUDE.md')).toBe(false);
+  });
+
+  test('docs/reference.md still exists after upgrade from legacy manifest', () => {
+    expect(fs.existsSync(path.join(tmpDir, 'docs', 'reference.md'))).toBe(true);
+  });
+
+  test('CLAUDE.md still exists after upgrade from legacy manifest', () => {
+    expect(fs.existsSync(path.join(tmpDir, 'CLAUDE.md'))).toBe(true);
+  });
+
+  test('docs/reference.md has content from the package source after upgrade', () => {
+    const TOOLKIT_ROOT = path.resolve(__dirname, '../..');
+    const expected     = fs.readFileSync(path.join(TOOLKIT_ROOT, 'docs', 'reference.md'), 'utf8');
+    const actual       = fs.readFileSync(path.join(tmpDir, 'docs', 'reference.md'), 'utf8');
+    expect(actual).toBe(expected);
+  });
+
+  test('CLAUDE.md has content from the package source (CLAUDE.md) after upgrade', () => {
+    const TOOLKIT_ROOT = path.resolve(__dirname, '../..');
+    const expected     = fs.readFileSync(path.join(TOOLKIT_ROOT, 'CLAUDE.md'), 'utf8');
+    const actual       = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
+    expect(actual).toBe(expected);
   });
 
   test('new manifest does not contain docs/ entries', () => {
