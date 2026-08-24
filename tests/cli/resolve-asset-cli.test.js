@@ -21,27 +21,33 @@ const { spawnSync } = require('child_process');
 const CLI          = path.join(__dirname, '..', '..', 'bin', 'cli.js');
 const TOOLKIT_ROOT = path.join(__dirname, '..', '..');
 const { getAssetCategories } = require('../../lib/asset-catalog');
+const { TOOLKIT_INTERNAL_ASSETS } = require('../../bin/cli');
 
-// Install ALL catalog files from src/claude/ into <projectDir>/.claude/ with manifest + stamp.
-// Phase D Step 10 requires every expected payload file to exist on disk.
+// Install catalog files into <projectDir>/.claude/ with manifest + stamp.
+// Applies TOOLKIT_INTERNAL_ASSETS exclusions to match what the real installer writes,
+// preventing stale-entry warnings from the resolver (Phase C manifest validation).
 function makeCompleteInstall(projectDir, { mode = 'local', version = '0.10.1' } = {}) {
   const clauDir = path.join(projectDir, '.claude');
   fs.mkdirSync(clauDir, { recursive: true });
   const files = [];
   for (const cat of getAssetCategories()) {
-    const srcDir = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const srcDir      = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const internalSet = TOOLKIT_INTERNAL_ASSETS[cat.name];
     if (!fs.existsSync(srcDir)) continue;
-    const stack = [srcDir];
-    while (stack.length > 0) {
-      const dir = stack.pop();
-      for (const entry of fs.readdirSync(dir)) {
-        const full = path.join(dir, entry);
-        if (fs.statSync(full).isDirectory()) { stack.push(full); }
-        else {
-          const rel      = path.relative(srcDir, full).replace(/\\/g, '/');
+    for (const topEntry of fs.readdirSync(srcDir)) {
+      if (internalSet && internalSet.has(topEntry)) continue; // skip internal assets
+      const topFull = path.join(srcDir, topEntry);
+      const stack   = [topFull];
+      while (stack.length > 0) {
+        const cur = stack.pop();
+        const stat = fs.statSync(cur);
+        if (stat.isDirectory()) {
+          for (const sub of fs.readdirSync(cur)) stack.push(path.join(cur, sub));
+        } else {
+          const rel      = path.relative(srcDir, cur).replace(/\\/g, '/');
           const destPath = path.join(clauDir, cat.name, rel);
           fs.mkdirSync(path.dirname(destPath), { recursive: true });
-          fs.copyFileSync(full, destPath);
+          fs.copyFileSync(cur, destPath);
           files.push(`.claude/${cat.name}/${rel}`);
         }
       }
@@ -56,23 +62,27 @@ function makeCompleteInstall(projectDir, { mode = 'local', version = '0.10.1' } 
 
 // Install catalog payload files only (no manifest, no stamp) — satisfies condC only.
 // Phase C will emit warnings about missing manifest (Tier 2 scenario).
+// Also applies TOOLKIT_INTERNAL_ASSETS exclusions.
 function makePayloadOnlyInstall(projectDir) {
   const clauDir = path.join(projectDir, '.claude');
   fs.mkdirSync(clauDir, { recursive: true });
   for (const cat of getAssetCategories()) {
-    const srcDir = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const srcDir      = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const internalSet = TOOLKIT_INTERNAL_ASSETS[cat.name];
     if (!fs.existsSync(srcDir)) continue;
-    const stack = [srcDir];
-    while (stack.length > 0) {
-      const dir = stack.pop();
-      for (const entry of fs.readdirSync(dir)) {
-        const full = path.join(dir, entry);
-        if (fs.statSync(full).isDirectory()) { stack.push(full); }
-        else {
-          const rel      = path.relative(srcDir, full).replace(/\\/g, '/');
+    for (const topEntry of fs.readdirSync(srcDir)) {
+      if (internalSet && internalSet.has(topEntry)) continue;
+      const topFull = path.join(srcDir, topEntry);
+      const stack   = [topFull];
+      while (stack.length > 0) {
+        const cur = stack.pop();
+        if (fs.statSync(cur).isDirectory()) {
+          for (const sub of fs.readdirSync(cur)) stack.push(path.join(cur, sub));
+        } else {
+          const rel      = path.relative(srcDir, cur).replace(/\\/g, '/');
           const destPath = path.join(clauDir, cat.name, rel);
           fs.mkdirSync(path.dirname(destPath), { recursive: true });
-          fs.copyFileSync(full, destPath);
+          fs.copyFileSync(cur, destPath);
         }
       }
     }

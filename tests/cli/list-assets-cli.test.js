@@ -4,14 +4,15 @@
  * CLI integration tests for list-assets command — US-06-TASK-TEST-03 (FTR-015).
  *
  * Covers:
- * - JSON output format (--format json)
+ * - JSON output format (--format json, default)
  * - Plain text output format (--format plain)
- * - Empty category (no files installed → empty list, exit 0)
- * - Unknown category → exit 1 with valid category list in stderr
+ * - Absolute OS-native paths in output (Tech Spec contract)
  * - Deterministic ordering (sorted alphabetically)
  * - --category filter
  * - --home isolation (only local manifest used)
- * - Exit 0 even when no files found
+ * - Unknown category → exit 1
+ * - No installation → exit 1 Tier 3 error (not empty list)
+ * - Mixed installation → exit 1
  */
 
 const fs   = require('fs');
@@ -82,16 +83,15 @@ describe('list-assets CLI — with a complete local installation', () => {
     expect(result.status).toBe(0);
   });
 
-  test('plain format returns one path per line', () => {
+  test('plain format returns one absolute path per line', () => {
     const result = runCLI([
       'list-assets', '--format', 'plain', '--project', tmpDir, '--home', fakeHome,
     ]);
     expect(result.status).toBe(0);
     const lines = result.stdout.split('\n').filter(Boolean);
     expect(lines.length).toBeGreaterThan(0);
-    // Each line is a relative path like agents/foo.md
     for (const line of lines) {
-      expect(line).not.toContain('\n');
+      expect(path.isAbsolute(line)).toBe(true);
     }
   });
 
@@ -106,15 +106,27 @@ describe('list-assets CLI — with a complete local installation', () => {
     expect(parsed.length).toBeGreaterThan(0);
   });
 
-  test('JSON output contains paths for all 5 categories', () => {
+  test('JSON output contains absolute paths for all 5 categories', () => {
     const result = runCLI([
       'list-assets', '--format', 'json', '--project', tmpDir, '--home', fakeHome,
     ]);
     const files = JSON.parse(result.stdout);
+    const claudeDir = path.join(tmpDir, '.claude');
     const categories = ['agents', 'commands', 'skills', 'workflows', 'scripts'];
     for (const cat of categories) {
-      const catFiles = files.filter(f => f.startsWith(`${cat}/`));
+      const catDir = path.join(claudeDir, cat);
+      const catFiles = files.filter(f => f.startsWith(catDir + path.sep) || f.startsWith(catDir + '/'));
       expect(catFiles.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('all JSON output paths are absolute', () => {
+    const result = runCLI([
+      'list-assets', '--format', 'json', '--project', tmpDir, '--home', fakeHome,
+    ]);
+    const files = JSON.parse(result.stdout);
+    for (const f of files) {
+      expect(path.isAbsolute(f)).toBe(true);
     }
   });
 
@@ -127,7 +139,7 @@ describe('list-assets CLI — with a complete local installation', () => {
     expect(files).toEqual(sorted);
   });
 
-  test('--category agents returns only agent files', () => {
+  test('--category agents returns absolute paths for agents only', () => {
     const result = runCLI([
       'list-assets', '--category', 'agents', '--format', 'json',
       '--project', tmpDir, '--home', fakeHome,
@@ -135,12 +147,14 @@ describe('list-assets CLI — with a complete local installation', () => {
     expect(result.status).toBe(0);
     const files = JSON.parse(result.stdout);
     expect(files.length).toBeGreaterThan(0);
+    const agentsDir = path.join(tmpDir, '.claude', 'agents');
     for (const f of files) {
-      expect(f.startsWith('agents/')).toBe(true);
+      expect(path.isAbsolute(f)).toBe(true);
+      expect(f.startsWith(agentsDir)).toBe(true);
     }
   });
 
-  test('--category scripts returns only script files', () => {
+  test('--category scripts returns absolute paths for scripts only', () => {
     const result = runCLI([
       'list-assets', '--category', 'scripts', '--format', 'json',
       '--project', tmpDir, '--home', fakeHome,
@@ -148,8 +162,10 @@ describe('list-assets CLI — with a complete local installation', () => {
     expect(result.status).toBe(0);
     const files = JSON.parse(result.stdout);
     expect(files.length).toBeGreaterThan(0);
+    const scriptsDir = path.join(tmpDir, '.claude', 'scripts');
     for (const f of files) {
-      expect(f.startsWith('scripts/')).toBe(true);
+      expect(path.isAbsolute(f)).toBe(true);
+      expect(f.startsWith(scriptsDir)).toBe(true);
     }
   });
 
@@ -160,8 +176,21 @@ describe('list-assets CLI — with a complete local installation', () => {
     ]);
     expect(result.status).toBe(0);
     const files = JSON.parse(result.stdout);
-    // Files should come from the local install in tmpDir
     expect(files.length).toBeGreaterThan(0);
+    // All paths must be under tmpDir (local), not fakeHome (global)
+    for (const f of files) {
+      expect(f.startsWith(path.resolve(tmpDir))).toBe(true);
+    }
+  });
+
+  test('default format is JSON (no --format flag)', () => {
+    const result = runCLI([
+      'list-assets', '--project', tmpDir, '--home', fakeHome,
+    ]);
+    expect(result.status).toBe(0);
+    let parsed;
+    expect(() => { parsed = JSON.parse(result.stdout); }).not.toThrow();
+    expect(Array.isArray(parsed)).toBe(true);
   });
 });
 
@@ -189,7 +218,6 @@ describe('list-assets CLI — unknown category', () => {
         'list-assets', '--category', 'banana',
         '--project', emptyProject, '--home', emptyHome,
       ]);
-      // stderr should mention the valid category names
       expect(result.stderr).toMatch(/agents|commands|skills|workflows|scripts/i);
     } finally {
       fs.rmSync(emptyProject, { recursive: true, force: true });
@@ -198,8 +226,8 @@ describe('list-assets CLI — unknown category', () => {
   });
 });
 
-describe('list-assets CLI — empty installation', () => {
-  test('exit 0 when no toolkit installed (empty list, not an error)', () => {
+describe('list-assets CLI — no installation (Tier 3 error)', () => {
+  test('exit 1 when no toolkit installed', () => {
     const emptyProject = fs.mkdtempSync(path.join(os.tmpdir(), 'list-empty-'));
     const emptyHome    = fs.mkdtempSync(path.join(os.tmpdir(), 'list-empty-h-'));
     try {
@@ -207,29 +235,69 @@ describe('list-assets CLI — empty installation', () => {
         'list-assets', '--format', 'json',
         '--project', emptyProject, '--home', emptyHome,
       ]);
-      expect(result.status).toBe(0);
-      const files = JSON.parse(result.stdout);
-      expect(Array.isArray(files)).toBe(true);
-      expect(files).toHaveLength(0);
+      expect(result.status).toBe(1);
     } finally {
       fs.rmSync(emptyProject, { recursive: true, force: true });
       fs.rmSync(emptyHome, { recursive: true, force: true });
     }
   });
 
-  test('plain output is empty string (not an error) when nothing installed', () => {
+  test('no-installation: stdout is empty (Tier 3 contract)', () => {
     const emptyProject = fs.mkdtempSync(path.join(os.tmpdir(), 'list-empty2-'));
     const emptyHome    = fs.mkdtempSync(path.join(os.tmpdir(), 'list-empty2-h-'));
+    try {
+      const result = runCLI([
+        'list-assets', '--format', 'json',
+        '--project', emptyProject, '--home', emptyHome,
+      ]);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+    } finally {
+      fs.rmSync(emptyProject, { recursive: true, force: true });
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
+  });
+
+  test('no-installation: stderr contains a diagnostic message', () => {
+    const emptyProject = fs.mkdtempSync(path.join(os.tmpdir(), 'list-empty3-'));
+    const emptyHome    = fs.mkdtempSync(path.join(os.tmpdir(), 'list-empty3-h-'));
     try {
       const result = runCLI([
         'list-assets', '--format', 'plain',
         '--project', emptyProject, '--home', emptyHome,
       ]);
-      expect(result.status).toBe(0);
-      expect(result.stdout.trim()).toBe('');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/no toolkit installation/i);
     } finally {
       fs.rmSync(emptyProject, { recursive: true, force: true });
       fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('list-assets CLI — valid category with no files installed', () => {
+  test('empty installation dir for a category → exit 0 and empty array', () => {
+    const projDir  = fs.mkdtempSync(path.join(os.tmpdir(), 'list-emptycat-'));
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'list-emptycat-h-'));
+    try {
+      // Create an empty agents dir (satisfies condC = false but manifest satisfies condA)
+      const clauDir = path.join(projDir, '.claude');
+      fs.mkdirSync(path.join(clauDir, 'agents'), { recursive: true });
+      fs.writeFileSync(
+        path.join(clauDir, '.ai-toolkit-manifest.json'),
+        JSON.stringify({ version: '0.1.0', installedAt: '2026-01-01T00:00:00.000Z', installationMode: 'local', files: [] }, null, 2)
+      );
+      const result = runCLI([
+        'list-assets', '--category', 'agents', '--format', 'json',
+        '--project', projDir, '--home', fakeHome,
+      ]);
+      expect(result.status).toBe(0);
+      const files = JSON.parse(result.stdout);
+      expect(Array.isArray(files)).toBe(true);
+      expect(files).toHaveLength(0);
+    } finally {
+      fs.rmSync(projDir,  { recursive: true, force: true });
+      fs.rmSync(fakeHome, { recursive: true, force: true });
     }
   });
 });
