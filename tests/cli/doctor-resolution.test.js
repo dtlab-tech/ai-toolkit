@@ -19,6 +19,8 @@ const { spawnSync } = require('child_process');
 
 const cliPath = path.join(__dirname, '..', '..', 'bin', 'cli.js');
 
+jest.setTimeout(60000);
+
 // ── CLI runner ─────────────────────────────────────────────────────────────────
 // Uses process.execPath so the correct Node binary is invoked on all platforms.
 function cli(argv) {
@@ -303,7 +305,8 @@ describe('doctor resolution', () => {
 
   // ── Summary section ──────────────────────────────────────────────────────────
 
-  test('reports READY in summary for a valid single-installation setup', () => {
+  test('reports PROBLEMATIC for a partial installation (valid manifest + only one file)', () => {
+    // Even with a valid manifest, disk completeness check requires all catalog files.
     const tmpProject = mktmp('proj');
     const tmpHome    = mktmp('home');
 
@@ -312,7 +315,7 @@ describe('doctor resolution', () => {
 
     const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
 
-    expect(result.stdout).toContain('READY');
+    expect(result.stdout).toContain('PROBLEMATIC');
   });
 
   test('reports PROBLEMATIC in summary when both installations are present', () => {
@@ -347,6 +350,51 @@ describe('doctor resolution', () => {
     // Output includes "src" and "claude" from the source directory path
     expect(result.stdout).toContain('src');
     expect(result.stdout).toContain('claude');
+  });
+
+  // ── Disk Completeness section ─────────────────────────────────────────────────
+
+  test('reports INCOMPLETE in Disk Completeness section for a partial install', () => {
+    const tmpProject = mktmp('proj');
+    const tmpHome    = mktmp('home');
+
+    // Only one agent file — catalog completeness check will fail.
+    putManifest(tmpProject, manifest(['.claude/agents/test.md'], 'local'));
+    putAgentFile(tmpProject, 'test.md', '# test');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+
+    expect(result.stdout).toContain('INCOMPLETE');
+  });
+
+  test('reports COMPLETE in Disk Completeness section for a fully valid install', () => {
+    const tmpProject = mktmp('complete');
+    const tmpHome    = mktmp('home-c');
+
+    // Run the real installer so all catalog files are present.
+    const { spawnSync } = require('child_process');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+
+    expect(result.stdout).toContain('COMPLETE');
+    expect(result.stdout).toContain('READY');
+  });
+
+  test('action items list missing files when disk is incomplete', () => {
+    const tmpProject = mktmp('incomplete');
+    const tmpHome    = mktmp('home-i');
+
+    putManifest(tmpProject, manifest(['.claude/agents/test.md'], 'local'));
+    putAgentFile(tmpProject, 'test.md', '# test');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+
+    expect(result.stdout).toMatch(/missing|incomplete/i);
   });
 
   // ── --home isolation ─────────────────────────────────────────────────────────
