@@ -1196,6 +1196,8 @@ function runDoctorResolution(options) {
   H('Action Items');
   const actions = [];
   let manifestSchemaProblematic = false;
+  let manifestModeInconsistent  = false;
+  let manifestFilesIncomplete   = false;
 
   if (mode === 'both') {
     actions.push(`${warnS}  Choose one: delete local or global installation to resolve ambiguity`);
@@ -1204,7 +1206,8 @@ function runDoctorResolution(options) {
     actions.push(`${cross}  No installation found. Run 'npm run toolkit:dev-install-global' or the local installer`);
   }
   if (mode === 'local-only' || mode === 'global-only') {
-    const effectiveRoot = mode === 'local-only' ? localRuntimeRoot : globalRuntimeRoot;
+    const effectiveRoot  = mode === 'local-only' ? localRuntimeRoot : globalRuntimeRoot;
+    const detectedMode   = mode === 'local-only' ? 'local' : 'global';
     const iv = readVersionStamp(effectiveRoot);
     if (iv && iv !== TOOLKIT_VERSION) {
       actions.push(`${warnS}  Version mismatch: run 'npm run toolkit:dev-install-global' to update`);
@@ -1219,13 +1222,43 @@ function runDoctorResolution(options) {
     } else if (mInfo.status === 'present' && mInfo.data) {
       // Check required manifest fields (including installationMode).
       const required = ['version', 'installedAt', 'installationMode', 'files'];
-      const missing = required.filter(f => mInfo.data[f] === undefined);
-      if (missing.length > 0) {
+      const missingFields = required.filter(f => mInfo.data[f] === undefined);
+      if (missingFields.length > 0) {
         manifestSchemaProblematic = true;
-        for (const f of missing) {
+        for (const f of missingFields) {
           actions.push(`${cross}  Manifest schema invalid: missing required field '${f}'`);
         }
         actions.push(`${warnS}  Run the installer to regenerate the manifest with all required fields.`);
+      } else {
+        // installationMode must match the detected installation mode.
+        if (mInfo.data.installationMode !== detectedMode) {
+          manifestModeInconsistent = true;
+          actions.push(
+            `${cross}  Manifest installationMode='${mInfo.data.installationMode}' does not match ` +
+            `detected mode '${detectedMode}' — run the installer to repair`
+          );
+        }
+        // manifest.files must cover all expected catalog assets.
+        if (Array.isArray(mInfo.data.files)) {
+          const expected      = buildExpectedPayload(effectiveRoot);
+          const parentDir     = path.join(effectiveRoot, '..');
+          const manifestAbsSet = new Set(
+            mInfo.data.files.map(f => path.resolve(path.join(parentDir, f)))
+          );
+          const missingFromManifest = [...expected].filter(f => !manifestAbsSet.has(f));
+          if (missingFromManifest.length > 0) {
+            manifestFilesIncomplete = true;
+            actions.push(
+              `${cross}  manifest.files is missing ${missingFromManifest.length} expected catalog asset(s) — run the installer`
+            );
+            for (const f of missingFromManifest.slice(0, 3)) {
+              actions.push(`       ${dim(path.basename(f))}`);
+            }
+            if (missingFromManifest.length > 3) {
+              actions.push(`       ${dim(`... and ${missingFromManifest.length - 3} more`)}`);
+            }
+          }
+        }
       }
     }
   }
@@ -1248,15 +1281,27 @@ function runDoctorResolution(options) {
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   H('Summary');
-  // READY requires: single installation, valid manifest schema, and complete disk payload.
-  const overallOk     = (mode === 'local-only' || mode === 'global-only') && !manifestSchemaProblematic && !diskIncomplete;
+  // READY requires: single installation, valid manifest schema, consistent installationMode,
+  // manifest.files covering all expected assets, and complete disk payload.
+  const overallOk = (mode === 'local-only' || mode === 'global-only')
+    && !manifestSchemaProblematic
+    && !manifestModeInconsistent
+    && !manifestFilesIncomplete
+    && !diskIncomplete;
   const overallStatus = overallOk ? 'READY' : 'PROBLEMATIC';
   L(`  Status: ${clr(overallOk ? 'green' : 'red', overallStatus)}`);
   let recommendation;
-  if (mode === 'none')      recommendation = "Run 'npm run toolkit:dev-install-global' to install globally, or use the local installer.";
-  else if (mode === 'both') recommendation = 'Remove one installation to resolve ambiguity before running pipelines.';
-  else if (manifestSchemaProblematic) recommendation = 'Run the installer to repair the manifest before running pipelines.';
-  else                      recommendation = `Installation is operational in ${mode} mode.`;
+  if (mode === 'none') {
+    recommendation = "Run 'npm run toolkit:dev-install-global' to install globally, or use the local installer.";
+  } else if (mode === 'both') {
+    recommendation = 'Remove one installation to resolve ambiguity before running pipelines.';
+  } else if (manifestSchemaProblematic || manifestModeInconsistent || manifestFilesIncomplete) {
+    recommendation = 'Run the installer to repair the manifest before running pipelines.';
+  } else if (diskIncomplete) {
+    recommendation = 'Run the installer to complete the installation before running pipelines.';
+  } else {
+    recommendation = `Installation is operational in ${mode} mode.`;
+  }
   L(`  Recommendation: ${dim(recommendation)}`);
   L('');
   L(clr('gray', '═'.repeat(72)));

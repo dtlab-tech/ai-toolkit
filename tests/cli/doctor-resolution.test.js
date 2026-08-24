@@ -470,4 +470,110 @@ describe('doctor resolution', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('9.9.9');
   });
+
+  // ── installationMode consistency (P1-B) ──────────────────────────────────────
+
+  test('reports PROBLEMATIC when manifest.installationMode does not match detected mode', () => {
+    // Install real toolkit locally, then overwrite manifest with wrong installationMode.
+    const tmpProject = mktmp('mode-mismatch');
+    const tmpHome    = mktmp('home-mm');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    // Overwrite installationMode to 'global' while the install is local.
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    m.installationMode = 'global';
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toContain('installationMode');
+  });
+
+  test('action items mention installationMode mismatch', () => {
+    const tmpProject = mktmp('mode-action');
+    const tmpHome    = mktmp('home-ma');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    m.installationMode = 'global';
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toMatch(/installationMode.*does not match|does not match.*installationMode/i);
+  });
+
+  // ── manifest.files completeness (P1-B) ───────────────────────────────────────
+
+  test('reports PROBLEMATIC when manifest.files is empty but disk is complete', () => {
+    // Install real toolkit (disk complete), then set manifest.files = [].
+    const tmpProject = mktmp('empty-files');
+    const tmpHome    = mktmp('home-ef');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    m.files = [];
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/manifest\.files|missing.*catalog/i);
+  });
+
+  test('reports PROBLEMATIC when a single expected asset is missing from manifest.files', () => {
+    // Install real toolkit, then remove one catalog asset from manifest.files.
+    const tmpProject = mktmp('single-missing');
+    const tmpHome    = mktmp('home-sm');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    // Drop the first catalog file from the manifest.files list.
+    if (m.files.length > 0) m.files.splice(0, 1);
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+  });
+
+  test('reports READY when manifest and disk are fully coherent (real install)', () => {
+    // A fresh real install must produce READY without modification.
+    const tmpProject = mktmp('coherent');
+    const tmpHome    = mktmp('home-coh');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('READY');
+    expect(result.stdout).not.toContain('PROBLEMATIC');
+  });
+
+  test('recommendation is not "operational" when status is PROBLEMATIC', () => {
+    // A manifest-only install without disk files → PROBLEMATIC.
+    const tmpProject = mktmp('not-operational');
+    const tmpHome    = mktmp('home-no');
+    putManifest(tmpProject, manifest(['.claude/agents/test.md'], 'local'));
+    putAgentFile(tmpProject, 'test.md', '# test');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).not.toContain('Installation is operational');
+  });
 });
