@@ -329,7 +329,10 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
   const allFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
   // Restrict manifest entries to catalog runtime assets only (no docs, no CLAUDE.md).
   const newFileSet  = allFileSet.filter(rel => catalogPrefixes.some(p => rel.startsWith(p)));
-  const orphans     = computeOrphans(oldManifest.files, newFileSet);
+  // Filter orphans to catalog prefixes only: entries from old manifests outside catalog dirs
+  // (e.g. docs/, CLAUDE.md written by pre-hotfix installers) must never be treated as orphans.
+  const orphans     = computeOrphans(oldManifest.files, newFileSet)
+    .filter(o => catalogPrefixes.some(p => o.replace(/\\/g, '/').startsWith(p)));
 
   const existingOrphans = orphans.filter(o => fs.existsSync(path.join(destRoot, o)));
 
@@ -669,6 +672,42 @@ function updateGitignore(destDir) {
   }
 }
 
+// ── buildExpectedPayload ──────────────────────────────────────────────────────
+
+// Returns the Set of absolute runtime paths that the installer distributes to
+// effectiveRoot (.claude/ directory), applying TOOLKIT_INTERNAL_ASSETS exclusions.
+// Single source of truth shared by the resolver, doctor, and list-assets so all
+// three agree on exactly what a valid installation contains.
+function buildExpectedPayload(effectiveRoot) {
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  const payload = new Set();
+  for (const cat of getAssetCategories()) {
+    const srcDir = path.join(packageRoot, cat.sourceDir);
+    if (!fs.existsSync(srcDir)) continue;
+    const internalItems = TOOLKIT_INTERNAL_ASSETS[cat.name];
+    const catSubDir = cat.runtimeDir.replace(/^\.claude\//, '');
+    let entries;
+    try { entries = fs.readdirSync(srcDir); } catch (_) { continue; }
+    for (const item of entries) {
+      if (internalItems && internalItems.has(item)) continue;
+      const itemSrcPath = path.join(srcDir, item);
+      let stat;
+      try { stat = fs.statSync(itemSrcPath); } catch (_) { continue; }
+      if (stat.isDirectory()) {
+        try {
+          for (const f of walkDir(itemSrcPath)) {
+            const relFile = path.relative(srcDir, f);
+            payload.add(path.resolve(path.join(effectiveRoot, catSubDir, relFile)));
+          }
+        } catch (_) { /* ignore */ }
+      } else {
+        payload.add(path.resolve(path.join(effectiveRoot, catSubDir, item)));
+      }
+    }
+  }
+  return payload;
+}
+
 // ── resolveClaudeRuntimeAsset ─────────────────────────────────────────────────
 
 // INFRA-TASK-BE-02 (FTR-015):
@@ -822,22 +861,9 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   }
 
   // ── Phase D: Catalog membership + completeness check ──────────────────────
-  // Build expectedPayload: every runtime asset path derived from the package source catalog.
-  // Files are enumerated from packageRoot/cat.sourceDir and mapped to their runtime destinations.
-  const categories      = getAssetCategories();
-  const expectedPayload = new Set();
-
-  for (const cat of categories) {
-    const srcDir = path.join(packageRoot, cat.sourceDir);
-    if (!fs.existsSync(srcDir)) continue;
-    try {
-      for (const f of walkDir(srcDir)) {
-        const relFile    = path.relative(srcDir, f);
-        const runtimeAbs = path.resolve(path.join(effectiveRoot, catRelDir(cat), relFile));
-        expectedPayload.add(runtimeAbs);
-      }
-    } catch (_) { /* ignore unreadable source dirs */ }
-  }
+  // Use the shared distributable payload function so the resolver checks exactly
+  // the same files that the installer writes (TOOLKIT_INTERNAL_ASSETS excluded).
+  const expectedPayload = buildExpectedPayload(effectiveRoot);
 
   // Step 6e: warn about stale manifest entries (in manifest but no longer in catalog)
   if (manifestSchemaValid && manifest && Array.isArray(manifest.files)) {
@@ -1158,6 +1184,31 @@ function runDoctorResolution(options) {
   }
   L('');
 
+  // ── Disk Completeness ─────────────────────────────────────────────────────────
+  H('Disk Completeness');
+  let diskIncomplete = false;
+  let missingRuntimeFiles = [];
+
+  if (mode === 'local-only' || mode === 'global-only') {
+    const singleRoot = mode === 'local-only' ? localRuntimeRoot : globalRuntimeRoot;
+    const expected   = buildExpectedPayload(singleRoot);
+    missingRuntimeFiles = [...expected].filter(f => !fs.existsSync(f));
+    diskIncomplete = missingRuntimeFiles.length > 0;
+  }
+
+  if (mode !== 'local-only' && mode !== 'global-only') {
+    L(`  ${dim('(check runs only for single-installation mode)')}`);
+  } else if (!diskIncomplete) {
+    L(`  ${tick}  ${clr('green', 'COMPLETE')}  ${dim('all catalog files present on disk')}`);
+  } else {
+    L(`  ${cross}  ${clr('red', 'INCOMPLETE')}  — ${missingRuntimeFiles.length} required file(s) missing:`);
+    for (const f of missingRuntimeFiles.slice(0, 10)) {
+      L(`    ${clr('red', '✖')} ${dim(f)}`);
+    }
+    if (missingRuntimeFiles.length > 10) L(`    ${dim(`... and ${missingRuntimeFiles.length - 10} more`)}`);
+  }
+  L('');
+
   // ── Action Items ────────────────────────────────────────────────────────────
   H('Action Items');
   const actions = [];
@@ -1195,6 +1246,16 @@ function runDoctorResolution(options) {
       }
     }
   }
+  if (diskIncomplete) {
+    const display = missingRuntimeFiles.slice(0, 5);
+    for (const f of display) {
+      actions.push(`${cross}  Missing required file: ${dim(path.basename(f))} — run the installer`);
+    }
+    if (missingRuntimeFiles.length > 5) {
+      actions.push(`${cross}  ... and ${missingRuntimeFiles.length - 5} more missing file(s) — run the installer`);
+    }
+  }
+
   if (actions.length === 0) {
     L(`  ${tick}  ${clr('green', 'runtime ready for pipelines')}`);
   } else {
@@ -1204,8 +1265,8 @@ function runDoctorResolution(options) {
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   H('Summary');
-  // READY only when installation mode is valid (single installation) AND manifest is schema-valid.
-  const overallOk     = (mode === 'local-only' || mode === 'global-only') && !manifestSchemaProblematic;
+  // READY requires: single installation, valid manifest schema, and complete disk payload.
+  const overallOk     = (mode === 'local-only' || mode === 'global-only') && !manifestSchemaProblematic && !diskIncomplete;
   const overallStatus = overallOk ? 'READY' : 'PROBLEMATIC';
   L(`  Status: ${clr(overallOk ? 'green' : 'red', overallStatus)}`);
   let recommendation;
@@ -1307,6 +1368,49 @@ function buildCategoryMappings(srcCatDir, destCatDir, catName) {
     .map(item => ({ src: path.join(srcCatDir, item), dest: path.join(destCatDir, item) }));
 }
 
+// ── verifyInstall ─────────────────────────────────────────────────────────────
+
+// Checks that the version stamp in <home>/.claude/.ai-toolkit-version matches
+// package.json. Called as the final step of toolkit:dev-install-global.
+// Exit 0 = versions match. Exit 1 = stamp missing, unreadable, or wrong version.
+function runVerifyInstall(options) {
+  const os = require('os');
+  const opts          = options || {};
+  const effectiveHome = opts.home !== undefined ? path.resolve(opts.home) : os.homedir();
+  const versionFile   = path.join(effectiveHome, '.claude', VERSION_FILE);
+
+  if (!fs.existsSync(versionFile)) {
+    process.stderr.write(`Error: verify-install FAILED — no version stamp at ${versionFile}\n`);
+    process.exit(1);
+  }
+
+  let stamp;
+  try {
+    stamp = fs.readFileSync(versionFile, 'utf8').trim();
+  } catch (err) {
+    process.stderr.write(`Error: verify-install FAILED — cannot read ${versionFile}: ${err.message}\n`);
+    process.exit(1);
+  }
+
+  if (!stamp) {
+    process.stderr.write(`Error: verify-install FAILED — version stamp is empty at ${versionFile}\n`);
+    process.exit(1);
+  }
+
+  if (stamp !== TOOLKIT_VERSION) {
+    process.stderr.write(
+      `Error: verify-install FAILED — version mismatch\n` +
+      `  installed: ${stamp}\n` +
+      `  expected:  ${TOOLKIT_VERSION}\n` +
+      `Run 'npm run toolkit:dev-install-global' to update.\n`
+    );
+    process.exit(1);
+  }
+
+  process.stdout.write(`verify-install: PASS — version ${stamp} matches package.json\n`);
+  process.exit(0);
+}
+
 // ── entry points ──────────────────────────────────────────────────────────────
 
 async function installLocal(targetDir, force, dryRun = false) {
@@ -1347,10 +1451,10 @@ async function installLocal(targetDir, force, dryRun = false) {
   console.log();
 }
 
-async function installGlobal(force, dryRun = false) {
+async function installGlobal(force, dryRun = false, homeOverride = undefined) {
   banner();
   try {
-    const homedir = require('os').homedir();
+    const homedir = homeOverride !== undefined ? path.resolve(homeOverride) : require('os').homedir();
     const target  = path.join(homedir, '.claude');
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
     // destRoot is homedir so helpers (manifest, version stamp, trash) resolve to
@@ -1417,7 +1521,9 @@ async function main() {
   if (argv[0] === '--local') {
     await installLocal(argv[1] || '.', force, dryRun);
   } else if (argv[0] === '--global') {
-    await installGlobal(force, dryRun);
+    const homeIdx = argv.indexOf('--home');
+    const homeOverride = homeIdx !== -1 ? argv[homeIdx + 1] : undefined;
+    await installGlobal(force, dryRun, homeOverride);
   } else if (argv[0] === 'install') {
     // Subcommand aliases: `install --project <dir>` ≡ `--local <dir>`
     //                     `install --global`         ≡ `--global`
@@ -1468,6 +1574,11 @@ async function main() {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
+  } else if (argv[0] === 'verify-install') {
+    const remaining = argv.slice(1);
+    const homeIdx   = remaining.indexOf('--home');
+    const home      = homeIdx !== -1 ? remaining[homeIdx + 1] : undefined;
+    runVerifyInstall({ home });
   } else if (argv[0] === 'doctor' && argv[1] === 'resolution') {
     const remaining  = argv.slice(2);
     const projectIdx = remaining.indexOf('--project');
@@ -1607,11 +1718,12 @@ async function main() {
       process.exit(1);
     }
 
-    // Determine the runtime root to enumerate. When neither is present, runtimeRoot points
-    // nowhere meaningful — the walk finds nothing and an empty list is returned (exit 0).
-    const runtimeRoot = localPresent  ? localClaude
-                      : globalPresent ? globalClaude
-                      : localClaude;   // fallback: not installed — returns empty list, exit 0
+    // No installation → Tier 3 error (exit 1, stdout empty, diagnostic on stderr).
+    if (!localPresent && !globalPresent) {
+      process.stderr.write('Error: no toolkit installation found. Install with --local or --global.\n');
+      process.exit(1);
+    }
+    const runtimeRoot = localPresent ? localClaude : globalClaude;
 
     const cats = category ? [getCategoryByName(category)] : getAssetCategories();
     const results = [];
@@ -1626,7 +1738,7 @@ async function main() {
           if (fs.statSync(full).isDirectory()) {
             stack.push(full);
           } else {
-            results.push(path.relative(runtimeRoot, full).replace(/\\/g, '/'));
+            results.push(full);
           }
         }
       }
@@ -1681,5 +1793,7 @@ if (require.main === module) {
     validatePurityGuard,
     TOOLKIT_INTERNAL_ASSETS,
     buildCategoryMappings,
+    buildExpectedPayload,
+    runVerifyInstall,
   };
 }

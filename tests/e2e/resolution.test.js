@@ -16,31 +16,39 @@
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const CLI          = path.join(__dirname, '..', '..', 'bin', 'cli.js');
 const TOOLKIT_ROOT = path.join(__dirname, '..', '..');
 const { getAssetCategories } = require('../../lib/asset-catalog');
+const { TOOLKIT_INTERNAL_ASSETS } = require('../../bin/cli');
+
+jest.setTimeout(60000);
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+// Copies distributable catalog files into clauDir, applying TOOLKIT_INTERNAL_ASSETS
+// exclusions to match what the real installer writes (avoids stale-entry warnings).
 function installCatalogFilesInto(clauDir) {
   fs.mkdirSync(clauDir, { recursive: true });
   const files = [];
   for (const cat of getAssetCategories()) {
-    const srcDir = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const srcDir      = path.join(TOOLKIT_ROOT, cat.sourceDir);
+    const internalSet = TOOLKIT_INTERNAL_ASSETS[cat.name];
     if (!fs.existsSync(srcDir)) continue;
-    const stack = [srcDir];
-    while (stack.length > 0) {
-      const dir = stack.pop();
-      for (const entry of fs.readdirSync(dir)) {
-        const full = path.join(dir, entry);
-        if (fs.statSync(full).isDirectory()) { stack.push(full); }
-        else {
-          const rel  = path.relative(srcDir, full).replace(/\\/g, '/');
+    for (const topEntry of fs.readdirSync(srcDir)) {
+      if (internalSet && internalSet.has(topEntry)) continue;
+      const topFull = path.join(srcDir, topEntry);
+      const stack   = [topFull];
+      while (stack.length > 0) {
+        const cur = stack.pop();
+        if (fs.statSync(cur).isDirectory()) {
+          for (const sub of fs.readdirSync(cur)) stack.push(path.join(cur, sub));
+        } else {
+          const rel  = path.relative(srcDir, cur).replace(/\\/g, '/');
           const dest = path.join(clauDir, cat.name, rel);
           fs.mkdirSync(path.dirname(dest), { recursive: true });
-          fs.copyFileSync(full, dest);
+          fs.copyFileSync(cur, dest);
           files.push(`.claude/${cat.name}/${rel}`);
         }
       }
@@ -213,5 +221,97 @@ describe('E2E resolution — no installation found', () => {
     const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
     expect(result.stderr).toBeTruthy();
     expect(result.stdout).toBe('');
+  });
+});
+
+// ── fresh CLI local install → resolve ─────────────────────────────────────────
+// Validates the installer–resolver contract end-to-end: a fresh `--local` install
+// via the CLI must produce an installation that the resolver accepts without error.
+// This is the key P0-1 regression guard.
+
+describe('E2E resolution — fresh CLI local install → resolve-asset', () => {
+  let projectDir;
+  let home;
+
+  beforeAll(() => {
+    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve e2e cli-install-'));
+    home       = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve e2e cli-home-'));
+    // Run the actual CLI installer (applies TOOLKIT_INTERNAL_ASSETS exclusions)
+    spawnSync(
+      process.execPath,
+      [CLI, '--local', projectDir, '--force'],
+      { encoding: 'utf8', cwd: TOOLKIT_ROOT }
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(projectDir, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  test('fresh local install → resolve-asset scripts/wb-validate.js exits 0', () => {
+    const result = resolveAsset('scripts/wb-validate.js', { projectDir, home });
+    expect(result.status).toBe(0);
+    expect(path.isAbsolute(result.stdout)).toBe(true);
+    expect(result.stdout).toContain('wb-validate.js');
+  });
+
+  test('fresh local install → resolved path is inside projectDir/.claude/', () => {
+    const result = resolveAsset('scripts/wb-validate.js', { projectDir, home });
+    const expected = path.resolve(path.join(projectDir, '.claude'));
+    expect(result.stdout.startsWith(expected)).toBe(true);
+  });
+
+  test('fresh local install → resolve-asset agents/developer-backend.md exits 0', () => {
+    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    expect(result.status).toBe(0);
+  });
+
+  test('fresh local install → install-toolkit.md is NOT resolvable (excluded from distribution)', () => {
+    const result = resolveAsset('agents/install-toolkit.md', { projectDir, home });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('not a registered catalog asset');
+  });
+});
+
+// ── fresh CLI global install → resolve ────────────────────────────────────────
+
+describe('E2E resolution — fresh CLI global install → resolve-asset', () => {
+  let projectDir;
+  let home;
+
+  beforeAll(() => {
+    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve e2e global-install-p-'));
+    home       = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve e2e global-install-h-'));
+    // Run the actual CLI global installer with --home override for test isolation
+    spawnSync(
+      process.execPath,
+      [CLI, '--global', '--force', '--home', home],
+      { encoding: 'utf8', cwd: TOOLKIT_ROOT }
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(projectDir, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  test('fresh global install → resolve-asset scripts/wb-validate.js exits 0', () => {
+    const result = resolveAsset('scripts/wb-validate.js', { projectDir, home });
+    expect(result.status).toBe(0);
+    expect(path.isAbsolute(result.stdout)).toBe(true);
+    expect(result.stdout).toContain('wb-validate.js');
+  });
+
+  test('fresh global install → resolved path is inside home/.claude/', () => {
+    const result = resolveAsset('scripts/wb-validate.js', { projectDir, home });
+    const expected = path.resolve(path.join(home, '.claude'));
+    expect(result.stdout.startsWith(expected)).toBe(true);
+  });
+
+  test('fresh global install → install-toolkit.md is NOT resolvable (excluded from distribution)', () => {
+    const result = resolveAsset('agents/install-toolkit.md', { projectDir, home });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('not a registered catalog asset');
   });
 });
