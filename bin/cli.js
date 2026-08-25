@@ -716,6 +716,48 @@ function buildExpectedPayload(effectiveRoot) {
   return new Set(buildPayloadFileMappings(effectiveRoot).map(m => path.resolve(m.dest)));
 }
 
+// Validate the shape of a manifest 'files' field for the doctor's schema check.
+// Returns an array of human-readable error strings; an empty array means valid.
+// A valid 'files' field is an array whose every element is a non-empty, relative,
+// normalizable path confined to destRoot, free of null bytes and '..' segments.
+// destRoot is the installation destination (parent of .claude) the paths resolve against.
+function validateManifestFilesField(files, destRoot) {
+  const errors = [];
+  if (!Array.isArray(files)) {
+    errors.push(`'files' must be an array (found ${files === null ? 'null' : typeof files})`);
+    return errors;
+  }
+  const rootResolved = path.resolve(destRoot);
+  files.forEach((entry, i) => {
+    if (typeof entry !== 'string') {
+      errors.push(`'files[${i}]' must be a string (found ${entry === null ? 'null' : typeof entry})`);
+      return;
+    }
+    if (entry.length === 0) {
+      errors.push(`'files[${i}]' must not be empty`);
+      return;
+    }
+    if (entry.includes('\0')) {
+      errors.push(`'files[${i}]' contains a null byte`);
+      return;
+    }
+    if (path.isAbsolute(entry)) {
+      errors.push(`'files[${i}]' must be a relative path ('${entry}')`);
+      return;
+    }
+    const segments = entry.replace(/\\/g, '/').split('/');
+    if (segments.some(s => s === '..')) {
+      errors.push(`'files[${i}]' must not contain '..' segments ('${entry}')`);
+      return;
+    }
+    const resolved = path.resolve(rootResolved, entry);
+    if (resolved !== rootResolved && !resolved.startsWith(rootResolved + path.sep)) {
+      errors.push(`'files[${i}]' escapes the installation root ('${entry}')`);
+    }
+  });
+  return errors;
+}
+
 // Shared presence-detection helpers — used by resolver, doctor, and list-assets.
 // condC: at least one catalog category directory inside claudeDir has files.
 function hasToolkitPayloadFiles(claudeDir) {
@@ -993,7 +1035,11 @@ function runDoctorResolution(options) {
   // Only meaningful when manifestData exists with a files array; returns [] otherwise.
   function findResiduals(runtimeRoot, manifestData) {
     if (!manifestData || !Array.isArray(manifestData.files)) return [];
-    const tracked = new Set(manifestData.files.map(f => f.replace(/\\/g, '/')));
+    // Defensive: a malformed manifest may contain non-string entries; ignore them
+    // here so doctor still produces a read-only report (the schema check flags them).
+    const tracked = new Set(
+      manifestData.files.filter(f => typeof f === 'string').map(f => f.replace(/\\/g, '/'))
+    );
     const residuals = [];
     const parentDir = path.dirname(runtimeRoot); // e.g. /proj (parent of .claude)
     for (const cat of categories) {
@@ -1230,6 +1276,7 @@ function runDoctorResolution(options) {
         }
         actions.push(`${warnS}  Run the installer to regenerate the manifest with all required fields.`);
       } else {
+        const parentDir = path.join(effectiveRoot, '..');
         // installationMode must match the detected installation mode.
         if (mInfo.data.installationMode !== detectedMode) {
           manifestModeInconsistent = true;
@@ -1238,10 +1285,20 @@ function runDoctorResolution(options) {
             `detected mode '${detectedMode}' — run the installer to repair`
           );
         }
-        // manifest.files must cover all expected catalog assets.
-        if (Array.isArray(mInfo.data.files)) {
-          const expected      = buildExpectedPayload(effectiveRoot);
-          const parentDir     = path.join(effectiveRoot, '..');
+        // manifest.files must be a well-formed array of relative, in-bounds paths.
+        const filesErrors = validateManifestFilesField(mInfo.data.files, parentDir);
+        if (filesErrors.length > 0) {
+          manifestSchemaProblematic = true;
+          for (const e of filesErrors.slice(0, 5)) {
+            actions.push(`${cross}  Manifest schema invalid: ${e}`);
+          }
+          if (filesErrors.length > 5) {
+            actions.push(`${cross}  ... and ${filesErrors.length - 5} more manifest 'files' error(s)`);
+          }
+          actions.push(`${warnS}  Run the installer to regenerate the manifest with a valid 'files' list.`);
+        } else {
+          // files is a valid array — it must cover all expected catalog assets.
+          const expected       = buildExpectedPayload(effectiveRoot);
           const manifestAbsSet = new Set(
             mInfo.data.files.map(f => path.resolve(path.join(parentDir, f)))
           );
@@ -1789,6 +1846,7 @@ if (require.main === module) {
     TOOLKIT_INTERNAL_ASSETS,
     buildPayloadFileMappings,
     buildExpectedPayload,
+    validateManifestFilesField,
     hasToolkitPayloadFiles,
     isToolkitInstalled,
     runVerifyInstall,
