@@ -1437,22 +1437,6 @@ const TOOLKIT_INTERNAL_ASSETS = {
   skills: new Set(['install-toolkit']),
 };
 
-// Build per-item mappings for a single category, skipping any items listed in
-// TOOLKIT_INTERNAL_ASSETS. For categories without internal items the mapping
-// covers the whole source directory (identical to the previous whole-dir approach).
-function buildCategoryMappings(srcCatDir, destCatDir, catName) {
-  if (!fs.existsSync(srcCatDir)) return [];
-  const internalItems = TOOLKIT_INTERNAL_ASSETS[catName];
-  if (!internalItems) {
-    // No exclusions for this category — map the whole directory as before.
-    return [{ src: srcCatDir, dest: destCatDir }];
-  }
-  // Enumerate items individually so we can exclude toolkit-internal entries.
-  return fs.readdirSync(srcCatDir)
-    .filter(item => !internalItems.has(item))
-    .map(item => ({ src: path.join(srcCatDir, item), dest: path.join(destCatDir, item) }));
-}
-
 // ── verifyInstall ─────────────────────────────────────────────────────────────
 
 // Checks that the version stamp in <home>/.claude/.ai-toolkit-version matches
