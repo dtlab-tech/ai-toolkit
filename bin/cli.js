@@ -1733,7 +1733,8 @@ async function main() {
       process.exit(1);
     }
   } else if (argv[0] === 'list-assets') {
-    // list-assets [--category <name>] [--format json|plain] [--project <dir>] [--home <dir>]
+    // list-assets --project <dir> --category <name> [--format json|plain] [--home <dir>]
+    // Both --project and --category are MANDATORY (Tech Spec contract).
     // Returns exclusively assets from the distributable payload (buildExpectedPayload).
     // Foreign/user-created files under .claude/ are never returned.
     // Exit 0 + result for installed single-mode; exit 1 for no-install or mixed install.
@@ -1742,7 +1743,7 @@ async function main() {
     const remaining  = argv.slice(1);
     let category     = null;
     let format       = 'json';
-    let projectDir   = process.cwd();
+    let projectDir   = null;
     let home;
     for (let i = 0; i < remaining.length; i++) {
       if      (remaining[i] === '--category' && remaining[i + 1]) { category   = remaining[++i]; }
@@ -1750,13 +1751,20 @@ async function main() {
       else if (remaining[i] === '--project'  && remaining[i + 1]) { projectDir = remaining[++i]; }
       else if (remaining[i] === '--home'     && remaining[i + 1]) { home       = remaining[++i]; }
     }
-    if (category) {
-      const cat = getCategoryByName(category);
-      if (!cat) {
-        const valid = getAssetCategories().map(c => c.name).join(', ');
-        process.stderr.write(`Error: unknown category '${category}'. Valid: ${valid}\n`);
-        process.exit(1);
-      }
+    // Mandatory parameter contract (Tier 3: exit 1, stdout empty, diagnostic on stderr).
+    if (!projectDir) {
+      process.stderr.write('Error: list-assets requires --project <dir>\n');
+      process.exit(1);
+    }
+    if (!category) {
+      process.stderr.write('Error: list-assets requires --category <name>\n');
+      process.exit(1);
+    }
+    const cat = getCategoryByName(category);
+    if (!cat) {
+      const valid = getAssetCategories().map(c => c.name).join(', ');
+      process.stderr.write(`Error: unknown category '${category}'. Valid: ${valid}\n`);
+      process.exit(1);
     }
     // Shared 3-condition presence detection (same as resolver and doctor).
     const effectiveHome    = home       ? path.resolve(home)       : os.homedir();
@@ -1782,19 +1790,13 @@ async function main() {
     }
     const runtimeRoot = localPresent ? localClaude : globalClaude;
 
-    // Return only catalog-defined assets (no foreign files).
-    // Filter to the requested category if given; include only files that exist on disk.
+    // Return only catalog-defined assets (no foreign files) for the requested
+    // category, and only files that actually exist on disk.
     const allExpected = [...buildExpectedPayload(runtimeRoot)].sort();
-    let results;
-    if (category) {
-      const cat    = getCategoryByName(category);
-      const catDir = path.resolve(path.join(runtimeRoot, cat.name));
-      results = allExpected.filter(f => f.startsWith(catDir + path.sep) || f.startsWith(catDir + '/'));
-    } else {
-      results = allExpected;
-    }
-    // Only return files that are actually present on disk.
-    results = results.filter(f => fs.existsSync(f));
+    const catDir      = path.resolve(path.join(runtimeRoot, cat.name));
+    const results = allExpected
+      .filter(f => f.startsWith(catDir + path.sep) || f.startsWith(catDir + '/'))
+      .filter(f => fs.existsSync(f));
 
     if (format === 'json') {
       process.stdout.write(JSON.stringify(results, null, 2) + '\n');
