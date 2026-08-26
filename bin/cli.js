@@ -716,11 +716,107 @@ function buildExpectedPayload(effectiveRoot) {
   return new Set(buildPayloadFileMappings(effectiveRoot).map(m => path.resolve(m.dest)));
 }
 
+// ── validateRuntimeRelativePath ───────────────────────────────────────────────
+// Single source of truth for runtime-path safety and canonicalization. Used by
+// BOTH resolveClaudeRuntimeAsset() (lenient: normalizes and accepts) and
+// validateManifestFilesField() (strict: rejects any non-canonical form). The
+// two callers format their own diagnostics, but traversal, absolute/drive paths,
+// null bytes, confinement, and the canonical computation live here only.
+//
+// A path is safe when it is a non-empty string with no surrounding whitespace,
+// no null byte, is neither a Unix/Windows absolute path nor drive-relative
+// (e.g. 'C:foo'), and contains no '..' traversal segment.
+// Its canonical form uses '/' as the sole separator with no '.'/empty segments,
+// no double separators, and no trailing slash.
+//
+// options:
+//   root             — absolute installation root; when given, the resolved path
+//                      must stay confined within it (defence in depth).
+//   requireCanonical — when true, a value that is not already canonical is an
+//                      error (code 'non-canonical'); the manifest validator uses
+//                      this so doctor flags incoherent manifests instead of
+//                      silently normalizing them.
+//
+// Returns on success: { ok: true, canonical, resolved, canonicalDiffers }
+// Returns on failure: { ok: false, code, reason, canonical? }
+function validateRuntimeRelativePath(value, options) {
+  const opts = options || {};
+  const fail = (code, reason, extra) => Object.assign({ ok: false, code, reason }, extra);
+
+  if (typeof value !== 'string') {
+    const found = value === null ? 'null' : value === undefined ? 'undefined' : typeof value;
+    return fail('not-string', `must be a non-empty string (found ${found})`);
+  }
+  if (value.length === 0) {
+    return fail('empty', 'must be a non-empty string (found empty string)');
+  }
+  if (value.includes('\0')) {
+    return fail('null-byte', 'must not contain null bytes');
+  }
+  if (value.trim().length === 0) {
+    return fail('whitespace-only', 'must not be a whitespace-only string');
+  }
+  if (value !== value.trim()) {
+    return fail('surrounding-whitespace', 'must not have leading or trailing whitespace');
+  }
+  if (value.startsWith('/')) {
+    return fail('absolute-unix', 'must be relative (got Unix absolute path)');
+  }
+  if (/^[A-Za-z]:[\\/]/.test(value)) {
+    return fail('absolute-windows', 'must be relative (got Windows absolute path)');
+  }
+  if (/^[A-Za-z]:/.test(value)) {
+    return fail('drive-relative', 'must be relative (got Windows drive-relative path)');
+  }
+  const unified = value.replace(/\\/g, '/');
+  if (unified.split('/').includes('..')) {
+    return fail('traversal', 'must not contain path traversal (..)');
+  }
+  // Canonical form: forward slashes, no '.'/empty segments, no double separators,
+  // no trailing slash. '..' is already rejected above, so it cannot survive here.
+  const canonical = unified.split('/').filter(s => s !== '' && s !== '.').join('/');
+  if (canonical.length === 0) {
+    return fail('empty-after-canonical', 'must resolve to a non-empty canonical path');
+  }
+  let resolved = null;
+  if (opts.root !== undefined && opts.root !== null) {
+    const rootResolved = path.resolve(opts.root);
+    resolved = path.resolve(rootResolved, canonical);
+    if (resolved !== rootResolved && !resolved.startsWith(rootResolved + path.sep)) {
+      return fail('escapes-root', 'escapes the installation root', { canonical });
+    }
+  }
+  const canonicalDiffers = value !== canonical;
+  if (opts.requireCanonical && canonicalDiffers) {
+    return fail('non-canonical', `is not canonical; expected '${canonical}'`, { canonical });
+  }
+  return { ok: true, canonical, resolved, canonicalDiffers };
+}
+
+// Format a manifest 'files[i]' schema error from a validateRuntimeRelativePath
+// failure. The entry is echoed (when a string) so operators can spot the culprit.
+function formatManifestFilesError(i, entry, check) {
+  const shown = typeof entry === 'string' ? ` ('${entry}')` : '';
+  switch (check.code) {
+    case 'traversal':
+      return `'files[${i}]' must not contain '..' segments (path traversal)${shown}`;
+    case 'non-canonical':
+      return `'files[${i}]' is not canonical; expected '${check.canonical}'${shown}`;
+    case 'escapes-root':
+      return `'files[${i}]' escapes the installation root${shown}`;
+    default:
+      return `'files[${i}]' ${check.reason}${shown}`;
+  }
+}
+
 // Validate the shape of a manifest 'files' field for the doctor's schema check.
 // Returns an array of human-readable error strings; an empty array means valid.
-// A valid 'files' field is an array whose every element is a non-empty, relative,
-// normalizable path confined to destRoot, free of null bytes and '..' segments.
-// destRoot is the installation destination (parent of .claude) the paths resolve against.
+// A valid 'files' field is an array whose every element is a canonical,
+// destination-relative path (forward slashes only, no '.'/'..'/empty segments,
+// no trailing slash) confined to destRoot and free of null bytes. Non-canonical
+// entries are reported — never silently normalized — so doctor requires the
+// installer to regenerate an incoherent manifest.
+// destRoot is the installation destination (parent of .claude) paths resolve against.
 function validateManifestFilesField(files, destRoot) {
   const errors = [];
   if (!Array.isArray(files)) {
@@ -729,31 +825,9 @@ function validateManifestFilesField(files, destRoot) {
   }
   const rootResolved = path.resolve(destRoot);
   files.forEach((entry, i) => {
-    if (typeof entry !== 'string') {
-      errors.push(`'files[${i}]' must be a string (found ${entry === null ? 'null' : typeof entry})`);
-      return;
-    }
-    if (entry.length === 0) {
-      errors.push(`'files[${i}]' must not be empty`);
-      return;
-    }
-    if (entry.includes('\0')) {
-      errors.push(`'files[${i}]' contains a null byte`);
-      return;
-    }
-    if (path.isAbsolute(entry)) {
-      errors.push(`'files[${i}]' must be a relative path ('${entry}')`);
-      return;
-    }
-    const segments = entry.replace(/\\/g, '/').split('/');
-    if (segments.some(s => s === '..')) {
-      errors.push(`'files[${i}]' must not contain '..' segments ('${entry}')`);
-      return;
-    }
-    const resolved = path.resolve(rootResolved, entry);
-    if (resolved !== rootResolved && !resolved.startsWith(rootResolved + path.sep)) {
-      errors.push(`'files[${i}]' escapes the installation root ('${entry}')`);
-    }
+    const check = validateRuntimeRelativePath(entry, { root: rootResolved, requireCanonical: true });
+    if (check.ok) return;
+    errors.push(formatManifestFilesError(i, entry, check));
   });
   return errors;
 }
@@ -810,30 +884,15 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   const effectiveProjectDir = opts.projectDir !== undefined ? opts.projectDir : process.cwd();
 
   // ── Phase 0: Input validation (no filesystem access) ──────────────────────
-  // 0a: reject null / undefined / empty
-  if (relativePath === null || relativePath === undefined || relativePath === '') {
-    throw new Error('relativePath must be a non-empty string');
+  // Delegate all path-safety + canonicalization to the shared primitive. The
+  // resolver is lenient (requireCanonical omitted): it normalizes backslashes,
+  // '.'/empty segments, and trailing slashes into the canonical form and
+  // proceeds, but still rejects null bytes, absolute/drive paths, and traversal.
+  const inputCheck = validateRuntimeRelativePath(relativePath);
+  if (!inputCheck.ok) {
+    throw new Error(`relativePath ${inputCheck.reason}`);
   }
-  if (typeof relativePath !== 'string') {
-    throw new Error('relativePath must be a non-empty string');
-  }
-  // 0b: reject null bytes
-  if (relativePath.includes('\0')) {
-    throw new Error('relativePath must not contain null bytes');
-  }
-  // 0c: normalize backslashes to forward slashes
-  relativePath = relativePath.replace(/\\/g, '/');
-  // 0d: reject absolute paths
-  if (relativePath.startsWith('/')) {
-    throw new Error('relativePath must be relative (got Unix absolute path)');
-  }
-  if (/^[A-Za-z]:[/\\]/.test(relativePath)) {
-    throw new Error('relativePath must be relative (got Windows absolute path)');
-  }
-  // 0e: reject .. segments
-  if (relativePath.split('/').includes('..')) {
-    throw new Error('relativePath must not contain path traversal (..)');
-  }
+  relativePath = inputCheck.canonical;
 
   // ── Runtime root definitions ───────────────────────────────────────────────
   const localRuntimeRoot  = path.join(effectiveProjectDir, '.claude');
@@ -1832,6 +1891,7 @@ if (require.main === module) {
     TOOLKIT_INTERNAL_ASSETS,
     buildPayloadFileMappings,
     buildExpectedPayload,
+    validateRuntimeRelativePath,
     validateManifestFilesField,
     hasToolkitPayloadFiles,
     isToolkitInstalled,

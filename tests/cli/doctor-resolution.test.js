@@ -680,4 +680,32 @@ describe('doctor resolution', () => {
     expect(result.stdout).toContain('READY');
     expect(result.stdout).not.toContain('Manifest schema invalid');
   });
+
+  test('fresh install then manifest paths converted / → \\ → PROBLEMATIC, not operational', () => {
+    const tmpProject = mktmp('files-backslash');
+    const tmpHome    = mktmp('home-fb');
+    // 1. Fresh, real local install (produces a coherent forward-slash manifest).
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+
+    // Sanity: the untouched install is READY.
+    const before = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(before.stdout).toContain('READY');
+
+    // 2. Convert every '/' in each manifest 'files' entry to '\'.
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const manifest     = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.files     = manifest.files.map(f => f.replace(/\//g, '\\'));
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+    // 3. Doctor must flag the incoherent manifest — never declare it operational.
+    const after = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(after);
+    expect(after.stdout).toContain('PROBLEMATIC');
+    expect(after.stdout).toMatch(/Manifest schema invalid.*is not canonical/);
+    expect(after.stdout).not.toContain('Installation is operational');
+  });
 });
