@@ -14,9 +14,9 @@
 | Frontmatter parsing | gray-matter | ^4.0.3 |
 | CLI entry point | `bin/cli.js` (runs on `require.main === module`) | — |
 | CI | GitHub Actions (`.github/workflows/ci.yml`) | ubuntu-latest / Node 20 |
-| Agent definition format | Markdown with YAML frontmatter (`.claude/agents/*.md`) | — |
-| Skill definition format | Markdown with YAML frontmatter (`.claude/skills/*/SKILL.md`) | — |
-| Workflow scripts | Claude Code Workflow JS (`.claude/workflows/*.js`) | — |
+| Agent definition format | Markdown with YAML frontmatter (`src/claude/agents/*.md`) | — |
+| Skill definition format | Markdown with YAML frontmatter (`src/claude/skills/*/SKILL.md`) | — |
+| Workflow scripts | Claude Code Workflow JS (`src/claude/workflows/*.js`) | — |
 
 ---
 
@@ -25,20 +25,25 @@
 ```
 Fincantieri.CommonLibraries.AIToolkit/
 ├── bin/
-│   └── cli.js                  — CLI installer; pure functions exported for unit tests
-├── .claude/
-│   ├── agents/                 — Agent definition files (name, description, model, tools, body)
-│   ├── skills/                 — User-invocable skill directories, each with SKILL.md
-│   │   ├── implement-feature/
-│   │   ├── assess-codebase/
-│   │   ├── define-feature/
-│   │   ├── hi-gaia/
-│   │   ├── init-agents/
-│   │   └── install-toolkit/
-│   ├── commands/               — Slash command definition files
-│   ├── workflows/              — Claude Code Workflow orchestrator scripts (pm-phase1/2/3.js, am-phase1/2.js)
-│   ├── settings.json           — Sets CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2
-│   └── .ai-toolkit-version     — Installed version stamp
+│   └── cli.js                  — CLI installer + resolver; pure functions exported for unit tests
+├── lib/
+│   └── asset-catalog.js        — Single source of truth for asset categories (agents, commands, skills, workflows, scripts)
+├── src/
+│   └── claude/                 — Versioned source of all runtime assets (installed into dest/.claude/ at runtime)
+│       ├── agents/             — Agent definition files (name, description, model, tools, body)
+│       ├── skills/             — User-invocable skill directories, each with SKILL.md
+│       │   ├── implement-feature/
+│       │   ├── assess-codebase/
+│       │   ├── define-feature/
+│       │   ├── hi-gaia/
+│       │   ├── init-agents/
+│       │   └── install-toolkit/
+│       ├── commands/           — Slash command definition files
+│       ├── workflows/          — Claude Code Workflow orchestrator scripts (pm-phase1/2/3.js, am-phase1/2.js)
+│       └── scripts/            — CLI scripts for work breakdown validation and rendering
+├── .claude/                    — Runtime config (NOT versioned source; personal config files are gitignored)
+│   ├── settings.json           — Sets CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2 (gitignored)
+│   └── .ai-toolkit-version     — Installed version stamp (gitignored)
 ├── docs/
 │   ├── procedures/             — Reusable text procedures referenced by agents
 │   ├── reference.md            — Full quick-reference cheatsheet
@@ -58,10 +63,10 @@ Fincantieri.CommonLibraries.AIToolkit/
 ```
 
 **Naming conventions:**
-- Agent files: `kebab-case.md` under `.claude/agents/` (e.g., `developer-backend.md`)
-- Skill directories: `kebab-case/` under `.claude/skills/`, each containing a `SKILL.md`
-- Command files: `kebab-case.md` under `.claude/commands/`
-- Workflow scripts: `kebab-case.js` under `.claude/workflows/`
+- Agent files: `kebab-case.md` under `src/claude/agents/` (e.g., `developer-backend.md`)
+- Skill directories: `kebab-case/` under `src/claude/skills/`, each containing a `SKILL.md`
+- Command files: `kebab-case.md` under `src/claude/commands/`
+- Workflow scripts: `kebab-case.js` under `src/claude/workflows/`
 - Test files: `{function-name}.test.js` under `tests/cli/` or `tests/frontmatter/`
 - Feature directories: `{PREFIX}-{slug}/` (e.g., `FTR-010-unit-tests/`)
 - Feature prefix pattern: `[A-Z]+-[0-9]+` (e.g., `FTR-010`, `ASSESS-001`)
@@ -238,7 +243,7 @@ const fs     = require('fs');
 const path   = require('path');
 const matter = require('gray-matter');
 
-const AGENTS_DIR   = path.join(__dirname, '..', '..', '.claude', 'agents');
+const AGENTS_DIR   = path.join(__dirname, '..', '..', 'src', 'claude', 'agents');
 const VALID_MODELS = new Set(['haiku', 'sonnet', 'opus']);
 
 const agentFiles = fs.existsSync(AGENTS_DIR)
@@ -362,7 +367,7 @@ These rules are **non-negotiable**. Violating them will cause the architect revi
 - **DO NOT** copy the `install-toolkit/` skill directory to any destination — it is toolkit-internal
 - **DO NOT** present approval gates inside a workflow script or subagent — gates MUST be presented in the main loop (the `implement-feature` or `assess-codebase` skill)
 - **DO NOT** start Phase 6 (implementation) without verifying BOTH Gate 1 and Gate 2 in `{PREFIX}-Approvals.md` on disk
-- **ALWAYS** run `npm test` after any change to `bin/cli.js`, `tests/`, or `.claude/agents/` to verify the test suite passes
+- **ALWAYS** run `npm test` after any change to `bin/cli.js`, `tests/`, or `src/claude/agents/` to verify the test suite passes
 - **ALWAYS** read `AGENTS.md` from the current working directory before writing any code (in all developer and assessment agents — this is Step 0, MANDATORY)
 - **ALWAYS** search for existing patterns in the codebase before introducing new ones
 - **ALWAYS** return a structured completion summary to the orchestrator from developer agents — never dump file contents or diffs

@@ -2,15 +2,21 @@
 
 ## Sequenza
 
-Questa è la seconda di tre idee dipendenti:
+Questa è la quarta di sei idee dipendenti:
 
 ```text
 1. Atomic Work Breakdown
-2. Execution Ledger
-3. Task Checkpoints and Resume
+2. Claude Source Layout and Runtime Resolution
+3. Deterministic Estimate Generation
+4. Execution Ledger
+5. Task Checkpoints and Resume
+6. Isolated Parallel Task Execution
 ```
 
-Dipende da Atomic Work Breakdown per gli identificatori stabili dei task e prepara il tracker persistente utilizzato dalla successiva orchestrazione con commit e recovery.
+Dipende da Atomic Work Breakdown per gli identificatori stabili dei task. Si colloca dopo
+Deterministic Estimate Generation, della quale traccerà le tre attività atomiche, e prepara
+il tracker persistente utilizzato prima dall'orchestrazione con commit e recovery e poi
+dall'esecuzione parallela isolata.
 
 ## Contesto
 
@@ -42,6 +48,28 @@ Git
 ```
 
 In questa feature l'execution ledger traccia pipeline, fasi, agent invocation, task, tentativi, token, durata ed esiti. La creazione automatica dei commit per task e il resume operativo completo appartengono alla feature successiva.
+
+## Principio task-level e concurrency-aware
+
+Il task è l'unità minima di osservabilità anche quando più task vengono eseguiti
+contemporaneamente. Il parallelismo non può ridurre la granularità del ledger: ogni attempt
+mantiene identità, stato, token, durata e risultato autonomi.
+
+Il ledger deve registrare la configurazione richiesta e quella effettivamente applicata:
+
+```jsonl
+{"schemaVersion":1,"event":"scheduler_configured","feature":"FTR-020","maxConcurrencyRequested":3,"maxConcurrencyEffective":3,"isolationStrategy":"git-worktree","at":"2026-08-02T10:00:01Z"}
+```
+
+Regole:
+
+- `maxConcurrencyRequested` proviene dalla configurazione risolta;
+- `maxConcurrencyEffective` è deciso deterministicamente dalle capability disponibili;
+- una differenza tra requested ed effective richiede motivo esplicito e warning;
+- il numero di task `active` non può superare `maxConcurrencyEffective`;
+- il modello LLM non può modificare il limite o scegliere autonomamente la strategia;
+- nella fase seriale iniziale entrambi i valori sono `1`;
+- con parallelismo attivo ogni attempt registra worker slot e worktree isolato.
 
 ## Evoluzione del token ledger
 
@@ -100,6 +128,7 @@ Il ledger non deve sovrascrivere eventi precedenti. Lo stato corrente viene rico
 pipeline_started
 pipeline_completed
 pipeline_failed
+scheduler_configured
 phase_started
 phase_completed
 phase_failed
@@ -194,6 +223,14 @@ Ogni attempt deve registrare quando disponibili:
 - errore;
 - motivo del rework;
 - verifiche associate.
+
+Quando l'esecuzione è parallela deve registrare anche:
+
+- worker/slot ID;
+- worktree o workspace isolato;
+- base commit;
+- commit prodotto;
+- ordine di integrazione sul branch della feature.
 
 ### Interruzione e token sconosciuti
 
@@ -329,12 +366,18 @@ Non inventa task ID quando il vecchio formato non li contiene.
 - gli eventi precedenti non vengono modificati;
 - un import legacy non viene eseguito due volte;
 - una proiezione non modifica il ledger.
+- il numero di task attivi non supera `maxConcurrencyEffective`;
+- due attempt concorrenti non condividono lo stesso worktree mutabile;
+- tutti gli eventi concorrenti passano attraverso un unico writer deterministico.
 
 ## Proiezioni
 
 ### Execution status
 
 Vista per pipeline, fasi, task e attempt.
+
+La vista espone anche configurazione dello scheduler, slot occupati, task ready, task attivi,
+worktree associati e coda di integrazione.
 
 ### Token Estimate actuals
 
@@ -377,6 +420,11 @@ agent_completed | agent_failed | agent_interrupted
 
 Quando il Work Breakdown atomico è disponibile, gli eventi devono includere anche `taskId`. Prima della successiva feature, `pm-phase3` può continuare temporaneamente con l'attuale orchestrazione, ma il ledger deve essere già in grado di rappresentare il task.
 
+Il batching per fase o `agentType` resta una compatibilità transitoria e non costituisce il
+modello target. Task Checkpoints and Resume migrerà l'esecuzione alla granularità del task;
+Isolated Parallel Task Execution aumenterà successivamente la concorrenza senza reintrodurre
+batch non osservabili.
+
 ## Criteri di accettazione
 
 1. Esiste `{PREFIX}-execution-ledger.jsonl` come nuova fonte primaria.
@@ -392,6 +440,9 @@ Quando il Work Breakdown atomico è disponibile, gli eventi devono includere anc
 11. Non esiste dual-write tra token ledger ed execution ledger.
 12. Il modulo ha una piccola interface testata attraverso il suo seam.
 13. I test coprono append, fsync/errori, parsing, schema, proiezioni e import legacy.
+14. Il ledger registra concorrenza richiesta ed effettiva.
+15. La proiezione segnala il superamento del limite di task attivi.
+16. Gli eventi prodotti da task concorrenti vengono serializzati da un unico writer.
 
 ## Incluso
 
@@ -405,6 +456,7 @@ Quando il Work Breakdown atomico è disponibile, gli eventi devono includere anc
 - proiezioni per Token Estimate ed Effort Estimate;
 - CLI;
 - integrazione delle invocazioni agentiche esistenti;
+- metadati concurrency-aware e proiezione degli slot;
 - test automatici.
 
 ## Escluso
@@ -417,9 +469,11 @@ Quando il Work Breakdown atomico è disponibile, gli eventi devono includere anc
 - replan runtime;
 - push remoto;
 - worktree paralleli.
+- scheduler parallelo e integrazione dei commit concorrenti.
 
 ## Dipendenze
 
 - richiede gli ID stabili definiti da Atomic Work Breakdown per la granularità task;
 - sostituisce progressivamente il token ledger di FTR-013;
 - viene utilizzato da Task Checkpoints and Resume.
+- viene utilizzato da Isolated Parallel Task Execution come fonte unica dello stato concorrente.

@@ -1,10 +1,15 @@
 'use strict';
 
+/**
+ * Frontmatter validation tests for skill definition files.
+ * Discovers skills from src/claude/skills/ (versioned source) — US-09-TASK-TEST-01 (FTR-015).
+ */
+
 const fs     = require('fs');
 const path   = require('path');
 const matter = require('gray-matter');
 
-const SKILLS_DIR = path.join(__dirname, '..', '..', '.claude', 'skills');
+const SKILLS_DIR = path.join(__dirname, '..', '..', 'src', 'claude', 'skills');
 
 /**
  * Recursively find all SKILL.md files under a directory.

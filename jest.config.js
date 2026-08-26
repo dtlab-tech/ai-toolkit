@@ -8,8 +8,8 @@ module.exports = {
   // Discover test files under tests/
   testMatch: ['**/tests/**/*.test.js'],
 
-  // Collect coverage from cli.js only
-  collectCoverageFrom: ['bin/cli.js'],
+  // Collect coverage from cli.js and lib/ modules
+  collectCoverageFrom: ['bin/cli.js', 'lib/*.js'],
 
   // Exclude coverage/ and node_modules from coverage report
   coveragePathIgnorePatterns: ['/node_modules/', '/coverage/'],

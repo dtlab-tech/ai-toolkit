@@ -8,12 +8,8 @@
     "CHANGELOG.md",
     "README.md",
     "CLAUDE.global.md",
-    ".claude/agents",
-    ".claude/commands",
-    ".claude/workflows",
-    ".claude/skills",
-    ".claude/scripts/*.js",
-    ".claude/scripts/.gitkeep",
+    "src/claude",
+    "lib",
     "bin"
   ],
   "bin": {
@@ -21,7 +17,13 @@
   },
   "scripts": {
     "prepublishOnly": "npm pack --dry-run",
+    "prepack": "node bin/cli.js validate-purity",
+    "toolkit:validate-purity": "node bin/cli.js validate-purity",
+    "toolkit:dev-install-global": "node bin/cli.js --global --dry-run && node bin/cli.js --global && node bin/cli.js doctor resolution && node bin/cli.js verify-install",
     "test": "jest --bail",
+    "test:cli": "jest --bail --testPathPattern=tests/cli/",
+    "test:frontmatter": "jest --bail --testPathPattern=tests/frontmatter/",
+    "test:regression": "jest --bail --testPathPattern=tests/regression/",
     "test:coverage": "jest --coverage"
   },
   "devDependencies": {

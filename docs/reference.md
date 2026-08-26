@@ -41,7 +41,7 @@ Cheatsheet of every skill, command, agent, and procedure shipped with this toolk
 
 ---
 
-## Skills (in `.claude/skills/`)
+## Skills (in `src/claude/skills/`, installed to `.claude/skills/`)
 
 Invoked as `/<name>`. Comprehensive workflows that may chain multiple agents.
 
@@ -68,7 +68,7 @@ Invoked as `/<name>`. Comprehensive workflows that may chain multiple agents.
 
 ---
 
-## Commands (in `.claude/commands/`)
+## Commands (in `src/claude/commands/`, installed to `.claude/commands/`)
 
 Invoked as `/<name>`. Lightweight shortcuts focused on the current state of the repo. Do **not** spawn long-running workflows.
 
@@ -89,7 +89,7 @@ Invoked as `/<name>`. Lightweight shortcuts focused on the current state of the 
 
 ---
 
-## Agents (in `.claude/agents/`)
+## Agents (in `src/claude/agents/`, installed to `.claude/agents/`)
 
 Invoked via the Agent tool with `subagent_type`. Specialised sub-conversations that produce a single deliverable.
 
@@ -160,6 +160,52 @@ Reusable text procedures referenced by agents. **Override locally** by placing a
 
 ---
 
+## CLI Commands (`ai-toolkit <command>`)
+
+The `ai-toolkit` binary (from `bin/cli.js`) provides commands for runtime asset resolution, script execution, and diagnostics.
+
+### Asset resolution
+
+| Command | Purpose | Exit |
+|---|---|---|
+| `ai-toolkit resolve-asset <relativePath> [--project <dir>] [--home <dir>]` | Resolve a runtime asset path using the six-phase algorithm; stdout=resolved path | 0 success / 1 error |
+| `ai-toolkit run-asset <relativePath> [--project <dir>] [--home <dir>] [-- ...args]` | Resolve and execute a `scripts/*.js` asset; propagates exit code | script exit code |
+| `ai-toolkit list-assets [--category <name>] [--format json\|plain] [--project <dir>] [--home <dir>]` | List installed runtime assets from `.claude/<category>/`; exit 0 even when empty | 0 always |
+| `ai-toolkit doctor-resolution [--project <dir>] [--home <dir>]` | Doctor resolution diagnostics: reports presence mode, install mode, version, completeness gaps | 0 / 1 |
+| `ai-toolkit validate-purity [<sourceDir>]` | Check that `src/claude/` contains no test or fixture files | 0 clean / 1 violations |
+
+### `resolveClaudeRuntimeAsset(relativePath, options)` — resolver API
+
+The core runtime resolution algorithm exposed from `bin/cli.js`:
+
+```javascript
+const { resolveClaudeRuntimeAsset } = require('@dtlabs/ai-toolkit/bin/cli');
+const resolvedPath = resolveClaudeRuntimeAsset('agents/developer-backend.md', {
+  projectDir: '/path/to/project',   // optional; defaults to process.cwd()
+  home: '/path/to/home',            // optional; defaults to os.homedir()
+});
+```
+
+Six-phase algorithm:
+- **Phase 0**: Input validation (relativePath must be a non-empty string)
+- **Phase A**: Presence detection — checks manifest (condA), version stamp (condB), payload files (condC)
+- **Phase B**: Mode decision — local (project `.claude/`) vs global (`~/.claude/`)
+- **Phase C**: Metadata warnings (version stamp missing, mode ambiguity)
+- **Phase D**: Completeness check — verifies requested file exists, validates catalog membership
+- **Phase E**: Return resolved absolute path with confinement check
+
+### Doctor resolution
+
+`ai-toolkit doctor-resolution` reports the full resolution diagnosis for a project:
+- Detected presence mode (manifest / stamp / payload / none)
+- Install mode (local / global)
+- Installed version
+- Catalog completeness gaps (files present in asset catalog but missing from runtime)
+
+Used by workflow agents to verify installation via doctor resolution before dispatching asset-dependent tasks.
+
+---
+
 ## Typical flows
 
 ### Flow 1 — Brand new feature, end-to-end
@@ -217,12 +263,14 @@ Then delegate manually to the suggested agent, or rerun `/implement-feature` to 
 
 ## File locations
 
-| What | Local install | Global install |
-|---|---|---|
-| Agents | `<project>/.claude/agents/` | `~/.claude/agents/` |
-| Skills | `<project>/.claude/skills/` | `~/.claude/skills/` |
-| Commands | `<project>/.claude/commands/` | `~/.claude/commands/` |
-| Procedures | `<project>/docs/procedures/` | `~/.claude/docs/procedures/` |
-| Feature docs | `<project>/docs/features/FTR-NNN-slug/` | — |
-| Assessment docs | `<project>/docs/assessments/ASSESS-NNN/` | — |
-| This reference | `<project>/docs/reference.md` | `~/.claude/docs/reference.md` |
+| What | Source (toolkit repo) | Local install | Global install |
+|---|---|---|---|
+| Agents | `src/claude/agents/` | `<project>/.claude/agents/` | `~/.claude/agents/` |
+| Skills | `src/claude/skills/` | `<project>/.claude/skills/` | `~/.claude/skills/` |
+| Commands | `src/claude/commands/` | `<project>/.claude/commands/` | `~/.claude/commands/` |
+| Workflows | `src/claude/workflows/` | `<project>/.claude/workflows/` | `~/.claude/workflows/` |
+| Scripts | `src/claude/scripts/` | `<project>/.claude/scripts/` | `~/.claude/scripts/` |
+| Procedures | `docs/procedures/` | `<project>/docs/procedures/` | `~/.claude/docs/procedures/` |
+| Feature docs | — | `<project>/docs/features/FTR-NNN-slug/` | — |
+| Assessment docs | — | `<project>/docs/assessments/ASSESS-NNN/` | — |
+| This reference | `docs/reference.md` | `<project>/docs/reference.md` | `~/.claude/docs/reference.md` |
