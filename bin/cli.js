@@ -329,7 +329,10 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
   const allFileSet  = files.map(f => path.relative(destRoot, f.dest).replace(/\\/g, '/'));
   // Restrict manifest entries to catalog runtime assets only (no docs, no CLAUDE.md).
   const newFileSet  = allFileSet.filter(rel => catalogPrefixes.some(p => rel.startsWith(p)));
-  const orphans     = computeOrphans(oldManifest.files, newFileSet);
+  // Filter orphans to catalog prefixes only: entries from old manifests outside catalog dirs
+  // (e.g. docs/, CLAUDE.md written by pre-hotfix installers) must never be treated as orphans.
+  const orphans     = computeOrphans(oldManifest.files, newFileSet)
+    .filter(o => catalogPrefixes.some(p => o.replace(/\\/g, '/').startsWith(p)));
 
   const existingOrphans = orphans.filter(o => fs.existsSync(path.join(destRoot, o)));
 
@@ -669,6 +672,202 @@ function updateGitignore(destDir) {
   }
 }
 
+// ── payload & detection ───────────────────────────────────────────────────────
+
+// Returns file-level {src, dest} mappings (absolute paths) for ALL distributable
+// catalog assets, applying TOOLKIT_INTERNAL_ASSETS exclusions.
+// This is the single authoritative source used by the installer (copy plan),
+// resolver, doctor, and list-assets so that ALL four agree on exactly what a valid
+// installation contains. effectiveRoot must be the .claude/ runtime directory.
+function buildPayloadFileMappings(effectiveRoot) {
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  const mappings = [];
+  for (const cat of getAssetCategories()) {
+    const srcDir      = path.join(packageRoot, cat.sourceDir);
+    if (!fs.existsSync(srcDir)) continue;
+    const internalItems = TOOLKIT_INTERNAL_ASSETS[cat.name];
+    const catSubDir   = cat.runtimeDir.replace(/^\.claude\//, '');
+    const destCatDir  = path.join(effectiveRoot, catSubDir);
+    let entries;
+    try { entries = fs.readdirSync(srcDir); } catch (_) { continue; }
+    for (const item of entries) {
+      if (internalItems && internalItems.has(item)) continue;
+      const itemSrc = path.join(srcDir, item);
+      let stat;
+      try { stat = fs.statSync(itemSrc); } catch (_) { continue; }
+      if (stat.isDirectory()) {
+        try {
+          for (const f of walkDir(itemSrc)) {
+            const rel = path.relative(itemSrc, f);
+            mappings.push({ src: f, dest: path.join(destCatDir, item, rel) });
+          }
+        } catch (_) { /* ignore */ }
+      } else {
+        mappings.push({ src: itemSrc, dest: path.join(destCatDir, item) });
+      }
+    }
+  }
+  return mappings;
+}
+
+// Returns the Set of absolute runtime dest-paths derived from buildPayloadFileMappings.
+// Used by resolver, doctor, and list-assets for completeness checks.
+function buildExpectedPayload(effectiveRoot) {
+  return new Set(buildPayloadFileMappings(effectiveRoot).map(m => path.resolve(m.dest)));
+}
+
+// ── validateRuntimeRelativePath ───────────────────────────────────────────────
+// Single source of truth for runtime-path safety and canonicalization. Used by
+// BOTH resolveClaudeRuntimeAsset() (lenient: normalizes and accepts) and
+// validateManifestFilesField() (strict: rejects any non-canonical form). The
+// two callers format their own diagnostics, but traversal, absolute/drive paths,
+// null bytes, confinement, and the canonical computation live here only.
+//
+// A path is safe when it is a non-empty string with no surrounding whitespace,
+// no null byte, is neither a Unix/Windows absolute path nor drive-relative
+// (e.g. 'C:foo'), and contains no '..' traversal segment.
+// Its canonical form uses '/' as the sole separator with no '.'/empty segments,
+// no double separators, and no trailing slash.
+//
+// options:
+//   root             — absolute installation root; when given, the returned
+//                      `resolved` is confined within it. NOTE: after the
+//                      absolute/drive/traversal rejections above, a surviving
+//                      value can never escape root, so the 'escapes-root' branch
+//                      is unreachable defence in depth (retained against future
+//                      OS/symlink normalization surprises).
+//   requireCanonical — when true, a value that is not already canonical is an
+//                      error (code 'non-canonical'); the manifest validator uses
+//                      this so doctor flags incoherent manifests instead of
+//                      silently normalizing them.
+//
+// Returns on success: { ok: true, canonical, resolved, canonicalDiffers }
+// Returns on failure: { ok: false, code, reason, canonical? }
+function validateRuntimeRelativePath(value, options) {
+  const opts = options || {};
+  const fail = (code, reason, extra) => Object.assign({ ok: false, code, reason }, extra);
+
+  if (typeof value !== 'string') {
+    const found = value === null ? 'null' : value === undefined ? 'undefined' : typeof value;
+    return fail('not-string', `must be a non-empty string (found ${found})`);
+  }
+  if (value.length === 0) {
+    return fail('empty', 'must be a non-empty string (found empty string)');
+  }
+  if (value.includes('\0')) {
+    return fail('null-byte', 'must not contain null bytes');
+  }
+  if (value.trim().length === 0) {
+    return fail('whitespace-only', 'must not be a whitespace-only string');
+  }
+  if (value !== value.trim()) {
+    return fail('surrounding-whitespace', 'must not have leading or trailing whitespace');
+  }
+  // Normalize separators BEFORE the absolute-path checks. Otherwise a rooted
+  // Windows path ('\Windows\x.md') or a UNC path ('\\server\share\x.md') would
+  // slip past a raw startsWith('/') test and be reinterpreted as relative once
+  // the backslashes were converted. Per the Tech Spec: normalize '\' → '/' first,
+  // then reject anything that begins with '/'.
+  const unified = value.replace(/\\/g, '/');
+  if (unified.startsWith('/')) {
+    // Covers Unix absolute ('/etc/passwd'), rooted Windows ('\Windows\x.md' → '/…'),
+    // and UNC ('\\server\share' → '//server/share', or already-'/'-form '//server').
+    return fail('absolute-unix', 'must be relative (got Unix absolute path)');
+  }
+  if (/^[A-Za-z]:\//.test(unified)) {
+    return fail('absolute-windows', 'must be relative (got Windows absolute path)');
+  }
+  if (/^[A-Za-z]:/.test(unified)) {
+    return fail('drive-relative', 'must be relative (got Windows drive-relative path)');
+  }
+  if (unified.split('/').includes('..')) {
+    return fail('traversal', 'must not contain path traversal (..)');
+  }
+  // Canonical form: forward slashes, no '.'/empty segments, no double separators,
+  // no trailing slash. '..' is already rejected above, so it cannot survive here.
+  const canonical = unified.split('/').filter(s => s !== '' && s !== '.').join('/');
+  if (canonical.length === 0) {
+    return fail('empty-after-canonical', 'must resolve to a non-empty canonical path');
+  }
+  let resolved = null;
+  if (opts.root !== undefined && opts.root !== null) {
+    const rootResolved = path.resolve(opts.root);
+    resolved = path.resolve(rootResolved, canonical);
+    if (resolved !== rootResolved && !resolved.startsWith(rootResolved + path.sep)) {
+      return fail('escapes-root', 'escapes the installation root', { canonical });
+    }
+  }
+  const canonicalDiffers = value !== canonical;
+  if (opts.requireCanonical && canonicalDiffers) {
+    return fail('non-canonical', `is not canonical; expected '${canonical}'`, { canonical });
+  }
+  return { ok: true, canonical, resolved, canonicalDiffers };
+}
+
+// Validate the shape of a manifest 'files' field for the doctor's schema check.
+// Returns an array of human-readable error strings; an empty array means valid.
+// A valid 'files' field is an array whose every element is a canonical,
+// destination-relative path (forward slashes only, no '.'/'..'/empty segments,
+// no trailing slash) confined to destRoot and free of null bytes. Non-canonical
+// entries are reported — never silently normalized — so doctor requires the
+// installer to regenerate an incoherent manifest.
+// destRoot is the installation destination (parent of .claude) paths resolve against.
+function validateManifestFilesField(files, destRoot) {
+  const errors = [];
+  if (!Array.isArray(files)) {
+    errors.push(`'files' must be an array (found ${files === null ? 'null' : typeof files})`);
+    return errors;
+  }
+  const rootResolved = path.resolve(destRoot);
+  files.forEach((entry, i) => {
+    const check = validateRuntimeRelativePath(entry, { root: rootResolved, requireCanonical: true });
+    if (check.ok) return;
+    // Format the diagnostic inline — this is the only caller, so no shared helper.
+    // The entry is echoed (when a string) so operators can spot the culprit.
+    const shown = typeof entry === 'string' ? ` ('${entry}')` : '';
+    let msg;
+    switch (check.code) {
+      case 'traversal':
+        msg = `'files[${i}]' must not contain '..' segments (path traversal)${shown}`;
+        break;
+      case 'non-canonical':
+        msg = `'files[${i}]' is not canonical; expected '${check.canonical}'${shown}`;
+        break;
+      case 'escapes-root':
+        msg = `'files[${i}]' escapes the installation root${shown}`;
+        break;
+      default:
+        msg = `'files[${i}]' ${check.reason}${shown}`;
+    }
+    errors.push(msg);
+  });
+  return errors;
+}
+
+// Shared presence-detection helpers — used by resolver, doctor, and list-assets.
+// condC: at least one catalog category directory inside claudeDir has files.
+function hasToolkitPayloadFiles(claudeDir) {
+  const { getAssetCategories } = require('../lib/asset-catalog');
+  for (const cat of getAssetCategories()) {
+    const catDir = path.join(claudeDir, cat.runtimeDir.replace(/^\.claude\//, ''));
+    if (!fs.existsSync(catDir)) continue;
+    try { if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true; }
+    catch (_) { /* ignore unreadable dirs */ }
+  }
+  return false;
+}
+
+// A toolkit installation is PRESENT at claudeDir when any of:
+//   condA: .ai-toolkit-manifest.json exists (content may be corrupt)
+//   condB: .ai-toolkit-version exists
+//   condC: at least one catalog category dir contains one or more files
+// settings.json / settings.local.json alone do NOT satisfy any condition.
+function isToolkitInstalled(claudeDir) {
+  if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-manifest.json'))) return true;
+  if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-version')))       return true;
+  return hasToolkitPayloadFiles(claudeDir);
+}
+
 // ── resolveClaudeRuntimeAsset ─────────────────────────────────────────────────
 
 // INFRA-TASK-BE-02 (FTR-015):
@@ -697,67 +896,23 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   const effectiveProjectDir = opts.projectDir !== undefined ? opts.projectDir : process.cwd();
 
   // ── Phase 0: Input validation (no filesystem access) ──────────────────────
-  // 0a: reject null / undefined / empty
-  if (relativePath === null || relativePath === undefined || relativePath === '') {
-    throw new Error('relativePath must be a non-empty string');
+  // Delegate all path-safety + canonicalization to the shared primitive. The
+  // resolver is lenient (requireCanonical omitted): it normalizes backslashes,
+  // '.'/empty segments, and trailing slashes into the canonical form and
+  // proceeds, but still rejects null bytes, absolute/drive paths, and traversal.
+  const inputCheck = validateRuntimeRelativePath(relativePath);
+  if (!inputCheck.ok) {
+    throw new Error(`relativePath ${inputCheck.reason}`);
   }
-  if (typeof relativePath !== 'string') {
-    throw new Error('relativePath must be a non-empty string');
-  }
-  // 0b: reject null bytes
-  if (relativePath.includes('\0')) {
-    throw new Error('relativePath must not contain null bytes');
-  }
-  // 0c: normalize backslashes to forward slashes
-  relativePath = relativePath.replace(/\\/g, '/');
-  // 0d: reject absolute paths
-  if (relativePath.startsWith('/')) {
-    throw new Error('relativePath must be relative (got Unix absolute path)');
-  }
-  if (/^[A-Za-z]:[/\\]/.test(relativePath)) {
-    throw new Error('relativePath must be relative (got Windows absolute path)');
-  }
-  // 0e: reject .. segments
-  if (relativePath.split('/').includes('..')) {
-    throw new Error('relativePath must not contain path traversal (..)');
-  }
+  relativePath = inputCheck.canonical;
 
   // ── Runtime root definitions ───────────────────────────────────────────────
   const localRuntimeRoot  = path.join(effectiveProjectDir, '.claude');
   const globalRuntimeRoot = path.join(effectiveHome, '.claude');
 
-  // Strip the '.claude/' prefix so catRelDir gives the sub-directory relative to runtimeRoot.
-  // e.g. '.claude/agents' → 'agents'
-  function catRelDir(cat) {
-    return cat.runtimeDir.replace(/^\.claude\//, '');
-  }
-
-  // condC: at least one catalog category directory has files at this runtimeRoot
-  function hasPayloadFiles(runtimeRoot) {
-    for (const cat of getAssetCategories()) {
-      const catDir = path.join(runtimeRoot, catRelDir(cat));
-      if (!fs.existsSync(catDir)) continue;
-      try {
-        if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true;
-      } catch (_) { /* ignore unreadable dirs */ }
-    }
-    return false;
-  }
-
-  // A toolkit installation is PRESENT at runtimeRoot when any of the following hold:
-  //   condA: .ai-toolkit-manifest.json exists (content may be corrupt; file presence is enough)
-  //   condB: .ai-toolkit-version exists
-  //   condC: at least one catalog category dir contains one or more files
-  // settings.json / settings.local.json alone do NOT satisfy any condition.
-  function isToolkitPresent(runtimeRoot) {
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-manifest.json'))) return true;
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-version'))) return true;
-    return hasPayloadFiles(runtimeRoot);
-  }
-
   // ── Phase A: Presence detection ────────────────────────────────────────────
-  const localPresent  = isToolkitPresent(localRuntimeRoot);
-  const globalPresent = isToolkitPresent(globalRuntimeRoot);
+  const localPresent  = isToolkitInstalled(localRuntimeRoot);
+  const globalPresent = isToolkitInstalled(globalRuntimeRoot);
 
   // ── Phase B: Mode decision ─────────────────────────────────────────────────
   if (!localPresent && !globalPresent) {
@@ -775,6 +930,16 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
 
   const effectiveRoot = localPresent ? localRuntimeRoot : globalRuntimeRoot;
   const effectiveMode = localPresent ? 'local' : 'global';
+
+  // Confinement lives in the shared primitive: re-validate the (already canonical)
+  // relativePath against the now-known installation root and reuse its resolved
+  // absolute path everywhere below, instead of re-implementing path.resolve +
+  // startsWith here.
+  const rootedCheck = validateRuntimeRelativePath(relativePath, { root: effectiveRoot });
+  if (!rootedCheck.ok) {
+    throw new Error('Resolved path escapes installation root (confinement violation)');
+  }
+  const absoluteRequested = rootedCheck.resolved;
 
   // ── Phase C: Metadata warnings (emit to stderr; never abort) ──────────────
   const manifestPath = path.join(effectiveRoot, '.ai-toolkit-manifest.json');
@@ -822,22 +987,9 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   }
 
   // ── Phase D: Catalog membership + completeness check ──────────────────────
-  // Build expectedPayload: every runtime asset path derived from the package source catalog.
-  // Files are enumerated from packageRoot/cat.sourceDir and mapped to their runtime destinations.
-  const categories      = getAssetCategories();
-  const expectedPayload = new Set();
-
-  for (const cat of categories) {
-    const srcDir = path.join(packageRoot, cat.sourceDir);
-    if (!fs.existsSync(srcDir)) continue;
-    try {
-      for (const f of walkDir(srcDir)) {
-        const relFile    = path.relative(srcDir, f);
-        const runtimeAbs = path.resolve(path.join(effectiveRoot, catRelDir(cat), relFile));
-        expectedPayload.add(runtimeAbs);
-      }
-    } catch (_) { /* ignore unreadable source dirs */ }
-  }
+  // Use the shared distributable payload function so the resolver checks exactly
+  // the same files that the installer writes (TOOLKIT_INTERNAL_ASSETS excluded).
+  const expectedPayload = buildExpectedPayload(effectiveRoot);
 
   // Step 6e: warn about stale manifest entries (in manifest but no longer in catalog)
   if (manifestSchemaValid && manifest && Array.isArray(manifest.files)) {
@@ -851,7 +1003,6 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   }
 
   // Step 8a: catalog membership — requested asset must be in expectedPayload
-  const absoluteRequested = path.resolve(path.join(effectiveRoot, relativePath));
   if (!expectedPayload.has(absoluteRequested)) {
     throw new Error(
       `Requested asset '${relativePath}' is not a registered catalog asset (mode: ${effectiveMode}). ` +
@@ -884,15 +1035,9 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   }
 
   // ── Phase E: Return path ───────────────────────────────────────────────────
-  // Step 11: resolve absolute path (effectiveRoot already ends at .claude/)
-  const absolutePath = path.resolve(path.join(effectiveRoot, relativePath));
-
-  // Step 11a: confinement check — belt-and-suspenders after Phase 0 traversal rejection;
-  // catches edge cases introduced by OS-level normalization or symlink resolution.
-  const resolvedRoot = path.resolve(effectiveRoot);
-  if (!absolutePath.startsWith(resolvedRoot + path.sep) && absolutePath !== resolvedRoot) {
-    throw new Error('Resolved path escapes installation root (confinement violation)');
-  }
+  // Confinement was already enforced by the shared primitive above; absoluteRequested
+  // is its confined, resolved absolute path (effectiveRoot already ends at .claude/).
+  const absolutePath = absoluteRequested;
 
   // Step 12: final existence check
   if (!fs.existsSync(absolutePath)) {
@@ -932,26 +1077,6 @@ function runDoctorResolution(options) {
     return cat.runtimeDir.replace(/^\.claude\//, '');
   }
 
-  function hasPayloadFiles(runtimeRoot) {
-    for (const cat of categories) {
-      const catDir = path.join(runtimeRoot, catRelDir(cat));
-      if (!fs.existsSync(catDir)) continue;
-      try {
-        if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true;
-      } catch (_) { /* ignore unreadable dirs */ }
-    }
-    return false;
-  }
-
-  // Mirrors the same three-condition presence check as resolveClaudeRuntimeAsset().
-  // condA: manifest file exists (any content); condB: version stamp exists;
-  // condC: at least one catalog category dir has files.
-  function isToolkitPresent(runtimeRoot) {
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-manifest.json'))) return true;
-    if (fs.existsSync(path.join(runtimeRoot, '.ai-toolkit-version')))       return true;
-    return hasPayloadFiles(runtimeRoot);
-  }
-
   function countCategoryFiles(runtimeRoot, cat) {
     const catDir = path.join(runtimeRoot, catRelDir(cat));
     if (!fs.existsSync(catDir)) return 0;
@@ -984,7 +1109,11 @@ function runDoctorResolution(options) {
   // Only meaningful when manifestData exists with a files array; returns [] otherwise.
   function findResiduals(runtimeRoot, manifestData) {
     if (!manifestData || !Array.isArray(manifestData.files)) return [];
-    const tracked = new Set(manifestData.files.map(f => f.replace(/\\/g, '/')));
+    // Defensive: a malformed manifest may contain non-string entries; ignore them
+    // here so doctor still produces a read-only report (the schema check flags them).
+    const tracked = new Set(
+      manifestData.files.filter(f => typeof f === 'string').map(f => f.replace(/\\/g, '/'))
+    );
     const residuals = [];
     const parentDir = path.dirname(runtimeRoot); // e.g. /proj (parent of .claude)
     for (const cat of categories) {
@@ -1001,8 +1130,8 @@ function runDoctorResolution(options) {
   }
 
   // ── Detect installations ────────────────────────────────────────────────────
-  const localPresent  = isToolkitPresent(localRuntimeRoot);
-  const globalPresent = isToolkitPresent(globalRuntimeRoot);
+  const localPresent  = isToolkitInstalled(localRuntimeRoot);
+  const globalPresent = isToolkitInstalled(globalRuntimeRoot);
 
   let mode, modeStatus;
   if      (localPresent && globalPresent) { mode = 'both';        modeStatus = 'AMBIGUOUS';    }
@@ -1158,10 +1287,37 @@ function runDoctorResolution(options) {
   }
   L('');
 
+  // ── Disk Completeness ─────────────────────────────────────────────────────────
+  H('Disk Completeness');
+  let diskIncomplete = false;
+  let missingRuntimeFiles = [];
+
+  if (mode === 'local-only' || mode === 'global-only') {
+    const singleRoot = mode === 'local-only' ? localRuntimeRoot : globalRuntimeRoot;
+    const expected   = buildExpectedPayload(singleRoot);
+    missingRuntimeFiles = [...expected].filter(f => !fs.existsSync(f));
+    diskIncomplete = missingRuntimeFiles.length > 0;
+  }
+
+  if (mode !== 'local-only' && mode !== 'global-only') {
+    L(`  ${dim('(check runs only for single-installation mode)')}`);
+  } else if (!diskIncomplete) {
+    L(`  ${tick}  ${clr('green', 'COMPLETE')}  ${dim('all catalog files present on disk')}`);
+  } else {
+    L(`  ${cross}  ${clr('red', 'INCOMPLETE')}  — ${missingRuntimeFiles.length} required file(s) missing:`);
+    for (const f of missingRuntimeFiles.slice(0, 10)) {
+      L(`    ${clr('red', '✖')} ${dim(f)}`);
+    }
+    if (missingRuntimeFiles.length > 10) L(`    ${dim(`... and ${missingRuntimeFiles.length - 10} more`)}`);
+  }
+  L('');
+
   // ── Action Items ────────────────────────────────────────────────────────────
   H('Action Items');
   const actions = [];
   let manifestSchemaProblematic = false;
+  let manifestModeInconsistent  = false;
+  let manifestFilesIncomplete   = false;
 
   if (mode === 'both') {
     actions.push(`${warnS}  Choose one: delete local or global installation to resolve ambiguity`);
@@ -1170,7 +1326,8 @@ function runDoctorResolution(options) {
     actions.push(`${cross}  No installation found. Run 'npm run toolkit:dev-install-global' or the local installer`);
   }
   if (mode === 'local-only' || mode === 'global-only') {
-    const effectiveRoot = mode === 'local-only' ? localRuntimeRoot : globalRuntimeRoot;
+    const effectiveRoot  = mode === 'local-only' ? localRuntimeRoot : globalRuntimeRoot;
+    const detectedMode   = mode === 'local-only' ? 'local' : 'global';
     const iv = readVersionStamp(effectiveRoot);
     if (iv && iv !== TOOLKIT_VERSION) {
       actions.push(`${warnS}  Version mismatch: run 'npm run toolkit:dev-install-global' to update`);
@@ -1185,16 +1342,67 @@ function runDoctorResolution(options) {
     } else if (mInfo.status === 'present' && mInfo.data) {
       // Check required manifest fields (including installationMode).
       const required = ['version', 'installedAt', 'installationMode', 'files'];
-      const missing = required.filter(f => mInfo.data[f] === undefined);
-      if (missing.length > 0) {
+      const missingFields = required.filter(f => mInfo.data[f] === undefined);
+      if (missingFields.length > 0) {
         manifestSchemaProblematic = true;
-        for (const f of missing) {
+        for (const f of missingFields) {
           actions.push(`${cross}  Manifest schema invalid: missing required field '${f}'`);
         }
         actions.push(`${warnS}  Run the installer to regenerate the manifest with all required fields.`);
+      } else {
+        const parentDir = path.join(effectiveRoot, '..');
+        // installationMode must match the detected installation mode.
+        if (mInfo.data.installationMode !== detectedMode) {
+          manifestModeInconsistent = true;
+          actions.push(
+            `${cross}  Manifest installationMode='${mInfo.data.installationMode}' does not match ` +
+            `detected mode '${detectedMode}' — run the installer to repair`
+          );
+        }
+        // manifest.files must be a well-formed array of relative, in-bounds paths.
+        const filesErrors = validateManifestFilesField(mInfo.data.files, parentDir);
+        if (filesErrors.length > 0) {
+          manifestSchemaProblematic = true;
+          for (const e of filesErrors.slice(0, 5)) {
+            actions.push(`${cross}  Manifest schema invalid: ${e}`);
+          }
+          if (filesErrors.length > 5) {
+            actions.push(`${cross}  ... and ${filesErrors.length - 5} more manifest 'files' error(s)`);
+          }
+          actions.push(`${warnS}  Run the installer to regenerate the manifest with a valid 'files' list.`);
+        } else {
+          // files is a valid array — it must cover all expected catalog assets.
+          const expected       = buildExpectedPayload(effectiveRoot);
+          const manifestAbsSet = new Set(
+            mInfo.data.files.map(f => path.resolve(path.join(parentDir, f)))
+          );
+          const missingFromManifest = [...expected].filter(f => !manifestAbsSet.has(f));
+          if (missingFromManifest.length > 0) {
+            manifestFilesIncomplete = true;
+            actions.push(
+              `${cross}  manifest.files is missing ${missingFromManifest.length} expected catalog asset(s) — run the installer`
+            );
+            for (const f of missingFromManifest.slice(0, 3)) {
+              actions.push(`       ${dim(path.basename(f))}`);
+            }
+            if (missingFromManifest.length > 3) {
+              actions.push(`       ${dim(`... and ${missingFromManifest.length - 3} more`)}`);
+            }
+          }
+        }
       }
     }
   }
+  if (diskIncomplete) {
+    const display = missingRuntimeFiles.slice(0, 5);
+    for (const f of display) {
+      actions.push(`${cross}  Missing required file: ${dim(path.basename(f))} — run the installer`);
+    }
+    if (missingRuntimeFiles.length > 5) {
+      actions.push(`${cross}  ... and ${missingRuntimeFiles.length - 5} more missing file(s) — run the installer`);
+    }
+  }
+
   if (actions.length === 0) {
     L(`  ${tick}  ${clr('green', 'runtime ready for pipelines')}`);
   } else {
@@ -1204,15 +1412,27 @@ function runDoctorResolution(options) {
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   H('Summary');
-  // READY only when installation mode is valid (single installation) AND manifest is schema-valid.
-  const overallOk     = (mode === 'local-only' || mode === 'global-only') && !manifestSchemaProblematic;
+  // READY requires: single installation, valid manifest schema, consistent installationMode,
+  // manifest.files covering all expected assets, and complete disk payload.
+  const overallOk = (mode === 'local-only' || mode === 'global-only')
+    && !manifestSchemaProblematic
+    && !manifestModeInconsistent
+    && !manifestFilesIncomplete
+    && !diskIncomplete;
   const overallStatus = overallOk ? 'READY' : 'PROBLEMATIC';
   L(`  Status: ${clr(overallOk ? 'green' : 'red', overallStatus)}`);
   let recommendation;
-  if (mode === 'none')      recommendation = "Run 'npm run toolkit:dev-install-global' to install globally, or use the local installer.";
-  else if (mode === 'both') recommendation = 'Remove one installation to resolve ambiguity before running pipelines.';
-  else if (manifestSchemaProblematic) recommendation = 'Run the installer to repair the manifest before running pipelines.';
-  else                      recommendation = `Installation is operational in ${mode} mode.`;
+  if (mode === 'none') {
+    recommendation = "Run 'npm run toolkit:dev-install-global' to install globally, or use the local installer.";
+  } else if (mode === 'both') {
+    recommendation = 'Remove one installation to resolve ambiguity before running pipelines.';
+  } else if (manifestSchemaProblematic || manifestModeInconsistent || manifestFilesIncomplete) {
+    recommendation = 'Run the installer to repair the manifest before running pipelines.';
+  } else if (diskIncomplete) {
+    recommendation = 'Run the installer to complete the installation before running pipelines.';
+  } else {
+    recommendation = `Installation is operational in ${mode} mode.`;
+  }
   L(`  Recommendation: ${dim(recommendation)}`);
   L('');
   L(clr('gray', '═'.repeat(72)));
@@ -1291,20 +1511,47 @@ const TOOLKIT_INTERNAL_ASSETS = {
   skills: new Set(['install-toolkit']),
 };
 
-// Build per-item mappings for a single category, skipping any items listed in
-// TOOLKIT_INTERNAL_ASSETS. For categories without internal items the mapping
-// covers the whole source directory (identical to the previous whole-dir approach).
-function buildCategoryMappings(srcCatDir, destCatDir, catName) {
-  if (!fs.existsSync(srcCatDir)) return [];
-  const internalItems = TOOLKIT_INTERNAL_ASSETS[catName];
-  if (!internalItems) {
-    // No exclusions for this category — map the whole directory as before.
-    return [{ src: srcCatDir, dest: destCatDir }];
+// ── verifyInstall ─────────────────────────────────────────────────────────────
+
+// Checks that the version stamp in <home>/.claude/.ai-toolkit-version matches
+// package.json. Called as the final step of toolkit:dev-install-global.
+// Exit 0 = versions match. Exit 1 = stamp missing, unreadable, or wrong version.
+function runVerifyInstall(options) {
+  const os = require('os');
+  const opts          = options || {};
+  const effectiveHome = opts.home !== undefined ? path.resolve(opts.home) : os.homedir();
+  const versionFile   = path.join(effectiveHome, '.claude', VERSION_FILE);
+
+  if (!fs.existsSync(versionFile)) {
+    process.stderr.write(`Error: verify-install FAILED — no version stamp at ${versionFile}\n`);
+    process.exit(1);
   }
-  // Enumerate items individually so we can exclude toolkit-internal entries.
-  return fs.readdirSync(srcCatDir)
-    .filter(item => !internalItems.has(item))
-    .map(item => ({ src: path.join(srcCatDir, item), dest: path.join(destCatDir, item) }));
+
+  let stamp;
+  try {
+    stamp = fs.readFileSync(versionFile, 'utf8').trim();
+  } catch (err) {
+    process.stderr.write(`Error: verify-install FAILED — cannot read ${versionFile}: ${err.message}\n`);
+    process.exit(1);
+  }
+
+  if (!stamp) {
+    process.stderr.write(`Error: verify-install FAILED — version stamp is empty at ${versionFile}\n`);
+    process.exit(1);
+  }
+
+  if (stamp !== TOOLKIT_VERSION) {
+    process.stderr.write(
+      `Error: verify-install FAILED — version mismatch\n` +
+      `  installed: ${stamp}\n` +
+      `  expected:  ${TOOLKIT_VERSION}\n` +
+      `Run 'npm run toolkit:dev-install-global' to update.\n`
+    );
+    process.exit(1);
+  }
+
+  process.stdout.write(`verify-install: PASS — version ${stamp} matches package.json\n`);
+  process.exit(0);
 }
 
 // ── entry points ──────────────────────────────────────────────────────────────
@@ -1314,24 +1561,18 @@ async function installLocal(targetDir, force, dryRun = false) {
   targetDir = path.resolve(process.cwd(), targetDir || '.');
   console.log(`  ${clr('cyan', '▸')}  Target: ${bold(targetDir)}\n`);
   if (!dryRun) await checkVersion(targetDir, force);
-  // Build mappings from asset catalog: each category copies src/claude/<cat> → .claude/<cat>
-  const { getAssetCategories } = require('../lib/asset-catalog');
-  const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
   // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+  const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
   const purityViolations = validatePurityGuard(srcClaudeDir);
   if (purityViolations.length > 0) {
     process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
     for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
     process.exit(1);
   }
+  // Build copy plan from the single canonical source (buildPayloadFileMappings) so
+  // installer, resolver, doctor, and list-assets all use the same distributable set.
   const mappings = [
-    ...getAssetCategories().flatMap(cat =>
-      buildCategoryMappings(
-        path.join(srcClaudeDir, cat.name),
-        path.join(targetDir, '.claude', cat.name),
-        cat.name
-      )
-    ),
+    ...buildPayloadFileMappings(path.join(targetDir, '.claude')),
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
@@ -1347,33 +1588,26 @@ async function installLocal(targetDir, force, dryRun = false) {
   console.log();
 }
 
-async function installGlobal(force, dryRun = false) {
+async function installGlobal(force, dryRun = false, homeOverride = undefined) {
   banner();
   try {
-    const homedir = require('os').homedir();
+    const homedir = homeOverride !== undefined ? path.resolve(homeOverride) : require('os').homedir();
     const target  = path.join(homedir, '.claude');
     console.log(`  ${clr('cyan', '▸')}  Target: ${bold(target)}  ${clr('gray', '(global Claude folder)')}\n`);
     // destRoot is homedir so helpers (manifest, version stamp, trash) resolve to
     // ~/.claude/... rather than ~/.claude/.claude/... (FIX: global install root path)
     if (!dryRun) await checkVersion(homedir, force);
-    // Build mappings from asset catalog: each category copies src/claude/<cat> → ~/.claude/<cat>
-    const { getAssetCategories } = require('../lib/asset-catalog');
-    const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
     // Purity guard (UC-05 / BR-16 / AC-29): abort if source contains test files or blocked dirs.
+    const srcClaudeDir = path.join(packageRoot, 'src', 'claude');
     const purityViolations = validatePurityGuard(srcClaudeDir);
     if (purityViolations.length > 0) {
       process.stderr.write(`Purity guard: FAIL — ${purityViolations.length} violation(s):\n`);
       for (const v of purityViolations) process.stderr.write(`  ${v}\n`);
       process.exit(1);
     }
+    // Build copy plan from the single canonical source (buildPayloadFileMappings).
     const mappings = [
-      ...getAssetCategories().flatMap(cat =>
-        buildCategoryMappings(
-          path.join(srcClaudeDir, cat.name),
-          path.join(target, cat.name),
-          cat.name
-        )
-      ),
+      ...buildPayloadFileMappings(target),
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
@@ -1417,7 +1651,9 @@ async function main() {
   if (argv[0] === '--local') {
     await installLocal(argv[1] || '.', force, dryRun);
   } else if (argv[0] === '--global') {
-    await installGlobal(force, dryRun);
+    const homeIdx = argv.indexOf('--home');
+    const homeOverride = homeIdx !== -1 ? argv[homeIdx + 1] : undefined;
+    await installGlobal(force, dryRun, homeOverride);
   } else if (argv[0] === 'install') {
     // Subcommand aliases: `install --project <dir>` ≡ `--local <dir>`
     //                     `install --global`         ≡ `--global`
@@ -1468,6 +1704,11 @@ async function main() {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
+  } else if (argv[0] === 'verify-install') {
+    const remaining = argv.slice(1);
+    const homeIdx   = remaining.indexOf('--home');
+    const home      = homeIdx !== -1 ? remaining[homeIdx + 1] : undefined;
+    runVerifyInstall({ home });
   } else if (argv[0] === 'doctor' && argv[1] === 'resolution') {
     const remaining  = argv.slice(2);
     const projectIdx = remaining.indexOf('--project');
@@ -1550,17 +1791,17 @@ async function main() {
       process.exit(1);
     }
   } else if (argv[0] === 'list-assets') {
-    // list-assets [--category <name>] [--format json|plain] [--project <dir>] [--home <dir>]
-    // Default format: json. Exit 0 (empty list) when not installed; exit 1 for unknown
-    // category or mixed (both local + global) installation.
-    // Uses the same 3-condition presence detection as resolveClaudeRuntimeAsset():
-    //   condA: manifest file present; condB: version stamp present; condC: payload files present.
+    // list-assets --project <dir> --category <name> [--format json|plain] [--home <dir>]
+    // Both --project and --category are MANDATORY (Tech Spec contract).
+    // Returns exclusively assets from the distributable payload (buildExpectedPayload).
+    // Foreign/user-created files under .claude/ are never returned.
+    // Exit 0 + result for installed single-mode; exit 1 for no-install or mixed install.
     const { getAssetCategories, getCategoryByName } = require('../lib/asset-catalog');
     const os         = require('os');
     const remaining  = argv.slice(1);
     let category     = null;
     let format       = 'json';
-    let projectDir   = process.cwd();
+    let projectDir   = null;
     let home;
     for (let i = 0; i < remaining.length; i++) {
       if      (remaining[i] === '--category' && remaining[i + 1]) { category   = remaining[++i]; }
@@ -1568,36 +1809,29 @@ async function main() {
       else if (remaining[i] === '--project'  && remaining[i + 1]) { projectDir = remaining[++i]; }
       else if (remaining[i] === '--home'     && remaining[i + 1]) { home       = remaining[++i]; }
     }
-    if (category) {
-      const cat = getCategoryByName(category);
-      if (!cat) {
-        const valid = getAssetCategories().map(c => c.name).join(', ');
-        process.stderr.write(`Error: unknown category '${category}'. Valid: ${valid}\n`);
-        process.exit(1);
-      }
+    // Mandatory parameter contract (Tier 3: exit 1, stdout empty, diagnostic on stderr).
+    if (!projectDir) {
+      process.stderr.write('Error: list-assets requires --project <dir>\n');
+      process.exit(1);
     }
-    // 3-condition presence detection (mirrors resolveClaudeRuntimeAsset Phase A).
+    if (!category) {
+      process.stderr.write('Error: list-assets requires --category <name>\n');
+      process.exit(1);
+    }
+    const cat = getCategoryByName(category);
+    if (!cat) {
+      const valid = getAssetCategories().map(c => c.name).join(', ');
+      process.stderr.write(`Error: unknown category '${category}'. Valid: ${valid}\n`);
+      process.exit(1);
+    }
+    // Shared 3-condition presence detection (same as resolver and doctor).
     const effectiveHome    = home       ? path.resolve(home)       : os.homedir();
     const effectiveProject = path.resolve(projectDir);
     const localClaude      = path.join(effectiveProject, '.claude');
     const globalClaude     = path.join(effectiveHome,    '.claude');
 
-    function listAssetsHasPayload(claudeDir) {
-      for (const cat of getAssetCategories()) {
-        const catDir = path.join(claudeDir, cat.name);
-        if (!fs.existsSync(catDir)) continue;
-        try { if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true; } catch (_) {}
-      }
-      return false;
-    }
-    function listAssetsIsPresent(claudeDir) {
-      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-manifest.json'))) return true;
-      if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-version')))       return true;
-      return listAssetsHasPayload(claudeDir);
-    }
-
-    const localPresent  = listAssetsIsPresent(localClaude);
-    const globalPresent = listAssetsIsPresent(globalClaude);
+    const localPresent  = isToolkitInstalled(localClaude);
+    const globalPresent = isToolkitInstalled(globalClaude);
 
     if (localPresent && globalPresent) {
       process.stderr.write(
@@ -1607,31 +1841,21 @@ async function main() {
       process.exit(1);
     }
 
-    // Determine the runtime root to enumerate. When neither is present, runtimeRoot points
-    // nowhere meaningful — the walk finds nothing and an empty list is returned (exit 0).
-    const runtimeRoot = localPresent  ? localClaude
-                      : globalPresent ? globalClaude
-                      : localClaude;   // fallback: not installed — returns empty list, exit 0
-
-    const cats = category ? [getCategoryByName(category)] : getAssetCategories();
-    const results = [];
-    for (const cat of cats) {
-      const catDir = path.join(runtimeRoot, cat.name);
-      if (!fs.existsSync(catDir)) continue;
-      const stack = [catDir];
-      while (stack.length > 0) {
-        const dir = stack.pop();
-        for (const entry of fs.readdirSync(dir)) {
-          const full = path.join(dir, entry);
-          if (fs.statSync(full).isDirectory()) {
-            stack.push(full);
-          } else {
-            results.push(path.relative(runtimeRoot, full).replace(/\\/g, '/'));
-          }
-        }
-      }
+    // No installation → Tier 3 error (exit 1, stdout empty, diagnostic on stderr).
+    if (!localPresent && !globalPresent) {
+      process.stderr.write('Error: no toolkit installation found. Install with --local or --global.\n');
+      process.exit(1);
     }
-    results.sort();
+    const runtimeRoot = localPresent ? localClaude : globalClaude;
+
+    // Return only catalog-defined assets (no foreign files) for the requested
+    // category, and only files that actually exist on disk.
+    const allExpected = [...buildExpectedPayload(runtimeRoot)].sort();
+    const catDir      = path.resolve(path.join(runtimeRoot, cat.name));
+    const results = allExpected
+      .filter(f => f.startsWith(catDir + path.sep) || f.startsWith(catDir + '/'))
+      .filter(f => fs.existsSync(f));
+
     if (format === 'json') {
       process.stdout.write(JSON.stringify(results, null, 2) + '\n');
     } else {
@@ -1680,6 +1904,12 @@ if (require.main === module) {
     runDoctorResolution,
     validatePurityGuard,
     TOOLKIT_INTERNAL_ASSETS,
-    buildCategoryMappings,
+    buildPayloadFileMappings,
+    buildExpectedPayload,
+    validateRuntimeRelativePath,
+    validateManifestFilesField,
+    hasToolkitPayloadFiles,
+    isToolkitInstalled,
+    runVerifyInstall,
   };
 }

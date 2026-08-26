@@ -19,6 +19,8 @@ const { spawnSync } = require('child_process');
 
 const cliPath = path.join(__dirname, '..', '..', 'bin', 'cli.js');
 
+jest.setTimeout(60000);
+
 // ── CLI runner ─────────────────────────────────────────────────────────────────
 // Uses process.execPath so the correct Node binary is invoked on all platforms.
 function cli(argv) {
@@ -303,7 +305,8 @@ describe('doctor resolution', () => {
 
   // ── Summary section ──────────────────────────────────────────────────────────
 
-  test('reports READY in summary for a valid single-installation setup', () => {
+  test('reports PROBLEMATIC for a partial installation (valid manifest + only one file)', () => {
+    // Even with a valid manifest, disk completeness check requires all catalog files.
     const tmpProject = mktmp('proj');
     const tmpHome    = mktmp('home');
 
@@ -312,7 +315,7 @@ describe('doctor resolution', () => {
 
     const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
 
-    expect(result.stdout).toContain('READY');
+    expect(result.stdout).toContain('PROBLEMATIC');
   });
 
   test('reports PROBLEMATIC in summary when both installations are present', () => {
@@ -347,6 +350,51 @@ describe('doctor resolution', () => {
     // Output includes "src" and "claude" from the source directory path
     expect(result.stdout).toContain('src');
     expect(result.stdout).toContain('claude');
+  });
+
+  // ── Disk Completeness section ─────────────────────────────────────────────────
+
+  test('reports INCOMPLETE in Disk Completeness section for a partial install', () => {
+    const tmpProject = mktmp('proj');
+    const tmpHome    = mktmp('home');
+
+    // Only one agent file — catalog completeness check will fail.
+    putManifest(tmpProject, manifest(['.claude/agents/test.md'], 'local'));
+    putAgentFile(tmpProject, 'test.md', '# test');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+
+    expect(result.stdout).toContain('INCOMPLETE');
+  });
+
+  test('reports COMPLETE in Disk Completeness section for a fully valid install', () => {
+    const tmpProject = mktmp('complete');
+    const tmpHome    = mktmp('home-c');
+
+    // Run the real installer so all catalog files are present.
+    const { spawnSync } = require('child_process');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+
+    expect(result.stdout).toContain('COMPLETE');
+    expect(result.stdout).toContain('READY');
+  });
+
+  test('action items list missing files when disk is incomplete', () => {
+    const tmpProject = mktmp('incomplete');
+    const tmpHome    = mktmp('home-i');
+
+    putManifest(tmpProject, manifest(['.claude/agents/test.md'], 'local'));
+    putAgentFile(tmpProject, 'test.md', '# test');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+
+    expect(result.stdout).toMatch(/missing|incomplete/i);
   });
 
   // ── --home isolation ─────────────────────────────────────────────────────────
@@ -421,5 +469,243 @@ describe('doctor resolution', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('9.9.9');
+  });
+
+  // ── installationMode consistency (P1-B) ──────────────────────────────────────
+
+  test('reports PROBLEMATIC when manifest.installationMode does not match detected mode', () => {
+    // Install real toolkit locally, then overwrite manifest with wrong installationMode.
+    const tmpProject = mktmp('mode-mismatch');
+    const tmpHome    = mktmp('home-mm');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    // Overwrite installationMode to 'global' while the install is local.
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    m.installationMode = 'global';
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toContain('installationMode');
+  });
+
+  test('action items mention installationMode mismatch', () => {
+    const tmpProject = mktmp('mode-action');
+    const tmpHome    = mktmp('home-ma');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    m.installationMode = 'global';
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toMatch(/installationMode.*does not match|does not match.*installationMode/i);
+  });
+
+  // ── manifest.files completeness (P1-B) ───────────────────────────────────────
+
+  test('reports PROBLEMATIC when manifest.files is empty but disk is complete', () => {
+    // Install real toolkit (disk complete), then set manifest.files = [].
+    const tmpProject = mktmp('empty-files');
+    const tmpHome    = mktmp('home-ef');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    m.files = [];
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/manifest\.files|missing.*catalog/i);
+  });
+
+  test('reports PROBLEMATIC when a single expected asset is missing from manifest.files', () => {
+    // Install real toolkit, then remove one catalog asset from manifest.files.
+    const tmpProject = mktmp('single-missing');
+    const tmpHome    = mktmp('home-sm');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    // Drop the first catalog file from the manifest.files list.
+    if (m.files.length > 0) m.files.splice(0, 1);
+    fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf8');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+  });
+
+  test('reports READY when manifest and disk are fully coherent (real install)', () => {
+    // A fresh real install must produce READY without modification.
+    const tmpProject = mktmp('coherent');
+    const tmpHome    = mktmp('home-coh');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('READY');
+    expect(result.stdout).not.toContain('PROBLEMATIC');
+  });
+
+  test('recommendation is not "operational" when status is PROBLEMATIC', () => {
+    // A manifest-only install without disk files → PROBLEMATIC.
+    const tmpProject = mktmp('not-operational');
+    const tmpHome    = mktmp('home-no');
+    putManifest(tmpProject, manifest(['.claude/agents/test.md'], 'local'));
+    putAgentFile(tmpProject, 'test.md', '# test');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).not.toContain('Installation is operational');
+  });
+
+  // ── manifest.files schema validation (P1) ────────────────────────────────────
+  // A present manifest whose 'files' field is malformed must be reported as a
+  // schema problem (PROBLEMATIC + repair recommendation) and must never crash the
+  // doctor with an unhandled exception — the report stays read-only.
+
+  /** Build a manifest with all required fields present but an arbitrary 'files' value. */
+  function manifestWithFiles(filesValue) {
+    return {
+      version:          '1.0.0',
+      installedAt:      new Date().toISOString(),
+      installationMode: 'local',
+      files:            filesValue,
+    };
+  }
+
+  /** Assert the doctor ran cleanly (exit 0, no stack trace on stderr). */
+  function expectNoCrash(result) {
+    expect(result.status).toBe(0);
+    expect(result.stderr || '').not.toMatch(/TypeError|is not a function|at Object|at runDoctorResolution/);
+  }
+
+  test('files as a string → PROBLEMATIC schema error (no crash)', () => {
+    const tmpProject = mktmp('files-string');
+    const tmpHome    = mktmp('home-fs');
+    putManifest(tmpProject, manifestWithFiles('not-an-array'));
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(result);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/Manifest schema invalid.*'files'/);
+    expect(result.stdout).not.toContain('Installation is operational');
+  });
+
+  test('files as an object → PROBLEMATIC schema error (no crash)', () => {
+    const tmpProject = mktmp('files-object');
+    const tmpHome    = mktmp('home-fo');
+    putManifest(tmpProject, manifestWithFiles({ nope: true }));
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(result);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/Manifest schema invalid.*'files'/);
+  });
+
+  test('files as null → PROBLEMATIC schema error (no crash)', () => {
+    const tmpProject = mktmp('files-null');
+    const tmpHome    = mktmp('home-fn');
+    putManifest(tmpProject, manifestWithFiles(null));
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(result);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/Manifest schema invalid.*'files'/);
+  });
+
+  test('files array containing a number → PROBLEMATIC schema error (no crash on .replace)', () => {
+    const tmpProject = mktmp('files-number');
+    const tmpHome    = mktmp('home-fnum');
+    putManifest(tmpProject, manifestWithFiles(['.claude/agents/test.md', 123]));
+    putAgentFile(tmpProject, 'test.md', '# test');
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(result);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/Manifest schema invalid.*files\[1\].*string/);
+  });
+
+  test('files array containing an empty string → PROBLEMATIC schema error (no crash)', () => {
+    const tmpProject = mktmp('files-empty');
+    const tmpHome    = mktmp('home-fe');
+    putManifest(tmpProject, manifestWithFiles(['']));
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(result);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/Manifest schema invalid.*files\[0\].*empty/);
+  });
+
+  test('files array with a path-traversal entry → PROBLEMATIC schema error (no crash)', () => {
+    const tmpProject = mktmp('files-traversal');
+    const tmpHome    = mktmp('home-ft');
+    putManifest(tmpProject, manifestWithFiles(['../../etc/passwd']));
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(result);
+    expect(result.stdout).toContain('PROBLEMATIC');
+    expect(result.stdout).toMatch(/Manifest schema invalid.*'\.\.'|escapes the installation root/);
+  });
+
+  test('valid, coherent files array (real install) → READY, no schema error', () => {
+    const tmpProject = mktmp('files-valid');
+    const tmpHome    = mktmp('home-fv');
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+
+    const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(result);
+    expect(result.stdout).toContain('READY');
+    expect(result.stdout).not.toContain('Manifest schema invalid');
+  });
+
+  test('fresh install then manifest paths converted / → \\ → PROBLEMATIC, not operational', () => {
+    const tmpProject = mktmp('files-backslash');
+    const tmpHome    = mktmp('home-fb');
+    // 1. Fresh, real local install (produces a coherent forward-slash manifest).
+    spawnSync(
+      process.execPath,
+      [cliPath, '--local', tmpProject, '--force'],
+      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..') }
+    );
+
+    // Sanity: the untouched install is READY.
+    const before = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expect(before.stdout).toContain('READY');
+
+    // 2. Convert every '/' in each manifest 'files' entry to '\'.
+    const manifestPath = path.join(tmpProject, '.claude', '.ai-toolkit-manifest.json');
+    const manifest     = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.files     = manifest.files.map(f => f.replace(/\//g, '\\'));
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+    // 3. Doctor must flag the incoherent manifest — never declare it operational.
+    const after = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
+    expectNoCrash(after);
+    expect(after.stdout).toContain('PROBLEMATIC');
+    expect(after.stdout).toMatch(/Manifest schema invalid.*is not canonical/);
+    expect(after.stdout).not.toContain('Installation is operational');
   });
 });

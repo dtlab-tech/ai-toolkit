@@ -187,6 +187,101 @@ describe('upgrade-orphan-cleanup — Group 2: legitimate files survive the upgra
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Group 3b: docs/ and CLAUDE.md from old manifests are NOT trashed during upgrade
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('upgrade-orphan-cleanup — Group 3b: docs/CLAUDE.md from legacy manifest not trashed', () => {
+  let tmpDir;
+
+  beforeAll(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-toolkit-upgrade-docs-'));
+
+    // Create docs and CLAUDE.md at the target location (pre-existing from old install).
+    const docsDir = path.join(tmpDir, 'docs');
+    fs.mkdirSync(docsDir, { recursive: true });
+    fs.writeFileSync(path.join(docsDir, 'reference.md'), '# existing reference', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# existing claude', 'utf8');
+
+    // Old manifest that listed docs and CLAUDE.md (pre-hotfix installer behavior).
+    const manifest = {
+      version:          '0.9.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files: [
+        'docs/reference.md',
+        'CLAUDE.md',
+        '.claude/scripts/wb-validate.js',
+      ],
+    };
+    const claudeDir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, '.ai-toolkit-manifest.json'),
+      JSON.stringify(manifest, null, 2),
+      'utf8'
+    );
+
+    spawnSync(
+      process.execPath,
+      [CLI_PATH, '--local', tmpDir, '--force'],
+      { encoding: 'utf8', cwd: TOOLKIT_ROOT }
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('docs/ files are not moved to trash during upgrade from legacy manifest', () => {
+    const trashBase  = path.join(tmpDir, '.claude', '.ai-toolkit-trash');
+    const trashFiles = walkDirSync(trashBase);
+    expect(trashFiles.some(f => f.replace(/\\/g, '/').includes('reference.md'))).toBe(false);
+  });
+
+  test('CLAUDE.md is not moved to trash during upgrade from legacy manifest', () => {
+    const trashBase  = path.join(tmpDir, '.claude', '.ai-toolkit-trash');
+    const trashFiles = walkDirSync(trashBase);
+    expect(trashFiles.some(f => path.basename(f) === 'CLAUDE.md')).toBe(false);
+  });
+
+  test('docs/reference.md still exists after upgrade from legacy manifest', () => {
+    expect(fs.existsSync(path.join(tmpDir, 'docs', 'reference.md'))).toBe(true);
+  });
+
+  test('CLAUDE.md still exists after upgrade from legacy manifest', () => {
+    expect(fs.existsSync(path.join(tmpDir, 'CLAUDE.md'))).toBe(true);
+  });
+
+  test('docs/reference.md has content from the package source after upgrade', () => {
+    const TOOLKIT_ROOT = path.resolve(__dirname, '../..');
+    const expected     = fs.readFileSync(path.join(TOOLKIT_ROOT, 'docs', 'reference.md'), 'utf8');
+    const actual       = fs.readFileSync(path.join(tmpDir, 'docs', 'reference.md'), 'utf8');
+    expect(actual).toBe(expected);
+  });
+
+  test('CLAUDE.md has content from the package source (CLAUDE.md) after upgrade', () => {
+    const TOOLKIT_ROOT = path.resolve(__dirname, '../..');
+    const expected     = fs.readFileSync(path.join(TOOLKIT_ROOT, 'CLAUDE.md'), 'utf8');
+    const actual       = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
+    expect(actual).toBe(expected);
+  });
+
+  test('new manifest does not contain docs/ entries', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json'), 'utf8')
+    );
+    expect(manifest.files.some(f => f.startsWith('docs/'))).toBe(false);
+  });
+
+  test('new manifest does not contain CLAUDE.md entry', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json'), 'utf8')
+    );
+    expect(manifest.files.some(f => f === 'CLAUDE.md')).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Group 3: Repeated upgrades accumulate orphans in separate timestamp dirs
 // ─────────────────────────────────────────────────────────────────────────────
 
