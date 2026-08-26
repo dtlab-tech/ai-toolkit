@@ -18,6 +18,7 @@ const { spawnSync } = require('child_process');
 
 const CLI          = path.join(__dirname, '..', '..', 'bin', 'cli.js');
 const TOOLKIT_ROOT = path.join(__dirname, '..', '..');
+const TOOLKIT_VERSION = require('../../package.json').version;
 const { getAssetCategories } = require('../../lib/asset-catalog');
 
 function makeCompleteInstall(projectDir) {
@@ -45,9 +46,9 @@ function makeCompleteInstall(projectDir) {
   }
   fs.writeFileSync(
     path.join(clauDir, '.ai-toolkit-manifest.json'),
-    JSON.stringify({ version: '0.10.1', installedAt: '2026-01-01T00:00:00.000Z', installationMode: 'local', files }, null, 2)
+    JSON.stringify({ version: TOOLKIT_VERSION, installedAt: '2026-01-01T00:00:00.000Z', installationMode: 'local', files }, null, 2)
   );
-  fs.writeFileSync(path.join(clauDir, '.ai-toolkit-version'), '0.10.1');
+  fs.writeFileSync(path.join(clauDir, '.ai-toolkit-version'), TOOLKIT_VERSION);
 }
 
 function runAsset(relativePath, { projectDir, home }, scriptArgs = []) {
