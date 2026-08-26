@@ -20,13 +20,18 @@ const { spawnSync } = require('child_process');
 
 const CLI          = path.join(__dirname, '..', '..', 'bin', 'cli.js');
 const TOOLKIT_ROOT = path.join(__dirname, '..', '..');
+const TOOLKIT_VERSION = require('../../package.json').version;
 const { getAssetCategories } = require('../../lib/asset-catalog');
 const { TOOLKIT_INTERNAL_ASSETS } = require('../../bin/cli');
 
 // Install catalog files into <projectDir>/.claude/ with manifest + stamp.
 // Applies TOOLKIT_INTERNAL_ASSETS exclusions to match what the real installer writes,
 // preventing stale-entry warnings from the resolver (Phase C manifest validation).
-function makeCompleteInstall(projectDir, { mode = 'local', version = '0.10.1' } = {}) {
+// The version stamp defaults to the real package version so a Tier 1 "complete"
+// install matches the resolver and produces no version-mismatch warning on stderr
+// (mirrors what the real installer writes). Callers testing a mismatch pass an
+// explicit older version.
+function makeCompleteInstall(projectDir, { mode = 'local', version = TOOLKIT_VERSION } = {}) {
   const clauDir = path.join(projectDir, '.claude');
   fs.mkdirSync(clauDir, { recursive: true });
   const files = [];
