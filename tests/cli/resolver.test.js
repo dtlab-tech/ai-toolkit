@@ -222,6 +222,33 @@ describe('Phase 0 — Input validation (throws before any filesystem access)', (
       .toThrow('must not contain null bytes');
   });
 
+  // Rooted / UNC Windows paths must fail immediately (after '\' → '/' normalization)
+  // and must NOT be reinterpreted as relative (e.g. '\Windows\x.md' → 'Windows/x.md').
+  test('rejects a single leading backslash (rooted Windows path)', () => {
+    expect(() => resolveClaudeRuntimeAsset('\\Windows\\x.md', { projectDir, home }))
+      .toThrow('must be relative');
+  });
+
+  test('rejects a UNC path with double backslash', () => {
+    expect(() => resolveClaudeRuntimeAsset('\\\\server\\share\\x.md', { projectDir, home }))
+      .toThrow('must be relative');
+  });
+
+  test('rejects a UNC path already expressed with forward slashes', () => {
+    expect(() => resolveClaudeRuntimeAsset('//server/share/x.md', { projectDir, home }))
+      .toThrow('must be relative');
+  });
+
+  test('rejects a Windows drive-absolute path with forward slashes (C:/...)', () => {
+    expect(() => resolveClaudeRuntimeAsset('C:/Windows/x.md', { projectDir, home }))
+      .toThrow('got Windows absolute path');
+  });
+
+  test('rejects a Windows drive-relative path (C:relative.txt)', () => {
+    expect(() => resolveClaudeRuntimeAsset('C:relative.txt', { projectDir, home }))
+      .toThrow('drive-relative');
+  });
+
   test('Phase 0 throws before touching the filesystem — nonexistent dirs are safe', () => {
     // The test dirs above do not exist on disk. If Phase 0 did filesystem I/O
     // the call would still throw (just with a different error). We verify the

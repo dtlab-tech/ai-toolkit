@@ -730,8 +730,12 @@ function buildExpectedPayload(effectiveRoot) {
 // no double separators, and no trailing slash.
 //
 // options:
-//   root             — absolute installation root; when given, the resolved path
-//                      must stay confined within it (defence in depth).
+//   root             — absolute installation root; when given, the returned
+//                      `resolved` is confined within it. NOTE: after the
+//                      absolute/drive/traversal rejections above, a surviving
+//                      value can never escape root, so the 'escapes-root' branch
+//                      is unreachable defence in depth (retained against future
+//                      OS/symlink normalization surprises).
 //   requireCanonical — when true, a value that is not already canonical is an
 //                      error (code 'non-canonical'); the manifest validator uses
 //                      this so doctor flags incoherent manifests instead of
@@ -759,16 +763,23 @@ function validateRuntimeRelativePath(value, options) {
   if (value !== value.trim()) {
     return fail('surrounding-whitespace', 'must not have leading or trailing whitespace');
   }
-  if (value.startsWith('/')) {
+  // Normalize separators BEFORE the absolute-path checks. Otherwise a rooted
+  // Windows path ('\Windows\x.md') or a UNC path ('\\server\share\x.md') would
+  // slip past a raw startsWith('/') test and be reinterpreted as relative once
+  // the backslashes were converted. Per the Tech Spec: normalize '\' → '/' first,
+  // then reject anything that begins with '/'.
+  const unified = value.replace(/\\/g, '/');
+  if (unified.startsWith('/')) {
+    // Covers Unix absolute ('/etc/passwd'), rooted Windows ('\Windows\x.md' → '/…'),
+    // and UNC ('\\server\share' → '//server/share', or already-'/'-form '//server').
     return fail('absolute-unix', 'must be relative (got Unix absolute path)');
   }
-  if (/^[A-Za-z]:[\\/]/.test(value)) {
+  if (/^[A-Za-z]:\//.test(unified)) {
     return fail('absolute-windows', 'must be relative (got Windows absolute path)');
   }
-  if (/^[A-Za-z]:/.test(value)) {
+  if (/^[A-Za-z]:/.test(unified)) {
     return fail('drive-relative', 'must be relative (got Windows drive-relative path)');
   }
-  const unified = value.replace(/\\/g, '/');
   if (unified.split('/').includes('..')) {
     return fail('traversal', 'must not contain path traversal (..)');
   }
@@ -793,22 +804,6 @@ function validateRuntimeRelativePath(value, options) {
   return { ok: true, canonical, resolved, canonicalDiffers };
 }
 
-// Format a manifest 'files[i]' schema error from a validateRuntimeRelativePath
-// failure. The entry is echoed (when a string) so operators can spot the culprit.
-function formatManifestFilesError(i, entry, check) {
-  const shown = typeof entry === 'string' ? ` ('${entry}')` : '';
-  switch (check.code) {
-    case 'traversal':
-      return `'files[${i}]' must not contain '..' segments (path traversal)${shown}`;
-    case 'non-canonical':
-      return `'files[${i}]' is not canonical; expected '${check.canonical}'${shown}`;
-    case 'escapes-root':
-      return `'files[${i}]' escapes the installation root${shown}`;
-    default:
-      return `'files[${i}]' ${check.reason}${shown}`;
-  }
-}
-
 // Validate the shape of a manifest 'files' field for the doctor's schema check.
 // Returns an array of human-readable error strings; an empty array means valid.
 // A valid 'files' field is an array whose every element is a canonical,
@@ -827,7 +822,24 @@ function validateManifestFilesField(files, destRoot) {
   files.forEach((entry, i) => {
     const check = validateRuntimeRelativePath(entry, { root: rootResolved, requireCanonical: true });
     if (check.ok) return;
-    errors.push(formatManifestFilesError(i, entry, check));
+    // Format the diagnostic inline — this is the only caller, so no shared helper.
+    // The entry is echoed (when a string) so operators can spot the culprit.
+    const shown = typeof entry === 'string' ? ` ('${entry}')` : '';
+    let msg;
+    switch (check.code) {
+      case 'traversal':
+        msg = `'files[${i}]' must not contain '..' segments (path traversal)${shown}`;
+        break;
+      case 'non-canonical':
+        msg = `'files[${i}]' is not canonical; expected '${check.canonical}'${shown}`;
+        break;
+      case 'escapes-root':
+        msg = `'files[${i}]' escapes the installation root${shown}`;
+        break;
+      default:
+        msg = `'files[${i}]' ${check.reason}${shown}`;
+    }
+    errors.push(msg);
   });
   return errors;
 }
@@ -919,6 +931,16 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   const effectiveRoot = localPresent ? localRuntimeRoot : globalRuntimeRoot;
   const effectiveMode = localPresent ? 'local' : 'global';
 
+  // Confinement lives in the shared primitive: re-validate the (already canonical)
+  // relativePath against the now-known installation root and reuse its resolved
+  // absolute path everywhere below, instead of re-implementing path.resolve +
+  // startsWith here.
+  const rootedCheck = validateRuntimeRelativePath(relativePath, { root: effectiveRoot });
+  if (!rootedCheck.ok) {
+    throw new Error('Resolved path escapes installation root (confinement violation)');
+  }
+  const absoluteRequested = rootedCheck.resolved;
+
   // ── Phase C: Metadata warnings (emit to stderr; never abort) ──────────────
   const manifestPath = path.join(effectiveRoot, '.ai-toolkit-manifest.json');
   let manifest = null;
@@ -981,7 +1003,6 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   }
 
   // Step 8a: catalog membership — requested asset must be in expectedPayload
-  const absoluteRequested = path.resolve(path.join(effectiveRoot, relativePath));
   if (!expectedPayload.has(absoluteRequested)) {
     throw new Error(
       `Requested asset '${relativePath}' is not a registered catalog asset (mode: ${effectiveMode}). ` +
@@ -1014,15 +1035,9 @@ function resolveClaudeRuntimeAsset(relativePath, options) {
   }
 
   // ── Phase E: Return path ───────────────────────────────────────────────────
-  // Step 11: resolve absolute path (effectiveRoot already ends at .claude/)
-  const absolutePath = path.resolve(path.join(effectiveRoot, relativePath));
-
-  // Step 11a: confinement check — belt-and-suspenders after Phase 0 traversal rejection;
-  // catches edge cases introduced by OS-level normalization or symlink resolution.
-  const resolvedRoot = path.resolve(effectiveRoot);
-  if (!absolutePath.startsWith(resolvedRoot + path.sep) && absolutePath !== resolvedRoot) {
-    throw new Error('Resolved path escapes installation root (confinement violation)');
-  }
+  // Confinement was already enforced by the shared primitive above; absoluteRequested
+  // is its confined, resolved absolute path (effectiveRoot already ends at .claude/).
+  const absolutePath = absoluteRequested;
 
   // Step 12: final existence check
   if (!fs.existsSync(absolutePath)) {

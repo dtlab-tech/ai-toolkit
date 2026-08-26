@@ -93,6 +93,39 @@ describe('validateRuntimeRelativePath() — hard safety rules (both callers)', (
     expect(r.reason).toMatch(/drive-relative/);
   });
 
+  // Rooted / UNC Windows paths must be rejected AFTER '\' → '/' normalization,
+  // never reinterpreted as relative (e.g. '\Windows\x.md' must not become
+  // 'Windows/x.md'). All collapse to a leading '/' and hit the absolute branch.
+  test('rejects a single leading backslash (rooted Windows path)', () => {
+    const r = validateRuntimeRelativePath('\\Windows\\x.md');
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('absolute-unix');
+  });
+
+  test('rejects a UNC path with double backslash', () => {
+    const r = validateRuntimeRelativePath('\\\\server\\share\\x.md');
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('absolute-unix');
+  });
+
+  test('rejects a UNC path already expressed with forward slashes', () => {
+    const r = validateRuntimeRelativePath('//server/share/x.md');
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('absolute-unix');
+  });
+
+  test('rejects a Windows drive-absolute path with backslashes (C:\\...)', () => {
+    const r = validateRuntimeRelativePath('C:\\Windows\\x.md');
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('absolute-windows');
+  });
+
+  test('rejects a Windows drive-absolute path with forward slashes (C:/...)', () => {
+    const r = validateRuntimeRelativePath('C:/Windows/x.md');
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('absolute-windows');
+  });
+
   test('rejects a simple .. traversal', () => {
     const r = validateRuntimeRelativePath('../outside.js');
     expect(r.ok).toBe(false);
@@ -193,13 +226,23 @@ describe('validateRuntimeRelativePath() — requireCanonical (manifest policy)',
 describe('validateRuntimeRelativePath() — confinement (root option)', () => {
   const root = path.resolve('/tmp/install-root');
 
-  test('accepts a path confined within root', () => {
+  test('accepts a path confined within root and returns its resolved absolute path', () => {
     const r = validateRuntimeRelativePath('.claude/agents/a.md', { root });
     expect(r.ok).toBe(true);
     expect(path.resolve(r.resolved)).toBe(path.resolve(root, '.claude/agents/a.md'));
   });
 
-  test('a .. traversal is rejected before confinement is even considered', () => {
+  // An out-of-root value can only be expressed as an absolute path or via '..',
+  // both of which are rejected by the syntactic checks BEFORE confinement runs.
+  // So the 'escapes-root' branch is unreachable defence-in-depth — we assert the
+  // branch actually reached rather than pretending to cover confinement.
+  test("an absolute 'out-of-root' value hits absolute-unix, not escapes-root", () => {
+    const r = validateRuntimeRelativePath('/outside/root/file.md', { root });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('absolute-unix');
+  });
+
+  test("a '..' 'out-of-root' value hits traversal, not escapes-root", () => {
     const r = validateRuntimeRelativePath('../../etc/passwd', { root });
     expect(r.ok).toBe(false);
     expect(r.code).toBe('traversal');

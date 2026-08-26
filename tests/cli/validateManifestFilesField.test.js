@@ -109,11 +109,19 @@ describe('validateManifestFilesField() — per-entry rejections', () => {
     expect(onlyError(['.claude/agents/a\x00.md'])).toMatch(/files\[0\].*null byte/);
   });
 
-  test('an out-of-root entry is rejected (defence in depth)', () => {
-    // Constructed so it survives the '..' check but escapes root once resolved.
-    // '..' is caught first, so we rely on absolute detection for out-of-root here;
-    // a bare drive/absolute path is the practical escape vector.
-    expect(onlyError(['/outside/root/file.md'])).toMatch(/files\[0\]/);
+  test('an out-of-root absolute entry is rejected via the absolute branch', () => {
+    // An out-of-root value can only be absolute or use '..'; both are rejected by
+    // the syntactic checks before confinement, so the diagnostic reports the
+    // absolute path — not a confinement ('escapes the installation root') error.
+    expect(onlyError(['/outside/root/file.md'])).toMatch(/files\[0\].*Unix absolute/);
+  });
+
+  test('a rooted Windows entry (\\Windows\\x.md) is rejected as absolute', () => {
+    expect(onlyError(['\\Windows\\x.md'])).toMatch(/files\[0\].*Unix absolute/);
+  });
+
+  test('a UNC entry (\\\\server\\share) is rejected as absolute', () => {
+    expect(onlyError(['\\\\server\\share\\x.md'])).toMatch(/files\[0\].*Unix absolute/);
   });
 
   test('reports only the single invalid entry in an otherwise valid array', () => {
