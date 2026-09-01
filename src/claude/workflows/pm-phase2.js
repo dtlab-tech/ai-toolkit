@@ -90,8 +90,21 @@ function normalizeError(err) {
 // args: "<path-to-feature.md>"
 const featurePath = (typeof args === 'string' ? args : '').trim().split(/\s+/)[0]
 
+// Feature directory = parent of the feature.md path. Separator-agnostic: the workflow
+// runtime provides no `path` module, so we cannot use path.dirname. Handle BOTH POSIX
+// "/" and Windows "\": strip a trailing "<sep>feature.md" tail when present; if the
+// input is already a directory (no feature.md tail), strip only a trailing separator.
+// This replaces the previous POSIX-only regex (/\/[^/]+$/), which left "\feature.md"
+// attached on Windows paths and produced malformed "…\feature.md/…json" paths that only
+// "worked" because an LLM wrapper agent silently repaired them.
+function deriveFeatureDir(featurePath) {
+  return /[/\\]feature\.md$/i.test(featurePath)
+    ? featurePath.replace(/[/\\]feature\.md$/i, '')
+    : featurePath.replace(/[/\\]+$/, '')
+}
+
 // Derive feature directory and prefix early (needed for ledger writes before metrics agent runs)
-const featureDir  = featurePath.replace(/\/[^/]+$/, '')
+const featureDir  = deriveFeatureDir(featurePath)
 const prefixMatch = featureDir.match(/([A-Z]+-\d+)/)
 const prefix      = prefixMatch ? prefixMatch[1] : 'FTR-000'
 
