@@ -57,15 +57,23 @@ function render(wb, prefix) {
 }
 
 // Extract, from rendered Markdown, the array of fenced-code-block bodies that appear
-// under a given task's verification heading (### <taskId>), stopping at the next
-// heading. The fence length is dynamic, so we match a run of >=3 backticks and pair
-// each opening fence with the next identical-length closing fence.
+// under a given task's detail heading (### <taskId>), after the
+// "**Verification commands:**" marker, stopping at the next heading. The fence length
+// is dynamic, so we match a run of >=3 backticks and pair each opening fence with the
+// next identical-length closing fence.
 function extractVerificationCommands(md, taskId) {
   const lines = md.split('\n')
   // find the heading line "### <taskId>"
   let i = lines.findIndex(l => l === `### ${taskId}`)
   if (i === -1) return null
   i++ // move past heading
+  // advance to the verification-commands marker (skipping the field bullet list),
+  // but do not cross into the next task's heading
+  while (i < lines.length && lines[i] !== '**Verification commands:**') {
+    if (/^#{1,3} /.test(lines[i])) return []   // no marker before next heading
+    i++
+  }
+  i++ // move past the marker
   const cmds = []
   while (i < lines.length) {
     const line = lines[i]
@@ -117,9 +125,10 @@ describe('wb-render.js — verification commands are lossless in Markdown', () =
     expect(rendered.result.status).toBe(0)
   })
 
-  test('a dedicated "Verification Commands" section is emitted', () => {
-    expect(rendered.md).toContain('## Verification Commands')
+  test('an authoritative "Task Details" section is emitted', () => {
+    expect(rendered.md).toContain('## Task Details')
     expect(rendered.md).toContain('### US-01-TASK-BE-01')
+    expect(rendered.md).toContain('**Verification commands:**')
   })
 
   test('every verification command is recoverable from the Markdown byte-for-byte, in order', () => {
@@ -173,9 +182,20 @@ describe('wb-render.js — tabular sanitisation vs command losslessness are dist
   })
   afterAll(() => { if (rendered) rendered.cleanup() })
 
-  test('descriptive tabular field (title) IS sanitised — raw pipe absent, spaces present', () => {
-    expect(rendered.md).toContain('render table field')
-    expect(rendered.md).not.toContain('render|table|field')
+  test('in the SUMMARY TABLE the title is sanitised — raw pipe absent, spaces present', () => {
+    // Scope the assertion to the summary-table row for this task (the table uses `|`
+    // as a column separator, so descriptive fields must be sanitised there). The
+    // authoritative Task Details section renders the SAME title verbatim (asserted
+    // below) — the two representations are intentionally distinct.
+    const tableRow = rendered.md.split('\n').find(l => l.startsWith('| US-02-TASK-BE-01 |'))
+    expect(tableRow).toBeDefined()
+    expect(tableRow).toContain('render table field')
+    expect(tableRow).not.toContain('render|table|field')
+  })
+
+  test('in the TASK DETAILS section the same title is rendered verbatim (with its pipes)', () => {
+    // Detail fields live outside any table, so pipes must survive byte-for-byte.
+    expect(rendered.md).toContain('- **Title:** render|table|field')
   })
 
   test('CSV structure is protected: every data row still has exactly 8 columns', () => {
@@ -190,10 +210,11 @@ describe('wb-render.js — tabular sanitisation vs command losslessness are dist
   })
 
   test('the task-table Verification cell is a reference, not the sanitised command', () => {
-    // It must link to the anchor and must NOT contain a mangled copy of the command.
-    expect(rendered.md).toContain('[details](#verify-US-02-TASK-BE-01)')
+    // It must link to the authoritative detail anchor and must NOT contain a mangled
+    // copy of the command.
+    expect(rendered.md).toContain('[details](#task-US-02-TASK-BE-01)')
     // the anchor target exists
-    expect(rendered.md).toContain('<a id="verify-US-02-TASK-BE-01"></a>')
+    expect(rendered.md).toContain('<a id="task-US-02-TASK-BE-01"></a>')
   })
 })
 
