@@ -132,6 +132,11 @@ describe('wb-render.js — Group 1: sanitizeField behaviour via output files', (
   })
 
   // ── Test 4: pipe in task title → MD table row contains sanitized form ─────────
+  // NOTE: the task TITLE is a descriptive tabular field, where pipe sanitisation is
+  // intentional (it protects Markdown/CSV column structure). Lossless preservation
+  // applies ONLY to executable verification commands, which are rendered in the
+  // dedicated "Verification Commands" section — covered by
+  // wb-render.verification-commands-lossless.test.js, not here.
 
   test('pipe in task title is replaced with space in Markdown task table so raw pipe is absent', () => {
     // Arrange

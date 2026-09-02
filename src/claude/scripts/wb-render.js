@@ -105,6 +105,37 @@ function sanitizeField(str) {
     .trim()
 }
 
+// ── Verification-command helpers (LOSSLESS — never sanitized) ─────────────────
+//
+// Verification commands are executable and MUST survive verbatim: operators like
+// `||`, shell pipes `|`, and regex alternations `grep -E 'a|b|c'` are destroyed by
+// sanitizeField (which maps `|` → space to protect table/CSV column structure).
+// These commands are therefore rendered in a dedicated section as fenced code
+// blocks whose content is byte-equivalent to the source JSON. The task table shows
+// only a reference (a count + anchor link), never a sanitized copy of a command.
+
+function getVerificationCommands(task) {
+  const v = task && (task.verificationCommands ?? task.verification?.commands)
+  return Array.isArray(v) ? v : []
+}
+
+// Stable, deterministic HTML anchor id for a task's verification block.
+function verifyAnchor(id) {
+  const s = typeof id === 'string' ? id : String(id ?? '')
+  return 'verify-' + s.replace(/[^A-Za-z0-9_-]/g, '-')
+}
+
+// Render a single command inside a fenced code block, byte-equivalent to `cmd`.
+// The fence length is chosen to exceed the longest backtick run in the content so a
+// command that itself contains backticks can never prematurely close the fence.
+function fencedCommandBlock(cmd) {
+  const s = typeof cmd === 'string' ? cmd : String(cmd ?? '')
+  const runs = s.match(/`+/g) || []
+  const maxRun = runs.reduce((m, r) => Math.max(m, r.length), 0)
+  const fence = '`'.repeat(Math.max(3, maxRun + 1))
+  return `${fence}\n${s}\n${fence}`
+}
+
 function buildCommitSubject(task) {
   if (!task.commit || typeof task.commit !== 'object') {
     return 'chore: implement task'
@@ -189,8 +220,13 @@ function renderMarkdown(wb, prefix, phaseDepsMap) {
     const est      = mins !== null ? String(mins) : '—'
     const depArr   = Array.isArray(task.dependsOn) && task.dependsOn.length > 0 ? task.dependsOn : null
     const deps     = depArr ? depArr.join(', ') : '—'
-    const verifArr = task.verificationCommands ?? task.verification?.commands ?? []
-    const verif    = verifArr.length > 0 ? sanitizeField(verifArr.join('; ')) : '—'
+    // Verification commands are NOT rendered in-table (sanitizeField would destroy
+    // their operators). The cell references the lossless "Verification Commands"
+    // section instead; see fencedCommandBlock / renderVerificationSection.
+    const verifCmds = getVerificationCommands(task)
+    const verif     = verifCmds.length > 0
+      ? `${verifCmds.length} cmd — [details](#${verifyAnchor(task.id)})`
+      : '—'
     return `| ${id} | ${title} | ${outcome} | ${domain} | ${est} | ${deps} | ${verif} |`
   }
 
@@ -260,6 +296,32 @@ function renderMarkdown(wb, prefix, phaseDepsMap) {
         L.push(taskRow(task))
       }
       L.push('')
+    }
+  }
+
+  // ── Verification Commands (LOSSLESS) ──
+  // Each task's executable verification commands, preserved byte-for-byte from the
+  // source JSON as fenced code blocks. This is the authoritative form the developer
+  // agent must read; the task-table "Verification" column only links here.
+  L.push('## Verification Commands')
+  L.push('')
+  L.push('> Executable verification commands per task, preserved **verbatim** from the Work Breakdown source — never sanitized. Operators such as `||`, shell pipes `|`, and regex alternations (`grep -E \'a|b|c\'`) survive byte-for-byte. Each command is an independent fenced code block.')
+  L.push('')
+  for (const phase of wb.phases) {
+    for (const task of (Array.isArray(phase.tasks) ? phase.tasks : [])) {
+      const cmds = getVerificationCommands(task)
+      L.push(`<a id="${verifyAnchor(task.id)}"></a>`)
+      L.push(`### ${sanitizeField(task.id ?? '—')}`)
+      L.push('')
+      if (cmds.length === 0) {
+        L.push('_No verification commands._')
+        L.push('')
+      } else {
+        for (const cmd of cmds) {
+          L.push(fencedCommandBlock(cmd))
+          L.push('')
+        }
+      }
     }
   }
 
