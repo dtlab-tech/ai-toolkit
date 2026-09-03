@@ -3,6 +3,7 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
+const executionLedger = require('../lib/execution-ledger');
 const packageRoot = path.join(__dirname, '..');
 
 // ── colors ────────────────────────────────────────────────────────────────────
@@ -1862,6 +1863,8 @@ async function main() {
       for (const r of results) process.stdout.write(r + '\n');
     }
     process.exit(0);
+  } else if (argv[0] === 'ledger') {
+    handleLedgerCommand(argv.slice(1));
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force, dryRun);
   } else {
@@ -1927,6 +1930,28 @@ function parseLedgerArgs(argv) {
   return result;
 }
 
+// ── ledger dispatcher ─────────────────────────────────────────────────────────
+// Routes `ai-toolkit ledger <subcommand> [flags]` to the per-operation
+// handlers in lib/execution-ledger.js. All operation logic lives in that
+// module; this function only parses shared flags and routes.
+function handleLedgerCommand(argv) {
+  const subcommand = argv[0];
+  const flags = argv.slice(1);
+  const args = parseLedgerArgs(flags);
+
+  if (subcommand === 'open') {
+    return executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+  } else if (subcommand === 'close') {
+    return executionLedger.close(args.dir, args.prefix, args.agent, args.tokens, args.attempt);
+  } else if (subcommand === 'fail') {
+    return executionLedger.fail(args.dir, args.prefix, args.agent, args.error, args.attempt);
+  } else if (subcommand === 'skip') {
+    return executionLedger.skip(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+  } else {
+    throw new Error('handleLedgerCommand: unknown subcommand: ' + subcommand);
+  }
+}
+
 // ── entry point guard ─────────────────────────────────────────────────────────
 // Run the CLI only when invoked directly (node bin/cli.js).
 // When required as a module (e.g., by Jest), skip main() and export pure
@@ -1970,5 +1995,6 @@ if (require.main === module) {
     runVerifyInstall,
     shellQuotePosix,
     parseLedgerArgs,
+    handleLedgerCommand,
   };
 }
