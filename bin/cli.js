@@ -1883,7 +1883,7 @@ function shellQuotePosix(arg) {
 
 function parseLedgerArgs(argv) {
   const PREFIX_RE = /^[A-Za-z]+-\d+$/;
-  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined };
+  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined };
 
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -1917,6 +1917,24 @@ function parseLedgerArgs(argv) {
         throw new Error('parseLedgerArgs: --tokens must be an integer >= 1, got: ' + val);
       }
       result.tokens = n;
+    } else if (flag === '--dir') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --dir must be a non-empty string');
+      }
+      result.dir = val;
+    } else if (flag === '--phase') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --phase must be a non-empty string');
+      }
+      result.phase = val;
+    } else if (flag === '--model') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --model must be a non-empty string');
+      }
+      result.model = val;
     }
   }
 
@@ -1930,6 +1948,19 @@ function parseLedgerArgs(argv) {
   return result;
 }
 
+// Serialize obj to JSON with all object keys sorted recursively.
+// Used by the ledger subcommand to produce deterministic stdout output.
+function sortedJson(obj) {
+  return JSON.stringify(obj, (key, val) => {
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      const sorted = {};
+      for (const k of Object.keys(val).sort()) sorted[k] = val[k];
+      return sorted;
+    }
+    return val;
+  }, 2);
+}
+
 // ── ledger dispatcher ─────────────────────────────────────────────────────────
 // Routes `ai-toolkit ledger <subcommand> [flags]` to the per-operation
 // handlers in lib/execution-ledger.js. All operation logic lives in that
@@ -1940,7 +1971,15 @@ function handleLedgerCommand(argv) {
   const args = parseLedgerArgs(flags);
 
   if (subcommand === 'open') {
-    return executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+    try {
+      const result = executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+      process.stdout.write(sortedJson(result) + '\n');
+      process.exitCode = 0;
+    } catch (err) {
+      process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+      process.exitCode = 1;
+    }
+    return;
   } else if (subcommand === 'close') {
     return executionLedger.close(args.dir, args.prefix, args.agent, args.tokens, args.attempt);
   } else if (subcommand === 'fail') {
@@ -1996,5 +2035,6 @@ if (require.main === module) {
     shellQuotePosix,
     parseLedgerArgs,
     handleLedgerCommand,
+    sortedJson,
   };
 }
