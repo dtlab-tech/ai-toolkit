@@ -1,0 +1,213 @@
+[
+  {
+    "agent": "generate-requirements:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 13541,
+    "started_at": "2026-08-27T15:20:31Z",
+    "completed_at": "2026-08-27T15:23:19Z"
+  },
+  {
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 17127,
+    "started_at": "2026-08-27T15:23:47Z",
+    "completed_at": "2026-08-27T15:27:06Z"
+  },
+  {
+    "agent": "validate-feature-docs:phase1:cycle1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 8415,
+    "started_at": "2026-08-27T15:27:33Z",
+    "completed_at": "2026-08-27T15:29:28Z"
+  },
+  {
+    "started_at": "2026-08-31T12:39:48Z",
+    "completed_at": "2026-08-31T12:44:09Z",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 30626
+  },
+  {
+    "started_at": "2026-08-31T12:44:38Z",
+    "completed_at": "2026-08-31T13:16:35Z",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "failed",
+    "phase_delta_tokens": 463,
+    "error_summary": "malformed UC reference \"BR-01\" in AC \"AC-02\" Related UC field",
+    "exit_code": 2
+  },
+  {
+    "started_at": "2026-08-31T13:17:04Z",
+    "completed_at": "2026-08-31T13:17:04Z",
+    "agent": "validate-work-breakdown-semantic:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "skipped",
+    "phase_delta_tokens": 0
+  },
+  {
+    "started_at": "2026-08-31T13:17:36Z",
+    "completed_at": "2026-08-31T13:17:36Z",
+    "agent": "wb-render:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "skipped",
+    "phase_delta_tokens": 0
+  },
+  {
+    "started_at": "2026-08-31T13:49:49Z",
+    "completed_at": "2026-08-31T13:58:38Z",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 50850
+  },
+  {
+    "started_at": "2026-08-31T13:59:10Z",
+    "completed_at": "2026-08-31T14:02:12Z",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "failed",
+    "phase_delta_tokens": 1394,
+    "error_summary": "Error: malformed UC reference \"close\" in AC \"AC-03\" Related UC field",
+    "exit_code": 2
+  },
+  {
+    "started_at": "2026-08-31T14:02:46Z",
+    "completed_at": "2026-08-31T14:02:46Z",
+    "agent": "validate-work-breakdown-semantic:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "skipped",
+    "phase_delta_tokens": 0
+  },
+  {
+    "started_at": "2026-08-31T14:03:13Z",
+    "completed_at": "2026-08-31T14:03:13Z",
+    "agent": "wb-render:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "skipped",
+    "phase_delta_tokens": 0
+  },
+  {
+    "started_at": "2026-08-31T14:36:31Z",
+    "completed_at": "2026-08-31T14:44:38Z",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "phase_delta_tokens": 44102
+  },
+  {
+    "started_at": "2026-08-31T14:45:10Z",
+    "completed_at": "2026-08-31T15:06:53Z",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "failed",
+    "phase_delta_tokens": 586,
+    "error_summary": "Error: malformed UC reference \"close\\\" in AC \"AC-03\" Related UC field",
+    "exit_code": 2
+  },
+  {
+    "started_at": "2026-08-31T15:07:28Z",
+    "completed_at": "2026-08-31T15:07:28Z",
+    "agent": "validate-work-breakdown-semantic:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "skipped",
+    "phase_delta_tokens": 0
+  },
+  {
+    "started_at": "2026-08-31T15:08:02Z",
+    "completed_at": "2026-08-31T15:08:02Z",
+    "agent": "wb-render:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "skipped",
+    "phase_delta_tokens": 0
+  },
+  {
+    "started_at": "2026-09-01T00:00:00Z",
+    "completed_at": "2026-09-01T00:00:00Z",
+    "agent": "hotfix-wb-validate-escaped-pipe:phase2",
+    "phase": "phase2",
+    "model": "opus",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "note": "Section 1 atomic hotfix: splitTableRow() treats backslash-escaped pipes as in-cell literals; regression tests added (tests/wb-validate.escaped-pipe-parser.test.js); commit c604810"
+  },
+  {
+    "started_at": "2026-09-01T00:00:01Z",
+    "completed_at": "2026-09-01T00:00:01Z",
+    "agent": "hotfix-pm-phase2-featuredir:phase2",
+    "phase": "phase2",
+    "model": "opus",
+    "status": "done",
+    "phase_delta_tokens": 0,
+    "note": "Section 2 atomic hotfix: deriveFeatureDir() is separator-agnostic (POSIX + Windows); regression tests added (tests/pm-phase2.featureDir-derivation.test.js); commit 4ae54ed"
+  },
+  {
+    "started_at": "2026-09-01T00:00:02Z",
+    "completed_at": "2026-09-01T00:00:03Z",
+    "agent": "wb-rework-deterministic:phase2",
+    "phase": "phase2",
+    "model": "opus",
+    "status": "done",
+    "phase_delta_tokens": null,
+    "note": "Section 3+4 complete: in-place deterministic rework (no regeneration) -> 39 tasks / 12 phases. wb-validate PASS (valid:true, 0 err/warn, acyclic, 5 waves); semantic validator PASS (0 findings after splitting INFRA-TASK-BE-11 into shellQuotePosix + parseLedgerArgs and strengthening 7 verifications). All 27 Must ACs covered; AC-19->US-01, AC-20->US-03; US-11 = reader compatibility per directive. MD+CSV rendered; intermediate JSON deleted after render (pm-phase3 consumes CSV). Estimates recomputed from final JSON. phase_delta_tokens null = not separately measured (unavailable, never observable 0)."
+  },
+  {
+    "started_at": "2026-09-02T00:00:00Z",
+    "completed_at": "2026-09-02T00:00:01Z",
+    "agent": "hotfix-wb-render-lossless-commands:phase2",
+    "phase": "phase2",
+    "model": "opus",
+    "status": "done",
+    "phase_delta_tokens": null,
+    "note": "Gate-2 change-request hotfix: wb-render.js no longer routes verification commands through sanitizeField (which mapped | -> space, destroying ||, shell pipes, and regex alternations). Commands are now emitted in a dedicated 'Verification Commands' section as byte-equivalent fenced code blocks (dynamic fence length so backtick-bearing commands cannot break out); the task-table Verification column shows only a reference link. sanitizeField retained for descriptive tabular fields (title/outcome) and CSV delimiter safety. Regression suite added (tests/wb-render.verification-commands-lossless.test.js) covering ||, single |, grep -E 'a|b|c', quoted paths with spaces, multi-command, and backtick-in-command; it renders the WB and proves every command is recoverable byte-for-byte from the MD. All 4 wb-render suites pass (54 tests)."
+  },
+  {
+    "started_at": "2026-09-02T00:00:02Z",
+    "completed_at": "2026-09-02T00:00:03Z",
+    "agent": "wb-recover-and-rerender:phase2",
+    "phase": "phase2",
+    "model": "opus",
+    "status": "done",
+    "phase_delta_tokens": null,
+    "note": "Recovered the semantically-validated Work-Breakdown.json losslessly (it had been deleted too early after the previous render): replayed 1 base Write + 10 Edits from the session transcript, each old_string matching exactly once -> 39 tasks / 12 phases, INFRA-TASK-BE-13 present, US-11 final title. Cross-verified against the on-disk CSV (task-id order identical) before restoring to the canonical path. Re-rendered MD+CSV with the patched renderer. Lossless JSON->MD/CSV verification PASS: 97/97 verification commands byte-identical; 39/39 task id, outcome (sanitized tabular form), estimate, and dependencies; CSV dispatch fields consistent. JSON RETAINED on disk (NOT deleted): the MD does not render acceptanceCriteria or groupingRationale, so under the new deletion policy the JSON remains the authoritative source."
+  },
+  {
+    "started_at": "2026-09-03T00:00:00Z",
+    "completed_at": "2026-09-03T00:00:01Z",
+    "agent": "wb-split-us05-and-authoritative-md:phase2",
+    "phase": "phase2",
+    "model": "opus",
+    "status": "done",
+    "phase_delta_tokens": null,
+    "note": "Gate-2 change-request cycle 2. (1) Split US-05-TASK-TEST-01 in place (no regeneration) into US-05-TASK-TEST-01 (resolve-features-root output contract, grammar parsing, ambiguity; AC-27) and new US-05-TASK-TEST-02 (installer/packaging propagation; AC-22), each with a single outcome, a separate verification command, correct dependencies, a distinct atomic commit, and estimates that conserve the original 14 min / 34000 tok (8/20000 + 6/14000). Task count 39->40, TEST 13->14, US-05 4->5; minutes (457), tokens (1,086,000), waves, and critical path (317 min) unchanged. (2) Extended wb-render.js with an authoritative '## Task Details' section rendering every field per task (id, title, outcome, domain, agentType, dependsOn, acceptanceCriteria, estimate agentMinutes+tokens, outputCount, groupingRationale, commit type/scope/subject) plus verification commands lossless (one per dynamic-fence block); free-text fields rendered verbatim (pipes preserved); summary table links to #task-<id>. Added tests/wb-render.task-details-parity.test.js; updated the lossless + sanitize tests to scope pipe sanitisation to the summary table. Re-rendered MD (72.6 KB) + CSV (40 rows). Full JSON->MD/CSV parity PASS: 40 tasks, 560 field checks, 97 byte-identical command checks, 40 CSV dispatch checks, 0 failures. Structural validator PASS (valid, 40 tasks, 0 err/warn, acyclic, 5 waves). Semantic validator PASS with zero findings (zero advisory; US-05 bundling concern confirmed resolved). Full suite green (63 suites / 1072 tests). Estimate docs recomputed for the 40-task count."
+  },
+  {
+    "started_at": "2026-09-03T00:00:02Z",
+    "completed_at": "2026-09-03T00:00:03Z",
+    "agent": "wb-delete-intermediate-json:phase2",
+    "phase": "phase2",
+    "model": "opus",
+    "status": "done",
+    "phase_delta_tokens": null,
+    "note": "Deleted the intermediate FTR-016-Work-Breakdown.json ONLY after all validation + parity passed (structural 0 err/warn, semantic PASS 0 findings, full JSON->MD/CSV parity 0 failures, full suite green). The JSON is a phase-2 intermediate: every reference to Work-Breakdown.json lives in phase 2 (generate-work-breakdown produces it; wb-validate / wb-render / validate-work-breakdown-semantic consume it during phase 2). No phase-3 consumer reads it -- pm-phase3.js reads only ${featureDir}/${prefix}-Work-Breakdown.csv (8 dispatch columns) and developers read the MD Task Details section. Final phase-2 deliverables at Gate 2: FTR-016-Work-Breakdown.md (authoritative, complete) + FTR-016-Work-Breakdown.csv (dispatch). The JSON is neither a deliverable nor left untracked."
+  }
+]
