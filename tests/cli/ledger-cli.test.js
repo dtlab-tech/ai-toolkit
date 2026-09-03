@@ -15,7 +15,11 @@
  * the per-US task files, or in a shared helper module they require.
  */
 
+const fs   = require('fs');
+const os   = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
+
 // NOTE: bin/cli.js is guarded by `if (require.main === module)` so requiring it here
 // is side-effect-free; pure functions are exported via the else branch.
 // Per-user-story tasks will destructure specific exports (e.g. parseLedgerArgs,
@@ -85,7 +89,41 @@ describe('ledger CLI', () => {
   // ─────────────────────────────────────────────────────────────────────────
   describe('fail-closed behavior', () => {
     it.todo('open failure (lock contention) exits non-zero and writes no entry');
-    it.todo('open failure (corrupt ledger) exits non-zero and writes no entry');
+
+    it('open failure exits non-zero when the ledger file is corrupt', () => {
+      // Arrange: write a corrupt (non-JSON) ledger file so open() will throw on parse
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-cli-'));
+      try {
+        const prefix      = 'FTR-999';
+        const ledgerFile  = path.join(tmpDir, prefix + '-token-ledger.json');
+        fs.writeFileSync(ledgerFile, '{ not json', 'utf8');
+
+        // Act: invoke the CLI subcommand via a child process
+        const result = spawnSync(
+          process.execPath,
+          [
+            CLI, 'ledger', 'open',
+            '--dir',     tmpDir,
+            '--prefix',  prefix,
+            '--agent',   'test-agent',
+            '--phase',   'phase1',
+            '--model',   'haiku',
+            '--attempt', '1',
+          ],
+          { encoding: 'utf8' }
+        );
+
+        // Assert: the process must exit non-zero (fail-closed) so the workflow hard-stops
+        expect(result.status).not.toBe(0);
+
+        // Assert: the corrupt file is NOT replaced by a fresh running entry
+        const stillCorrupt = fs.readFileSync(ledgerFile, 'utf8');
+        expect(stillCorrupt).toBe('{ not json');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
     it.todo('close failure for a never-opened operation_id exits non-zero');
     it.todo('fail failure for a never-opened operation_id exits non-zero');
     it.todo('skip with ambiguous agent fallback exits non-zero without mutating the ledger');
