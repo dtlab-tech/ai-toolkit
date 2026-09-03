@@ -1870,6 +1870,14 @@ async function main() {
   }
 }
 
+// ── shell quoting helper ──────────────────────────────────────────────────────
+function shellQuotePosix(arg) {
+  const s = String(arg);
+  if (s.indexOf('\0') !== -1) throw new Error('shellQuotePosix: argument contains a NUL byte');
+  if (s.indexOf('\n') !== -1) throw new Error('shellQuotePosix: argument contains a newline');
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 // ── entry point guard ─────────────────────────────────────────────────────────
 // Run the CLI only when invoked directly (node bin/cli.js).
 // When required as a module (e.g., by Jest), skip main() and export pure
@@ -1911,5 +1919,6 @@ if (require.main === module) {
     hasToolkitPayloadFiles,
     isToolkitInstalled,
     runVerifyInstall,
+    shellQuotePosix,
   };
 }
