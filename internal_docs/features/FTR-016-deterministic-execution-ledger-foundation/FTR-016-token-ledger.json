@@ -533,5 +533,17 @@
     "phase_delta_tokens": 105054,
     "tool_uses": 26,
     "verification": "All 5 verification commands pass: 'function appendLedgerEntry' and 'function updateLedgerEntry' absent from bin/cli.js; require(../lib/execution-ledger) present; npm test green (58 suites, 957 passed, 49 todo, 0 failures); npm run test:coverage exits 0 (no threshold enforced per AGENTS.md). Removed both dead function definitions + their module.exports lines; no internal caller in cli.js or src/ (all pm-phase workflows already on the facade). Deleted 7 proxy test files that existed solely to exercise the removed pure-JS writers (appendLedgerEntry.test.js, updateLedgerEntry.test.js, defineLedger.test.js, pipeline-integration.test.js, pm-phase1/2/3-ledger.test.js); equivalent write/format coverage now lives in tests/lib/execution-ledger.test.js + tests/cli/ledger-cli.test.js. Facade source tests (pm-phase*-source.test.js) retain assertions that the functions are absent (correct). Module is now the sole ledger writer (AC-01/02/04). Scope: bin/cli.js + 7 deleted test files + ledger."
+  },
+  {
+    "started_at": "2026-09-03T10:49:00.000Z",
+    "agent": "developer-backend:US-05-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-05-TASK-BE-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T10:55:00.000Z",
+    "phase_delta_tokens": 67861,
+    "tool_uses": 10,
+    "verification": "All 3 verification commands pass: node --check clean; commented-out '<!-- features_root: docs/OLD -->' ignored + inline comment stripped so resolveFeaturesRoot resolves to basename 'docs'; two active features_root declarations throws. resolveFeaturesRoot(cwd, options?) exported with ordered precedence gathering all candidates before deciding: (1) explicit options.featuresRoot, (2) single active AGENTS.md features_root:, (3) single existing conventional default (internal_docs/features | docs/features) — throws on ambiguous/multiply-declared/not-found. Deterministic grammar: skip /^<!--.*-->$/ lines; strip first '#' inline trailer + trim; only active lines count toward multiply-declared. tests/cli green 29 suites, 451 passed, 27 todo, 0 failures. Scope clean: bin/cli.js + ledger."
   }
 ]

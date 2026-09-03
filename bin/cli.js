@@ -612,6 +612,113 @@ function updateGitignore(destDir) {
   }
 }
 
+// ── resolveFeaturesRoot ───────────────────────────────────────────────────────
+
+// US-05-TASK-BE-01 (FTR-016):
+// Resolve the features root directory for a given working directory.
+//
+// Ordered precedence — ALL candidates are gathered before deciding so that
+// ambiguity (multiply-declared AGENTS.md entries, multiple inconsistent
+// defaults) can be detected rather than silently swallowed:
+//   1. Explicit override via options.featuresRoot (highest precedence)
+//   2. features_root: convention parsed from <cwd>/AGENTS.md
+//   3. A single existing conventional default directory
+//
+// AGENTS.md grammar parser (deterministic):
+//   - Ignores HTML-comment lines of the form <!-- ... --> (same input line)
+//   - Strips inline # comments from the value and trims trailing whitespace
+//   - Counts only active (non-commented) declarations when detecting the
+//     multiply-declared error; throws when two or more are found
+//
+// Returns an absolute path.
+// Throws a clear structured Error on ambiguous or multiply-declared roots.
+//
+// Parameters:
+//   cwd     (string): project root directory
+//   options (object): { featuresRoot? } — explicit override, highest precedence
+function resolveFeaturesRoot(cwd, options) {
+  const opts        = options || {};
+  const resolvedCwd = path.resolve(cwd);
+
+  // Conventional default directories tried when no higher-precedence source is found.
+  const CONVENTIONAL_DEFAULTS = [
+    'internal_docs/features',
+    'docs/features',
+  ];
+
+  // ── AGENTS.md grammar parser ──────────────────────────────────────────────
+  // Returns an array of trimmed value strings for each ACTIVE features_root:
+  // declaration found in <cwdDir>/AGENTS.md.  Deterministic: same input →
+  // same result; does not rely on filesystem ordering.
+  function parseAgentsMdDeclarations(cwdDir) {
+    const agentsMdPath = path.join(cwdDir, 'AGENTS.md');
+    if (!fs.existsSync(agentsMdPath)) return [];
+    let content;
+    try { content = fs.readFileSync(agentsMdPath, 'utf8'); } catch (_) { return []; }
+
+    const declarations = [];
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+
+      // Ignore HTML comment lines: <!-- anything -->
+      if (/^<!--.*-->$/.test(trimmed)) continue;
+
+      // Match active features_root: declarations
+      const match = trimmed.match(/^features_root:\s*(.*)$/);
+      if (!match) continue;
+
+      // Strip inline # comment, then trim
+      let value = match[1];
+      const hashIdx = value.indexOf('#');
+      if (hashIdx !== -1) value = value.substring(0, hashIdx);
+      value = value.trim();
+
+      if (value) declarations.push(value);
+    }
+    return declarations;
+  }
+
+  // ── Source 1: Explicit override ───────────────────────────────────────────
+  if (opts.featuresRoot !== undefined && opts.featuresRoot !== null && opts.featuresRoot !== '') {
+    return path.resolve(resolvedCwd, opts.featuresRoot);
+  }
+
+  // ── Source 2: AGENTS.md features_root: convention ────────────────────────
+  const agentsDeclarations = parseAgentsMdDeclarations(resolvedCwd);
+  if (agentsDeclarations.length > 1) {
+    throw new Error(
+      `resolveFeaturesRoot: AGENTS.md declares features_root: ${agentsDeclarations.length} times ` +
+      `(values: ${agentsDeclarations.map(v => JSON.stringify(v)).join(', ')}); ` +
+      'only one active declaration is allowed'
+    );
+  }
+  if (agentsDeclarations.length === 1) {
+    return path.resolve(resolvedCwd, agentsDeclarations[0]);
+  }
+
+  // ── Source 3: Conventional defaults — use only when exactly one exists ────
+  const existingDefaults = CONVENTIONAL_DEFAULTS
+    .map(d => path.resolve(resolvedCwd, d))
+    .filter(d => { try { return fs.statSync(d).isDirectory(); } catch (_) { return false; } });
+
+  if (existingDefaults.length === 1) {
+    return existingDefaults[0];
+  }
+
+  if (existingDefaults.length > 1) {
+    throw new Error(
+      `resolveFeaturesRoot: multiple conventional default directories exist ` +
+      `(${existingDefaults.join(', ')}); declare features_root: in AGENTS.md to disambiguate`
+    );
+  }
+
+  throw new Error(
+    `resolveFeaturesRoot: no features root found under ${resolvedCwd}. ` +
+    'Declare features_root: in AGENTS.md or create one of the conventional default directories ' +
+    `(${CONVENTIONAL_DEFAULTS.join(', ')})`
+  );
+}
+
 // ── payload & detection ───────────────────────────────────────────────────────
 
 // Returns file-level {src, dest} mappings (absolute paths) for ALL distributable
@@ -2010,5 +2117,6 @@ if (require.main === module) {
     parseLedgerArgs,
     handleLedgerCommand,
     sortedJson,
+    resolveFeaturesRoot,
   };
 }
