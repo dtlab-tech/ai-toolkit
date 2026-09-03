@@ -433,10 +433,60 @@ describe('ledger CLI', () => {
   //    catalog/manifest so they reach a destination project via packaging alone.
   // ─────────────────────────────────────────────────────────────────────────
   describe('installer propagation', () => {
-    it.todo('pm-phase1.js is included in the installer catalog payload');
-    it.todo('pm-phase2.js is included in the installer catalog payload');
-    it.todo('pm-phase3.js is included in the installer catalog payload');
-    it.todo('define-feature.md is included in the installer catalog payload');
-    it.todo('no duplicate copies of ledger assets exist (catalog is the single source)');
+    // Obtain the real catalog payload from the single authoritative source
+    // (buildPayloadFileMappings, exported from bin/cli.js).  A dummy
+    // effectiveRoot is used because only the `src` side matters for verifying
+    // which source files the catalog covers; `dest` paths depend on that root
+    // but are irrelevant here.
+    const { buildPayloadFileMappings } = require('../../bin/cli');
+    const DUMMY_ROOT = path.join(os.tmpdir(), 'propagation-check');
+    const catalogMappings = buildPayloadFileMappings(DUMMY_ROOT);
+    const catalogBasenames = catalogMappings.map(m => path.basename(m.src));
+
+    it('pm-phase1.js is included in the installer catalog payload', () => {
+      // Arrange: catalog mappings from the real authoritative source (above)
+      // Act: count how many entries have this basename
+      const matches = catalogBasenames.filter(b => b === 'pm-phase1.js');
+      // Assert: present in the catalog
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('pm-phase2.js is included in the installer catalog payload', () => {
+      // Arrange/Act
+      const matches = catalogBasenames.filter(b => b === 'pm-phase2.js');
+      // Assert: present in the catalog
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('pm-phase3.js is included in the installer catalog payload', () => {
+      // Arrange/Act
+      const matches = catalogBasenames.filter(b => b === 'pm-phase3.js');
+      // Assert: present in the catalog
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('define-feature.md is included in the installer catalog payload', () => {
+      // Arrange/Act
+      const matches = catalogBasenames.filter(b => b === 'define-feature.md');
+      // Assert: present in the catalog
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('no duplicate copies of ledger assets exist (catalog is the single source)', () => {
+      // Arrange: the four assets that must reach a destination project via the
+      // catalog — no manually synced dual copies are allowed (AC-22).
+      const ledgerAssets = [
+        'pm-phase1.js',
+        'pm-phase2.js',
+        'pm-phase3.js',
+        'define-feature.md',
+      ];
+
+      // Act / Assert: each asset appears in exactly ONE catalog entry
+      for (const assetName of ledgerAssets) {
+        const count = catalogBasenames.filter(b => b === assetName).length;
+        expect(count).toBe(1);
+      }
+    });
   });
 });

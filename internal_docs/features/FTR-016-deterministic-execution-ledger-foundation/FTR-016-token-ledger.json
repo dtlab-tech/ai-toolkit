@@ -581,5 +581,17 @@
     "phase_delta_tokens": 80789,
     "tool_uses": 11,
     "verification": "Verification command passes: ledger-cli.test.js --testNamePattern 'resolve.*features.*root|ambiguous|grammar' selects and passes 8 real tests. Added 7 resolve-features-root tests (renamed describe 'features-root resolution'->'resolve-features-root' to match pattern): stdout-only path on success, exit 0 single root, missing/not-found diagnostic, ambiguous (both internal_docs/features + docs/features defaults exist) diagnostic, multiply-declared diagnostic, commented-out '<!-- -->' ignored, inline '#' stripped — all assert exit code + stdout purity + stderr per AC-27. Suite green: tests/cli/ledger-cli.test.js = 12 passed, 20 todo, 0 failures. Scope clean: ledger-cli.test.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T11:20:00.000Z",
+    "agent": "developer-testing:US-05-TASK-TEST-02:phase3",
+    "phase": "phase3",
+    "task_id": "US-05-TASK-TEST-02",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T11:25:00.000Z",
+    "phase_delta_tokens": 64188,
+    "tool_uses": 17,
+    "verification": "Verification command passes: npm test --testNamePattern 'installer|propagat|packaging' selects 69 tests across 6 suites, all pass, 0 failures. Added 5 real installer-propagation tests querying the single-source catalog via exported buildPayloadFileMappings() (reads lib/asset-catalog.js getAssetCategories, walks workflows/agents, applies TOOLKIT_INTERNAL_ASSETS exclusions) — asserts pm-phase1/2/3.js and define-feature.md each present exactly once (no dual copies) per AC-22; no hardcoded parallel list. tests/cli/ledger-cli.test.js green 17 passed, 15 todo, 0 failures. Scope clean: ledger-cli.test.js + ledger."
   }
 ]
