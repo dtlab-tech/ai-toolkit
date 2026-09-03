@@ -60,8 +60,63 @@ describe('ledger CLI', () => {
     it.todo('malformed --prefix (contains spaces or special characters) exits non-zero');
     it.todo('empty --agent value exits non-zero with a validation error');
     it.todo('non-integer --attempt value exits non-zero with a validation error');
-    it.todo('--tokens of 0 exits non-zero and writes nothing');
-    it.todo('--tokens of a negative integer exits non-zero and writes nothing');
+    it('rejects --tokens zero and writes nothing', () => {
+      // Arrange: fresh directory with no ledger file
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-cli-'));
+      try {
+        // Act: spawn the CLI close subcommand with --tokens 0
+        const result = spawnSync(
+          process.execPath,
+          [
+            CLI, 'ledger', 'close',
+            '--dir',     tmpDir,
+            '--prefix',  'FTR-999',
+            '--agent',   'a',
+            '--tokens',  '0',
+            '--attempt', '1',
+          ],
+          { encoding: 'utf8' }
+        );
+
+        // Assert: exit is non-zero (validation rejects before any write)
+        expect(result.status).not.toBe(0);
+
+        // Assert: nothing was written (ledger file must not exist)
+        const ledgerFile = path.join(tmpDir, 'FTR-999-token-ledger.json');
+        expect(fs.existsSync(ledgerFile)).toBe(false);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects --tokens negative and writes nothing', () => {
+      // Arrange: fresh directory with no ledger file
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-cli-'));
+      try {
+        // Act: spawn the CLI close subcommand with --tokens -5
+        const result = spawnSync(
+          process.execPath,
+          [
+            CLI, 'ledger', 'close',
+            '--dir',     tmpDir,
+            '--prefix',  'FTR-999',
+            '--agent',   'a',
+            '--tokens',  '-5',
+            '--attempt', '1',
+          ],
+          { encoding: 'utf8' }
+        );
+
+        // Assert: exit is non-zero (validation rejects before any write)
+        expect(result.status).not.toBe(0);
+
+        // Assert: nothing was written (ledger file must not exist)
+        const ledgerFile = path.join(tmpDir, 'FTR-999-token-ledger.json');
+        expect(fs.existsSync(ledgerFile)).toBe(false);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
     it.todo('--tokens of a non-integer string exits non-zero and writes nothing');
     it.todo('well-formed argument vector returns a parsed object with coerced integer fields');
     it.todo('omitting --tokens is accepted and records null for phase_delta_tokens');

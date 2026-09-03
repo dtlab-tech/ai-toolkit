@@ -64,12 +64,54 @@ describe('execution-ledger — open', () => {
 // ---------------------------------------------------------------------------
 
 describe('execution-ledger — close', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it.todo('sets status to done and records completed_at');
-  it.todo('preserves an existing positive phase_delta_tokens when --tokens is omitted');
+
+  it('preserves an existing positive phase_delta_tokens when tokens omitted', () => {
+    // Arrange: open an entry, then manually set phase_delta_tokens to a positive value
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1);
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    entries[0].phase_delta_tokens = 1234;
+    ledger._writeLedger(ledgerFile, entries);
+
+    // Act: close with null tokens (simulates --tokens being omitted)
+    ledger.close(tmpDir, prefix, 'test-agent', null, 1);
+
+    // Assert: phase_delta_tokens is preserved and status is 'done'
+    const result = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(result[0].phase_delta_tokens).toBe(1234);
+    expect(result[0].status).toBe('done');
+  });
+
   it.todo('null never overwrites a positive phase_delta_tokens value');
   it.todo('rejects --tokens of 0 with a non-zero exit and writes nothing');
   it.todo('rejects a negative --tokens value with a non-zero exit and writes nothing');
-  it.todo('fails non-zero for an operation_id that was never opened');
+
+  it('fails for a nonexistent (never-opened) operation_id', () => {
+    // Arrange: fresh empty directory (set up in beforeEach); no open() call made
+
+    // Act & Assert: close must throw when no entry has ever been opened
+    expect(() => ledger.close(tmpDir, 'FTR-999', 'ghost', null, 1)).toThrow();
+
+    // Assert: no 'done' entry was silently created (ledger file absent or contains no done entry)
+    const ledgerFile = path.join(tmpDir, 'FTR-999-token-ledger.json');
+    if (fs.existsSync(ledgerFile)) {
+      const afterEntries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+      const hasDone = afterEntries.some(function (e) { return e.status === 'done'; });
+      expect(hasDone).toBe(false);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

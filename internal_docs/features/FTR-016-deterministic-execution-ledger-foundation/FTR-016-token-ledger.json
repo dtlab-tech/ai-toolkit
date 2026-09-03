@@ -401,5 +401,17 @@
     "phase_delta_tokens": 58945,
     "tool_uses": 12,
     "verification": "3/3 commands passed (node --check; grep close; --tokens 0 exits non-zero). Extra: valid open->close round-trip records done+tokens 500; omit --tokens records null; open no regression. tests/cli 577 passed."
+  },
+  {
+    "started_at": "2026-09-03T08:54:00.000Z",
+    "agent": "developer-testing:US-02-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-02-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T09:02:00.000Z",
+    "phase_delta_tokens": 64720,
+    "tool_uses": 11,
+    "verification": "Both verification commands pass: execution-ledger.test.js close.*token|preserve|close.*nonexistent selects 2 real passing tests; ledger-cli.test.js tokens.*zero|tokens.*negative selects 2 real passing tests. Full suites green: tests/lib/execution-ledger.test.js + tests/cli/ledger-cli.test.js = 7 passed, 58 todo, 0 failures. Scope clean: only the two test files + ledger."
   }
 ]
