@@ -9,38 +9,6 @@ export const meta = {
   ],
 }
 
-// ── Ledger helper functions ───────────────────────────────────────────────────
-
-async function appendLedgerEntry(featureDir, prefix, entry) {
-  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  // started_at is generated via Bash inside the agent to get a real UTC timestamp with time
-  const entryWithoutTs = JSON.stringify({ ...entry, started_at: '__TS__', completed_at: null })
-  await agent(
-    `Append a JSON object to the ledger array at: ${ledgerPath}\n\n` +
-    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
-    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n` +
-    `3. Push this object onto the array, replacing "__TS__" in started_at with NOW: ${entryWithoutTs}\n` +
-    `4. Write the full array back (JSON, 2-space indent). Return no output.`,
-    { label: 'append-ledger', phase: 'Requirements', model: 'haiku' }
-  )
-}
-
-async function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
-  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  // completed_at is generated via Bash inside the agent to get a real UTC timestamp with time
-  const updatesWithoutTs = JSON.stringify({ ...updates, completed_at: '__TS__' })
-  await agent(
-    `Update an entry in the ledger array at: ${ledgerPath}\n\n` +
-    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
-    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, do nothing.\n` +
-    `3. Search from the end for the last entry where agent === "${agentKey}".\n` +
-    `4. If found, merge these fields into that entry, replacing "__TS__" in completed_at with NOW: ${updatesWithoutTs}\n` +
-    `5. Write the full array back (JSON, 2-space indent). Return no output.\n` +
-    `6. If not found, do nothing.`,
-    { label: 'update-ledger', phase: 'Requirements', model: 'haiku' }
-  )
-}
-
 // ── Parse args ────────────────────────────────────────────────────────────────
 // args is the raw prompt string: "<path-to-feature.md> [--force]"
 const featurePath = args.split(/\s+/)[0]
@@ -104,7 +72,7 @@ log(`needs_requirements=${discoveryResult.needs_requirements} needs_tech_spec=${
 
 // ── Ensure ledger file exists (US-02-T02) ─────────────────────────────────────
 // If define-feature was not used, the ledger file will not exist yet.
-// Touch it with an empty array so appendLedgerEntry can always assume a valid base.
+// Touch it with an empty array so the ledger facade can always assume a valid base.
 const ledgerFilePath = `${feature_dir}/${prefix}-token-ledger.json`
 await agent(
   `Check whether the file ${ledgerFilePath} exists.\n\n1. Try to read the file using the Read tool.\n2. If the file does NOT exist: write it now using the Write tool with contents: []\n3. If the file already exists and is a valid JSON array: do nothing.\n4. If the file exists but is not valid JSON: overwrite it with: []\n5. Return no output.`,
@@ -120,23 +88,17 @@ const errors      = []
 
 if (discoveryResult.needs_requirements) {
   const reqKey = 'generate-requirements:phase1'
-  await appendLedgerEntry(feature_dir, prefix, {
-    agent: reqKey,
-    phase: 'phase1',
-    model: 'haiku',
-    status: 'running',
-    phase_delta_tokens: 0,
-    started_at: '__TS__',
-    completed_at: null,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${reqKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-open-requirements', phase: 'Requirements', model: 'haiku' }
+  )
   const beforeReq = budget.spent()
   const reqResult = await agent(featurePath, { agentType: 'generate-requirements', label: 'generate-requirements', phase: 'Requirements' })
   const reqTokens = budget.spent() - beforeReq
-  await updateLedgerEntry(feature_dir, prefix, reqKey, {
-    status: 'done',
-    completed_at: '__TS__',
-    phase_delta_tokens: reqTokens,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${reqKey} --tokens ${reqTokens} --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-close-requirements', phase: 'Requirements', model: 'haiku' }
+  )
   tokenLedger.push({ agent: 'generate-requirements', model: 'haiku', phase_delta_tokens: reqTokens })
   log(`generate-requirements done — phase delta: ${reqTokens} tokens`)
 } else {
@@ -148,23 +110,17 @@ phase('Tech-Spec')
 
 if (discoveryResult.needs_tech_spec) {
   const specKey = 'generate-tech-spec:phase1'
-  await appendLedgerEntry(feature_dir, prefix, {
-    agent: specKey,
-    phase: 'phase1',
-    model: 'haiku',
-    status: 'running',
-    phase_delta_tokens: 0,
-    started_at: '__TS__',
-    completed_at: null,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${specKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-open-tech-spec', phase: 'Tech-Spec', model: 'haiku' }
+  )
   const beforeSpec = budget.spent()
   const specResult = await agent(featurePath, { agentType: 'generate-tech-spec', label: 'generate-tech-spec', phase: 'Tech-Spec' })
   const specTokens = budget.spent() - beforeSpec
-  await updateLedgerEntry(feature_dir, prefix, specKey, {
-    status: 'done',
-    completed_at: '__TS__',
-    phase_delta_tokens: specTokens,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${specKey} --tokens ${specTokens} --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-close-tech-spec', phase: 'Tech-Spec', model: 'haiku' }
+  )
   tokenLedger.push({ agent: 'generate-tech-spec', model: 'haiku', phase_delta_tokens: specTokens })
   log(`generate-tech-spec done — phase delta: ${specTokens} tokens`)
 } else {
@@ -181,23 +137,17 @@ const MAX_CYCLES = 3
 for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   log(`validate-feature-docs cycle ${cycle}`)
   const valKey = `validate-feature-docs:phase1:cycle${cycle}`
-  await appendLedgerEntry(feature_dir, prefix, {
-    agent: valKey,
-    phase: 'phase1',
-    model: 'haiku',
-    status: 'running',
-    phase_delta_tokens: 0,
-    started_at: '__TS__',
-    completed_at: null,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${valKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
+    { label: `ledger-open-validate-cycle-${cycle}`, phase: 'Validation', model: 'haiku' }
+  )
   const beforeVal = budget.spent()
   const valResult = await agent(featurePath, { agentType: 'validate-feature-docs', label: `validate-feature-docs (cycle ${cycle})`, phase: 'Validation' })
   const valTokens = budget.spent() - beforeVal
-  await updateLedgerEntry(feature_dir, prefix, valKey, {
-    status: 'done',
-    completed_at: '__TS__',
-    phase_delta_tokens: valTokens,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${valKey} --tokens ${valTokens} --attempt 1\n\nReturn no output.`,
+    { label: `ledger-close-validate-cycle-${cycle}`, phase: 'Validation', model: 'haiku' }
+  )
   tokenLedger.push({ agent: `validate-feature-docs (cycle ${cycle})`, model: 'haiku', phase_delta_tokens: valTokens })
 
   // valResult is the agent's text output — check for gap indicators
