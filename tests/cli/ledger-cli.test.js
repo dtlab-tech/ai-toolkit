@@ -123,18 +123,170 @@ describe('ledger CLI', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 3. Features-root resolution
+  // 3. resolve-features-root
   //    resolve-features-root CLI output contract and the AGENTS.md grammar
   //    parser that backs it (resolveFeaturesRoot).
   // ─────────────────────────────────────────────────────────────────────────
-  describe('features-root resolution', () => {
-    it.todo('resolved path is printed to stdout only (no trailing content) on success');
-    it.todo('exit 0 when exactly one valid features root is found');
-    it.todo('stdout is empty and stderr contains a diagnostic when no root is found');
-    it.todo('stdout is empty and stderr contains a diagnostic for an ambiguous root');
-    it.todo('stdout is empty and stderr contains a diagnostic for a multiply-declared root');
-    it.todo('commented-out lines in AGENTS.md are ignored by the grammar parser');
-    it.todo('inline comments in AGENTS.md are stripped by the grammar parser');
+  describe('resolve-features-root', () => {
+    it('resolved path is printed to stdout only (no trailing content) on success', () => {
+      // Arrange: AGENTS.md declaring a single features root; the dir exists
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfr-'));
+      try {
+        fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), 'features_root: docs\n', 'utf8');
+        fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+        // Act
+        const result = spawnSync(process.execPath, [CLI, 'resolve-features-root'], {
+          encoding: 'utf8',
+          cwd: tmpDir,
+        });
+
+        // Assert: stdout is exactly the resolved path followed by a newline — nothing more
+        const expectedPath = path.join(tmpDir, 'docs');
+        expect(result.stdout).toBe(expectedPath + '\n');
+        expect(result.stderr).toBe('');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('exit 0 when exactly one valid features root is found', () => {
+      // Arrange
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfr-'));
+      try {
+        fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), 'features_root: docs\n', 'utf8');
+        fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+        // Act
+        const result = spawnSync(process.execPath, [CLI, 'resolve-features-root'], {
+          encoding: 'utf8',
+          cwd: tmpDir,
+        });
+
+        // Assert
+        expect(result.status).toBe(0);
+        expect(result.stdout.trim()).toBe(path.join(tmpDir, 'docs'));
+        expect(result.stderr.trim()).toBe('');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('stdout is empty and stderr contains a diagnostic when no root is found', () => {
+      // Arrange: empty directory — no AGENTS.md, no conventional default dirs
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfr-'));
+      try {
+        // Act
+        const result = spawnSync(process.execPath, [CLI, 'resolve-features-root'], {
+          encoding: 'utf8',
+          cwd: tmpDir,
+        });
+
+        // Assert
+        expect(result.status).not.toBe(0);
+        expect(result.stdout.trim()).toBe('');
+        expect(result.stderr.trim()).not.toBe('');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('stdout is empty and stderr contains a diagnostic for an ambiguous root', () => {
+      // Arrange: create BOTH conventional defaults (internal_docs/features and docs/features)
+      // so resolveFeaturesRoot cannot pick a single winner without an explicit declaration
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfr-'));
+      try {
+        fs.mkdirSync(path.join(tmpDir, 'internal_docs', 'features'), { recursive: true });
+        fs.mkdirSync(path.join(tmpDir, 'docs', 'features'), { recursive: true });
+
+        // Act
+        const result = spawnSync(process.execPath, [CLI, 'resolve-features-root'], {
+          encoding: 'utf8',
+          cwd: tmpDir,
+        });
+
+        // Assert: ambiguous — exit non-zero, stdout empty, stderr has diagnostic
+        expect(result.status).not.toBe(0);
+        expect(result.stdout.trim()).toBe('');
+        expect(result.stderr.trim()).not.toBe('');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('stdout is empty and stderr contains a diagnostic for a multiply-declared root', () => {
+      // Arrange: AGENTS.md with two active features_root: lines
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfr-'));
+      try {
+        fs.writeFileSync(
+          path.join(tmpDir, 'AGENTS.md'),
+          'features_root: docs\nfeatures_root: internal_docs/features\n',
+          'utf8'
+        );
+
+        // Act
+        const result = spawnSync(process.execPath, [CLI, 'resolve-features-root'], {
+          encoding: 'utf8',
+          cwd: tmpDir,
+        });
+
+        // Assert: multiply-declared — exit non-zero, stdout empty, stderr has diagnostic
+        expect(result.status).not.toBe(0);
+        expect(result.stdout.trim()).toBe('');
+        expect(result.stderr.trim()).not.toBe('');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('commented-out lines in AGENTS.md are ignored by the grammar parser', () => {
+      // Arrange: one HTML-comment line (<!-- features_root: docs/OLD -->) and one active line
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfr-'));
+      try {
+        const agentsMd = '<!-- features_root: docs/OLD -->\nfeatures_root: docs\n';
+        fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), agentsMd, 'utf8');
+        fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+        // Act
+        const result = spawnSync(process.execPath, [CLI, 'resolve-features-root'], {
+          encoding: 'utf8',
+          cwd: tmpDir,
+        });
+
+        // Assert: resolves to docs — the commented-out docs/OLD is not counted
+        expect(result.status).toBe(0);
+        expect(result.stdout.trim()).toBe(path.join(tmpDir, 'docs'));
+        expect(result.stderr.trim()).toBe('');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('inline comments in AGENTS.md are stripped by the grammar parser', () => {
+      // Arrange: AGENTS.md with an inline # comment after the path value
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfr-'));
+      try {
+        fs.writeFileSync(
+          path.join(tmpDir, 'AGENTS.md'),
+          'features_root: docs # trailing note\n',
+          'utf8'
+        );
+        fs.mkdirSync(path.join(tmpDir, 'docs'));
+
+        // Act
+        const result = spawnSync(process.execPath, [CLI, 'resolve-features-root'], {
+          encoding: 'utf8',
+          cwd: tmpDir,
+        });
+
+        // Assert: inline comment stripped → resolves to docs, not "docs # trailing note"
+        expect(result.status).toBe(0);
+        expect(result.stdout.trim()).toBe(path.join(tmpDir, 'docs'));
+        expect(result.stderr.trim()).toBe('');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────

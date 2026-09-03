@@ -569,5 +569,17 @@
     "phase_delta_tokens": 51788,
     "tool_uses": 12,
     "verification": "All 3 grep verifications pass: define-feature.md contains 'ai-toolkit resolve-features-root', 'ai-toolkit ledger open', 'ai-toolkit ledger close'. define-feature.md migrated: new Phase 1a runs resolve-features-root ONCE, captures stdout into featuresRoot as single source of truth reused for both feature.md dir and ledger --dir (AC-14/AC-15); ledger open (agent define-feature:define, phase define, model sonnet, attempt 1) before define work; ledger close OMITS --tokens (line 355) so phase_delta_tokens recorded null (not 0/estimate). Old hard-coded docs/features paths + manual JSON writes replaced; interview/feature.md content preserved. tests/cli green 29 suites, 451 passed, 27 todo, 0 failures (no suite asserts define-feature.md content). Scope clean: define-feature.md + ledger."
+  },
+  {
+    "started_at": "2026-09-03T11:13:00.000Z",
+    "agent": "developer-testing:US-05-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-05-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T11:18:00.000Z",
+    "phase_delta_tokens": 80789,
+    "tool_uses": 11,
+    "verification": "Verification command passes: ledger-cli.test.js --testNamePattern 'resolve.*features.*root|ambiguous|grammar' selects and passes 8 real tests. Added 7 resolve-features-root tests (renamed describe 'features-root resolution'->'resolve-features-root' to match pattern): stdout-only path on success, exit 0 single root, missing/not-found diagnostic, ambiguous (both internal_docs/features + docs/features defaults exist) diagnostic, multiply-declared diagnostic, commented-out '<!-- -->' ignored, inline '#' stripped — all assert exit code + stdout purity + stderr per AC-27. Suite green: tests/cli/ledger-cli.test.js = 12 passed, 20 todo, 0 failures. Scope clean: ledger-cli.test.js + ledger."
   }
 ]
