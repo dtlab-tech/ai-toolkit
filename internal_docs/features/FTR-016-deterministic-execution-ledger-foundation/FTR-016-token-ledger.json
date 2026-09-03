@@ -473,5 +473,17 @@
     "phase_delta_tokens": 84132,
     "tool_uses": 12,
     "verification": "All 5 verification commands pass: node --check clean; appendLedgerEntry/updateLedgerEntry absent; 'ai-toolkit ledger' present; fail-closed token (status/exit code/hard stop) present. pm-phase3 migrated to facade across all tracked activities (read-wb-csv, impl groups, developer-testing, review-solution, final-test-run, remediation+skip else-branch, pr-and-registry, write-actuals) via ledgerTerminal(cmd,label,phase) helper that captures exitCode into status and throws 'HARD STOP — ledger terminal state not persisted' on non-zero (AC-20; open+close+fail+skip all routed through facade, no error swallowed). Companion pm-phase3-source.test.js updated to facade+fail-closed assertions; pm-phase3-ledger.test.js unchanged. Companion suites 72/72; full tests/cli green 36 suites, 584 passed, 28 todo, 0 failures. Scope clean: pm-phase3.js + pm-phase3-source.test.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T10:07:00.000Z",
+    "agent": "developer-backend:US-03-TASK-BE-04:phase3",
+    "phase": "phase3",
+    "task_id": "US-03-TASK-BE-04",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T10:14:00.000Z",
+    "phase_delta_tokens": 76338,
+    "tool_uses": 21,
+    "verification": "All 3 verification commands pass: node --check clean; unavailability marker (null/0/not_available => data unavailable) present; 'tokens || 0' coercion absent. New tokensAvailable(t)=Number.isInteger(t)&&t>0 helper guards all 8 ledger close calls (omit --tokens when unavailable so module close() preserves persisted positive phase_delta_tokens; never emits --tokens 0). Resume-clobber guard rewritten to !tokensAvailable(inMemory) && tokensAvailable(disk) => restore disk value (AC-18). Companion pm-phase3-source.test.js gained 'null-compatibility token guard present (AC-18)' describe (4 assertions). Companion suites 76/76; full tests/cli green 36 suites, 588 passed, 28 todo, 0 failures. Scope clean: pm-phase3.js + pm-phase3-source.test.js + ledger."
   }
 ]

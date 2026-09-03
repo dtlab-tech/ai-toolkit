@@ -358,3 +358,43 @@ describe('pm-phase3.js — old persist-ledger agent call is removed', () => {
     expect(source).not.toMatch(/label:\s*['"`]persist-ledger/);
   });
 });
+
+// ── Null-compatibility: token unavailability guard (AC-18) ────────────────────
+// null/0/not_available token values must be treated as data unavailable and
+// never coerced into an observable real zero passed to ledger close --tokens 0.
+// The tokensAvailable() helper enforces this; the resume-clobber guard uses it
+// instead of a raw `=== 0` check so cached agents cannot overwrite positive
+// on-disk values.
+
+describe('pm-phase3.js — null-compatibility token guard present (AC-18)', () => {
+  test('"tokens || 0" coercion pattern is absent from source', () => {
+    // Arrange/Act/Assert: no raw || 0 coercion on token values
+    expect(source).not.toContain('tokens || 0');
+  });
+
+  test('source contains an unavailability marker (null/0/not_available => unavailable)', () => {
+    // Arrange/Act/Assert: the marker that documents null/0/not_available intent must be present
+    expect(source).toMatch(/null.*unavailable|data.*unavailable|not_available/);
+  });
+
+  test('tokensAvailable helper function is defined', () => {
+    // Arrange/Act/Assert: the guard function that prevents zero/null emission must exist
+    expect(source).toMatch(/function\s+tokensAvailable\s*\(/);
+  });
+
+  test('tokensAvailable guards the resume-clobber branch in Actuals', () => {
+    // Arrange: locate the Actuals recovery block
+    const actualsIdx = source.indexOf('Fallback: merge in any ledger entries');
+    expect(actualsIdx).toBeGreaterThan(-1);
+
+    // The block ends before totalPhase3Tokens
+    const totalIdx = source.indexOf('totalPhase3Tokens', actualsIdx);
+    expect(totalIdx).toBeGreaterThan(actualsIdx);
+
+    const recoveryBlock = source.slice(actualsIdx, totalIdx);
+
+    // Assert: tokensAvailable is used in the resume-clobber guard (not raw === 0)
+    expect(recoveryBlock).toContain('tokensAvailable');
+    expect(recoveryBlock).not.toContain('phase_delta_tokens === 0 &&');
+  });
+});

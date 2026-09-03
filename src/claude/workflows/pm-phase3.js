@@ -38,6 +38,12 @@ async function ledgerTerminal(cmd, label, phaseName) {
   }
 }
 
+// null/0/not_available => data unavailable, never an observable real zero.
+// A cached or resumed agent returns a budget delta of 0, which is not a real
+// measurement — omit --tokens from close so the module preserves any existing
+// positive phase_delta_tokens on disk rather than clobbering it with zero.
+function tokensAvailable(t) { return Number.isInteger(t) && t > 0 }
+
 // ── Parse args ────────────────────────────────────────────────────────────────
 
 // args: "<path-to-feature.md> --branch feature/FTR-NNN-slug"
@@ -72,7 +78,7 @@ const csvContent = await agent(
 )
 const csvTokens = budget.spent() - beforeCsv
 await ledgerTerminal(
-  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${csvKey} --tokens ${csvTokens} --attempt 1`,
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${csvKey}${tokensAvailable(csvTokens) ? ` --tokens ${csvTokens}` : ''} --attempt 1`,
   'ledger-close-read-wb-csv', 'Parse'
 )
 
@@ -220,7 +226,7 @@ const executePhase = async (implPhase) => {
         throw new Error(`Phase ${implPhase.phase_id} impl dispatch failed: ${implErrMsg}`)
       }
       await ledgerTerminal(
-        `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${implKey} --tokens ${implTokens} --attempt 1`,
+        `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${implKey}${tokensAvailable(implTokens) ? ` --tokens ${implTokens}` : ''} --attempt 1`,
         `ledger-close-impl:${implPhase.phase_id}`, 'Implementation'
       )
       tokenLedger.push({ agent: implKey, model: 'sonnet', phase_delta_tokens: implTokens })
@@ -261,7 +267,7 @@ const executePhase = async (implPhase) => {
         throw new Error(`Phase ${implPhase.phase_id} test dispatch failed: ${testErrMsg}`)
       }
       await ledgerTerminal(
-        `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${testKey} --tokens ${testGroupTokens} --attempt 1`,
+        `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${testKey}${tokensAvailable(testGroupTokens) ? ` --tokens ${testGroupTokens}` : ''} --attempt 1`,
         `ledger-close-test:${implPhase.phase_id}`, 'Implementation'
       )
       tokenLedger.push({ agent: testKey, model: 'sonnet', phase_delta_tokens: testGroupTokens })
@@ -286,7 +292,7 @@ const executePhase = async (implPhase) => {
     )
     const reviewTokens = budget.spent() - beforeReview
     await ledgerTerminal(
-      `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${reviewKey} --tokens ${reviewTokens} --attempt 1`,
+      `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${reviewKey}${tokensAvailable(reviewTokens) ? ` --tokens ${reviewTokens}` : ''} --attempt 1`,
       `ledger-close-review:${implPhase.phase_id}`, 'Implementation'
     )
     tokenLedger.push({
@@ -380,7 +386,7 @@ Do NOT fix failing tests — only report them.`,
 )
 const finalTestTokens = budget.spent() - beforeFinalTest
 await ledgerTerminal(
-  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${testRunKey} --tokens ${finalTestTokens} --attempt 1`,
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${testRunKey}${tokensAvailable(finalTestTokens) ? ` --tokens ${finalTestTokens}` : ''} --attempt 1`,
   'ledger-close-final-test-run', 'Test'
 )
 tokenLedger.push({ agent: testRunKey, model: 'haiku', phase_delta_tokens: finalTestTokens })
@@ -431,7 +437,7 @@ Update the Issues Register Status column in place for each resolved/deferred iss
 
   const remTokens = budget.spent() - beforeRem
   await ledgerTerminal(
-    `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${remKey} --tokens ${remTokens} --attempt 1`,
+    `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${remKey}${tokensAvailable(remTokens) ? ` --tokens ${remTokens}` : ''} --attempt 1`,
     'ledger-close-remediation', 'Remediation'
   )
   tokenLedger.push({ agent: remKey, model: 'sonnet', phase_delta_tokens: remTokens })
@@ -513,7 +519,7 @@ If the PR creation fails, return { "pr_url": "(PR creation failed)", "registry_u
 
 const prTokens = budget.spent() - beforePR
 await ledgerTerminal(
-  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${prKey} --tokens ${prTokens} --attempt 1`,
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${prKey}${tokensAvailable(prTokens) ? ` --tokens ${prTokens}` : ''} --attempt 1`,
   'ledger-close-pr-and-registry', 'PR'
 )
 tokenLedger.push({ agent: prKey, model: 'sonnet', phase_delta_tokens: prTokens })
@@ -542,7 +548,7 @@ try {
         tokenLedger.push(entry)
         inMemoryByAgent.set(entry.agent, tokenLedger.length - 1)
         log(`Recovered ledger entry from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
-      } else if (tokenLedger[idx].phase_delta_tokens === 0 && (entry.phase_delta_tokens || 0) > 0) {
+      } else if (!tokensAvailable(tokenLedger[idx].phase_delta_tokens) && tokensAvailable(entry.phase_delta_tokens)) {
         // in-memory entry has delta=0 (cached agent on resume) but disk has real data — prefer disk
         tokenLedger[idx] = entry
         log(`Restored real token count from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
@@ -553,7 +559,7 @@ try {
   log(`Could not parse persisted token ledger — using in-memory ledger only`)
 }
 
-const totalPhase3Tokens = tokenLedger.reduce((s, e) => s + (e.phase_delta_tokens || 0), 0)
+const totalPhase3Tokens = tokenLedger.reduce((s, e) => s + (tokensAvailable(e.phase_delta_tokens) ? e.phase_delta_tokens : 0), 0)
 
 // ── Load token pricing for cost columns ──────────────────────────────────────
 const pricingRaw3 = await agent(
@@ -583,7 +589,7 @@ const roleTotals = {}
 const roleModels = {}
 for (const e of tokenLedger) {
   const role = String(e.agent).split(':')[0]
-  roleTotals[role] = (roleTotals[role] || 0) + (e.phase_delta_tokens || 0)
+  roleTotals[role] = (roleTotals[role] || 0) + (tokensAvailable(e.phase_delta_tokens) ? e.phase_delta_tokens : 0)
   roleModels[role] = e.model || 'sonnet'
 }
 const roleRows = Object.entries(roleTotals)
@@ -701,7 +707,7 @@ Return { "token_estimate_path": "<path>", "effort_estimate_path": "<path>" }.`,
 
 const actualsTokens = budget.spent() - beforeActuals
 await ledgerTerminal(
-  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${actualsKey} --tokens ${actualsTokens} --attempt 1`,
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${actualsKey}${tokensAvailable(actualsTokens) ? ` --tokens ${actualsTokens}` : ''} --attempt 1`,
   'ledger-close-write-actuals', 'Actuals'
 )
 tokenLedger.push({ agent: actualsKey, model: 'sonnet', phase_delta_tokens: actualsTokens })
