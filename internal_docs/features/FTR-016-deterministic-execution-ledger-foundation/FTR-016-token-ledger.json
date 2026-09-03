@@ -521,5 +521,17 @@
     "phase_delta_tokens": 52443,
     "tool_uses": 8,
     "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'skip.*create|skip.*update|skip.*ambiguous' selects and passes 3 real skip tests (create terminal entry when none exists: 1 entry, started_at===completed_at, tokens null, correct phase/model; update-in-place preserving started_at; ambiguous agent-fallback throws without mutating count). Added CLI fail-closed test (ledger-cli.test.js): ambiguous skip exits non-zero + ledger bytes unchanged. Both suites green: tests/lib/execution-ledger.test.js + tests/cli/ledger-cli.test.js = 16 passed, 49 todo, 0 failures. Scope clean: two test files + ledger."
+  },
+  {
+    "started_at": "2026-09-03T10:38:00.000Z",
+    "agent": "developer-backend:US-04-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "task_id": "US-04-TASK-BE-03",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T10:47:00.000Z",
+    "phase_delta_tokens": 105054,
+    "tool_uses": 26,
+    "verification": "All 5 verification commands pass: 'function appendLedgerEntry' and 'function updateLedgerEntry' absent from bin/cli.js; require(../lib/execution-ledger) present; npm test green (58 suites, 957 passed, 49 todo, 0 failures); npm run test:coverage exits 0 (no threshold enforced per AGENTS.md). Removed both dead function definitions + their module.exports lines; no internal caller in cli.js or src/ (all pm-phase workflows already on the facade). Deleted 7 proxy test files that existed solely to exercise the removed pure-JS writers (appendLedgerEntry.test.js, updateLedgerEntry.test.js, defineLedger.test.js, pipeline-integration.test.js, pm-phase1/2/3-ledger.test.js); equivalent write/format coverage now lives in tests/lib/execution-ledger.test.js + tests/cli/ledger-cli.test.js. Facade source tests (pm-phase*-source.test.js) retain assertions that the functions are absent (correct). Module is now the sole ledger writer (AC-01/02/04). Scope: bin/cli.js + 7 deleted test files + ledger."
   }
 ]

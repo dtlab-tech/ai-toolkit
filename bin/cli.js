@@ -581,67 +581,6 @@ function mergeAllowlist(destDir) {
   return { status: 'merged', preserved };
 }
 
-// INFRA-T01 (FTR-013):
-// Append a new entry to {featureDir}/{prefix}-token-ledger.json atomically.
-// If the file does not exist it is created. If JSON is malformed the file is
-// overwritten with a single-element array containing the new entry.
-//
-// Algorithm:
-//   1. Read and parse the existing ledger (or start with [])
-//   2. Push the new entry
-//   3. Write the full array back in one synchronous write (atomic)
-function appendLedgerEntry(featureDir, prefix, entry) {
-  const filePath = path.join(featureDir, `${prefix}-token-ledger.json`);
-  let ledger = [];
-  if (fs.existsSync(filePath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      ledger = Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      console.log(`Warning: could not parse token ledger at ${filePath} — starting fresh`);
-      ledger = [];
-    }
-  }
-  ledger.push(entry);
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(ledger, null, 2), 'utf8');
-}
-
-// INFRA-T02 (FTR-013):
-// Find and update an existing entry in {featureDir}/{prefix}-token-ledger.json
-// by agent key, atomically. Searches from the end of the array so that the most
-// recent entry for a given key is updated (handles any accidental duplicates).
-// If the file does not exist or the key is not found the call is a silent no-op.
-//
-// Algorithm:
-//   1. Read and parse the existing ledger (silent return on missing/malformed)
-//   2. Find the last entry where entry.agent === agentKey
-//   3. Object.assign the updates onto that entry
-//   4. Write the full array back in one synchronous write (atomic)
-function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
-  const filePath = path.join(featureDir, `${prefix}-token-ledger.json`);
-  if (!fs.existsSync(filePath)) return;
-  let ledger;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    ledger = Array.isArray(parsed) ? parsed : [];
-  } catch (_) {
-    console.log(`Warning: could not parse token ledger at ${filePath} — skipping update for "${agentKey}"`);
-    return;
-  }
-  let idx = -1;
-  for (let i = ledger.length - 1; i >= 0; i--) {
-    if (ledger[i] && ledger[i].agent === agentKey) { idx = i; break; }
-  }
-  if (idx === -1) {
-    console.log(`Warning: ledger entry not found for agent key "${agentKey}"`);
-    return;
-  }
-  Object.assign(ledger[idx], updates);
-  fs.writeFileSync(filePath, JSON.stringify(ledger, null, 2), 'utf8');
-}
-
 // US-05-T01:
 // Idempotently append `.claude/settings.local.json` to {destDir}/.gitignore.
 // Creates .gitignore if it does not exist (AC-06, AC-07).
@@ -2056,8 +1995,6 @@ if (require.main === module) {
     writeSettings,
     mergeAllowlist,
     updateGitignore,
-    appendLedgerEntry,
-    updateLedgerEntry,
     resolveClaudeRuntimeAsset,
     runDoctorResolution,
     validatePurityGuard,
