@@ -384,6 +384,111 @@ describe('execution-ledger — resume / idempotency', () => {
 });
 
 // ---------------------------------------------------------------------------
+// rework / US-08
+// ---------------------------------------------------------------------------
+
+describe('execution-ledger — rework / US-08', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('rework attempt yields a distinct operation_id from the original attempt', () => {
+    // Arrange: open attempt 1
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'rework-agent', 'phase1', 'haiku', 1);
+
+    // Act: open the same agent at attempt 2 (rework)
+    ledger.open(tmpDir, prefix, 'rework-agent', 'phase1', 'haiku', 2);
+
+    // Assert: the computed ids for attempt 1 and attempt 2 are distinct
+    const id1 = ledger.computeOperationId(prefix, 'rework-agent', 1);
+    const id2 = ledger.computeOperationId(prefix, 'rework-agent', 2);
+    expect(id1).not.toBe(id2);
+
+    // Assert: both entries exist in the ledger with their respective distinct ids
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    const entry1  = entries.find(function (e) { return e.operation_id === id1; });
+    const entry2  = entries.find(function (e) { return e.operation_id === id2; });
+    expect(entry1).toBeDefined();
+    expect(entry2).toBeDefined();
+  });
+
+  it('rework attempt leaves the original attempt-1 entry untouched (operation_id and started_at unchanged)', () => {
+    // Arrange: open attempt 1 and capture its operation_id and started_at
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'rework-agent', 'phase1', 'haiku', 1);
+    const originalEntries   = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    const originalOpId      = originalEntries[0].operation_id;
+    const originalStartedAt = originalEntries[0].started_at;
+
+    // Act: open attempt 2 (rework) for the same agent
+    ledger.open(tmpDir, prefix, 'rework-agent', 'phase1', 'haiku', 2);
+
+    // Assert: the original attempt-1 entry is still present with operation_id and started_at unchanged
+    const afterEntries  = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    const attempt1Entry = afterEntries.find(function (e) { return e.operation_id === originalOpId; });
+    expect(attempt1Entry).toBeDefined();
+    expect(attempt1Entry.operation_id).toBe(originalOpId);
+    expect(attempt1Entry.started_at).toBe(originalStartedAt);
+  });
+
+  it('ledger has two entries both correlatable by agent key with distinct operation_ids after a rework attempt', () => {
+    // Arrange
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+
+    // Act: open attempt 1 then attempt 2 (rework) for the same agent
+    ledger.open(tmpDir, prefix, 'rework-agent', 'phase1', 'haiku', 1);
+    ledger.open(tmpDir, prefix, 'rework-agent', 'phase1', 'haiku', 2);
+
+    // Assert: exactly two entries, both sharing the same agent key, with distinct operation_ids
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(2);
+    const allSameAgent = entries.every(function (e) { return e.agent === 'rework-agent'; });
+    expect(allSameAgent).toBe(true);
+    expect(entries[0].operation_id).not.toBe(entries[1].operation_id);
+  });
+
+  it('agent slug collision resistance: a:b, a/b, a-b produce three distinct operation_ids', () => {
+    // Arrange: three slugs that collapse under naive concatenation
+    const prefix  = 'FTR-999';
+    const attempt = 1;
+
+    // Act: compute ids for each slug
+    const idColon  = ledger.computeOperationId(prefix, 'a:b', attempt);
+    const idSlash  = ledger.computeOperationId(prefix, 'a/b', attempt);
+    const idHyphen = ledger.computeOperationId(prefix, 'a-b', attempt);
+
+    // Assert: all three are pairwise distinct (JSON.stringify-of-array avoids collision)
+    expect(idColon).not.toBe(idSlash);
+    expect(idColon).not.toBe(idHyphen);
+    expect(idSlash).not.toBe(idHyphen);
+  });
+
+  it('computeOperationId is deterministic: same tuple always yields the same id', () => {
+    // Arrange
+    const prefix  = 'FTR-999';
+    const agent   = 'deterministic-agent';
+    const attempt = 3;
+
+    // Act: call twice with an identical tuple
+    const id1 = ledger.computeOperationId(prefix, agent, attempt);
+    const id2 = ledger.computeOperationId(prefix, agent, attempt);
+
+    // Assert: identical output for identical input (pure hash, no randomness)
+    expect(id1).toBe(id2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // concurrency
 // ---------------------------------------------------------------------------
 

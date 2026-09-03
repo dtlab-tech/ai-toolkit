@@ -629,5 +629,17 @@
     "phase_delta_tokens": 67920,
     "tool_uses": 7,
     "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'resume|idempotent|no.*duplicate|preserve.*token' selects and passes 5 real tests (4 new resume/idempotency + 1 pre-existing close-preserve): re-open same operation_id -> no duplicate (still 1 running entry); resume preserves original started_at; positive phase_delta_tokens survives close with tokens omitted after resume; exactly one entry after open-resume-close cycle (AC-11). Module suite green: tests/lib/execution-ledger.test.js = 21 passed, 21 todo, 0 failures. Scope clean: execution-ledger.test.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T11:49:00.000Z",
+    "agent": "developer-testing:US-08-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-08-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T11:54:00.000Z",
+    "phase_delta_tokens": 66497,
+    "tool_uses": 7,
+    "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'rework|attempt|distinct|collision|deterministic' selects and passes 5 real tests (AC-25): rework attempt yields distinct operation_id; original attempt-1 entry untouched (op_id + started_at); two entries correlatable by same agent key with distinct ids; slug collision resistance (a:b, a/b, a-b -> 3 distinct ids); computeOperationId deterministic for identical tuple. Module suite green: tests/lib/execution-ledger.test.js = 26 passed, 21 todo, 0 failures. Scope clean: execution-ledger.test.js + ledger."
   }
 ]
