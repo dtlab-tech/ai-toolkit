@@ -485,5 +485,17 @@
     "phase_delta_tokens": 76338,
     "tool_uses": 21,
     "verification": "All 3 verification commands pass: node --check clean; unavailability marker (null/0/not_available => data unavailable) present; 'tokens || 0' coercion absent. New tokensAvailable(t)=Number.isInteger(t)&&t>0 helper guards all 8 ledger close calls (omit --tokens when unavailable so module close() preserves persisted positive phase_delta_tokens; never emits --tokens 0). Resume-clobber guard rewritten to !tokensAvailable(inMemory) && tokensAvailable(disk) => restore disk value (AC-18). Companion pm-phase3-source.test.js gained 'null-compatibility token guard present (AC-18)' describe (4 assertions). Companion suites 76/76; full tests/cli green 36 suites, 588 passed, 28 todo, 0 failures. Scope clean: pm-phase3.js + pm-phase3-source.test.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T10:16:00.000Z",
+    "agent": "developer-backend:US-04-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-04-TASK-BE-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T10:21:00.000Z",
+    "phase_delta_tokens": 37170,
+    "tool_uses": 7,
+    "verification": "Both verification commands pass: node --check clean; skip() on empty dir creates a single skipped entry with started_at===completed_at and phase_delta_tokens null. Independently sanity-checked: update-in-place (open then skip preserves started_at, sets status=skipped + later completed_at) and ambiguous agent-fallback throws without writing. skip(dir,prefix,agent,phase,model,attempt) implements 3 cases (AC-23): no match -> atomic create terminal skipped (single ts for started_at & completed_at, supplied phase/model, tokens null); one match -> Object.assign in-place preserving started_at; >1 agent match -> throw. Reuses _acquireLock/_releaseLock/_readLedger/_writeLedger/computeOperationId. Module suite green 8 passed/25 todo, 0 failures. Scope clean: lib/execution-ledger.js + ledger."
   }
 ]
