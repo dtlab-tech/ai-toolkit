@@ -55,7 +55,17 @@ describe('execution-ledger — open', () => {
   });
 
   it.todo('exits non-zero (fail-closed) when a lock cannot be acquired');
-  it.todo('exits non-zero (fail-closed) when the ledger file is corrupt');
+
+  it('exits non-zero (fail-closed) when the ledger file is corrupt', () => {
+    // Arrange: write a malformed (unparseable, non-empty) JSON ledger
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    fs.writeFileSync(ledgerFile, '{not valid json');
+
+    // Act & Assert: open() throws — the caller hard-stops rather than starting the activity
+    expect(() => ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1)).toThrow();
+  });
+
   it.todo('open() result JSON is deterministically structured');
 });
 
@@ -302,4 +312,107 @@ describe('execution-ledger — concurrency', () => {
   it.todo('two concurrent open() calls serialize via the cross-process lock');
   it.todo('both updates are present in the ledger with no lost update');
   it.todo('each concurrent entry carries correct data after serialization');
+});
+
+// ---------------------------------------------------------------------------
+// malformed/corrupt ledger
+// ---------------------------------------------------------------------------
+
+describe('execution-ledger — malformed/corrupt ledger', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('throws CORRUPT_LEDGER code when open() encounters a malformed JSON ledger', () => {
+    // Arrange: write a malformed (unparseable, non-empty) JSON ledger
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    fs.writeFileSync(ledgerFile, '{not valid json');
+
+    // Act: capture the thrown error so we can inspect its code
+    let caughtErr;
+    try {
+      ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1);
+    } catch (e) {
+      caughtErr = e;
+    }
+
+    // Assert: an error was thrown
+    expect(caughtErr).toBeDefined();
+    // Assert: the error carries the CORRUPT_LEDGER code (fail-closed contract)
+    expect(caughtErr.code).toBe('CORRUPT_LEDGER');
+  });
+
+  it('creates a backup sidecar containing the original corrupt bytes', () => {
+    // Arrange: write a malformed JSON ledger
+    const prefix         = 'FTR-999';
+    const ledgerFile     = path.join(tmpDir, prefix + '-token-ledger.json');
+    const corruptContent = '{not valid json';
+    fs.writeFileSync(ledgerFile, corruptContent);
+
+    // Act: trigger the corrupt-ledger detection path
+    try { ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1); } catch (_) {}
+
+    // Assert: a sidecar file whose name contains 'backup' was created in the same directory
+    const files    = fs.readdirSync(tmpDir);
+    const hasSidecar = files.some(function (n) { return n.includes('backup'); });
+    expect(hasSidecar).toBe(true);
+
+    // Assert: the sidecar content exactly equals the original corrupt bytes (recoverable)
+    const sidecarName    = files.find(function (n) { return n.includes('backup'); });
+    const sidecarContent = fs.readFileSync(path.join(tmpDir, sidecarName), 'utf8');
+    expect(sidecarContent).toBe(corruptContent);
+  });
+
+  it('does not overwrite the original malformed ledger file', () => {
+    // Arrange: write a malformed JSON ledger
+    const prefix         = 'FTR-999';
+    const ledgerFile     = path.join(tmpDir, prefix + '-token-ledger.json');
+    const corruptContent = '{not valid json';
+    fs.writeFileSync(ledgerFile, corruptContent);
+
+    // Act: trigger the corrupt-ledger detection path
+    try { ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1); } catch (_) {}
+
+    // Assert: the original ledger file bytes are unchanged
+    const afterContent = fs.readFileSync(ledgerFile, 'utf8');
+    expect(afterContent).toBe(corruptContent);
+  });
+
+  it('does not silently create a fresh empty ledger after a malformed-ledger failure', () => {
+    // Arrange: write a malformed JSON ledger
+    const prefix         = 'FTR-999';
+    const ledgerFile     = path.join(tmpDir, prefix + '-token-ledger.json');
+    const corruptContent = '{not valid json';
+    fs.writeFileSync(ledgerFile, corruptContent);
+
+    // Act: trigger the corrupt-ledger detection path
+    try { ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1); } catch (_) {}
+
+    // Assert: the ledger file still contains the malformed bytes, not a fresh valid JSON array
+    const afterContent = fs.readFileSync(ledgerFile, 'utf8');
+    expect(afterContent).toBe(corruptContent);
+    // Assert: content remains unparseable — no silent replacement with [] or a new running entry
+    expect(() => JSON.parse(afterContent)).toThrow();
+  });
+
+  it('fail-closed: close() also throws and leaves the corrupt file untouched', () => {
+    // Arrange: write a malformed JSON ledger at the conventional path
+    const prefix         = 'FTR-999';
+    const ledgerFile     = path.join(tmpDir, prefix + '-token-ledger.json');
+    const corruptContent = '{not valid json';
+    fs.writeFileSync(ledgerFile, corruptContent);
+
+    // Act & Assert: close() throws — the fail-closed contract applies to every write operation
+    expect(() => ledger.close(tmpDir, prefix, 'test-agent', null, 1)).toThrow();
+
+    // Assert: the original corrupt bytes are preserved (no silent overwrite occurred)
+    expect(fs.readFileSync(ledgerFile, 'utf8')).toBe(corruptContent);
+  });
 });
