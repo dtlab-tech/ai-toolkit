@@ -437,5 +437,17 @@
     "phase_delta_tokens": 33670,
     "tool_uses": 7,
     "verification": "Both verification commands pass: node --check clean; never-opened fail() throws (threw=true) and writes no ledger entry (existed=false). fail() mirrors close(): find by operation_id or unambiguous single-agent fallback, throw on zero/ambiguous before any write; sets status=failed + completed_at + optional sanitized error (_sanitizeError strips CR/LF/TAB, caps 500 chars); preserves started_at/phase/model/phase_delta_tokens/operation_id/legacy fields via Object.assign. Module suite tests/lib/execution-ledger.test.js green: 4 passed, 29 todo, 0 failures. Scope clean: lib/execution-ledger.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T09:24:00.000Z",
+    "agent": "developer-backend:US-03-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "task_id": "US-03-TASK-BE-02",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T09:29:00.000Z",
+    "phase_delta_tokens": 71998,
+    "tool_uses": 12,
+    "verification": "Both verification commands pass: node --check bin/cli.js clean; open-then-fail yields exit 0 and entry status 'failed'. Fail-closed confirmed independently: fail for a never-opened operation_id exits non-zero (exit=1) with structured stderr JSON. parseLedgerArgs gained optional --error (same style as --dir/--phase/--model); handleLedgerCommand fail branch mirrors close branch's fail-closed try/catch (success -> sortedJson stdout + exit 0; throw -> structured JSON error stderr + exit 1). ledger-cli suite green 3 passed/29 todo; full tests/cli green 36 suites, 578 passed, 29 todo, 0 failures. Scope clean: bin/cli.js + ledger."
   }
 ]

@@ -1883,7 +1883,7 @@ function shellQuotePosix(arg) {
 
 function parseLedgerArgs(argv) {
   const PREFIX_RE = /^[A-Za-z]+-\d+$/;
-  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined };
+  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined, error: undefined };
 
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -1935,6 +1935,12 @@ function parseLedgerArgs(argv) {
         throw new Error('parseLedgerArgs: --model must be a non-empty string');
       }
       result.model = val;
+    } else if (flag === '--error') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --error must be a non-empty string');
+      }
+      result.error = val;
     }
   }
 
@@ -1998,7 +2004,15 @@ function handleLedgerCommand(argv) {
     }
     return;
   } else if (subcommand === 'fail') {
-    return executionLedger.fail(args.dir, args.prefix, args.agent, args.error, args.attempt);
+    try {
+      const result = executionLedger.fail(args.dir, args.prefix, args.agent, args.error, args.attempt);
+      process.stdout.write(sortedJson(result) + '\n');
+      process.exitCode = 0;
+    } catch (err) {
+      process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+      process.exitCode = 1;
+    }
+    return;
   } else if (subcommand === 'skip') {
     return executionLedger.skip(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
   } else {
