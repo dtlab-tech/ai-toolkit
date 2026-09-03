@@ -1878,6 +1878,55 @@ function shellQuotePosix(arg) {
   return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
+function parseLedgerArgs(argv) {
+  const PREFIX_RE = /^[A-Za-z]+-\d+$/;
+  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined };
+
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i];
+    const val  = argv[i + 1];
+
+    if (flag === '--prefix') {
+      i++;
+      if (!val || !PREFIX_RE.test(val)) {
+        throw new Error(
+          'parseLedgerArgs: --prefix must match /^[A-Za-z]+-\\d+$/ (e.g. FTR-016), got: ' + val
+        );
+      }
+      result.prefix = val;
+    } else if (flag === '--agent') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --agent must be a non-empty string');
+      }
+      result.agent = val;
+    } else if (flag === '--attempt') {
+      i++;
+      const n = Number(val);
+      if (!Number.isInteger(n)) {
+        throw new Error('parseLedgerArgs: --attempt must be an integer, got: ' + val);
+      }
+      result.attempt = n;
+    } else if (flag === '--tokens') {
+      i++;
+      const n = Number(val);
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error('parseLedgerArgs: --tokens must be an integer >= 1, got: ' + val);
+      }
+      result.tokens = n;
+    }
+  }
+
+  if (!result.prefix) {
+    throw new Error('parseLedgerArgs: --prefix is required');
+  }
+  if (!result.agent) {
+    throw new Error('parseLedgerArgs: --agent is required and must be non-empty');
+  }
+
+  return result;
+}
+
 // ── entry point guard ─────────────────────────────────────────────────────────
 // Run the CLI only when invoked directly (node bin/cli.js).
 // When required as a module (e.g., by Jest), skip main() and export pure
@@ -1920,5 +1969,6 @@ if (require.main === module) {
     isToolkitInstalled,
     runVerifyInstall,
     shellQuotePosix,
+    parseLedgerArgs,
   };
 }
