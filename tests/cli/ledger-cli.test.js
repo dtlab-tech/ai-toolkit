@@ -180,7 +180,34 @@ describe('ledger CLI', () => {
     });
 
     it.todo('close failure for a never-opened operation_id exits non-zero');
-    it.todo('fail failure for a never-opened operation_id exits non-zero');
+    it('fail failure for a never-opened operation_id exits non-zero', () => {
+      // Arrange: fresh directory with no ledger entry for the operation
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-cli-'));
+      try {
+        // Act: invoke the CLI fail subcommand for an operation that was never opened
+        const result = spawnSync(
+          process.execPath,
+          [
+            CLI, 'ledger', 'fail',
+            '--dir',     tmpDir,
+            '--prefix',  'FTR-999',
+            '--agent',   'ghost',
+            '--error',   'x',
+            '--attempt', '1',
+          ],
+          { encoding: 'utf8' }
+        );
+
+        // Assert: exit is non-zero (fail-closed; never-opened operation must hard-stop)
+        expect(result.status).not.toBe(0);
+
+        // Assert: nothing was written (ledger file must not exist)
+        const ledgerFile = path.join(tmpDir, 'FTR-999-token-ledger.json');
+        expect(fs.existsSync(ledgerFile)).toBe(false);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
     it.todo('skip with ambiguous agent fallback exits non-zero without mutating the ledger');
     it.todo('no failure is silently downgraded to exit 0 or a best-effort write');
   });

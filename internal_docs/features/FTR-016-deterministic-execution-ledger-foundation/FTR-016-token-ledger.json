@@ -449,5 +449,17 @@
     "phase_delta_tokens": 71998,
     "tool_uses": 12,
     "verification": "Both verification commands pass: node --check bin/cli.js clean; open-then-fail yields exit 0 and entry status 'failed'. Fail-closed confirmed independently: fail for a never-opened operation_id exits non-zero (exit=1) with structured stderr JSON. parseLedgerArgs gained optional --error (same style as --dir/--phase/--model); handleLedgerCommand fail branch mirrors close branch's fail-closed try/catch (success -> sortedJson stdout + exit 0; throw -> structured JSON error stderr + exit 1). ledger-cli suite green 3 passed/29 todo; full tests/cli green 36 suites, 578 passed, 29 todo, 0 failures. Scope clean: bin/cli.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T09:31:00.000Z",
+    "agent": "developer-testing:US-03-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-03-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T09:36:00.000Z",
+    "phase_delta_tokens": 69531,
+    "tool_uses": 11,
+    "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'fail.*error|fail.*nonexistent|fail.*never' selects and passes 4 real tests (3 new fail tests: marks failed+completed_at, stores sanitized error, works without error; +1 close nonexistent test matching pattern). Added CLI fail-closed test (ledger-cli.test.js): never-opened fail exits non-zero + writes nothing. Both suites green: tests/lib/execution-ledger.test.js + tests/cli/ledger-cli.test.js = 12 passed, 53 todo, 0 failures. Scope clean: two test files + ledger."
   }
 ]

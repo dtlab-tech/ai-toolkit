@@ -119,10 +119,79 @@ describe('execution-ledger — close', () => {
 // ---------------------------------------------------------------------------
 
 describe('execution-ledger — fail', () => {
-  it.todo('marks an open entry as failed and records completed_at');
-  it.todo('stores an optional sanitized error field when supplied');
-  it.todo('works without an error argument (error field absent or null)');
-  it.todo('fails non-zero for a never-opened operation_id without creating an entry');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('marks an open entry as failed and records completed_at', () => {
+    // Arrange
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1);
+
+    // Act
+    ledger.fail(tmpDir, prefix, 'test-agent', null, 1);
+
+    // Assert
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].status).toBe('failed');
+    expect(entries[0].completed_at).toBeTruthy();
+  });
+
+  it('stores a sanitized error field when an error is supplied', () => {
+    // Arrange
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1);
+
+    // Act: pass an error string that contains a newline
+    ledger.fail(tmpDir, prefix, 'test-agent', 'boom\nsecond line', 1);
+
+    // Assert: status is failed with completed_at
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].status).toBe('failed');
+    expect(entries[0].completed_at).toBeTruthy();
+    // Assert: error is sanitized — contains the original text but no newline
+    expect(entries[0].error).toContain('boom');
+    expect(entries[0].error).not.toMatch(/\n/);
+  });
+
+  it('works without an error argument (error field absent or null)', () => {
+    // Arrange
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1);
+
+    // Act: omit the error argument
+    ledger.fail(tmpDir, prefix, 'test-agent', undefined, 1);
+
+    // Assert: status is failed with completed_at; no error field stored
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].status).toBe('failed');
+    expect(entries[0].completed_at).toBeTruthy();
+    expect(entries[0].error).toBeUndefined();
+  });
+
+  it('throws for a never-opened operation without creating an entry', () => {
+    // Arrange: fresh empty dir (set up in beforeEach); no open() call made
+
+    // Act & Assert: fail must throw when no entry has ever been opened
+    expect(() => ledger.fail(tmpDir, 'FTR-999', 'ghost', 'x', 1)).toThrow();
+
+    // Assert: no 'failed' entry was silently created (file absent or has no failed entry)
+    const ledgerFile = path.join(tmpDir, 'FTR-999-token-ledger.json');
+    if (fs.existsSync(ledgerFile)) {
+      const afterEntries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+      const hasFailed = afterEntries.some(function (e) { return e.status === 'failed'; });
+      expect(hasFailed).toBe(false);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
