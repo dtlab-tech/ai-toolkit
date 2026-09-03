@@ -617,5 +617,17 @@
     "phase_delta_tokens": 63842,
     "tool_uses": 8,
     "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'malformed|corrupt|backup|fail.*closed' selects and passes 6 real tests: open() throws CORRUPT_LEDGER on malformed JSON; backup sidecar created containing original corrupt bytes (recoverable); original malformed file not overwritten; no fresh empty ledger silently created; close() also fail-closed leaving corrupt file untouched; open exits non-zero fail-closed. Module suite green: tests/lib/execution-ledger.test.js = 17 passed, 21 todo, 0 failures. Scope clean: execution-ledger.test.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T11:42:00.000Z",
+    "agent": "developer-testing:US-07-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-07-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T11:47:00.000Z",
+    "phase_delta_tokens": 67920,
+    "tool_uses": 7,
+    "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'resume|idempotent|no.*duplicate|preserve.*token' selects and passes 5 real tests (4 new resume/idempotency + 1 pre-existing close-preserve): re-open same operation_id -> no duplicate (still 1 running entry); resume preserves original started_at; positive phase_delta_tokens survives close with tokens omitted after resume; exactly one entry after open-resume-close cycle (AC-11). Module suite green: tests/lib/execution-ledger.test.js = 21 passed, 21 todo, 0 failures. Scope clean: execution-ledger.test.js + ledger."
   }
 ]

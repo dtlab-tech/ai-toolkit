@@ -305,6 +305,85 @@ describe('execution-ledger — legacy compatibility', () => {
 });
 
 // ---------------------------------------------------------------------------
+// resume / idempotency (US-07)
+// ---------------------------------------------------------------------------
+
+describe('execution-ledger — resume / idempotency', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('re-opening the same operation_id produces no duplicate entry', () => {
+    // Arrange: open an entry for a well-known (prefix, agent, attempt) triple
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'resume-agent', 'phase1', 'haiku', 1);
+
+    // Act: open the same triple again (resume)
+    ledger.open(tmpDir, prefix, 'resume-agent', 'phase1', 'haiku', 1);
+
+    // Assert: exactly one entry, status is running — no duplicate appended
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('running');
+  });
+
+  it('resume preserves the original started_at timestamp', () => {
+    // Arrange: first open — capture the started_at it writes
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'resume-agent', 'phase1', 'haiku', 1);
+    const originalStartedAt = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'))[0].started_at;
+
+    // Act: re-open (resume) — must NOT update started_at
+    ledger.open(tmpDir, prefix, 'resume-agent', 'phase1', 'haiku', 1);
+
+    // Assert: started_at is unchanged after the resume
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].started_at).toBe(originalStartedAt);
+  });
+
+  it('positive phase_delta_tokens survives a close with tokens omitted after resume', () => {
+    // Arrange: open an entry, then seed a positive phase_delta_tokens on it
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'resume-agent', 'phase1', 'haiku', 1);
+    const seeded = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    seeded[0].phase_delta_tokens = 4321;
+    ledger._writeLedger(ledgerFile, seeded);
+
+    // Act: resume (re-open preserves tokens), then close without supplying tokens
+    ledger.open(tmpDir, prefix, 'resume-agent', 'phase1', 'haiku', 1);
+    ledger.close(tmpDir, prefix, 'resume-agent', null, 1);
+
+    // Assert: the positive token count survived the full resume+close cycle
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].phase_delta_tokens).toBe(4321);
+    expect(entries[0].status).toBe('done');
+  });
+
+  it('exactly one entry remains after an open-resume-close cycle for the same operation_id', () => {
+    // Arrange / Act: open → resume (re-open) → close — all for the same triple
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'cycle-agent', 'phase1', 'haiku', 1);
+    ledger.open(tmpDir, prefix, 'cycle-agent', 'phase1', 'haiku', 1); // resume
+    ledger.close(tmpDir, prefix, 'cycle-agent', null, 1);
+
+    // Assert: exactly one entry total, status done — no phantom entries created
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('done');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // concurrency
 // ---------------------------------------------------------------------------
 
