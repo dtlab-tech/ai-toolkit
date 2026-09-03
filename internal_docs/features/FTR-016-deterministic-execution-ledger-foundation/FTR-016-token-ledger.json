@@ -545,5 +545,17 @@
     "phase_delta_tokens": 67861,
     "tool_uses": 10,
     "verification": "All 3 verification commands pass: node --check clean; commented-out '<!-- features_root: docs/OLD -->' ignored + inline comment stripped so resolveFeaturesRoot resolves to basename 'docs'; two active features_root declarations throws. resolveFeaturesRoot(cwd, options?) exported with ordered precedence gathering all candidates before deciding: (1) explicit options.featuresRoot, (2) single active AGENTS.md features_root:, (3) single existing conventional default (internal_docs/features | docs/features) — throws on ambiguous/multiply-declared/not-found. Deterministic grammar: skip /^<!--.*-->$/ lines; strip first '#' inline trailer + trim; only active lines count toward multiply-declared. tests/cli green 29 suites, 451 passed, 27 todo, 0 failures. Scope clean: bin/cli.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T10:57:00.000Z",
+    "agent": "developer-backend:US-05-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "task_id": "US-05-TASK-BE-02",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T11:02:00.000Z",
+    "phase_delta_tokens": 55821,
+    "tool_uses": 10,
+    "verification": "All 3 verification commands pass: node --check clean; success path prints ONLY resolved abs path to stdout + exit 0 + empty stderr; multiply-declared path exits non-zero with empty stdout + non-empty stderr diagnostics. resolve-features-root subcommand added to main() dispatch (between resolve-asset/list-assets and ledger), calls resolveFeaturesRoot(process.cwd()); success -> process.stdout.write(resolved+'\\n') + exit 0; catch -> process.stderr.write(err.message+'\\n') + exit 1 (stdout purity guaranteed on both paths, no banner leak) (AC-27). tests/cli green 29 suites, 451 passed, 27 todo, 0 failures. Scope clean: bin/cli.js + ledger."
   }
 ]

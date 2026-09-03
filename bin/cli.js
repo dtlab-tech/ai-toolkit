@@ -1909,6 +1909,15 @@ async function main() {
       for (const r of results) process.stdout.write(r + '\n');
     }
     process.exit(0);
+  } else if (argv[0] === 'resolve-features-root') {
+    try {
+      const resolved = resolveFeaturesRoot(process.cwd());
+      process.stdout.write(resolved + '\n');
+      process.exit(0);
+    } catch (err) {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
   } else if (argv[0] === 'ledger') {
     handleLedgerCommand(argv.slice(1));
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
