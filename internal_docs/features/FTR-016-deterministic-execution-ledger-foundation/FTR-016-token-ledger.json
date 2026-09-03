@@ -593,5 +593,17 @@
     "phase_delta_tokens": 64188,
     "tool_uses": 17,
     "verification": "Verification command passes: npm test --testNamePattern 'installer|propagat|packaging' selects 69 tests across 6 suites, all pass, 0 failures. Added 5 real installer-propagation tests querying the single-source catalog via exported buildPayloadFileMappings() (reads lib/asset-catalog.js getAssetCategories, walks workflows/agents, applies TOOLKIT_INTERNAL_ASSETS exclusions) — asserts pm-phase1/2/3.js and define-feature.md each present exactly once (no dual copies) per AC-22; no hardcoded parallel list. tests/cli/ledger-cli.test.js green 17 passed, 15 todo, 0 failures. Scope clean: ledger-cli.test.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T11:27:00.000Z",
+    "agent": "developer-backend:US-06-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-06-TASK-BE-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T11:33:00.000Z",
+    "phase_delta_tokens": 46292,
+    "tool_uses": 14,
+    "verification": "Both verification commands pass: node --check clean; open() on a malformed ledger throws, leaves original bytes unchanged ('{not valid json'), and produces a backup sidecar (FTR-999-token-ledger.json.backup-corrupt-<ts>). Corrupt guard added in _readLedger: JSON.parse wrapped in try/catch; on parse failure of a NON-EMPTY existing file -> _backupCorruptFile (renamed sidecar to *.backup-corrupt-<ts> so name contains 'backup') then throw structured CORRUPT_LEDGER error BEFORE any _writeLedger; empty file re-throws SyntaxError unchanged (existing convention). Lock released via operations' try/finally. Independently sanity-checked: absent file still creates a fresh running entry with no lock left; valid ledger updates without a backup. No test referenced the old .corrupt- name (AC-09). Module suite green 11 passed/22 todo, 0 failures. Scope clean: lib/execution-ledger.js + ledger."
   }
 ]
