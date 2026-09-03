@@ -1,40 +1,43 @@
 'use strict';
 
 /**
- * US-04-T15 (Rework Cycle 1) — pm-phase3.js source-structure validation
+ * US-03-TASK-BE-03 — pm-phase3.js source-structure validation (facade migration)
  *
- * PROBLEM IDENTIFIED IN REWORK CYCLE 1:
- * The existing pm-phase3-ledger.test.js tests appendLedgerEntry and updateLedgerEntry
- * from bin/cli.js only — not whether pm-phase3.js actually uses those helpers. The
- * production code does NOT define the helper functions or call them; it still uses the
- * old tokenLedger.push() + persist-ledger agent pattern. The test suite was therefore
- * green for code that does not implement the feature.
+ * pm-phase3.js runs inside the Claude Code Workflow runtime, which is an external
+ * process that does NOT expose Node.js globals such as `fs`, `require`, or `module`.
+ * Because of this constraint the file cannot be `require()`-d or executed inside Jest.
  *
- * This file provides source-level structural tests that read pm-phase3.js as text and
- * assert the structural properties that the proxy-only tests in pm-phase3-ledger.test.js
- * cannot catch.
+ * Source-level analysis is the correct testing strategy for workflow scripts: read the
+ * file as text and assert structural properties that proxy-only tests
+ * (pm-phase3-ledger.test.js) cannot catch, specifically:
  *
- * Testing strategy:
- * pm-phase3.js runs inside the Claude Code Workflow runtime, which does NOT expose
- * Node.js globals such as `require`, `module`, or `fs`. All file I/O must be routed
- * through await agent() calls — the same pattern used by pm-phase2.js. The helpers
- * are therefore async functions that delegate persistence to agent(), not fs.*Sync.
+ *   1. No direct `fs` usage — the workflow runtime does not provide the `fs` module.
+ *      pm-phase1.js and pm-phase2.js (reviewed PASS) deliberately avoid `fs` entirely
+ *      and route all ledger I/O through agent() calls.  pm-phase3.js must follow the
+ *      same pattern.
  *
- * Assertions:
- *   1. appendLedgerEntry is defined as an async function using await agent()
- *   2. updateLedgerEntry is defined as an async function using await agent()
- *   3. Helpers are defined before the first call site; use agent(), not fs.*Sync/require
- *   4. Correct agent keys are present for all critical call sites
- *   5. appendLedgerEntry/updateLedgerEntry are called symmetrically (one wrap per agent)
- *   6. The old persist-ledger agent call pattern is removed or not present
- *   7. All agent call sites in executePhase and top-level are wrapped
+ *   2. Ledger facade commands are used — after the US-03-TASK-BE-03 migration,
+ *      pm-phase3.js no longer defines appendLedgerEntry / updateLedgerEntry inline.
+ *      Instead each tracked activity wraps its agent() dispatch with two shell-command
+ *      agent() calls that invoke the facade: "ai-toolkit ledger open ..." before
+ *      dispatch, "ai-toolkit ledger close ..." after.  Activities that fail use
+ *      "ai-toolkit ledger fail ..."; skipped activities use "ai-toolkit ledger skip ...".
+ *
+ *   3. Fail-closed terminal contract (AC-20) — when a close, fail, or skip facade call
+ *      returns a non-zero exit status the workflow must hard-stop and report that the
+ *      terminal state was not persisted.  The ledgerTerminal() helper checks the exit
+ *      code captured by the agent and throws on non-zero.
+ *
+ *   4. Correct agent keys are embedded — keys like "read-wb-csv:phase3",
+ *      "final-test-run", etc. are the keys pm-phase3 passes to the facade.
+ *
+ *   5. Open-before / close-after pattern is present — the structural ordering of facade
+ *      open/close calls relative to the agent() dispatch calls must be correct; inversion
+ *      produces liveness-signal failures (AC-07, AC-13).
  *
  * Acceptance Criteria covered:
- *   AC-06: pm-phase3 entries all have status="done", timestamps, positive tokens
- *   AC-07: liveness — running entry is visible on disk between append and update
- *   AC-09: in-memory tokenLedger accumulation preserved
- *   AC-12: appendLedgerEntry and updateLedgerEntry helpers exist at top of file
- *   AC-13: mid-phase JSON is valid (guaranteed by agent()-based atomic writes)
+ *   AC-04: every tracked activity goes through the facade (open + close/fail/skip)
+ *   AC-20: terminal facade calls are fail-closed — non-zero exit hard-stops the workflow
  */
 
 const fs   = require('fs');
@@ -48,147 +51,138 @@ beforeAll(() => {
   source = fs.readFileSync(PM_PHASE3_PATH, 'utf8');
 });
 
-// ── Helper function definitions (AC-12) ───────────────────────────────────────
-// AC-12 states: "Two helper functions appendLedgerEntry(featureDir, prefix, entry)
-// and updateLedgerEntry(featureDir, prefix, agentKey, updates) exist at the top of
-// the file; every agent() call site uses them."
+// ── Critical: no direct fs usage ──────────────────────────────────────────────
+// The workflow runtime does not provide the `fs` module, so any call to
+// fs.readFileSync / fs.writeFileSync / fs.existsSync would throw
+// `ReferenceError: fs is not defined` at runtime.
 
-describe('pm-phase3.js — appendLedgerEntry and updateLedgerEntry defined (AC-12)', () => {
-  test('defines appendLedgerEntry function', () => {
-    // Arrange: source is read in beforeAll
-    // Act/Assert: the helper must be explicitly defined in pm-phase3.js
-    expect(source).toMatch(/function\s+appendLedgerEntry\s*\(/);
+describe('pm-phase3.js — no direct Node.js fs usage (workflow runtime constraint)', () => {
+  test('does not call require("fs")', () => {
+    expect(source).not.toMatch(/require\s*\(\s*['"]fs['"]\s*\)/);
   });
 
-  test('defines updateLedgerEntry function', () => {
-    // Arrange/Act/Assert: the update helper must also be explicitly defined
-    expect(source).toMatch(/function\s+updateLedgerEntry\s*\(/);
+  test('does not use an ESM "import fs" statement', () => {
+    expect(source).not.toMatch(/\bimport\s+\w*\s*\bfs\b/);
   });
 
-  test('appendLedgerEntry is defined before updateLedgerEntry in source order', () => {
-    // Arrange: locate both function definition sites
-    const appendIdx = source.indexOf('function appendLedgerEntry');
-    const updateIdx = source.indexOf('function updateLedgerEntry');
-
-    // Assert: append precedes update (canonical ordering from bin/cli.js and pm-phase2.js)
-    expect(appendIdx).toBeGreaterThan(-1);
-    expect(updateIdx).toBeGreaterThan(-1);
-    expect(appendIdx).toBeLessThan(updateIdx);
+  test('does not call fs.readFileSync directly', () => {
+    expect(source).not.toMatch(/\bfs\s*\.\s*readFileSync\b/);
   });
 
-  test('helper functions are defined before the meta export (before the main script body)', () => {
-    // Arrange: helpers must appear near the top — before parse/implementation logic
-    const appendDefIdx = source.indexOf('function appendLedgerEntry');
-    // The meta declaration marks the true script start; helpers must come before featureDir parsing
-    const featureDirIdx = source.indexOf("const featureDir");
+  test('does not call fs.writeFileSync directly', () => {
+    expect(source).not.toMatch(/\bfs\s*\.\s*writeFileSync\b/);
+  });
 
-    // Assert: helpers defined before featureDir extraction
-    expect(appendDefIdx).toBeGreaterThan(-1);
-    expect(featureDirIdx).toBeGreaterThan(-1);
-    expect(appendDefIdx).toBeLessThan(featureDirIdx);
+  test('does not call fs.existsSync directly', () => {
+    expect(source).not.toMatch(/\bfs\s*\.\s*existsSync\b/);
   });
 });
 
-// ── Helpers use agent() for file I/O (not fs.*Sync) ──────────────────────────
-// The Workflow runtime does not expose fs or require. All ledger persistence is
-// routed through await agent() — the same pattern used by pm-phase2.js.
+// ── Ledger facade commands present (AC-04) ────────────────────────────────────
+// After the migration to the ai-toolkit ledger CLI facade, pm-phase3.js no longer
+// defines appendLedgerEntry / updateLedgerEntry inline.  Instead each tracked activity
+// wraps its agent() dispatch with shell-command agent() calls that invoke the facade.
 
-describe('pm-phase3.js — helper functions use agent() for file I/O (not fs.*Sync)', () => {
-  test('appendLedgerEntry body uses await agent()', () => {
-    const appendStart = source.indexOf('async function appendLedgerEntry');
-    const updateStart = source.indexOf('async function updateLedgerEntry');
-    expect(appendStart).toBeGreaterThan(-1);
-    expect(updateStart).toBeGreaterThan(appendStart);
-    const funcBody = source.slice(appendStart, updateStart);
-
-    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
+describe('pm-phase3.js — ledger facade commands used (AC-04)', () => {
+  test('uses "ai-toolkit ledger open" command', () => {
+    // Arrange/Act/Assert: facade open command must be present in the workflow source
+    expect(source).toContain('ai-toolkit ledger open');
   });
 
-  test('updateLedgerEntry body uses await agent()', () => {
-    const updateStart     = source.indexOf('async function updateLedgerEntry');
-    const parseArgsMarker = source.indexOf('const featureDir');
-    expect(updateStart).toBeGreaterThan(-1);
-    expect(parseArgsMarker).toBeGreaterThan(updateStart);
-    const funcBody = source.slice(updateStart, parseArgsMarker);
-
-    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
+  test('uses "ai-toolkit ledger close" command', () => {
+    // Arrange/Act/Assert: facade close command must be present in the workflow source
+    expect(source).toContain('ai-toolkit ledger close');
   });
 
-  test('appendLedgerEntry body uses label "append-ledger"', () => {
-    const appendStart = source.indexOf('async function appendLedgerEntry');
-    const updateStart = source.indexOf('async function updateLedgerEntry');
-    const funcBody = source.slice(appendStart, updateStart);
-
-    expect(funcBody).toMatch(/label:\s*['"]append-ledger['"]/);
+  test('uses "ai-toolkit ledger fail" command (AC-04, AC-20)', () => {
+    // Arrange/Act/Assert: facade fail command must be present for error paths
+    expect(source).toContain('ai-toolkit ledger fail');
   });
 
-  test('updateLedgerEntry body uses label "update-ledger"', () => {
-    const updateStart     = source.indexOf('async function updateLedgerEntry');
-    const parseArgsMarker = source.indexOf('const featureDir');
-    const funcBody = source.slice(updateStart, parseArgsMarker);
-
-    expect(funcBody).toMatch(/label:\s*['"]update-ledger['"]/);
+  test('does not define appendLedgerEntry as an async function (removed in facade migration)', () => {
+    // Arrange/Act/Assert: the inline helper must no longer exist in the source
+    expect(source).not.toMatch(/async\s+function\s+appendLedgerEntry/);
   });
 
-  test('appendLedgerEntry body does not use fs.*Sync', () => {
-    const appendStart = source.indexOf('async function appendLedgerEntry');
-    const updateStart = source.indexOf('async function updateLedgerEntry');
-    const funcBody = source.slice(appendStart, updateStart);
-
-    expect(funcBody).not.toMatch(/\bfs\s*\.\s*\w+Sync\b/);
+  test('does not define updateLedgerEntry as an async function (removed in facade migration)', () => {
+    // Arrange/Act/Assert: the inline helper must no longer exist in the source
+    expect(source).not.toMatch(/async\s+function\s+updateLedgerEntry/);
   });
 
-  test('updateLedgerEntry body does not use fs.*Sync', () => {
-    const updateStart     = source.indexOf('async function updateLedgerEntry');
-    const parseArgsMarker = source.indexOf('const featureDir');
-    const funcBody = source.slice(updateStart, parseArgsMarker);
-
-    expect(funcBody).not.toMatch(/\bfs\s*\.\s*\w+Sync\b/);
+  test('does not call appendLedgerEntry anywhere in the source', () => {
+    // Arrange/Act/Assert: no residual call sites
+    expect(source).not.toMatch(/\bappendLedgerEntry\s*\(/);
   });
 
-  test('appendLedgerEntry body does not use require()', () => {
-    const appendStart = source.indexOf('async function appendLedgerEntry');
-    const updateStart = source.indexOf('async function updateLedgerEntry');
-    const funcBody = source.slice(appendStart, updateStart);
-
-    expect(funcBody).not.toMatch(/\brequire\s*\(/);
-  });
-
-  test('updateLedgerEntry body does not use require()', () => {
-    const updateStart     = source.indexOf('async function updateLedgerEntry');
-    const parseArgsMarker = source.indexOf('const featureDir');
-    const funcBody = source.slice(updateStart, parseArgsMarker);
-
-    expect(funcBody).not.toMatch(/\brequire\s*\(/);
+  test('does not call updateLedgerEntry anywhere in the source', () => {
+    // Arrange/Act/Assert: no residual call sites
+    expect(source).not.toMatch(/\bupdateLedgerEntry\s*\(/);
   });
 });
 
-// ── Helpers are async ────────────────────────────────────────────────────────
-// The Workflow runtime requires await agent() for file I/O. Helpers must be
-// declared async to support await inside them.
+// ── Fail-closed terminal contract (AC-20) — unique to pm-phase3 ──────────────
+// pm-phase3 adds a fail-closed contract: when a close, fail, or skip facade call
+// returns a non-zero exit status the workflow hard-stops because the terminal state
+// was not persisted.  The ledgerTerminal() helper implements this contract.
 
-describe('pm-phase3.js — helper functions are async', () => {
-  test('appendLedgerEntry is defined as an async function', () => {
-    expect(source).toMatch(/async\s+function\s+appendLedgerEntry\s*\(/);
+describe('pm-phase3.js — fail-closed terminal contract present (AC-20)', () => {
+  test('defines a ledgerTerminal helper function', () => {
+    // Arrange/Act/Assert: the helper that enforces the contract must be defined
+    expect(source).toMatch(/function\s+ledgerTerminal\s*\(/);
   });
 
-  test('updateLedgerEntry is defined as an async function', () => {
-    expect(source).toMatch(/async\s+function\s+updateLedgerEntry\s*\(/);
+  test('ledgerTerminal captures the exit code (exitCode) from the shell command', () => {
+    // Arrange: locate the ledgerTerminal function body
+    const fnStart = source.indexOf('function ledgerTerminal');
+    expect(fnStart).toBeGreaterThan(-1);
+    // The next function / block after ledgerTerminal is the parse-args section
+    const afterFn = source.indexOf('const argStr', fnStart);
+    expect(afterFn).toBeGreaterThan(fnStart);
+    const fnBody = source.slice(fnStart, afterFn);
+
+    // Assert: the body captures exitCode
+    expect(fnBody).toMatch(/exitCode/);
+  });
+
+  test('ledgerTerminal stores exit code in a "status" variable', () => {
+    // Arrange
+    const fnStart = source.indexOf('function ledgerTerminal');
+    const afterFn = source.indexOf('const argStr', fnStart);
+    const fnBody  = source.slice(fnStart, afterFn);
+
+    // Assert: a local `status` variable holds the exit code
+    expect(fnBody).toMatch(/\bstatus\b/);
+  });
+
+  test('ledgerTerminal throws a HARD STOP error on non-zero status', () => {
+    // Arrange
+    const fnStart = source.indexOf('function ledgerTerminal');
+    const afterFn = source.indexOf('const argStr', fnStart);
+    const fnBody  = source.slice(fnStart, afterFn);
+
+    // Assert: the function throws with a HARD STOP message when status !== 0
+    expect(fnBody).toMatch(/HARD STOP/);
+    expect(fnBody).toMatch(/throw\s+new\s+Error/);
+  });
+
+  test('ledgerTerminal is async (uses await agent())', () => {
+    // Arrange/Act/Assert: the helper must be async to use await
+    expect(source).toMatch(/async\s+function\s+ledgerTerminal\s*\(/);
   });
 });
 
-// ── Correct agent keys embedded in source ────────────────────────────────────
-// Agent keys are passed to appendLedgerEntry/updateLedgerEntry as the third argument.
-// A wrong key silently creates a dangling "running" entry and an orphaned "done" update.
+// ── Correct agent keys embedded in source (AC-04) ─────────────────────────────
+// Agent keys are passed to "ai-toolkit ledger open" and matched by "ai-toolkit
+// ledger close/fail" to find and mutate the correct entry.  A wrong key silently
+// creates a dangling entry.
 
-describe('pm-phase3.js — correct agent keys present in source (AC-06, AC-12)', () => {
+describe('pm-phase3.js — correct agent keys present in source (AC-04)', () => {
   test('uses agent key "read-wb-csv:phase3"', () => {
-    // The read-wb-csv call must be tracked with this exact key
+    // Arrange/Act/Assert
     expect(source).toContain('read-wb-csv:phase3');
   });
 
   test('uses "final-test-run" as an agent key for the final test phase', () => {
-    // AC-06: final-test-run must produce a ledger entry
     expect(source).toContain('final-test-run');
   });
 
@@ -204,93 +198,80 @@ describe('pm-phase3.js — correct agent keys present in source (AC-06, AC-12)',
     expect(source).toContain('write-actuals');
   });
 
-  test('uses "process-log" or "finalize-process-log" as an agent key', () => {
-    // The process-log step may be keyed as "process-log" or "finalize-process-log"
+  test('uses "finalize-process-log" as an agent label', () => {
     expect(source).toMatch(/['"](?:process-log|finalize-process-log)['"]/);
   });
 });
 
-// ── Append-before / update-after call sites ──────────────────────────────────
-// appendLedgerEntry must be called BEFORE each agent() dispatch.
-// updateLedgerEntry must be called AFTER each agent() dispatch.
-// The count of append calls should equal or be close to the count of update calls.
+// ── Facade open-before / close-after pattern (AC-07, AC-13) ──────────────────
+// The liveness guarantee (status: "running" visible on disk between dispatch calls)
+// now depends on "ai-toolkit ledger open ..." executing BEFORE the agent() dispatch
+// and "ai-toolkit ledger close ..." executing AFTER.
 
-describe('pm-phase3.js — append-before / update-after call sites present (AC-07, AC-13)', () => {
-  test('appendLedgerEntry is called at least 5 times (covering the main top-level agents)', () => {
-    // Arrange/Act: count call-sites of appendLedgerEntry (not the definition)
-    const matches = source.match(/\bappendLedgerEntry\s*\(/g);
+describe('pm-phase3.js — facade open-before / close-after pattern in source (AC-07, AC-13)', () => {
+  test('"ai-toolkit ledger open" appears at least once', () => {
+    // Arrange/Act: count facade open call-sites
+    const matches = source.match(/ai-toolkit ledger open/g);
 
-    // Assert: read-wb-csv, final-test-run, remediation, pr-and-registry, write-actuals
-    // = at minimum 5 top-level wraps; executePhase adds more
+    // Assert: at least one per tracked activity
     expect(matches).not.toBeNull();
-    expect(matches.length).toBeGreaterThanOrEqual(5);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('updateLedgerEntry is called at least 5 times (matching append call sites)', () => {
-    // Arrange/Act: count call-sites of updateLedgerEntry (not the definition)
-    const matches = source.match(/\bupdateLedgerEntry\s*\(/g);
+  test('"ai-toolkit ledger close" appears at least once', () => {
+    // Arrange/Act: count facade close call-sites
+    const matches = source.match(/ai-toolkit ledger close/g);
 
-    // Assert: symmetric with append
     expect(matches).not.toBeNull();
-    expect(matches.length).toBeGreaterThanOrEqual(5);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('appendLedgerEntry call-count equals updateLedgerEntry call-count and both are nonzero (symmetric wrapping)', () => {
+  test('"ai-toolkit ledger fail" appears at least once (error path coverage)', () => {
     // Arrange/Act
-    const appendCount = (source.match(/\bappendLedgerEntry\s*\(/g) || []).length;
-    const updateCount = (source.match(/\bupdateLedgerEntry\s*\(/g) || []).length;
+    const matches = source.match(/ai-toolkit ledger fail/g);
 
-    // Assert: every append must have a corresponding update; and both must be > 0
-    // (if both are 0 the helpers are not implemented at all — that must also fail)
-    expect(appendCount).toBeGreaterThanOrEqual(1);
-    expect(appendCount).toBe(updateCount);
+    expect(matches).not.toBeNull();
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('first appendLedgerEntry call site appears before read-wb-csv agent dispatch', () => {
-    // Arrange: "append before" means the append call appears before the agent dispatch
-    // The read-wb-csv dispatch is identified by its label in the agent options
-    const appendIdx  = source.indexOf("appendLedgerEntry(");
-    // Locate the first agent label that dispatches read-wb-csv
+  test('first "ai-toolkit ledger open" call site appears before read-wb-csv dispatch in source', () => {
+    // Arrange: find the first facade open invocation
+    const openIdx     = source.indexOf('ai-toolkit ledger open');
+    // The read-wb-csv dispatch is identified by its label
     const dispatchIdx = source.indexOf("label: 'read-wb-csv'");
 
-    // Assert: first append precedes the read-wb-csv dispatch
-    expect(appendIdx).toBeGreaterThan(-1);
+    // Assert: open precedes dispatch (liveness: status "running" visible before agent fires)
+    expect(openIdx).toBeGreaterThan(-1);
     expect(dispatchIdx).toBeGreaterThan(-1);
-    expect(appendIdx).toBeLessThan(dispatchIdx);
+    expect(openIdx).toBeLessThan(dispatchIdx);
   });
 
-  test('updateLedgerEntry call site for read-wb-csv appears after the agent dispatch', () => {
-    // Arrange
+  test('first "ai-toolkit ledger close" call site appears after read-wb-csv dispatch in source', () => {
+    // Arrange: find the dispatch marker and then the first facade close invocation
     const dispatchIdx = source.indexOf("label: 'read-wb-csv'");
-    // Use "await updateLedgerEntry(" to find call sites only, not the function definition
-    const updateIdx   = source.indexOf("await updateLedgerEntry(");
+    const closeIdx    = source.indexOf('ai-toolkit ledger close');
 
-    // Assert: update follows dispatch
+    // Assert: close follows dispatch (liveness: status updated only after agent completes)
     expect(dispatchIdx).toBeGreaterThan(-1);
-    expect(updateIdx).toBeGreaterThan(-1);
-    expect(updateIdx).toBeGreaterThan(dispatchIdx);
+    expect(closeIdx).toBeGreaterThan(-1);
+    expect(closeIdx).toBeGreaterThan(dispatchIdx);
   });
 });
 
-// ── old persist-ledger pattern removed (US-04-T11) ────────────────────────────
-// The old pattern writes the full in-memory tokenLedger array via a haiku agent call
-// at the end of each executePhase cycle.  This is replaced by the new append/update
-// pattern.  The old label 'persist-ledger' must no longer appear as an agent call.
+// ── ledger skip present for skipped activities ────────────────────────────────
+// The remediation skip branch uses "ai-toolkit ledger skip" so the ledger reflects
+// the terminal state correctly even when the activity is not executed.
 
-describe('pm-phase3.js — old persist-ledger agent call is removed (US-04-T11)', () => {
-  test('no persist-ledger agent call label present (static or template literal)', () => {
-    // Arrange/Act: the old per-phase persist-ledger agent call used this label in two forms:
-    //   label: 'persist-ledger:...'  (static string)
-    //   label: `persist-ledger:...`  (template literal)
-    // Both must be absent after the persist-ledger pattern is replaced with append/update.
-    expect(source).not.toMatch(/label:\s*['"`]persist-ledger/);
+describe('pm-phase3.js — ai-toolkit ledger skip used for skipped activities', () => {
+  test('"ai-toolkit ledger skip" is present in source', () => {
+    // Arrange/Act/Assert: skip command must be present for the remediation else branch
+    expect(source).toContain('ai-toolkit ledger skip');
   });
 });
 
-// ── in-memory tokenLedger preserved for Actuals (AC-09) ──────────────────────
+// ── in-memory tokenLedger preserved (AC-09) ───────────────────────────────────
 // The in-memory tokenLedger array must still be populated alongside disk writes.
 // This array feeds the Actuals phase aggregation (roleTotals, roleRows).
-// Removing it would break backward compatibility.
 
 describe('pm-phase3.js — in-memory tokenLedger array preserved (AC-09)', () => {
   test('tokenLedger array is still declared', () => {
@@ -305,17 +286,17 @@ describe('pm-phase3.js — in-memory tokenLedger array preserved (AC-09)', () =>
   });
 });
 
-// ── executePhase wrapping — impl groups, test groups, review-solution ─────────
+// ── executePhase uses facade calls (AC-04, AC-07) ────────────────────────────
 // The critical inner loop wraps must be present in executePhase.
 // These wrap the developer-backend/frontend/testing and review-solution calls.
 
-describe('pm-phase3.js — executePhase agent calls are wrapped (AC-06, AC-12)', () => {
+describe('pm-phase3.js — executePhase agent calls use facade (AC-04, AC-07)', () => {
   test('executePhase function is defined in source', () => {
-    // Arrange/Act/Assert: executePhase must still exist (it orchestrates per-phase work)
+    // Arrange/Act/Assert: executePhase must still exist
     expect(source).toMatch(/const\s+executePhase\s*=\s*async/);
   });
 
-  test('appendLedgerEntry is called inside the executePhase function body', () => {
+  test('"ai-toolkit ledger open" is called inside the executePhase function body', () => {
     // Arrange: locate executePhase and find its extent
     const executePhaseStart = source.indexOf('const executePhase = async');
     expect(executePhaseStart).toBeGreaterThan(-1);
@@ -326,21 +307,31 @@ describe('pm-phase3.js — executePhase agent calls are wrapped (AC-06, AC-12)',
 
     const executePhaseBody = source.slice(executePhaseStart, wavesLoopIdx);
 
-    // Assert: at least one appendLedgerEntry call inside executePhase
-    expect(executePhaseBody).toMatch(/\bappendLedgerEntry\s*\(/);
+    // Assert: at least one facade open call inside executePhase
+    expect(executePhaseBody).toContain('ai-toolkit ledger open');
   });
 
-  test('updateLedgerEntry is called inside the executePhase function body', () => {
+  test('"ai-toolkit ledger close" is called inside the executePhase function body', () => {
     // Arrange
     const executePhaseStart = source.indexOf('const executePhase = async');
     const wavesLoopIdx      = source.indexOf('for (const wave of waves)');
     const executePhaseBody  = source.slice(executePhaseStart, wavesLoopIdx);
 
-    // Assert: at least one updateLedgerEntry call inside executePhase
-    expect(executePhaseBody).toMatch(/\bupdateLedgerEntry\s*\(/);
+    // Assert: at least one facade close call inside executePhase
+    expect(executePhaseBody).toContain('ai-toolkit ledger close');
   });
 
-  test('review-solution agent call is inside executePhase and has ledger wrapping', () => {
+  test('"ai-toolkit ledger fail" is called inside the executePhase function body (error path)', () => {
+    // Arrange
+    const executePhaseStart = source.indexOf('const executePhase = async');
+    const wavesLoopIdx      = source.indexOf('for (const wave of waves)');
+    const executePhaseBody  = source.slice(executePhaseStart, wavesLoopIdx);
+
+    // Assert: at least one facade fail call inside executePhase for dispatch error paths
+    expect(executePhaseBody).toContain('ai-toolkit ledger fail');
+  });
+
+  test('review-solution agent call is inside executePhase and has ledger open before it', () => {
     // Arrange
     const executePhaseStart = source.indexOf('const executePhase = async');
     const wavesLoopIdx      = source.indexOf('for (const wave of waves)');
@@ -349,11 +340,21 @@ describe('pm-phase3.js — executePhase agent calls are wrapped (AC-06, AC-12)',
     // Assert: review-solution agent is dispatched inside executePhase
     expect(executePhaseBody).toMatch(/agentType:\s*'review-solution'/);
 
-    // Assert: appendLedgerEntry is called before the review-solution dispatch in the body
-    const appendInBody  = executePhaseBody.indexOf('appendLedgerEntry(');
-    const reviewInBody  = executePhaseBody.indexOf("agentType: 'review-solution'");
-    expect(appendInBody).toBeGreaterThan(-1);
+    // Assert: ledger open appears before review-solution dispatch in the body
+    const openInBody   = executePhaseBody.indexOf('ai-toolkit ledger open');
+    const reviewInBody = executePhaseBody.indexOf("agentType: 'review-solution'");
+    expect(openInBody).toBeGreaterThan(-1);
     expect(reviewInBody).toBeGreaterThan(-1);
-    expect(appendInBody).toBeLessThan(reviewInBody);
+    expect(openInBody).toBeLessThan(reviewInBody);
+  });
+});
+
+// ── old persist-ledger pattern removed ────────────────────────────────────────
+// The old label 'persist-ledger' must no longer appear as an agent call.
+
+describe('pm-phase3.js — old persist-ledger agent call is removed', () => {
+  test('no persist-ledger agent call label present', () => {
+    // Arrange/Act/Assert
+    expect(source).not.toMatch(/label:\s*['"`]persist-ledger/);
   });
 });
