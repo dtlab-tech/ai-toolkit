@@ -497,5 +497,17 @@
     "phase_delta_tokens": 37170,
     "tool_uses": 7,
     "verification": "Both verification commands pass: node --check clean; skip() on empty dir creates a single skipped entry with started_at===completed_at and phase_delta_tokens null. Independently sanity-checked: update-in-place (open then skip preserves started_at, sets status=skipped + later completed_at) and ambiguous agent-fallback throws without writing. skip(dir,prefix,agent,phase,model,attempt) implements 3 cases (AC-23): no match -> atomic create terminal skipped (single ts for started_at & completed_at, supplied phase/model, tokens null); one match -> Object.assign in-place preserving started_at; >1 agent match -> throw. Reuses _acquireLock/_releaseLock/_readLedger/_writeLedger/computeOperationId. Module suite green 8 passed/25 todo, 0 failures. Scope clean: lib/execution-ledger.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T10:23:00.000Z",
+    "agent": "developer-backend:US-04-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "task_id": "US-04-TASK-BE-02",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T10:28:00.000Z",
+    "phase_delta_tokens": 69019,
+    "tool_uses": 10,
+    "verification": "Both verification commands pass: node --check bin/cli.js clean; ledger skip on empty dir yields exit 0 and entry status 'skipped'. Fail-closed confirmed independently: an ambiguous skip (two open attempts for same agent, skip with non-matching attempt hitting the agent fallback) exits non-zero (exit=1) with structured stderr JSON. handleLedgerCommand skip branch replaces the prior stub and mirrors the fail branch's fail-closed try/catch (6-arg skip(dir,prefix,agent,phase,model,attempt); success -> sortedJson stdout + exit 0; throw -> structured JSON error stderr + exit 1); routed via existing main() ledger dispatch. ledger-cli suite green 4 passed/28 todo; full tests/cli green 36 suites, 588 passed, 28 todo, 0 failures. Scope clean: bin/cli.js + ledger."
   }
 ]
