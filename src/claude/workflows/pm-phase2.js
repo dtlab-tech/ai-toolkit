@@ -7,42 +7,6 @@ export const meta = {
   ],
 }
 
-// ── Ledger helper functions ───────────────────────────────────────────────────
-// Route all ledger I/O through agent() — fs is not available in the workflow runtime.
-// Mirrors appendLedgerEntry / updateLedgerEntry from bin/cli.js (same contract).
-
-async function appendLedgerEntry(featureDir, prefix, entry) {
-  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  // Defaults come first so the caller can override started_at/completed_at.
-  // Skipped entries pass completed_at: '__TS__' to get a real timestamp; running entries
-  // pass completed_at: null to keep it null. Both are replaced/kept by the agent below.
-  const entryWithoutTs = JSON.stringify({ started_at: '__TS__', completed_at: null, ...entry })
-  await agent(
-    `Append a JSON object to the ledger array at: ${ledgerPath}\n\n` +
-    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
-    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n` +
-    `3. Push this object onto the array, replacing every "__TS__" string value in the object with NOW: ${entryWithoutTs}\n` +
-    `4. Write the full array back (JSON, 2-space indent). Return no output.`,
-    { label: 'append-ledger', phase: 'Work Breakdown', model: 'haiku' }
-  )
-}
-
-async function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
-  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  // completed_at is generated via Bash inside the agent to get a real UTC timestamp with time
-  const updatesWithoutTs = JSON.stringify({ ...updates, completed_at: '__TS__' })
-  await agent(
-    `Update an entry in the ledger array at: ${ledgerPath}\n\n` +
-    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
-    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, do nothing.\n` +
-    `3. Search from the end for the last entry where agent === "${agentKey}".\n` +
-    `4. If found, merge these fields into that entry, replacing "__TS__" in completed_at with NOW: ${updatesWithoutTs}\n` +
-    `5. Write the full array back (JSON, 2-space indent). Return no output.\n` +
-    `6. If not found, do nothing.`,
-    { label: 'update-ledger', phase: 'Work Breakdown', model: 'haiku' }
-  )
-}
-
 // Output schemas for wb-validate and wb-render agent invocations (used by US-05)
 const WB_WRAPPER_SCHEMA = {
   type: 'object',
@@ -114,15 +78,11 @@ phase('Work Breakdown')
 const tokenLedger = []
 
 log(`Running generate-work-breakdown for ${featurePath}`)
-await appendLedgerEntry(featureDir, prefix, {
-  agent: 'generate-work-breakdown:phase2',
-  phase: 'phase2',
-  model: 'haiku',
-  status: 'running',
-  phase_delta_tokens: 0,
-  started_at: '__TS__',
-  completed_at: null,
-})
+const wbKey = 'generate-work-breakdown:phase2'
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${wbKey} --phase phase2 --model haiku --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-open-generate-work-breakdown', phase: 'Work Breakdown', model: 'haiku' }
+)
 const beforeWB = budget.spent()
 await agent(featurePath, {
   agentType: 'generate-work-breakdown',
@@ -130,11 +90,10 @@ await agent(featurePath, {
   phase:     'Work Breakdown',
 })
 const wbTokens = budget.spent() - beforeWB
-await updateLedgerEntry(featureDir, prefix, 'generate-work-breakdown:phase2', {
-  status: 'done',
-  completed_at: '__TS__',
-  phase_delta_tokens: wbTokens,
-})
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${wbKey} --tokens ${wbTokens} --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-close-generate-work-breakdown', phase: 'Work Breakdown', model: 'haiku' }
+)
 tokenLedger.push({ agent: 'generate-work-breakdown', model: 'haiku', phase_delta_tokens: wbTokens })
 log(`generate-work-breakdown done — phase delta: ${wbTokens} tokens`)
 
@@ -142,11 +101,11 @@ log(`generate-work-breakdown done — phase delta: ${wbTokens} tokens`)
 let wbValidatorReport = null
 let validateFailed = false
 let validateExitCode = null
-await appendLedgerEntry(featureDir, prefix, {
-  agent: 'wb-validate:phase2',
-  phase: 'phase2', model: 'haiku', status: 'running',
-  phase_delta_tokens: 0, started_at: '__TS__', completed_at: null,
-})
+const wbValidateKey = 'wb-validate:phase2'
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${wbValidateKey} --phase phase2 --model haiku --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-open-wb-validate', phase: 'Work Breakdown', model: 'haiku' }
+)
 const beforeValidate = budget.spent()
 try {
   const validateWrapper = await agent(
@@ -186,20 +145,14 @@ try {
   if (validateWrapper.exitCode === 1 && wbValidatorReport.valid) {
     throw new Error('Inconsistent wb-validate result: exit 1 with valid=true')
   }
-  await updateLedgerEntry(featureDir, prefix, 'wb-validate:phase2', {
-    status: 'done', completed_at: '__TS__',
-    phase_delta_tokens: budget.spent() - beforeValidate,
-  })
 } catch (err) {
   validateFailed = true
-  await updateLedgerEntry(featureDir, prefix, 'wb-validate:phase2', {
-    status: 'failed', completed_at: '__TS__',
-    phase_delta_tokens: budget.spent() - beforeValidate,
-    error_summary: normalizeError(err),
-    exit_code: err._exitCode ?? validateExitCode ?? null,
-  })
 }
 const validateTokens = budget.spent() - beforeValidate
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${wbValidateKey} --tokens ${validateTokens} --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-close-wb-validate', phase: 'Work Breakdown', model: 'haiku' }
+)
 const wbValidatorPassed = !validateFailed && wbValidatorReport !== null
   && wbValidatorReport.valid === true && wbValidatorReport.errors.length === 0
 log(`wb-validate: ${wbValidatorPassed ? 'passed' : 'failed/errors'} — ${validateTokens} tokens`)
@@ -208,18 +161,14 @@ log(`wb-validate: ${wbValidatorPassed ? 'passed' : 'failed/errors'} — ${valida
 let semanticResult = null
 let semanticFailed = false
 let semanticTokens = 0
+const semanticKey = 'validate-work-breakdown-semantic:phase2'
 if (!wbValidatorPassed) {
-  await appendLedgerEntry(featureDir, prefix, {
-    agent: 'validate-work-breakdown-semantic:phase2',
-    phase: 'phase2', model: 'sonnet', status: 'skipped',
-    phase_delta_tokens: 0, started_at: '__TS__', completed_at: '__TS__',
-  })
+  log('validate-work-breakdown-semantic: skipped (wb-validate did not pass)')
 } else {
-  await appendLedgerEntry(featureDir, prefix, {
-    agent: 'validate-work-breakdown-semantic:phase2',
-    phase: 'phase2', model: 'sonnet', status: 'running',
-    phase_delta_tokens: 0, started_at: '__TS__', completed_at: null,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${semanticKey} --phase phase2 --model sonnet --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-open-semantic-validator', phase: 'Work Breakdown', model: 'haiku' }
+  )
   const beforeSemantic = budget.spent()
   try {
     semanticResult = await agent(
@@ -231,18 +180,14 @@ if (!wbValidatorPassed) {
         schema:    WB_SEMANTIC_SCHEMA,
       }
     )
-    semanticTokens = budget.spent() - beforeSemantic
-    await updateLedgerEntry(featureDir, prefix, 'validate-work-breakdown-semantic:phase2', {
-      status: 'done', completed_at: '__TS__', phase_delta_tokens: semanticTokens,
-    })
   } catch (err) {
     semanticFailed = true
-    semanticTokens = budget.spent() - beforeSemantic
-    await updateLedgerEntry(featureDir, prefix, 'validate-work-breakdown-semantic:phase2', {
-      status: 'failed', completed_at: '__TS__', phase_delta_tokens: semanticTokens,
-      error_summary: normalizeError(err), exit_code: null,
-    })
   }
+  semanticTokens = budget.spent() - beforeSemantic
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${semanticKey} --tokens ${semanticTokens} --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-close-semantic-validator', phase: 'Work Breakdown', model: 'haiku' }
+  )
 }
 log(`semantic validator: ${semanticFailed ? 'failed' : semanticResult ? 'done' : 'skipped'}`)
 
@@ -250,18 +195,14 @@ log(`semantic validator: ${semanticFailed ? 'failed' : semanticResult ? 'done' :
 const canRender = wbValidatorPassed && !semanticFailed
 let renderFailed = false
 let renderResult = null
+const wbRenderKey = 'wb-render:phase2'
 if (!canRender) {
-  await appendLedgerEntry(featureDir, prefix, {
-    agent: 'wb-render:phase2',
-    phase: 'phase2', model: 'haiku', status: 'skipped',
-    phase_delta_tokens: 0, started_at: '__TS__', completed_at: '__TS__',
-  })
+  log('wb-render: skipped (wb-validate or semantic validator did not pass)')
 } else {
-  await appendLedgerEntry(featureDir, prefix, {
-    agent: 'wb-render:phase2',
-    phase: 'phase2', model: 'haiku', status: 'running',
-    phase_delta_tokens: 0, started_at: '__TS__', completed_at: null,
-  })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${wbRenderKey} --phase phase2 --model haiku --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-open-wb-render', phase: 'Work Breakdown', model: 'haiku' }
+  )
   const beforeRender = budget.spent()
   try {
     renderResult = await agent(
@@ -304,20 +245,15 @@ if (!canRender) {
         { _exitCode: renderResult.exitCode }
       )
     }
-    await updateLedgerEntry(featureDir, prefix, 'wb-render:phase2', {
-      status: 'done', completed_at: '__TS__',
-      phase_delta_tokens: budget.spent() - beforeRender,
-    })
   } catch (err) {
     renderFailed = true
-    await updateLedgerEntry(featureDir, prefix, 'wb-render:phase2', {
-      status: 'failed', completed_at: '__TS__',
-      phase_delta_tokens: budget.spent() - beforeRender,
-      error_summary: normalizeError(err),
-      exit_code: err._exitCode ?? renderResult?.exitCode ?? null,
-    })
   }
-  tokenLedger.push({ agent: 'wb-render', model: 'haiku', phase_delta_tokens: budget.spent() - beforeRender })
+  const renderTokens = budget.spent() - beforeRender
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${wbRenderKey} --tokens ${renderTokens} --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-close-wb-render', phase: 'Work Breakdown', model: 'haiku' }
+  )
+  tokenLedger.push({ agent: 'wb-render', model: 'haiku', phase_delta_tokens: renderTokens })
 }
 
 tokenLedger.push({ agent: 'wb-validate', model: 'haiku', phase_delta_tokens: validateTokens })
