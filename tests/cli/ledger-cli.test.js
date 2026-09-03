@@ -208,7 +208,70 @@ describe('ledger CLI', () => {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
     });
-    it.todo('skip with ambiguous agent fallback exits non-zero without mutating the ledger');
+    it('skip with ambiguous agent fallback exits non-zero without mutating the ledger', () => {
+      // Arrange: fresh directory; open two entries for the same agent under different attempts
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-cli-'));
+      try {
+        const prefix     = 'FTR-999';
+        const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+
+        spawnSync(
+          process.execPath,
+          [
+            CLI, 'ledger', 'open',
+            '--dir',     tmpDir,
+            '--prefix',  prefix,
+            '--agent',   'amb-agent',
+            '--phase',   'phase1',
+            '--model',   'haiku',
+            '--attempt', '1',
+          ],
+          { encoding: 'utf8' }
+        );
+
+        spawnSync(
+          process.execPath,
+          [
+            CLI, 'ledger', 'open',
+            '--dir',     tmpDir,
+            '--prefix',  prefix,
+            '--agent',   'amb-agent',
+            '--phase',   'phase1',
+            '--model',   'haiku',
+            '--attempt', '2',
+          ],
+          { encoding: 'utf8' }
+        );
+
+        // Capture the ledger content before the ambiguous skip attempt
+        const contentBefore = fs.readFileSync(ledgerFile, 'utf8');
+
+        // Act: skip with a non-matching attempt (99 — no exact operation_id match)
+        // so the agent-name fallback finds 2 entries and the CLI must exit non-zero
+        const result = spawnSync(
+          process.execPath,
+          [
+            CLI, 'ledger', 'skip',
+            '--dir',     tmpDir,
+            '--prefix',  prefix,
+            '--agent',   'amb-agent',
+            '--phase',   'phase1',
+            '--model',   'haiku',
+            '--attempt', '99',
+          ],
+          { encoding: 'utf8' }
+        );
+
+        // Assert: exit is non-zero (ambiguous fallback must hard-stop)
+        expect(result.status).not.toBe(0);
+
+        // Assert: ledger file is byte-for-byte unchanged (no mutation on ambiguous)
+        const contentAfter = fs.readFileSync(ledgerFile, 'utf8');
+        expect(contentAfter).toBe(contentBefore);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
     it.todo('no failure is silently downgraded to exit 0 or a best-effort write');
   });
 

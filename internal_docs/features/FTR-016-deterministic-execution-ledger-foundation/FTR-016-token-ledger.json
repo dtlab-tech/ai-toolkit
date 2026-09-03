@@ -509,5 +509,17 @@
     "phase_delta_tokens": 69019,
     "tool_uses": 10,
     "verification": "Both verification commands pass: node --check bin/cli.js clean; ledger skip on empty dir yields exit 0 and entry status 'skipped'. Fail-closed confirmed independently: an ambiguous skip (two open attempts for same agent, skip with non-matching attempt hitting the agent fallback) exits non-zero (exit=1) with structured stderr JSON. handleLedgerCommand skip branch replaces the prior stub and mirrors the fail branch's fail-closed try/catch (6-arg skip(dir,prefix,agent,phase,model,attempt); success -> sortedJson stdout + exit 0; throw -> structured JSON error stderr + exit 1); routed via existing main() ledger dispatch. ledger-cli suite green 4 passed/28 todo; full tests/cli green 36 suites, 588 passed, 28 todo, 0 failures. Scope clean: bin/cli.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T10:30:00.000Z",
+    "agent": "developer-testing:US-04-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-04-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T10:36:00.000Z",
+    "phase_delta_tokens": 52443,
+    "tool_uses": 8,
+    "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'skip.*create|skip.*update|skip.*ambiguous' selects and passes 3 real skip tests (create terminal entry when none exists: 1 entry, started_at===completed_at, tokens null, correct phase/model; update-in-place preserving started_at; ambiguous agent-fallback throws without mutating count). Added CLI fail-closed test (ledger-cli.test.js): ambiguous skip exits non-zero + ledger bytes unchanged. Both suites green: tests/lib/execution-ledger.test.js + tests/cli/ledger-cli.test.js = 16 passed, 49 todo, 0 failures. Scope clean: two test files + ledger."
   }
 ]

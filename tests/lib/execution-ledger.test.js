@@ -199,11 +199,75 @@ describe('execution-ledger — fail', () => {
 // ---------------------------------------------------------------------------
 
 describe('execution-ledger — skip', () => {
-  it.todo('creates a terminal skipped entry when no existing entry matches');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates a terminal skipped entry when none exists', () => {
+    // Arrange: tmpDir is a fresh empty directory (set up in beforeEach)
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+
+    // Act: skip on an empty ledger (no prior open)
+    ledger.skip(tmpDir, prefix, 'a', 'p', 'haiku', 1);
+
+    // Assert: exactly one entry created with terminal skipped state
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('skipped');
+    expect(entries[0].started_at).toBe(entries[0].completed_at);
+    expect(entries[0].phase_delta_tokens).toBeNull();
+    expect(entries[0].phase).toBe('p');
+    expect(entries[0].model).toBe('haiku');
+  });
+
   it.todo('started_at equals completed_at on a freshly created skip entry');
-  it.todo('updates an existing entry in place when exactly one match exists');
+
+  it('updates an existing entry in place when exactly one match exists, preserving started_at', () => {
+    // Arrange: open an entry so exactly one match exists in the ledger
+    const prefix          = 'FTR-999';
+    const ledgerFile      = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1);
+    const openedEntries   = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    const capturedStartedAt = openedEntries[0].started_at;
+
+    // Act: skip the same agent/attempt (exact operation_id match)
+    ledger.skip(tmpDir, prefix, 'test-agent', 'phase1', 'haiku', 1);
+
+    // Assert: still exactly one entry; status updated; started_at preserved; completed_at present
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('skipped');
+    expect(entries[0].started_at).toBe(capturedStartedAt);
+    expect(entries[0].completed_at).toBeTruthy();
+  });
+
   it.todo('preserves started_at when updating an existing entry in place');
-  it.todo('fails non-zero when agent fallback matches multiple entries (ambiguous)');
+
+  it('throws on ambiguous agent fallback matching multiple entries', () => {
+    // Arrange: open two entries for the same agent under different attempts so the
+    // agent-name fallback has 2 matches, and use attempt=99 (no exact operation_id hit)
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'multi-agent', 'phase1', 'haiku', 1);
+    ledger.open(tmpDir, prefix, 'multi-agent', 'phase1', 'haiku', 2);
+    const entriesBefore = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+
+    // Act & Assert: skip with a non-matching attempt (99) triggers ambiguous fallback → throws
+    expect(() => ledger.skip(tmpDir, prefix, 'multi-agent', 'phase1', 'haiku', 99)).toThrow();
+
+    // Assert: no additional or mutated skipped entry was written
+    const entriesAfter = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entriesAfter).toHaveLength(entriesBefore.length);
+    const hasSkipped = entriesAfter.some(function (e) { return e.status === 'skipped'; });
+    expect(hasSkipped).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
