@@ -641,5 +641,17 @@
     "phase_delta_tokens": 66497,
     "tool_uses": 7,
     "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'rework|attempt|distinct|collision|deterministic' selects and passes 5 real tests (AC-25): rework attempt yields distinct operation_id; original attempt-1 entry untouched (op_id + started_at); two entries correlatable by same agent key with distinct ids; slug collision resistance (a:b, a/b, a-b -> 3 distinct ids); computeOperationId deterministic for identical tuple. Module suite green: tests/lib/execution-ledger.test.js = 26 passed, 21 todo, 0 failures. Scope clean: execution-ledger.test.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T11:56:00.000Z",
+    "agent": "developer-testing:US-09-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-09-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T12:02:00.000Z",
+    "phase_delta_tokens": 71489,
+    "tool_uses": 9,
+    "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'concurrent|no.*lost.*update|lock.*serial' selects and passes 3 real tests (AC-07): two concurrent open() CLI processes (child_process.spawn under Promise.all, overlapping write windows, same dir/prefix) serialize via the cross-process O_EXCL lock; both updates present with no lost update (exactly 2 entries, valid JSON, not interleaved); each entry carries correct data (own agent, running, distinct operation_id, ISO started_at). Independently re-verified module suite stable across TWO runs: 29 passed, 18 todo, 0 failures each (no flakiness). Scope clean: execution-ledger.test.js + ledger."
   }
 ]

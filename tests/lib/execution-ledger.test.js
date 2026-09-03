@@ -1,5 +1,6 @@
 'use strict';
 
+const cp   = require('child_process');
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
@@ -493,9 +494,116 @@ describe('execution-ledger — rework / US-08', () => {
 // ---------------------------------------------------------------------------
 
 describe('execution-ledger — concurrency', () => {
-  it.todo('two concurrent open() calls serialize via the cross-process lock');
-  it.todo('both updates are present in the ledger with no lost update');
-  it.todo('each concurrent entry carries correct data after serialization');
+  let tmpDir;
+
+  // Resolve bin/cli.js once relative to this test file so the path is always
+  // absolute regardless of the Jest working directory.
+  const cliBin = path.resolve(__dirname, '../../bin/cli.js');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  /**
+   * Spawns `node bin/cli.js ledger open ...` for the given agent against a
+   * shared temp dir and prefix.  Returns a Promise that resolves with the
+   * process exit code once the child closes.
+   */
+  function spawnOpen(agent, dir, prefix) {
+    return new Promise(function (resolve) {
+      const child = cp.spawn('node', [
+        cliBin,
+        'ledger', 'open',
+        '--dir',     dir,
+        '--prefix',  prefix,
+        '--agent',   agent,
+        '--phase',   'phase1',
+        '--model',   'haiku',
+        '--attempt', '1',
+      ]);
+      child.on('close', function (code) { resolve(code); });
+    });
+  }
+
+  it('two concurrent open() calls — lock serializes access', async () => {
+    // Arrange: fresh temp dir; two distinct agents will write to the same ledger
+    const prefix = 'FTR-999';
+
+    // Act: launch both child processes at essentially the same time so their
+    // write windows overlap.  The cross-process O_EXCL lock in execution-ledger
+    // must serialize them so neither write is lost or corrupted.
+    const [exitA, exitB] = await Promise.all([
+      spawnOpen('agentA', tmpDir, prefix),
+      spawnOpen('agentB', tmpDir, prefix),
+    ]);
+
+    // Assert: both processes succeeded — the lock was acquired and released by each
+    expect(exitA).toBe(0);
+    expect(exitB).toBe(0);
+
+    // Assert: the resulting ledger file is valid JSON (no interleaved/truncated write)
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    const raw = fs.readFileSync(ledgerFile, 'utf8');
+    expect(function () { JSON.parse(raw); }).not.toThrow();
+  }, 20000);
+
+  it('both updates are present in the ledger with no lost update', async () => {
+    // Arrange: two concurrent writers targeting the same ledger file
+    const prefix = 'FTR-999';
+
+    // Act: concurrent writes via two real OS processes (exercises the cross-process lock)
+    await Promise.all([
+      spawnOpen('agentA', tmpDir, prefix),
+      spawnOpen('agentB', tmpDir, prefix),
+    ]);
+
+    // Assert: exactly two entries exist — one per agent, neither overwrote the other
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(2);
+
+    const agentNames = entries.map(function (e) { return e.agent; }).sort();
+    expect(agentNames).toEqual(['agentA', 'agentB']);
+  }, 20000);
+
+  it('each concurrent entry carries correct data after serialization', async () => {
+    // Arrange: two concurrent writers with distinct agents
+    const prefix = 'FTR-999';
+
+    // Act: both processes race; the lock serializes their writes
+    await Promise.all([
+      spawnOpen('agentA', tmpDir, prefix),
+      spawnOpen('agentB', tmpDir, prefix),
+    ]);
+
+    // Assert: each entry carries its own correct data (agent, status, operation_id, started_at)
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+
+    const entryA = entries.find(function (e) { return e.agent === 'agentA'; });
+    const entryB = entries.find(function (e) { return e.agent === 'agentB'; });
+
+    // agentA entry
+    expect(entryA).toBeDefined();
+    expect(entryA.status).toBe('running');
+    expect(typeof entryA.operation_id).toBe('string');
+    expect(entryA.operation_id.length).toBeGreaterThan(0);
+    expect(entryA.started_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+
+    // agentB entry
+    expect(entryB).toBeDefined();
+    expect(entryB.status).toBe('running');
+    expect(typeof entryB.operation_id).toBe('string');
+    expect(entryB.operation_id.length).toBeGreaterThan(0);
+    expect(entryB.started_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+
+    // The two entries are distinct — different agents hash to different operation_ids
+    expect(entryA.operation_id).not.toBe(entryB.operation_id);
+  }, 20000);
 });
 
 // ---------------------------------------------------------------------------
