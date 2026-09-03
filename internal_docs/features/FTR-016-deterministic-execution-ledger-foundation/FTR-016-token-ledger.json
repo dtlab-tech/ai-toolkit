@@ -557,5 +557,17 @@
     "phase_delta_tokens": 55821,
     "tool_uses": 10,
     "verification": "All 3 verification commands pass: node --check clean; success path prints ONLY resolved abs path to stdout + exit 0 + empty stderr; multiply-declared path exits non-zero with empty stdout + non-empty stderr diagnostics. resolve-features-root subcommand added to main() dispatch (between resolve-asset/list-assets and ledger), calls resolveFeaturesRoot(process.cwd()); success -> process.stdout.write(resolved+'\\n') + exit 0; catch -> process.stderr.write(err.message+'\\n') + exit 1 (stdout purity guaranteed on both paths, no banner leak) (AC-27). tests/cli green 29 suites, 451 passed, 27 todo, 0 failures. Scope clean: bin/cli.js + ledger."
+  },
+  {
+    "started_at": "2026-09-03T11:04:00.000Z",
+    "agent": "developer-backend:US-05-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "task_id": "US-05-TASK-BE-03",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T11:11:00.000Z",
+    "phase_delta_tokens": 51788,
+    "tool_uses": 12,
+    "verification": "All 3 grep verifications pass: define-feature.md contains 'ai-toolkit resolve-features-root', 'ai-toolkit ledger open', 'ai-toolkit ledger close'. define-feature.md migrated: new Phase 1a runs resolve-features-root ONCE, captures stdout into featuresRoot as single source of truth reused for both feature.md dir and ledger --dir (AC-14/AC-15); ledger open (agent define-feature:define, phase define, model sonnet, attempt 1) before define work; ledger close OMITS --tokens (line 355) so phase_delta_tokens recorded null (not 0/estimate). Old hard-coded docs/features paths + manual JSON writes replaced; interview/feature.md content preserved. tests/cli green 29 suites, 451 passed, 27 todo, 0 failures (no suite asserts define-feature.md content). Scope clean: define-feature.md + ledger."
   }
 ]
