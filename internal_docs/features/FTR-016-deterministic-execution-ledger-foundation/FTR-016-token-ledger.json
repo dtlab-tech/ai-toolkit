@@ -209,5 +209,17 @@
     "status": "done",
     "phase_delta_tokens": null,
     "note": "Deleted the intermediate FTR-016-Work-Breakdown.json ONLY after all validation + parity passed (structural 0 err/warn, semantic PASS 0 findings, full JSON->MD/CSV parity 0 failures, full suite green). The JSON is a phase-2 intermediate: every reference to Work-Breakdown.json lives in phase 2 (generate-work-breakdown produces it; wb-validate / wb-render / validate-work-breakdown-semantic consume it during phase 2). No phase-3 consumer reads it -- pm-phase3.js reads only ${featureDir}/${prefix}-Work-Breakdown.csv (8 dispatch columns) and developers read the MD Task Details section. Final phase-2 deliverables at Gate 2: FTR-016-Work-Breakdown.md (authoritative, complete) + FTR-016-Work-Breakdown.csv (dispatch). The JSON is neither a deliverable nor left untracked."
+  },
+  {
+    "started_at": "2026-09-03T07:27:48.219Z",
+    "agent": "developer-backend:INFRA-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "task_id": "INFRA-TASK-BE-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-03T07:30:09.443Z",
+    "phase_delta_tokens": 49734,
+    "tool_uses": 9,
+    "verification": "3/3 commands passed (test -f; node --check; exports present)"
   }
 ]
