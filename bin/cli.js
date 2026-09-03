@@ -1968,7 +1968,14 @@ function sortedJson(obj) {
 function handleLedgerCommand(argv) {
   const subcommand = argv[0];
   const flags = argv.slice(1);
-  const args = parseLedgerArgs(flags);
+  let args;
+  try {
+    args = parseLedgerArgs(flags);
+  } catch (err) {
+    process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+    process.exitCode = 1;
+    return;
+  }
 
   if (subcommand === 'open') {
     try {
@@ -1981,7 +1988,15 @@ function handleLedgerCommand(argv) {
     }
     return;
   } else if (subcommand === 'close') {
-    return executionLedger.close(args.dir, args.prefix, args.agent, args.tokens, args.attempt);
+    try {
+      const result = executionLedger.close(args.dir, args.prefix, args.agent, args.tokens, args.attempt);
+      process.stdout.write(sortedJson(result) + '\n');
+      process.exitCode = 0;
+    } catch (err) {
+      process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+      process.exitCode = 1;
+    }
+    return;
   } else if (subcommand === 'fail') {
     return executionLedger.fail(args.dir, args.prefix, args.agent, args.error, args.attempt);
   } else if (subcommand === 'skip') {
