@@ -660,8 +660,12 @@
     "phase": "phase3",
     "task_id": "US-10-TASK-TEST-01",
     "model": "sonnet",
-    "status": "in_progress",
-    "note": "Paused: US-10-TASK-TEST-01 surfaced that _acquireLock never consumes _isLockStale, so stale/orphan locks are not reclaimed end-to-end (AC-08/AC-26 gap). User approved adding an out-of-WB fix task US-10-TASK-BE-01 first, then faithful end-to-end tests."
+    "status": "done",
+    "completed_at": "2026-09-04T08:20:00.000Z",
+    "phase_delta_tokens": 88545,
+    "tool_uses": 9,
+    "note": "Paused mid-task: US-10-TASK-TEST-01 surfaced that _acquireLock never consumed _isLockStale, so stale/orphan locks were not reclaimed end-to-end (AC-08/AC-26 gap). User approved adding out-of-WB fix US-10-TASK-BE-01 first (committed 14d0deb), then these faithful end-to-end tests. First agent attempt (which faked reclaim via manual unlink) was reverted before the fix.",
+    "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'stale.*lock|orphan|reclaim|ABA|blocked' selects and passes 5 real END-TO-END tests (no manual unlink of the stale/orphan lock; reclaim driven through open()/_acquireLock): stale lock (dead pid + old startedAt/mtime) reclaimed by open() -> running entry; orphan young mtime waited/timeout + lock intact; orphan old mtime reclaimed via ABA-guarded acquire (lock now owned by process.pid); ledger never blocked permanently (open+close cycle succeeds on valid JSON after reclaim); _releaseLock ABA-safe. Plus real tests for O_EXCL owner token, second-acquire timeout, young-malformed waited-on. Independently confirmed no fs.unlink fakes reclaim (grep: only the ABA-release test + do-not-unlink comments). Module suite stable 37 passed/12 todo x2 runs, 0 failures (AC-08, AC-26). Scope clean: execution-ledger.test.js + ledger."
   },
   {
     "started_at": "2026-09-04T08:00:00.000Z",

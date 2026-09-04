@@ -286,12 +286,250 @@ describe('execution-ledger — skip', () => {
 // ---------------------------------------------------------------------------
 
 describe('execution-ledger — locking', () => {
-  it.todo('_acquireLock creates a lock file with O_EXCL owner token (pid, startedAt, nonce)');
-  it.todo('a second _acquireLock call times out when the lock is already held');
-  it.todo('_releaseLock unlinks the lock file only when the nonce still matches (ABA-safe)');
-  it.todo('a stale lock (age > 30s AND owner not alive) is reclaimed by a subsequent acquire');
-  it.todo('an orphan lock is reclaimed only once file-mtime age exceeds the orphan threshold');
-  it.todo('a younger malformed lock is waited on rather than force-deleted');
+  let tmpDir;
+  let lockPath;
+
+  // Helper — scan common large PIDs to find one that is genuinely dead.
+  // A dead PID throws on process.kill(pid, 0) with a code other than EPERM.
+  // EPERM means the process exists but we lack permission to signal it (still alive).
+  function findDeadPid() {
+    for (const candidate of [999999, 999998, 999997, 998765, 987654, 876543]) {
+      try {
+        process.kill(candidate, 0);
+        // No throw → process is alive; try the next candidate.
+      } catch (err) {
+        if (err.code !== 'EPERM') {
+          // ESRCH or any non-permission error → PID does not exist → confirmed dead.
+          return candidate;
+        }
+        // EPERM → process exists but we cannot signal it → alive; try next.
+      }
+    }
+    throw new Error(
+      'Could not find a dead PID for stale-lock tests — ' +
+      'all candidates appear alive or permission-restricted on this host'
+    );
+  }
+
+  beforeEach(() => {
+    tmpDir   = fs.mkdtempSync(path.join(os.tmpdir(), 'led-locking-'));
+    lockPath = path.join(tmpDir, 'FTR-999-token-ledger.json.lock');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('_acquireLock creates a lock file with O_EXCL owner token (pid, startedAt, nonce)', () => {
+    // Arrange: lockPath does not exist yet (fresh tmpDir from beforeEach)
+
+    // Act
+    const handle = ledger._acquireLock(lockPath);
+
+    // Assert: lock file was created on disk
+    expect(fs.existsSync(lockPath)).toBe(true);
+
+    // Assert: content is a valid owner token with the three required fields
+    const content = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    expect(content.pid).toBe(process.pid);
+    expect(typeof content.startedAt).toBe('string');
+    expect(content.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(typeof content.nonce).toBe('string');
+    expect(content.nonce.length).toBeGreaterThan(0);
+
+    // Assert: the returned handle carries the nonce that was written to disk
+    expect(handle.nonce).toBe(content.nonce);
+
+    // Cleanup
+    ledger._releaseLock(lockPath, handle);
+  });
+
+  it('a second _acquireLock call times out when the lock is already held', () => {
+    // Arrange: first acquire — lock is now live and held by this process
+    const handle = ledger._acquireLock(lockPath);
+
+    // Act & Assert: second acquire with a short deadline throws (lock still held)
+    expect(() =>
+      ledger._acquireLock(lockPath, { deadlineMs: 150, retryIntervalMs: 20 })
+    ).toThrow();
+
+    // Assert: lock file still exists — the failed acquire did NOT force-delete it
+    expect(fs.existsSync(lockPath)).toBe(true);
+
+    // Cleanup
+    ledger._releaseLock(lockPath, handle);
+  });
+
+  it('_releaseLock unlinks the lock file only when the nonce still matches (ABA-safe)', () => {
+    // Arrange: acquire and then release with the correct nonce
+    const handle = ledger._acquireLock(lockPath);
+    expect(fs.existsSync(lockPath)).toBe(true);
+
+    // Act: valid release
+    ledger._releaseLock(lockPath, handle);
+
+    // Assert: lock file is gone after a correctly-nonce'd release
+    expect(fs.existsSync(lockPath)).toBe(false);
+
+    // Arrange: re-acquire so a fresh live lock exists; prepare a stale (wrong) nonce
+    const handle2     = ledger._acquireLock(lockPath);
+    const staleHandle = { nonce: 'stale-nonce-ABA-test', lockPath };
+
+    // Act: attempt to release with a mismatched nonce — must be a no-op
+    ledger._releaseLock(lockPath, staleHandle);
+
+    // Assert: the live holder's lock is still present (ABA guard prevented unlink)
+    expect(fs.existsSync(lockPath)).toBe(true);
+
+    // Cleanup
+    ledger._releaseLock(lockPath, handle2);
+  });
+
+  it('stale lock (age > 30s AND owner not alive) is safely reclaimed by open() — end-to-end, no manual unlink', () => {
+    // Arrange: guard — verify the candidate PID is genuinely dead on this host
+    const deadPid = findDeadPid();
+    let isDeadConfirmed = false;
+    try {
+      process.kill(deadPid, 0);
+    } catch (err) {
+      if (err.code !== 'EPERM') isDeadConfirmed = true;
+    }
+    expect(isDeadConfirmed).toBe(true);
+
+    // Arrange: write a pre-existing stale lock (dead pid, startedAt 60s ago, mtime 60s ago)
+    const staleLockContent = JSON.stringify({
+      pid:       deadPid,
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      nonce:     'stale-lock-to-be-reclaimed',
+    });
+    fs.writeFileSync(lockPath, staleLockContent);
+    const oldTimeSecs = (Date.now() - 60000) / 1000;
+    fs.utimesSync(lockPath, oldTimeSecs, oldTimeSecs);
+
+    // Verify pre-condition: _isLockStale classifies this as reclaimable
+    const preStat = fs.statSync(lockPath);
+    expect(ledger._isLockStale(staleLockContent, preStat)).toBe('reclaimable');
+
+    // Act: call open() — the stale lock MUST be reclaimed by _acquireLock internally.
+    // DO NOT manually unlink the lock before this call — the whole point of this test
+    // is that open()/_acquireLock performs the reclaim itself.
+    expect(() => {
+      ledger.open(tmpDir, 'FTR-999', 'stale-reclaim-agent', 'phase1', 'haiku', 1);
+    }).not.toThrow();
+
+    // Assert: ledger was written with a valid running entry (reclaim + write succeeded)
+    const ledgerFile = path.join(tmpDir, 'FTR-999-token-ledger.json');
+    expect(fs.existsSync(ledgerFile)).toBe(true);
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('running');
+    expect(entries[0].agent).toBe('stale-reclaim-agent');
+
+    // Assert: open() released the lock after use — no lock file left behind
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it('orphan lock with young mtime is waited on and NOT reclaimed before the threshold', () => {
+    // Arrange: orphan lock — valid JSON but no numeric pid field; mtime is right now
+    const orphanContent = JSON.stringify({ nonce: 'orphan-young' }); // no pid → orphan branch
+    fs.writeFileSync(lockPath, orphanContent);
+    // mtime is just-written (now) → well under the 30s LOCK_ORPHAN_THRESHOLD_MS
+
+    // Act & Assert: _acquireLock times out — the young orphan is NOT reclaimed
+    expect(() =>
+      ledger._acquireLock(lockPath, { deadlineMs: 150, retryIntervalMs: 20 })
+    ).toThrow();
+
+    // Assert: the orphan lock file still exists with its original bytes (waited on, not deleted)
+    expect(fs.existsSync(lockPath)).toBe(true);
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe(orphanContent);
+  });
+
+  it('orphan lock with old mtime exceeding the orphan threshold is reclaimed via ABA-guarded acquire', () => {
+    // Arrange: orphan lock — no numeric pid field; mtime is 60s in the past
+    const orphanContent = JSON.stringify({ nonce: 'orphan-old' }); // no pid → orphan branch
+    fs.writeFileSync(lockPath, orphanContent);
+    const oldTimeSecs = (Date.now() - 60000) / 1000;
+    fs.utimesSync(lockPath, oldTimeSecs, oldTimeSecs);
+
+    // Verify pre-condition: classified as reclaimable by _isLockStale
+    const orphanStat = fs.statSync(lockPath);
+    expect(ledger._isLockStale(orphanContent, orphanStat)).toBe('reclaimable');
+
+    // Act: _acquireLock must reclaim the old orphan via ABA-guarded unlink + O_EXCL create.
+    // DO NOT manually unlink the orphan lock here — the test verifies the real reclaim path.
+    let handle;
+    expect(() => {
+      handle = ledger._acquireLock(lockPath, { deadlineMs: 500 });
+    }).not.toThrow();
+
+    // Assert: a valid handle was returned — we now hold the lock
+    expect(handle).toBeDefined();
+    expect(typeof handle.nonce).toBe('string');
+    expect(handle.nonce.length).toBeGreaterThan(0);
+
+    // Assert: the lock file exists and is owned by the current process (not the old orphan)
+    expect(fs.existsSync(lockPath)).toBe(true);
+    const freshContent = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    expect(freshContent.pid).toBe(process.pid);
+    expect(freshContent.nonce).toBe(handle.nonce);
+
+    // Cleanup: release the freshly acquired lock
+    ledger._releaseLock(lockPath, handle);
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it('a younger malformed lock is waited on rather than force-deleted — original bytes preserved', () => {
+    // Arrange: unparseable lock content with fresh mtime
+    const malformedContent = 'not-json{{{';
+    fs.writeFileSync(lockPath, malformedContent);
+    // mtime is just-written (now) → under the orphan threshold → _isLockStale returns 'wait'
+
+    // Verify pre-condition: classified as 'wait' (not reclaimable)
+    const malformedStat = fs.statSync(lockPath);
+    expect(ledger._isLockStale(malformedContent, malformedStat)).toBe('wait');
+
+    // Act & Assert: _acquireLock times out without deleting the malformed lock
+    expect(() =>
+      ledger._acquireLock(lockPath, { deadlineMs: 150, retryIntervalMs: 20 })
+    ).toThrow();
+
+    // Assert: malformed lock file still exists with its original bytes (NOT force-deleted)
+    expect(fs.existsSync(lockPath)).toBe(true);
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe(malformedContent);
+  });
+
+  it('ledger is never blocked permanently after stale reclaim — open and close cycle succeeds on valid JSON', () => {
+    // Arrange: a stale lock (dead pid, startedAt 60s ago, mtime 60s ago)
+    const deadPid = findDeadPid();
+    const staleLockContent = JSON.stringify({
+      pid:       deadPid,
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      nonce:     'stale-nonce-blocked-test',
+    });
+    fs.writeFileSync(lockPath, staleLockContent);
+    const oldTimeSecs = (Date.now() - 60000) / 1000;
+    fs.utimesSync(lockPath, oldTimeSecs, oldTimeSecs);
+
+    // Act (step 1): open() reclaims the stale lock and records a running entry
+    expect(() => {
+      ledger.open(tmpDir, 'FTR-999', 'blocked-test-agent', 'phase1', 'haiku', 1);
+    }).not.toThrow();
+
+    // Act (step 2): close() must succeed — the system must not be permanently blocked
+    expect(() => {
+      ledger.close(tmpDir, 'FTR-999', 'blocked-test-agent', null, 1);
+    }).not.toThrow();
+
+    // Assert: ledger file is valid JSON and contains a single 'done' entry (not corrupted)
+    const ledgerFile = path.join(tmpDir, 'FTR-999-token-ledger.json');
+    const raw = fs.readFileSync(ledgerFile, 'utf8');
+    let entries;
+    expect(() => { entries = JSON.parse(raw); }).not.toThrow();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('done');
+    expect(entries[0].agent).toBe('blocked-test-agent');
+  });
 });
 
 // ---------------------------------------------------------------------------
