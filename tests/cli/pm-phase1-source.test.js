@@ -80,55 +80,32 @@ describe('pm-phase1.js — no direct Node.js fs usage (workflow runtime constrai
   });
 });
 
-// ── Helper function definitions ───────────────────────────────────────────────
+// ── Ledger facade commands present (Tech-Spec §4.2) ───────────────────────────
+// After the migration to the ai-toolkit ledger CLI facade, pm-phase1.js no longer
+// defines appendLedgerEntry / updateLedgerEntry inline.  Instead each tracked activity
+// wraps its agent() dispatch with two shell-command agent() calls that invoke the
+// facade: "ai-toolkit ledger open ..." before dispatch, "ai-toolkit ledger close ..."
+// after.  These tests verify the facade is wired up and the old helpers are gone.
 
-describe('pm-phase1.js — ledger helper functions defined at top of file (Tech-Spec §4.2)', () => {
-  test('defines appendLedgerEntry as an async function', () => {
-    // Arrange/Act/Assert: helper must be defined in the workflow script
-    expect(source).toMatch(/async\s+function\s+appendLedgerEntry\s*\(/);
+describe('pm-phase1.js — ledger facade commands used (Tech-Spec §4.2)', () => {
+  test('uses "ai-toolkit ledger open" command (not an inline appendLedgerEntry helper)', () => {
+    // Arrange/Act/Assert: facade open command must be present in the workflow source
+    expect(source).toContain('ai-toolkit ledger open');
   });
 
-  test('defines updateLedgerEntry as an async function', () => {
+  test('uses "ai-toolkit ledger close" command (not an inline updateLedgerEntry helper)', () => {
+    // Arrange/Act/Assert: facade close command must be present in the workflow source
+    expect(source).toContain('ai-toolkit ledger close');
+  });
+
+  test('does not define appendLedgerEntry as an async function (removed in facade migration)', () => {
+    // Arrange/Act/Assert: the inline helper must no longer exist in the source
+    expect(source).not.toMatch(/async\s+function\s+appendLedgerEntry/);
+  });
+
+  test('does not define updateLedgerEntry as an async function (removed in facade migration)', () => {
     // Arrange/Act/Assert
-    expect(source).toMatch(/async\s+function\s+updateLedgerEntry\s*\(/);
-  });
-
-  test('appendLedgerEntry is defined before updateLedgerEntry (correct source order)', () => {
-    // Arrange
-    const appendDefIdx = source.indexOf('async function appendLedgerEntry');
-    const updateDefIdx = source.indexOf('async function updateLedgerEntry');
-
-    // Assert: append helper precedes update helper
-    expect(appendDefIdx).toBeGreaterThan(-1);
-    expect(updateDefIdx).toBeGreaterThan(-1);
-    expect(appendDefIdx).toBeLessThan(updateDefIdx);
-  });
-
-  test('appendLedgerEntry body uses await agent() for file I/O (not fs)', () => {
-    // Arrange: extract the appendLedgerEntry function body up to the next function definition
-    const appendDefStart = source.indexOf('async function appendLedgerEntry');
-    const updateDefStart = source.indexOf('async function updateLedgerEntry');
-    expect(appendDefStart).toBeGreaterThan(-1);
-    expect(updateDefStart).toBeGreaterThan(appendDefStart);
-    const funcBody = source.slice(appendDefStart, updateDefStart);
-
-    // Assert: function delegates to agent(), not to fs
-    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
-    expect(funcBody).not.toMatch(/\bfs\s*\.\s*(readFileSync|writeFileSync|existsSync)\b/);
-  });
-
-  test('updateLedgerEntry body uses await agent() for file I/O (not fs)', () => {
-    // Arrange: extract updateLedgerEntry body up to the parse-args block
-    const updateDefStart = source.indexOf('async function updateLedgerEntry');
-    // The helper block ends at the parse-args section (marked by featurePath / args parsing)
-    const parseArgsMarker = source.indexOf('const featurePath');
-    expect(updateDefStart).toBeGreaterThan(-1);
-    expect(parseArgsMarker).toBeGreaterThan(updateDefStart);
-    const funcBody = source.slice(updateDefStart, parseArgsMarker);
-
-    // Assert: function delegates to agent()
-    expect(funcBody).toMatch(/\bawait\s+agent\s*\(/);
-    expect(funcBody).not.toMatch(/\bfs\s*\.\s*(readFileSync|writeFileSync|existsSync)\b/);
+    expect(source).not.toMatch(/async\s+function\s+updateLedgerEntry/);
   });
 });
 
@@ -156,62 +133,61 @@ describe('pm-phase1.js — correct agent keys embedded in source (AC-03, AC-04)'
   });
 });
 
-// ── Append-before / update-after pattern (AC-07, AC-13) ──────────────────────
+// ── Facade open-before / close-after pattern (AC-07, AC-13) ──────────────────
 // The liveness guarantee (status: "running" visible on disk between dispatch calls)
-// depends on appendLedgerEntry executing BEFORE the agent() call and
-// updateLedgerEntry executing AFTER.  Source-level ordering verification is the
-// only practical check available without running the workflow runtime.
+// now depends on "ai-toolkit ledger open ..." executing BEFORE the agent() dispatch
+// and "ai-toolkit ledger close ..." executing AFTER.  Symmetric wrapping (equal open
+// and close counts) ensures no dangling "running" entries are left on disk.
 
-describe('pm-phase1.js — append-before / update-after pattern in source (AC-07, AC-13)', () => {
-  test('appendLedgerEntry is called at least three times (one per agent type)', () => {
-    // Arrange/Act: count call-sites of appendLedgerEntry
-    const matches = source.match(/\bappendLedgerEntry\s*\(/g);
-
-    // Assert: generate-requirements, generate-tech-spec, validate-feature-docs (loop) = min 3
-    expect(matches).not.toBeNull();
-    expect(matches.length).toBeGreaterThanOrEqual(3);
-  });
-
-  test('updateLedgerEntry is called at least three times (one per agent type)', () => {
-    // Arrange/Act: count call-sites of updateLedgerEntry
-    const matches = source.match(/\bupdateLedgerEntry\s*\(/g);
+describe('pm-phase1.js — facade open-before / close-after pattern in source (AC-07, AC-13)', () => {
+  test('"ai-toolkit ledger open" appears at least three times (one per tracked activity)', () => {
+    // Arrange/Act: count facade open call-sites
+    const matches = source.match(/ai-toolkit ledger open/g);
 
     // Assert: generate-requirements, generate-tech-spec, validate-feature-docs (loop) = min 3
     expect(matches).not.toBeNull();
     expect(matches.length).toBeGreaterThanOrEqual(3);
   });
 
-  test('appendLedgerEntry call-count equals updateLedgerEntry call-count (symmetric wrapping)', () => {
+  test('"ai-toolkit ledger close" appears at least three times (one per tracked activity)', () => {
+    // Arrange/Act: count facade close call-sites
+    const matches = source.match(/ai-toolkit ledger close/g);
+
+    // Assert: generate-requirements, generate-tech-spec, validate-feature-docs (loop) = min 3
+    expect(matches).not.toBeNull();
+    expect(matches.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('open call-count equals close call-count (symmetric wrapping)', () => {
     // Arrange/Act
-    const appendCount = (source.match(/\bappendLedgerEntry\s*\(/g) || []).length;
-    const updateCount = (source.match(/\bupdateLedgerEntry\s*\(/g) || []).length;
+    const openCount  = (source.match(/ai-toolkit ledger open/g)  || []).length;
+    const closeCount = (source.match(/ai-toolkit ledger close/g) || []).length;
 
-    // Assert: every append has a corresponding update
-    expect(appendCount).toBe(updateCount);
+    // Assert: every open has a corresponding close — no dangling "running" entries
+    expect(openCount).toBe(closeCount);
   });
 
-  test('first await appendLedgerEntry call site appears before generate-requirements dispatch in source', () => {
-    // Arrange: find the first call site (not the function definition).
-    // Use "await appendLedgerEntry(" which only matches call sites, not the definition.
-    const appendIdx = source.indexOf('await appendLedgerEntry(');
+  test('first "ai-toolkit ledger open" call site appears before generate-requirements dispatch in source', () => {
+    // Arrange: find the first facade open invocation
+    const openIdx     = source.indexOf('ai-toolkit ledger open');
     // The generate-requirements dispatch is identified by its agentType label
     const dispatchIdx = source.indexOf("agentType: 'generate-requirements'");
 
-    // Assert: append call precedes dispatch
-    expect(appendIdx).toBeGreaterThan(-1);
+    // Assert: open precedes dispatch (liveness: status "running" visible before agent fires)
+    expect(openIdx).toBeGreaterThan(-1);
     expect(dispatchIdx).toBeGreaterThan(-1);
-    expect(appendIdx).toBeLessThan(dispatchIdx);
+    expect(openIdx).toBeLessThan(dispatchIdx);
   });
 
-  test('first await updateLedgerEntry call site appears after generate-requirements dispatch in source', () => {
-    // Arrange: find call sites (not definitions) using the await keyword
+  test('first "ai-toolkit ledger close" call site appears after generate-requirements dispatch in source', () => {
+    // Arrange: find the dispatch marker and then the first facade close invocation
     const dispatchIdx = source.indexOf("agentType: 'generate-requirements'");
-    const updateIdx   = source.indexOf('await updateLedgerEntry(');
+    const closeIdx    = source.indexOf('ai-toolkit ledger close');
 
-    // Assert: update call follows dispatch
+    // Assert: close follows dispatch (liveness: status updated only after agent completes)
     expect(dispatchIdx).toBeGreaterThan(-1);
-    expect(updateIdx).toBeGreaterThan(-1);
-    expect(updateIdx).toBeGreaterThan(dispatchIdx);
+    expect(closeIdx).toBeGreaterThan(-1);
+    expect(closeIdx).toBeGreaterThan(dispatchIdx);
   });
 });
 
@@ -240,15 +216,14 @@ describe('pm-phase1.js — ensure-ledger startup step present (AC-08)', () => {
     expect(ensureIdx).toBeLessThan(reqPhaseIdx);
   });
 
-  test('ensure-ledger step appears before the first appendLedgerEntry call site', () => {
-    // Arrange: use 'await appendLedgerEntry(' to match only call sites (not the function
-    // definition itself, which appears at the top of the file before the ensure step)
+  test('ensure-ledger step appears before the first "ai-toolkit ledger open" call site', () => {
+    // Arrange: the ensure step must run before any ledger entry is opened
     const ensureIdx = source.indexOf('ensure-ledger');
-    const appendIdx = source.indexOf('await appendLedgerEntry(');
+    const openIdx   = source.indexOf('ai-toolkit ledger open');
 
-    // Assert: ledger is guaranteed to exist before pm-phase1 appends to it
+    // Assert: ledger file is guaranteed to exist before pm-phase1 opens its first entry
     expect(ensureIdx).toBeGreaterThan(-1);
-    expect(appendIdx).toBeGreaterThan(-1);
-    expect(ensureIdx).toBeLessThan(appendIdx);
+    expect(openIdx).toBeGreaterThan(-1);
+    expect(ensureIdx).toBeLessThan(openIdx);
   });
 });

@@ -3,6 +3,7 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
+const executionLedger = require('../lib/execution-ledger');
 const packageRoot = path.join(__dirname, '..');
 
 // ── colors ────────────────────────────────────────────────────────────────────
@@ -580,67 +581,6 @@ function mergeAllowlist(destDir) {
   return { status: 'merged', preserved };
 }
 
-// INFRA-T01 (FTR-013):
-// Append a new entry to {featureDir}/{prefix}-token-ledger.json atomically.
-// If the file does not exist it is created. If JSON is malformed the file is
-// overwritten with a single-element array containing the new entry.
-//
-// Algorithm:
-//   1. Read and parse the existing ledger (or start with [])
-//   2. Push the new entry
-//   3. Write the full array back in one synchronous write (atomic)
-function appendLedgerEntry(featureDir, prefix, entry) {
-  const filePath = path.join(featureDir, `${prefix}-token-ledger.json`);
-  let ledger = [];
-  if (fs.existsSync(filePath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      ledger = Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      console.log(`Warning: could not parse token ledger at ${filePath} — starting fresh`);
-      ledger = [];
-    }
-  }
-  ledger.push(entry);
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(ledger, null, 2), 'utf8');
-}
-
-// INFRA-T02 (FTR-013):
-// Find and update an existing entry in {featureDir}/{prefix}-token-ledger.json
-// by agent key, atomically. Searches from the end of the array so that the most
-// recent entry for a given key is updated (handles any accidental duplicates).
-// If the file does not exist or the key is not found the call is a silent no-op.
-//
-// Algorithm:
-//   1. Read and parse the existing ledger (silent return on missing/malformed)
-//   2. Find the last entry where entry.agent === agentKey
-//   3. Object.assign the updates onto that entry
-//   4. Write the full array back in one synchronous write (atomic)
-function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
-  const filePath = path.join(featureDir, `${prefix}-token-ledger.json`);
-  if (!fs.existsSync(filePath)) return;
-  let ledger;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    ledger = Array.isArray(parsed) ? parsed : [];
-  } catch (_) {
-    console.log(`Warning: could not parse token ledger at ${filePath} — skipping update for "${agentKey}"`);
-    return;
-  }
-  let idx = -1;
-  for (let i = ledger.length - 1; i >= 0; i--) {
-    if (ledger[i] && ledger[i].agent === agentKey) { idx = i; break; }
-  }
-  if (idx === -1) {
-    console.log(`Warning: ledger entry not found for agent key "${agentKey}"`);
-    return;
-  }
-  Object.assign(ledger[idx], updates);
-  fs.writeFileSync(filePath, JSON.stringify(ledger, null, 2), 'utf8');
-}
-
 // US-05-T01:
 // Idempotently append `.claude/settings.local.json` to {destDir}/.gitignore.
 // Creates .gitignore if it does not exist (AC-06, AC-07).
@@ -670,6 +610,113 @@ function updateGitignore(destDir) {
   } catch (err) {
     return { status: 'error', message: err.message };
   }
+}
+
+// ── resolveFeaturesRoot ───────────────────────────────────────────────────────
+
+// US-05-TASK-BE-01 (FTR-016):
+// Resolve the features root directory for a given working directory.
+//
+// Ordered precedence — ALL candidates are gathered before deciding so that
+// ambiguity (multiply-declared AGENTS.md entries, multiple inconsistent
+// defaults) can be detected rather than silently swallowed:
+//   1. Explicit override via options.featuresRoot (highest precedence)
+//   2. features_root: convention parsed from <cwd>/AGENTS.md
+//   3. A single existing conventional default directory
+//
+// AGENTS.md grammar parser (deterministic):
+//   - Ignores HTML-comment lines of the form <!-- ... --> (same input line)
+//   - Strips inline # comments from the value and trims trailing whitespace
+//   - Counts only active (non-commented) declarations when detecting the
+//     multiply-declared error; throws when two or more are found
+//
+// Returns an absolute path.
+// Throws a clear structured Error on ambiguous or multiply-declared roots.
+//
+// Parameters:
+//   cwd     (string): project root directory
+//   options (object): { featuresRoot? } — explicit override, highest precedence
+function resolveFeaturesRoot(cwd, options) {
+  const opts        = options || {};
+  const resolvedCwd = path.resolve(cwd);
+
+  // Conventional default directories tried when no higher-precedence source is found.
+  const CONVENTIONAL_DEFAULTS = [
+    'internal_docs/features',
+    'docs/features',
+  ];
+
+  // ── AGENTS.md grammar parser ──────────────────────────────────────────────
+  // Returns an array of trimmed value strings for each ACTIVE features_root:
+  // declaration found in <cwdDir>/AGENTS.md.  Deterministic: same input →
+  // same result; does not rely on filesystem ordering.
+  function parseAgentsMdDeclarations(cwdDir) {
+    const agentsMdPath = path.join(cwdDir, 'AGENTS.md');
+    if (!fs.existsSync(agentsMdPath)) return [];
+    let content;
+    try { content = fs.readFileSync(agentsMdPath, 'utf8'); } catch (_) { return []; }
+
+    const declarations = [];
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+
+      // Ignore HTML comment lines: <!-- anything -->
+      if (/^<!--.*-->$/.test(trimmed)) continue;
+
+      // Match active features_root: declarations
+      const match = trimmed.match(/^features_root:\s*(.*)$/);
+      if (!match) continue;
+
+      // Strip inline # comment, then trim
+      let value = match[1];
+      const hashIdx = value.indexOf('#');
+      if (hashIdx !== -1) value = value.substring(0, hashIdx);
+      value = value.trim();
+
+      if (value) declarations.push(value);
+    }
+    return declarations;
+  }
+
+  // ── Source 1: Explicit override ───────────────────────────────────────────
+  if (opts.featuresRoot !== undefined && opts.featuresRoot !== null && opts.featuresRoot !== '') {
+    return path.resolve(resolvedCwd, opts.featuresRoot);
+  }
+
+  // ── Source 2: AGENTS.md features_root: convention ────────────────────────
+  const agentsDeclarations = parseAgentsMdDeclarations(resolvedCwd);
+  if (agentsDeclarations.length > 1) {
+    throw new Error(
+      `resolveFeaturesRoot: AGENTS.md declares features_root: ${agentsDeclarations.length} times ` +
+      `(values: ${agentsDeclarations.map(v => JSON.stringify(v)).join(', ')}); ` +
+      'only one active declaration is allowed'
+    );
+  }
+  if (agentsDeclarations.length === 1) {
+    return path.resolve(resolvedCwd, agentsDeclarations[0]);
+  }
+
+  // ── Source 3: Conventional defaults — use only when exactly one exists ────
+  const existingDefaults = CONVENTIONAL_DEFAULTS
+    .map(d => path.resolve(resolvedCwd, d))
+    .filter(d => { try { return fs.statSync(d).isDirectory(); } catch (_) { return false; } });
+
+  if (existingDefaults.length === 1) {
+    return existingDefaults[0];
+  }
+
+  if (existingDefaults.length > 1) {
+    throw new Error(
+      `resolveFeaturesRoot: multiple conventional default directories exist ` +
+      `(${existingDefaults.join(', ')}); declare features_root: in AGENTS.md to disambiguate`
+    );
+  }
+
+  throw new Error(
+    `resolveFeaturesRoot: no features root found under ${resolvedCwd}. ` +
+    'Declare features_root: in AGENTS.md or create one of the conventional default directories ' +
+    `(${CONVENTIONAL_DEFAULTS.join(', ')})`
+  );
 }
 
 // ── payload & detection ───────────────────────────────────────────────────────
@@ -1862,11 +1909,177 @@ async function main() {
       for (const r of results) process.stdout.write(r + '\n');
     }
     process.exit(0);
+  } else if (argv[0] === 'resolve-features-root') {
+    try {
+      const resolved = resolveFeaturesRoot(process.cwd());
+      process.stdout.write(resolved + '\n');
+      process.exit(0);
+    } catch (err) {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
+  } else if (argv[0] === 'ledger') {
+    handleLedgerCommand(argv.slice(1));
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force, dryRun);
   } else {
     help();
     process.exit(1);
+  }
+}
+
+// ── shell quoting helper ──────────────────────────────────────────────────────
+function shellQuotePosix(arg) {
+  const s = String(arg);
+  if (s.indexOf('\0') !== -1) throw new Error('shellQuotePosix: argument contains a NUL byte');
+  if (s.indexOf('\n') !== -1) throw new Error('shellQuotePosix: argument contains a newline');
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+function parseLedgerArgs(argv) {
+  const PREFIX_RE = /^[A-Za-z]+-\d+$/;
+  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined, error: undefined };
+
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i];
+    const val  = argv[i + 1];
+
+    if (flag === '--prefix') {
+      i++;
+      if (!val || !PREFIX_RE.test(val)) {
+        throw new Error(
+          'parseLedgerArgs: --prefix must match /^[A-Za-z]+-\\d+$/ (e.g. FTR-016), got: ' + val
+        );
+      }
+      result.prefix = val;
+    } else if (flag === '--agent') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --agent must be a non-empty string');
+      }
+      result.agent = val;
+    } else if (flag === '--attempt') {
+      i++;
+      const n = Number(val);
+      if (!Number.isInteger(n)) {
+        throw new Error('parseLedgerArgs: --attempt must be an integer, got: ' + val);
+      }
+      result.attempt = n;
+    } else if (flag === '--tokens') {
+      i++;
+      const n = Number(val);
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error('parseLedgerArgs: --tokens must be an integer >= 1, got: ' + val);
+      }
+      result.tokens = n;
+    } else if (flag === '--dir') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --dir must be a non-empty string');
+      }
+      result.dir = val;
+    } else if (flag === '--phase') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --phase must be a non-empty string');
+      }
+      result.phase = val;
+    } else if (flag === '--model') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --model must be a non-empty string');
+      }
+      result.model = val;
+    } else if (flag === '--error') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --error must be a non-empty string');
+      }
+      result.error = val;
+    }
+  }
+
+  if (!result.prefix) {
+    throw new Error('parseLedgerArgs: --prefix is required');
+  }
+  if (!result.agent) {
+    throw new Error('parseLedgerArgs: --agent is required and must be non-empty');
+  }
+
+  return result;
+}
+
+// Serialize obj to JSON with all object keys sorted recursively.
+// Used by the ledger subcommand to produce deterministic stdout output.
+function sortedJson(obj) {
+  return JSON.stringify(obj, (key, val) => {
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      const sorted = {};
+      for (const k of Object.keys(val).sort()) sorted[k] = val[k];
+      return sorted;
+    }
+    return val;
+  }, 2);
+}
+
+// ── ledger dispatcher ─────────────────────────────────────────────────────────
+// Routes `ai-toolkit ledger <subcommand> [flags]` to the per-operation
+// handlers in lib/execution-ledger.js. All operation logic lives in that
+// module; this function only parses shared flags and routes.
+function handleLedgerCommand(argv) {
+  const subcommand = argv[0];
+  const flags = argv.slice(1);
+  let args;
+  try {
+    args = parseLedgerArgs(flags);
+  } catch (err) {
+    process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (subcommand === 'open') {
+    try {
+      const result = executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+      process.stdout.write(sortedJson(result) + '\n');
+      process.exitCode = 0;
+    } catch (err) {
+      process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+      process.exitCode = 1;
+    }
+    return;
+  } else if (subcommand === 'close') {
+    try {
+      const result = executionLedger.close(args.dir, args.prefix, args.agent, args.tokens, args.attempt);
+      process.stdout.write(sortedJson(result) + '\n');
+      process.exitCode = 0;
+    } catch (err) {
+      process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+      process.exitCode = 1;
+    }
+    return;
+  } else if (subcommand === 'fail') {
+    try {
+      const result = executionLedger.fail(args.dir, args.prefix, args.agent, args.error, args.attempt);
+      process.stdout.write(sortedJson(result) + '\n');
+      process.exitCode = 0;
+    } catch (err) {
+      process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+      process.exitCode = 1;
+    }
+    return;
+  } else if (subcommand === 'skip') {
+    try {
+      const result = executionLedger.skip(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+      process.stdout.write(sortedJson(result) + '\n');
+      process.exitCode = 0;
+    } catch (err) {
+      process.stderr.write(sortedJson({ message: err.message, status: 'error' }) + '\n');
+      process.exitCode = 1;
+    }
+    return;
+  } else {
+    throw new Error('handleLedgerCommand: unknown subcommand: ' + subcommand);
   }
 }
 
@@ -1898,8 +2111,6 @@ if (require.main === module) {
     writeSettings,
     mergeAllowlist,
     updateGitignore,
-    appendLedgerEntry,
-    updateLedgerEntry,
     resolveClaudeRuntimeAsset,
     runDoctorResolution,
     validatePurityGuard,
@@ -1911,5 +2122,10 @@ if (require.main === module) {
     hasToolkitPayloadFiles,
     isToolkitInstalled,
     runVerifyInstall,
+    shellQuotePosix,
+    parseLedgerArgs,
+    handleLedgerCommand,
+    sortedJson,
+    resolveFeaturesRoot,
   };
 }

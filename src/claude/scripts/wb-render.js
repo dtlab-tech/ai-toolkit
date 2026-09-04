@@ -105,6 +105,38 @@ function sanitizeField(str) {
     .trim()
 }
 
+// ── Verification-command helpers (LOSSLESS — never sanitized) ─────────────────
+//
+// Verification commands are executable and MUST survive verbatim: operators like
+// `||`, shell pipes `|`, and regex alternations `grep -E 'a|b|c'` are destroyed by
+// sanitizeField (which maps `|` → space to protect table/CSV column structure).
+// These commands are therefore rendered in a dedicated section as fenced code
+// blocks whose content is byte-equivalent to the source JSON. The task table shows
+// only a reference (a count + anchor link), never a sanitized copy of a command.
+
+function getVerificationCommands(task) {
+  const v = task && (task.verificationCommands ?? task.verification?.commands)
+  return Array.isArray(v) ? v : []
+}
+
+// Stable, deterministic HTML anchor id for a task's authoritative detail block.
+// The summary table links here; the "Task Details" section renders every field.
+function taskAnchor(id) {
+  const s = typeof id === 'string' ? id : String(id ?? '')
+  return 'task-' + s.replace(/[^A-Za-z0-9_-]/g, '-')
+}
+
+// Render a single command inside a fenced code block, byte-equivalent to `cmd`.
+// The fence length is chosen to exceed the longest backtick run in the content so a
+// command that itself contains backticks can never prematurely close the fence.
+function fencedCommandBlock(cmd) {
+  const s = typeof cmd === 'string' ? cmd : String(cmd ?? '')
+  const runs = s.match(/`+/g) || []
+  const maxRun = runs.reduce((m, r) => Math.max(m, r.length), 0)
+  const fence = '`'.repeat(Math.max(3, maxRun + 1))
+  return `${fence}\n${s}\n${fence}`
+}
+
 function buildCommitSubject(task) {
   if (!task.commit || typeof task.commit !== 'object') {
     return 'chore: implement task'
@@ -189,8 +221,15 @@ function renderMarkdown(wb, prefix, phaseDepsMap) {
     const est      = mins !== null ? String(mins) : '—'
     const depArr   = Array.isArray(task.dependsOn) && task.dependsOn.length > 0 ? task.dependsOn : null
     const deps     = depArr ? depArr.join(', ') : '—'
-    const verifArr = task.verificationCommands ?? task.verification?.commands ?? []
-    const verif    = verifArr.length > 0 ? sanitizeField(verifArr.join('; ')) : '—'
+    // The summary table is a digest only. Verification commands are NOT rendered
+    // in-table (sanitizeField would destroy their operators). The cell links to the
+    // authoritative per-task "Task Details" section, which carries every field
+    // (outcome, acceptance criteria, estimates, grouping rationale, commit, and the
+    // lossless verification commands). See renderTaskDetails / fencedCommandBlock.
+    const verifCmds = getVerificationCommands(task)
+    const verif     = verifCmds.length > 0
+      ? `${verifCmds.length} cmd — [details](#${taskAnchor(task.id)})`
+      : `[details](#${taskAnchor(task.id)})`
     return `| ${id} | ${title} | ${outcome} | ${domain} | ${est} | ${deps} | ${verif} |`
   }
 
@@ -260,6 +299,66 @@ function renderMarkdown(wb, prefix, phaseDepsMap) {
         L.push(taskRow(task))
       }
       L.push('')
+    }
+  }
+
+  // ── Task Details (AUTHORITATIVE) ──
+  // The summary tables above are a digest. This section is the authoritative,
+  // self-contained representation of every task: it renders each field integrally so
+  // the Work Breakdown Markdown (plus the dispatch CSV) is a complete deliverable —
+  // the intermediate JSON is not required by any downstream consumer.
+  //
+  // Free-text fields (title, outcome, grouping rationale, commit subject) are rendered
+  // OUTSIDE any table and are therefore preserved verbatim — including pipes, which
+  // sanitizeField would otherwise map to spaces to protect table/CSV columns.
+  // Verification commands are emitted as fenced code blocks that are byte-equivalent
+  // to the source; the fence length exceeds any backtick run in the command so a
+  // command containing backticks can never break out of its block.
+  const raw = v => (typeof v === 'string' ? v : String(v ?? ''))
+  const getTokens = task => {
+    const t = task.estimate?.tokens ?? task.tokens
+    return (t !== undefined && t !== null) ? String(t) : '—'
+  }
+  const listOrDash = arr =>
+    (Array.isArray(arr) && arr.length > 0) ? arr.join(', ') : '—'
+
+  L.push('## Task Details')
+  L.push('')
+  L.push('> Authoritative per-task detail. Every field is rendered integrally so this document, together with the dispatch CSV, is a complete deliverable requiring no separate JSON. Verification commands are preserved **verbatim** in fenced code blocks — operators such as `||`, shell pipes `|`, and regex alternations (`grep -E \'a|b|c\'`) survive byte-for-byte. Each command is an independent fenced block.')
+  L.push('')
+  for (const phase of wb.phases) {
+    for (const task of (Array.isArray(phase.tasks) ? phase.tasks : [])) {
+      const cmds    = getVerificationCommands(task)
+      const mins    = getAgentMinutes(task)
+      L.push(`<a id="${taskAnchor(task.id)}"></a>`)
+      L.push(`### ${raw(task.id)}`)
+      L.push('')
+      L.push(`- **Task ID:** ${raw(task.id)}`)
+      L.push(`- **Title:** ${raw(task.title)}`)
+      L.push(`- **Outcome:** ${raw(task.outcome)}`)
+      L.push(`- **Domain:** ${raw(task.domain)}`)
+      L.push(`- **Agent type:** ${raw(task.agentType)}`)
+      L.push(`- **Dependencies:** ${listOrDash(task.dependsOn)}`)
+      L.push(`- **Acceptance criteria:** ${listOrDash(task.acceptanceCriteria)}`)
+      L.push(`- **Estimate — agent minutes:** ${mins !== null ? String(mins) : '—'}`)
+      L.push(`- **Estimate — tokens:** ${getTokens(task)}`)
+      L.push(`- **Output count:** ${task.outputCount != null ? String(task.outputCount) : '—'}`)
+      L.push(`- **Grouping rationale:** ${task.groupingRationale != null ? raw(task.groupingRationale) : '—'}`)
+      L.push(`- **Commit type:** ${task.commit && task.commit.type != null ? raw(task.commit.type) : '—'}`)
+      L.push(`- **Commit scope:** ${task.commit && task.commit.scope != null ? raw(task.commit.scope) : '—'}`)
+      L.push(`- **Commit subject:** ${task.commit && task.commit.subject != null ? raw(task.commit.subject) : '—'}`)
+      L.push('')
+      L.push('**Verification commands:**')
+      L.push('')
+      if (cmds.length === 0) {
+        L.push('_No verification commands._')
+        L.push('')
+      } else {
+        for (const cmd of cmds) {
+          L.push(fencedCommandBlock(cmd))
+          L.push('')
+        }
+      }
     }
   }
 

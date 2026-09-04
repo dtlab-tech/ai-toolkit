@@ -112,3 +112,27 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-014-atomic-work-breakdown/feature.md)
 
 ---
+
+## FTR-015 — Claude Source Layout and Runtime Resolution
+
+**Keywords:** src-claude, source-layout, runtime-resolution, asset-catalog, lib/asset-catalog.js, resolveClaudeRuntimeAsset, doctor-resolution, installer, tests-migration, permission-fatigue, protected-path, npm-files, single-source-of-truth, dual-copy-obsolete
+
+**Status:** completed
+
+**Summary:** Eliminates the four-way overlap of `.claude/` (versioned source, auto-discovered runtime, npm payload, personal config) by migrating all versioned toolkit assets from `.claude/` to `src/claude/` as the single authoritative source and moving all tests to a top-level `tests/` hierarchy. Introduces `lib/asset-catalog.js` as the single source of truth for installable asset categories, updates local and global installers to read from `src/claude/`, adds `resolveClaudeRuntimeAsset()` for coherent runtime script resolution, and a read-only `doctor resolution` CLI command for provenance diagnostics. Ordinary development edits now land in the non-protected `src/claude/` path while runtime installs stay deterministic and verifiable. Executed as an 8-phase one-time migration. **Supersedes the FTR-013 "dual-copy" convention:** installed copies (`.claude/`, global home) are generated exclusively by the catalog-driven installer, never hand-synced. Prerequisite for subsequent resilient-execution initiatives (Deterministic Estimate Generation, Execution Ledger, Task Checkpoints, Isolated Parallel Task Execution).
+
+→ [Detail](FTR-015-claude-source-layout-and-runtime-resolution/feature.md)
+
+---
+
+## FTR-016 — Deterministic Execution Ledger Foundation
+
+**Keywords:** execution-ledger, lib/execution-ledger.js, ai-toolkit-ledger, cli-facade, operation_id, atomic-write, temp-rename, fsync, cross-process-lock, stale-lock, fail-closed, null-tokens, resume-safety, features-root-resolution, define-feature, pm-phase1, pm-phase2, pm-phase3, catalog-driven-install
+
+**Status:** defined
+
+**Summary:** Replaces the four-plus divergent, LLM-delegated ledger writers (dead `bin/cli.js` helpers + inline haiku JSON prompts in `pm-phase1/2/3.js` + `define-feature` prose) with a single canonical deterministic module `lib/execution-ledger.js`, exposed via a small CLI facade `ai-toolkit ledger open|close|fail|skip` invoked directly (never `run-asset`) and verified by structured JSON + exit code. Guarantees crash-atomic (temp+fsync+rename), concurrency-safe (cross-process lock with timeout/retry/stale-lock recovery), and fail-closed persistence; unknown token consumption recorded solely as `null` (readers tolerate legacy `0` / `"not_available"` as "unavailable", never a real zero); stable per-execution identity `operation_id` derived from prefix+agent+attempt with an unambiguous `agent` fallback for legacy entries; malformed ledgers backed up and hard-stopped (no silent `[]`); features-root resolved by deterministic precedence (explicit → project convention → `internal_docs/features` → `docs/features` → hard-stop on ambiguity). Migrates only currently-tracked writes plus minimal reader `null`-compatibility in `pm-phase3.js` and `implement-feature/SKILL.md`. Documented v1 residual: command dispatch stays agent-mediated (workflow runtime lacks direct fs/exec). Explicitly defers reader consolidation, untracked-activity coverage, per-task/per-finding granularity, and resume orchestration to future features (*Execution Ledger Coverage Completeness*, *Task Checkpoints and Resume*).
+
+→ [Detail](FTR-016-deterministic-execution-ledger-foundation/feature.md)
+
+---

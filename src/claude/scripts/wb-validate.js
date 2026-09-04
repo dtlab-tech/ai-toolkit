@@ -59,6 +59,36 @@ const ERRORS = {
   EMPTY_PHASE:                  'empty_phase',                   // check 23
 }
 
+// ── Markdown table row splitter ─────────────────────────────────────────────
+// Splits a Markdown table row into cells on unescaped pipe separators only.
+// A backslash-escaped pipe (\|) is treated as a literal pipe *inside* the cell
+// rather than a column separator and is unescaped in the returned cell, so a
+// criterion such as `ai-toolkit ledger open\|close\|fail\|skip` stays in a
+// single cell and does not shift the "Related UC" column.
+// Returns the raw split including the leading/trailing empty cells produced by
+// the row's outer pipes, matching the previous `line.split('|')` contract so
+// callers can keep using `.slice(1, -1)`.
+function splitTableRow(line) {
+  const cells = []
+  let current = ''
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '\\' && line[i + 1] === '|') {
+      current += '|' // unescape: keep the literal pipe inside this cell
+      i++            // consume the escaped '|'
+      continue
+    }
+    if (ch === '|') {
+      cells.push(current)
+      current = ''
+      continue
+    }
+    current += ch
+  }
+  cells.push(current)
+  return cells
+}
+
 // ── AC table parser (prerequisite for checks 19–21) ─────────────────────────
 
 function parseAcTable(requirementsPath) {
@@ -122,7 +152,7 @@ function parseAcTable(requirementsPath) {
   }
 
   // ── Validate column headers ────────────────────────────────────────────────
-  const headerCells = lines[tableHeaderIdx].split('|').slice(1, -1).map(c => c.trim())
+  const headerCells = splitTableRow(lines[tableHeaderIdx]).slice(1, -1).map(c => c.trim())
   if (headerCells.length < 3) {
     process.stderr.write('Error: AC table header has fewer than 3 columns\n')
     process.exit(2)
@@ -143,7 +173,7 @@ function parseAcTable(requirementsPath) {
     if (!line.trim().startsWith('|')) break
 
     // Skip separator rows: every cell is only dashes, colons, or spaces
-    const rawCells = line.split('|').slice(1, -1)
+    const rawCells = splitTableRow(line).slice(1, -1)
     if (rawCells.every(c => /^[\s\-:]+$/.test(c))) continue
 
     const cells = rawCells.map(c => c.trim())

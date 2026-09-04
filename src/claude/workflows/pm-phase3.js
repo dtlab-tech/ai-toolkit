@@ -11,37 +11,38 @@ export const meta = {
   ],
 }
 
-// ── Ledger helper functions ───────────────────────────────────────────────────
-// Route all ledger I/O through agent() — fs and require() are not available in
-// the Workflow runtime. Mirrors the pattern used by pm-phase2.js.
+// ── Ledger facade helpers ─────────────────────────────────────────────────────
+// Route all ledger I/O through the ai-toolkit CLI facade.
+// Open calls fire-and-forget (matching pm-phase1/pm-phase2 pattern).
+// Terminal calls (close, fail, skip) are fail-closed: a non-zero exit status
+// hard-stops the workflow because the terminal state was not persisted.
 
-async function appendLedgerEntry(featureDir, prefix, entry) {
-  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  const entryWithoutTs = JSON.stringify({ ...entry, started_at: '__TS__', completed_at: null })
-  await agent(
-    `Append a JSON object to the ledger array at: ${ledgerPath}\n\n` +
-    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
-    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, start with [].\n` +
-    `3. Push this object onto the array, replacing "__TS__" in started_at with NOW: ${entryWithoutTs}\n` +
-    `4. Write the full array back (JSON, 2-space indent). Return no output.`,
-    { label: 'append-ledger', phase: 'Implementation', model: 'haiku' }
-  )
+const LEDGER_TERMINAL_SCHEMA = {
+  type: 'object',
+  properties: {
+    exitCode: { type: 'number' },
+    stdout:   { type: 'string' },
+    stderr:   { type: 'string' },
+  },
+  required: ['exitCode'],
 }
 
-async function updateLedgerEntry(featureDir, prefix, agentKey, updates) {
-  const ledgerPath = `${featureDir}/${prefix}-token-ledger.json`
-  const updatesWithoutTs = JSON.stringify({ ...updates, completed_at: '__TS__' })
-  await agent(
-    `Update an entry in the ledger array at: ${ledgerPath}\n\n` +
-    `1. Run: date -u +"%Y-%m-%dT%H:%M:%SZ" and capture the output as NOW.\n` +
-    `2. Read the file. If it does not exist or cannot be parsed as a JSON array, do nothing.\n` +
-    `3. Search from the end for the last entry where agent === "${agentKey}".\n` +
-    `4. If found, merge these fields into that entry, replacing "__TS__" in completed_at with NOW: ${updatesWithoutTs}\n` +
-    `5. Write the full array back (JSON, 2-space indent). Return no output.\n` +
-    `6. If not found, do nothing.`,
-    { label: 'update-ledger', phase: 'Implementation', model: 'haiku' }
+async function ledgerTerminal(cmd, label, phaseName) {
+  const result = await agent(
+    `Run this shell command via Bash and return the exit code as structured output.\n\nCommand: ${cmd}\n\nCapture: exitCode (integer), stdout (string), stderr (string). Return all three.`,
+    { label, phase: phaseName, model: 'haiku', schema: LEDGER_TERMINAL_SCHEMA }
   )
+  const status = (result && typeof result.exitCode === 'number') ? result.exitCode : 1
+  if (status !== 0) {
+    throw new Error(`HARD STOP — ledger terminal state not persisted. Exit code: ${status}. Command: ${cmd}`)
+  }
 }
+
+// null/0/not_available => data unavailable, never an observable real zero.
+// A cached or resumed agent returns a budget delta of 0, which is not a real
+// measurement — omit --tokens from close so the module preserves any existing
+// positive phase_delta_tokens on disk rather than clobbering it with zero.
+function tokensAvailable(t) { return Number.isInteger(t) && t > 0 }
 
 // ── Parse args ────────────────────────────────────────────────────────────────
 
@@ -65,13 +66,21 @@ const csvPath     = `${featureDir}/${prefix}-Work-Breakdown.csv`
 
 log(`Reading CSV: ${csvPath}`)
 
-await appendLedgerEntry(featureDir, prefix, { agent: 'read-wb-csv:phase3', phase: 'phase3', model: 'haiku', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
+const csvKey = 'read-wb-csv:phase3'
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${csvKey} --phase phase3 --model haiku --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-open-read-wb-csv', phase: 'Parse', model: 'haiku' }
+)
 const beforeCsv = budget.spent()
 const csvContent = await agent(
   `Read the file at path: ${csvPath}\nReturn ONLY the raw file contents, nothing else. No explanation, no formatting, no JSON wrapping — just the raw text of the file.`,
   { label: 'read-wb-csv', phase: 'Parse', model: 'haiku' }
 )
-await updateLedgerEntry(featureDir, prefix, 'read-wb-csv:phase3', { status: 'done', completed_at: '__TS__', phase_delta_tokens: budget.spent() - beforeCsv })
+const csvTokens = budget.spent() - beforeCsv
+await ledgerTerminal(
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${csvKey}${tokensAvailable(csvTokens) ? ` --tokens ${csvTokens}` : ''} --attempt 1`,
+  'ledger-close-read-wb-csv', 'Parse'
+)
 
 // Parse CSV into structured phases — pure JS, no AI
 const rows = csvContent
@@ -186,20 +195,40 @@ const executePhase = async (implPhase) => {
     // Step 1 — impl groups in parallel (INFRA / BE / FE)
     if (implPhase.impl_groups.length > 0) {
       const implKey = `${implPhase.impl_groups.map(g => g.agent_type).join('+')}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`
-      await appendLedgerEntry(featureDir, prefix, { agent: implKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
+      await agent(
+        `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${implKey} --phase phase3 --model sonnet --attempt 1\n\nReturn no output.`,
+        { label: `ledger-open-impl:${implPhase.phase_id}`, phase: 'Implementation', model: 'haiku' }
+      )
       const beforeImpl = budget.spent()
-      await parallel(implPhase.impl_groups.map(group => () =>
-        agent(
-          `${featurePath} ${group.task_ids.join(',')}${reworkSuffix}`,
-          {
-            agentType: group.agent_type,
-            label:     `${group.agent_type}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`,
-            phase:     'Implementation',
-          }
-        )
-      ))
+      let implFailed = false
+      let implErrMsg = ''
+      try {
+        await parallel(implPhase.impl_groups.map(group => () =>
+          agent(
+            `${featurePath} ${group.task_ids.join(',')}${reworkSuffix}`,
+            {
+              agentType: group.agent_type,
+              label:     `${group.agent_type}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`,
+              phase:     'Implementation',
+            }
+          )
+        ))
+      } catch (err) {
+        implFailed = true
+        implErrMsg = err && err.message ? err.message.slice(0, 120) : 'impl dispatch failed'
+      }
       const implTokens = budget.spent() - beforeImpl
-      await updateLedgerEntry(featureDir, prefix, implKey, { status: 'done', completed_at: '__TS__', phase_delta_tokens: implTokens })
+      if (implFailed) {
+        await ledgerTerminal(
+          `ai-toolkit ledger fail --dir ${featureDir} --prefix ${prefix} --agent ${implKey} --error "impl dispatch failed" --attempt 1`,
+          `ledger-fail-impl:${implPhase.phase_id}`, 'Implementation'
+        )
+        throw new Error(`Phase ${implPhase.phase_id} impl dispatch failed: ${implErrMsg}`)
+      }
+      await ledgerTerminal(
+        `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${implKey}${tokensAvailable(implTokens) ? ` --tokens ${implTokens}` : ''} --attempt 1`,
+        `ledger-close-impl:${implPhase.phase_id}`, 'Implementation'
+      )
       tokenLedger.push({ agent: implKey, model: 'sonnet', phase_delta_tokens: implTokens })
       log(`Phase ${implPhase.phase_id} impl groups done — ${implTokens} tokens`)
     }
@@ -207,27 +236,50 @@ const executePhase = async (implPhase) => {
     // Step 2 — test groups in parallel (TEST) — after impl groups
     if (implPhase.test_groups.length > 0) {
       const testKey = `developer-testing:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`
-      await appendLedgerEntry(featureDir, prefix, { agent: testKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
-      const beforeTest = budget.spent()
-      await parallel(implPhase.test_groups.map(group => () =>
-        agent(
-          `${featurePath} ${group.task_ids.join(',')}${reworkSuffix}`,
-          {
-            agentType: group.agent_type,
-            label:     `${group.agent_type}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`,
-            phase:     'Implementation',
-          }
+      await agent(
+        `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${testKey} --phase phase3 --model sonnet --attempt 1\n\nReturn no output.`,
+        { label: `ledger-open-test:${implPhase.phase_id}`, phase: 'Implementation', model: 'haiku' }
+      )
+      const beforeTestGroup = budget.spent()
+      let testFailed = false
+      let testErrMsg = ''
+      try {
+        await parallel(implPhase.test_groups.map(group => () =>
+          agent(
+            `${featurePath} ${group.task_ids.join(',')}${reworkSuffix}`,
+            {
+              agentType: group.agent_type,
+              label:     `${group.agent_type}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`,
+              phase:     'Implementation',
+            }
+          )
+        ))
+      } catch (err) {
+        testFailed = true
+        testErrMsg = err && err.message ? err.message.slice(0, 120) : 'test dispatch failed'
+      }
+      const testGroupTokens = budget.spent() - beforeTestGroup
+      if (testFailed) {
+        await ledgerTerminal(
+          `ai-toolkit ledger fail --dir ${featureDir} --prefix ${prefix} --agent ${testKey} --error "test dispatch failed" --attempt 1`,
+          `ledger-fail-test:${implPhase.phase_id}`, 'Implementation'
         )
-      ))
-      const testTokens = budget.spent() - beforeTest
-      await updateLedgerEntry(featureDir, prefix, testKey, { status: 'done', completed_at: '__TS__', phase_delta_tokens: testTokens })
-      tokenLedger.push({ agent: testKey, model: 'sonnet', phase_delta_tokens: testTokens })
-      log(`Phase ${implPhase.phase_id} test groups done — ${testTokens} tokens`)
+        throw new Error(`Phase ${implPhase.phase_id} test dispatch failed: ${testErrMsg}`)
+      }
+      await ledgerTerminal(
+        `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${testKey}${tokensAvailable(testGroupTokens) ? ` --tokens ${testGroupTokens}` : ''} --attempt 1`,
+        `ledger-close-test:${implPhase.phase_id}`, 'Implementation'
+      )
+      tokenLedger.push({ agent: testKey, model: 'sonnet', phase_delta_tokens: testGroupTokens })
+      log(`Phase ${implPhase.phase_id} test groups done — ${testGroupTokens} tokens`)
     }
 
     // Step 3 — review-solution
     const reviewKey = `review-solution:${implPhase.phase_id}`
-    await appendLedgerEntry(featureDir, prefix, { agent: reviewKey, phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
+    await agent(
+      `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${reviewKey} --phase phase3 --model sonnet --attempt 1\n\nReturn no output.`,
+      { label: `ledger-open-review:${implPhase.phase_id}`, phase: 'Implementation', model: 'haiku' }
+    )
     const beforeReview = budget.spent()
     const review = await agent(
       `${featurePath} --scope ${implPhase.phase_id}`,
@@ -239,7 +291,10 @@ const executePhase = async (implPhase) => {
       }
     )
     const reviewTokens = budget.spent() - beforeReview
-    await updateLedgerEntry(featureDir, prefix, reviewKey, { status: 'done', completed_at: '__TS__', phase_delta_tokens: reviewTokens })
+    await ledgerTerminal(
+      `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${reviewKey}${tokensAvailable(reviewTokens) ? ` --tokens ${reviewTokens}` : ''} --attempt 1`,
+      `ledger-close-review:${implPhase.phase_id}`, 'Implementation'
+    )
     tokenLedger.push({
       agent: reviewKey,
       model: 'sonnet',
@@ -313,8 +368,12 @@ log(`Implementation complete — ${phasesDone} phases, ${usPassed.length} US pas
 // contention down to a single centralized run with one consolidated failure report.
 phase('Test')
 
-await appendLedgerEntry(featureDir, prefix, { agent: 'final-test-run', phase: 'phase3', model: 'haiku', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
-const beforeTest = budget.spent()
+const testRunKey = 'final-test-run'
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${testRunKey} --phase phase3 --model haiku --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-open-final-test-run', phase: 'Test', model: 'haiku' }
+)
+const beforeFinalTest = budget.spent()
 await agent(
   `Run the full test suite in the repository root and report the result.
 
@@ -325,10 +384,13 @@ await agent(
 Do NOT fix failing tests — only report them.`,
   { label: 'final-test-run', phase: 'Test', model: 'haiku' }
 )
-const testTokens = budget.spent() - beforeTest
-await updateLedgerEntry(featureDir, prefix, 'final-test-run', { status: 'done', completed_at: '__TS__', phase_delta_tokens: testTokens })
-tokenLedger.push({ agent: 'final-test-run', model: 'haiku', phase_delta_tokens: testTokens })
-log(`Test run complete — ${testTokens} tokens`)
+const finalTestTokens = budget.spent() - beforeFinalTest
+await ledgerTerminal(
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${testRunKey}${tokensAvailable(finalTestTokens) ? ` --tokens ${finalTestTokens}` : ''} --attempt 1`,
+  'ledger-close-final-test-run', 'Test'
+)
+tokenLedger.push({ agent: testRunKey, model: 'haiku', phase_delta_tokens: finalTestTokens })
+log(`Test run complete — ${finalTestTokens} tokens`)
 
 // ── Remediation ───────────────────────────────────────────────────────────────
 phase('Remediation')
@@ -345,9 +407,13 @@ const REM_SCHEMA = {
 let issuesFixed    = 0
 let issuesDeferred = 0
 
+const remKey = 'remediation'
 if (issuesOpen > 0 && issuesPath) {
   log(`Remediation: ${issuesOpen} OPEN issues`)
-  await appendLedgerEntry(featureDir, prefix, { agent: 'remediation', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
+  await agent(
+    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${remKey} --phase phase3 --model sonnet --attempt 1\n\nReturn no output.`,
+    { label: 'ledger-open-remediation', phase: 'Remediation', model: 'haiku' }
+  )
   const beforeRem = budget.spent()
 
   const remResult = await agent(
@@ -370,13 +436,20 @@ Update the Issues Register Status column in place for each resolved/deferred iss
   )
 
   const remTokens = budget.spent() - beforeRem
-  await updateLedgerEntry(featureDir, prefix, 'remediation', { status: 'done', completed_at: '__TS__', phase_delta_tokens: remTokens })
-  tokenLedger.push({ agent: 'remediation', model: 'sonnet', phase_delta_tokens: remTokens })
+  await ledgerTerminal(
+    `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${remKey}${tokensAvailable(remTokens) ? ` --tokens ${remTokens}` : ''} --attempt 1`,
+    'ledger-close-remediation', 'Remediation'
+  )
+  tokenLedger.push({ agent: remKey, model: 'sonnet', phase_delta_tokens: remTokens })
   issuesFixed    = remResult.issues_fixed    || 0
   issuesDeferred = remResult.issues_deferred || 0
   log(`Remediation done — fixed: ${issuesFixed}, deferred: ${issuesDeferred} — ${remTokens} tokens`)
 } else {
   log('Remediation: no OPEN issues — skipped')
+  await ledgerTerminal(
+    `ai-toolkit ledger skip --dir ${featureDir} --prefix ${prefix} --agent ${remKey} --phase phase3 --model sonnet --attempt 1`,
+    'ledger-skip-remediation', 'Remediation'
+  )
 }
 
 // ── PR ────────────────────────────────────────────────────────────────────────
@@ -391,7 +464,11 @@ const PR_SCHEMA = {
   required: ['pr_url'],
 }
 
-await appendLedgerEntry(featureDir, prefix, { agent: 'pr-and-registry', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
+const prKey = 'pr-and-registry'
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${prKey} --phase phase3 --model sonnet --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-open-pr-and-registry', phase: 'PR', model: 'haiku' }
+)
 const beforePR = budget.spent()
 
 const prResult = await agent(
@@ -441,8 +518,11 @@ If the PR creation fails, return { "pr_url": "(PR creation failed)", "registry_u
 )
 
 const prTokens = budget.spent() - beforePR
-await updateLedgerEntry(featureDir, prefix, 'pr-and-registry', { status: 'done', completed_at: '__TS__', phase_delta_tokens: prTokens })
-tokenLedger.push({ agent: 'pr-and-registry', model: 'sonnet', phase_delta_tokens: prTokens })
+await ledgerTerminal(
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${prKey}${tokensAvailable(prTokens) ? ` --tokens ${prTokens}` : ''} --attempt 1`,
+  'ledger-close-pr-and-registry', 'PR'
+)
+tokenLedger.push({ agent: prKey, model: 'sonnet', phase_delta_tokens: prTokens })
 log(`PR done: ${prResult.pr_url} — ${prTokens} tokens`)
 
 // ── Actuals ───────────────────────────────────────────────────────────────────
@@ -468,7 +548,7 @@ try {
         tokenLedger.push(entry)
         inMemoryByAgent.set(entry.agent, tokenLedger.length - 1)
         log(`Recovered ledger entry from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
-      } else if (tokenLedger[idx].phase_delta_tokens === 0 && (entry.phase_delta_tokens || 0) > 0) {
+      } else if (!tokensAvailable(tokenLedger[idx].phase_delta_tokens) && tokensAvailable(entry.phase_delta_tokens)) {
         // in-memory entry has delta=0 (cached agent on resume) but disk has real data — prefer disk
         tokenLedger[idx] = entry
         log(`Restored real token count from disk: ${entry.agent} (${entry.phase_delta_tokens} tokens)`)
@@ -479,7 +559,7 @@ try {
   log(`Could not parse persisted token ledger — using in-memory ledger only`)
 }
 
-const totalPhase3Tokens = tokenLedger.reduce((s, e) => s + (e.phase_delta_tokens || 0), 0)
+const totalPhase3Tokens = tokenLedger.reduce((s, e) => s + (tokensAvailable(e.phase_delta_tokens) ? e.phase_delta_tokens : 0), 0)
 
 // ── Load token pricing for cost columns ──────────────────────────────────────
 const pricingRaw3 = await agent(
@@ -509,7 +589,7 @@ const roleTotals = {}
 const roleModels = {}
 for (const e of tokenLedger) {
   const role = String(e.agent).split(':')[0]
-  roleTotals[role] = (roleTotals[role] || 0) + (e.phase_delta_tokens || 0)
+  roleTotals[role] = (roleTotals[role] || 0) + (tokensAvailable(e.phase_delta_tokens) ? e.phase_delta_tokens : 0)
   roleModels[role] = e.model || 'sonnet'
 }
 const roleRows = Object.entries(roleTotals)
@@ -528,7 +608,11 @@ const ACTUALS_SCHEMA = {
   required: [],
 }
 
-await appendLedgerEntry(featureDir, prefix, { agent: 'write-actuals', phase: 'phase3', model: 'sonnet', status: 'running', phase_delta_tokens: 0, started_at: '__TS__', completed_at: null })
+const actualsKey = 'write-actuals'
+await agent(
+  `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${actualsKey} --phase phase3 --model sonnet --attempt 1\n\nReturn no output.`,
+  { label: 'ledger-open-write-actuals', phase: 'Actuals', model: 'haiku' }
+)
 const beforeActuals = budget.spent()
 
 await agent(
@@ -622,8 +706,11 @@ Return { "token_estimate_path": "<path>", "effort_estimate_path": "<path>" }.`,
 )
 
 const actualsTokens = budget.spent() - beforeActuals
-await updateLedgerEntry(featureDir, prefix, 'write-actuals', { status: 'done', completed_at: '__TS__', phase_delta_tokens: actualsTokens })
-tokenLedger.push({ agent: 'write-actuals', model: 'sonnet', phase_delta_tokens: actualsTokens })
+await ledgerTerminal(
+  `ai-toolkit ledger close --dir ${featureDir} --prefix ${prefix} --agent ${actualsKey}${tokensAvailable(actualsTokens) ? ` --tokens ${actualsTokens}` : ''} --attempt 1`,
+  'ledger-close-write-actuals', 'Actuals'
+)
+tokenLedger.push({ agent: actualsKey, model: 'sonnet', phase_delta_tokens: actualsTokens })
 log(`Actuals written — ${actualsTokens} tokens`)
 
 // ── Append to process-log ─────────────────────────────────────────────────────

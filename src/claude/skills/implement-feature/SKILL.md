@@ -204,6 +204,8 @@ From the `<usage>` block of the pm-phase3 result, read:
 
 Read `{PREFIX}-Token-Estimate.md`. Append the orchestrator row and grand total:
 
+> **Null-compatibility — actuals reading and cost calculation:** Treat a token value of `null`, `0`, or `not_available` as **data unavailable** — never as a real, observable zero consumption. Render unavailable values as `—` in the Actual tokens and Actual cost columns; exclude them from sums, averages, and grand totals. Preventing resume clobber and legacy misinterpretation requires that no unavailable measurement is coerced into a real zero.
+
 ```markdown
 | project-manager/pm-phase3 (orchestrator) | — | sonnet | 80,000 (estimated) | {subagent_tokens} (actual) | ±{delta} | {duration} |
 
@@ -213,14 +215,14 @@ Read `{PREFIX}-Token-Estimate.md`. Append the orchestrator row and grand total:
 
 | Agent | Task / Scope | Model | Est. tokens | Actual tokens | Delta | Est. cost ($) | Actual cost ($) | Duration |
 |-------|-------------|-------|------------|---------------|-------|--------------|----------------|----------|
-{one row per entry in token_ledger — from phase 1, 2, and 3}
+{one row per entry in token_ledger — from phase 1, 2, and 3; for any entry where actual tokens is null, 0, or not_available show — in Actual tokens and Actual cost and exclude that row from totals}
 | project-manager/pm-phase3 (orchestrator) | — | sonnet | 80,000 | {subagent_tokens} | ±{delta} | $0.4320 | ${actual_cost} | {duration} |
 
 ## Estimation accuracy by agent type
 
 | Model | Count | Avg est. tokens | Avg actual tokens | Avg delta | Trend |
 |-------|-------|----------------|------------------|-----------|-------|
-{one row per model tier (haiku, sonnet) — exclude N/A rows from averages}
+{one row per model tier (haiku, sonnet) — exclude rows where actual tokens is null, 0, or not_available from averages}
 
 ## Grand Total
 
