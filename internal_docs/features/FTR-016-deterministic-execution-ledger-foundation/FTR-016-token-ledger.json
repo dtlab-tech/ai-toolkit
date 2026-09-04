@@ -691,5 +691,17 @@
     "tool_uses": 8,
     "note": "Out-of-WB task, user-approved 2026-09-04: wire _isLockStale reclaim into _acquireLock to satisfy AC-08/AC-26 (US-10 had no BE task).",
     "verification": "node --check clean. _acquireLock EEXIST branch now reads+stats the held lock, classifies via _isLockStale, and on 'reclaimable' performs an ABA guard (re-read content + re-stat mtimeMs; unlink only if unchanged, then retry O_EXCL immediately); 'live'/'wait'/ABA-failed fall through to the existing deadline+sleep; ENOENT mid-check -> continue. Independently verified all 5 scenarios end-to-end: STALE (dead pid, old mtime) -> open() reclaims + running entry; LIVE (own pid) -> times out, lock intact; ORPHAN young -> wait/timeout intact, ORPHAN old -> reclaimed; MALFORMED young -> waited on, bytes intact. Never force-deletes live/young-malformed; never blocks permanently on reclaimable (AC-08/AC-26). Module suite stable 29 passed/18 todo x2 runs; full suite 58 suites, 987 passed, 33 todo, 0 failures. Scope clean: lib/execution-ledger.js (_acquireLock only) + ledger."
+  },
+  {
+    "started_at": "2026-09-04T08:30:00.000Z",
+    "agent": "developer-testing:US-11-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-11-TASK-TEST-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-04T08:40:00.000Z",
+    "phase_delta_tokens": 95766,
+    "tool_uses": 9,
+    "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'legacy|FTR-014|unknown.*field|preserve.*verbatim' selects and passes 4 real tests (AC-12, AC-16): entry lacking operation_id matched via unambiguous agent fallback + updated in place; unknown/legacy fields preserved verbatim on update; a REAL FTR-014 fixture (internal_docs/features/FTR-014-atomic-work-breakdown/FTR-014-token-ledger.json, 75 legacy entries incl. phase_delta_tokens 'not_available') parses and updates without data loss; no operation_id backfilled and no auto-migration of unrelated legacy values (Object.assign merge preserves existing shape). Module suite green 41 passed/8 todo; FINAL full suite green 58 suites, 999 passed, 23 todo, 0 failures. Scope clean: execution-ledger.test.js + ledger."
   }
 ]

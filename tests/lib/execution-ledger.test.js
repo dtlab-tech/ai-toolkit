@@ -537,10 +537,186 @@ describe('execution-ledger — locking', () => {
 // ---------------------------------------------------------------------------
 
 describe('execution-ledger — legacy compatibility', () => {
-  it.todo('entries lacking operation_id are matched via unambiguous agent fallback');
-  it.todo('unknown or legacy fields are preserved verbatim on update');
-  it.todo('a real FTR-014 ledger fixture parses and updates without data loss');
-  it.todo('no auto-migration of unrelated legacy values occurs');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-legacy-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('entries lacking operation_id are matched via unambiguous agent fallback', () => {
+    // Arrange: seed a ledger (via _writeLedger) with a single legacy entry that has
+    // NO operation_id, a known agent, status 'running', and at least one unknown/legacy field.
+    const prefix     = 'FTR-LEGACY';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    const legacyEntry = {
+      agent:              'legacy-agent',
+      phase:              'phase1',
+      model:              'haiku',
+      status:             'running',
+      started_at:         '2025-01-01T00:00:00Z',
+      completed_at:       null,
+      phase_delta_tokens: null,
+      legacyFoo:          'bar',
+      tool_uses:          7,
+    };
+    ledger._writeLedger(ledgerFile, [legacyEntry]);
+
+    // Act: close() must locate the entry via the unambiguous agent fallback
+    // (operation_id computed from prefix/agent/attempt will not match any entry;
+    //  exactly one entry has agent === 'legacy-agent', so fallback succeeds)
+    expect(function () {
+      ledger.close(tmpDir, prefix, 'legacy-agent', 200, 1);
+    }).not.toThrow();
+
+    // Assert: entry was updated in place — status is 'done', completed_at is set,
+    // and phase_delta_tokens reflects the supplied value
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('done');
+    expect(entries[0].completed_at).toBeTruthy();
+    expect(entries[0].phase_delta_tokens).toBe(200);
+  });
+
+  it('unknown or legacy fields are preserved verbatim on update', () => {
+    // Arrange: same legacy entry shape — NO operation_id, plus two unknown/legacy fields
+    const prefix     = 'FTR-LEGACY';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    const legacyEntry = {
+      agent:              'legacy-agent',
+      phase:              'phase1',
+      model:              'haiku',
+      status:             'running',
+      started_at:         '2025-01-01T00:00:00Z',
+      completed_at:       null,
+      phase_delta_tokens: null,
+      legacyFoo:          'bar',
+      tool_uses:          7,
+    };
+    ledger._writeLedger(ledgerFile, [legacyEntry]);
+
+    // Act: update via unambiguous agent fallback
+    ledger.close(tmpDir, prefix, 'legacy-agent', 200, 1);
+
+    // Assert: unknown/legacy fields are preserved VERBATIM — exact same values as seeded
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].legacyFoo).toBe('bar');
+    expect(entries[0].tool_uses).toBe(7);
+
+    // Assert (AC-16): NO operation_id was added to the entry — legacy entries must NOT
+    // be auto-migrated or backfilled with a new operation_id field by the module
+    expect(entries[0].operation_id).toBeUndefined();
+  });
+
+  it('a real FTR-014 ledger fixture parses and updates without data loss', () => {
+    // REAL FTR-014 fixture path — using the actual file from:
+    //   internal_docs/features/FTR-014-atomic-work-breakdown/FTR-014-token-ledger.json
+    // All 75 entries in this fixture lack operation_id (pre-FTR-016 schema), several carry
+    // phase_delta_tokens: "not_available" (legacy string) and a notes field (unknown/legacy).
+    const fixturePath = path.resolve(
+      __dirname,
+      '../../internal_docs/features/FTR-014-atomic-work-breakdown/FTR-014-token-ledger.json'
+    );
+    const prefix     = 'FTR-014';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+
+    // Arrange: load real fixture; set the first entry to 'running' so close() can update it
+    const originalEntries = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+    const targetAgent     = originalEntries[0].agent; // 'define-feature:define'
+    const seedEntries     = originalEntries.map(function (e, i) {
+      return i === 0 ? Object.assign({}, e, { status: 'running', completed_at: null }) : e;
+    });
+    ledger._writeLedger(ledgerFile, seedEntries);
+
+    // Assert: module reads the fixture without error and returns all entries
+    var readResult;
+    expect(function () { readResult = ledger._readLedger(ledgerFile); }).not.toThrow();
+    expect(readResult.entries).toHaveLength(originalEntries.length);
+
+    // Act: close the target entry via the agent fallback (no entry has operation_id)
+    expect(function () {
+      ledger.close(tmpDir, prefix, targetAgent, 5000, 1);
+    }).not.toThrow();
+
+    // Assert: the updated entry reflects the close operation
+    const afterEntries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    const updatedEntry = afterEntries.find(function (e) { return e.agent === targetAgent; });
+    expect(updatedEntry.status).toBe('done');
+    expect(updatedEntry.phase_delta_tokens).toBe(5000);
+    expect(updatedEntry.completed_at).toBeTruthy();
+
+    // Assert: ALL OTHER entries are completely unchanged — no data loss, no auto-migration.
+    // This includes entries with phase_delta_tokens: "not_available" (legacy string) and
+    // entries with notes fields (unknown legacy field).
+    for (var i = 1; i < originalEntries.length; i++) {
+      var orig  = originalEntries[i];
+      var after = afterEntries.find(function (e) { return e.agent === orig.agent; });
+      expect(after).toBeDefined();
+      // Every original field is present on the non-target entry with its exact value
+      var origKeys = Object.keys(orig);
+      for (var j = 0; j < origKeys.length; j++) {
+        var k = origKeys[j];
+        expect(after[k]).toEqual(orig[k]);
+      }
+    }
+  });
+
+  it('no auto-migration of unrelated legacy values occurs', () => {
+    // Arrange: two legacy entries — one to update, one bystander with unusual legacy values.
+    // Neither entry has operation_id (pre-FTR-016 schema).
+    const prefix     = 'FTR-LEGACY';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    const targetEntry = {
+      agent:              'target-agent',
+      phase:              'phase1',
+      model:              'sonnet',
+      status:             'running',
+      started_at:         '2025-06-01T10:00:00Z',
+      completed_at:       null,
+      phase_delta_tokens: 'not_available', // legacy string value — must survive as-is on bystanders
+      notes:              'a legacy note field',
+    };
+    const bystander = {
+      agent:              'bystander-agent',
+      phase:              'phase2',
+      model:              'haiku',
+      status:             'done',
+      started_at:         '2025-06-01T09:00:00Z',
+      completed_at:       '2025-06-01T09:30:00Z',
+      phase_delta_tokens: 0,               // legacy zero — must NOT be auto-migrated to null
+      extra_field:        'preserve-me',
+    };
+    ledger._writeLedger(ledgerFile, [targetEntry, bystander]);
+
+    // Act: close only the target entry via the unambiguous agent fallback
+    ledger.close(tmpDir, prefix, 'target-agent', 100, 1);
+
+    // Assert: target entry was updated correctly
+    const entries  = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    const updated  = entries.find(function (e) { return e.agent === 'target-agent'; });
+    expect(updated.status).toBe('done');
+    expect(updated.phase_delta_tokens).toBe(100);
+
+    // Assert: target entry's legacy notes field is preserved verbatim
+    expect(updated.notes).toBe('a legacy note field');
+
+    // Assert (AC-16): no operation_id was added to the target entry
+    expect(updated.operation_id).toBeUndefined();
+
+    // Assert: bystander entry is completely unchanged — no auto-migration of any legacy values
+    const untouched = entries.find(function (e) { return e.agent === 'bystander-agent'; });
+    expect(untouched.status).toBe('done');
+    expect(untouched.phase_delta_tokens).toBe(0);          // legacy 0 preserved — NOT migrated to null
+    expect(untouched.extra_field).toBe('preserve-me');     // unknown field preserved verbatim
+    expect(untouched.completed_at).toBe('2025-06-01T09:30:00Z');
+    expect(untouched.started_at).toBe('2025-06-01T09:00:00Z');
+
+    // Assert (AC-16): no operation_id added to bystander entry either
+    expect(untouched.operation_id).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
