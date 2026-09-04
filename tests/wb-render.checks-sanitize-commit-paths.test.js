@@ -132,8 +132,14 @@ describe('wb-render.js — Group 1: sanitizeField behaviour via output files', (
   })
 
   // ── Test 4: pipe in task title → MD table row contains sanitized form ─────────
+  // NOTE: the task TITLE is a descriptive field. In the SUMMARY TABLE (which uses `|`
+  // as a column separator) pipe sanitisation is intentional and protects column
+  // structure. The authoritative "Task Details" section renders the SAME title
+  // verbatim (pipes preserved) — that lossless representation, and the lossless
+  // verification commands, are covered by wb-render.verification-commands-lossless
+  // and wb-render.task-details-parity, not here. This test asserts only the TABLE row.
 
-  test('pipe in task title is replaced with space in Markdown task table so raw pipe is absent', () => {
+  test('pipe in task title is replaced with space in the Markdown summary table row', () => {
     // Arrange
     const task  = makeTask('T-01', 'BE', { title: 'foo|bar' })
     const phase = makePhase('US-01', 'Phase One', [task])
@@ -145,9 +151,12 @@ describe('wb-render.js — Group 1: sanitizeField behaviour via output files', (
       runRender(jsonPath, 'TEST', tmpDir)
       const md = fs.readFileSync(path.join(tmpDir, 'TEST-Work-Breakdown.md'), 'utf8')
 
-      // Assert: sanitized value present; raw piped title absent
-      expect(md).toContain('foo bar')
-      expect(md).not.toContain('foo|bar')
+      // Assert on the summary-table row for this task: sanitized value present, raw
+      // piped title absent. (The Task Details section legitimately carries the pipe.)
+      const tableRow = md.split('\n').find(l => l.startsWith('| T-01 |'))
+      expect(tableRow).toBeDefined()
+      expect(tableRow).toContain('foo bar')
+      expect(tableRow).not.toContain('foo|bar')
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true })
       try { fs.unlinkSync(jsonPath) } catch (_) {}

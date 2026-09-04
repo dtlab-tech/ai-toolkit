@@ -80,56 +80,53 @@ Ask the user to **confirm or correct the draft**. Then grill ONLY on the `❓` g
 
 ## Phase 1 — Setup
 
-### 1a. Discover the next FTR number
+### 1a. Resolve the features root (MANDATORY — single source of truth)
 
-Scan `docs/features/` for existing folders matching the pattern `FTR-[0-9]+*`. Extract the highest number and increment by 1. If no folders exist, start at `FTR-001`.
+Before any file-system operation, run the following command **once** via Bash and capture its stdout into `featuresRoot`:
+
+```bash
+featuresRoot=$(ai-toolkit resolve-features-root) && echo "$featuresRoot"
+```
+
+If the command exits non-zero, stop immediately and report the error to the user — do not proceed.
+
+This single captured value (`featuresRoot`) is the **sole source of truth** for the features root in every subsequent step. Do **not** hard-code `docs/features/`, `internal_docs/features/`, or any other path. Both the directory under which `feature.md` is written (step 1d) and the `--dir` argument passed to the ledger facade must use this exact value — they must always agree, with no divergent or duplicate roots.
+
+### 1b. Discover the next FTR number
+
+Scan `{featuresRoot}` for existing folders matching the pattern `FTR-[0-9]+*`. Extract the highest number and increment by 1. If no folders exist, start at `FTR-001`.
 
 ```
-docs/features/FTR-001-user-management/  → max = 1
-docs/features/FTR-002-product-catalog/  → max = 2
+{featuresRoot}/FTR-001-user-management/  → max = 1
+{featuresRoot}/FTR-002-product-catalog/  → max = 2
 → next = FTR-003
 ```
 
-### 1b. Ask for a feature name
+### 1c. Ask for a feature name
 
 Ask the user: **"What is the name of this feature?"** (short, descriptive, in their language). Use it to build the folder slug in kebab-case.
 
 Example: "Supplier Onboarding" → `FTR-003-supplier-onboarding`
 
-### 1c. Create feature directory and initialize ledger
+### 1d. Create feature directory and open ledger entry
 
-Once you know the PREFIX (from 1a) and the feature slug (from 1b), do the following **before asking any grilling questions**:
+Once you know the PREFIX (from 1b) and the feature slug (from 1c), do the following **before asking any grilling questions**:
 
-1. Compute the paths:
-   - `featureDir` = `docs/features/{PREFIX}-{slug}` (e.g. `docs/features/FTR-003-supplier-onboarding`)
-   - `ledgerPath` = `{featureDir}/{PREFIX}-token-ledger.json`
+1. Compute `featureDir` using the captured `featuresRoot`:
+   - `featureDir` = `{featuresRoot}/{PREFIX}-{slug}` (e.g. `{featuresRoot}/FTR-003-supplier-onboarding`)
+   - This path is also the `--dir` value for every `ai-toolkit ledger` call that follows.
 
 2. Create the feature directory via Bash:
    ```bash
-   mkdir -p {featureDir}
+   mkdir -p "{featureDir}"
    ```
 
-3. Capture the current UTC timestamp via Bash:
+3. Open the ledger entry via the facade. Run the following command via Bash (quote the `--dir` path to handle spaces):
    ```bash
-   started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && echo $started_at
+   ai-toolkit ledger open --dir "{featureDir}" --prefix {PREFIX} --agent define-feature:define --phase define --model sonnet --attempt 1
    ```
 
-4. Write the initial ledger file at `{ledgerPath}` using the Write tool with exactly this content (substitute the actual PREFIX and timestamp):
-   ```json
-   [
-     {
-       "agent": "define-feature:define",
-       "phase": "define",
-       "model": "sonnet",
-       "status": "running",
-       "phase_delta_tokens": 0,
-       "started_at": "<started_at from step 3>",
-       "completed_at": null
-     }
-   ]
-   ```
-
-The ledger records that the define-feature agent is now running. Proceed to Phase 2.
+The ledger now records that the define-feature agent is running. Proceed to Phase 2.
 
 ---
 
@@ -254,12 +251,12 @@ Synthesize all answers into a structured `feature.md` file.
 ### Output path
 
 ```
-docs/features/{PREFIX}-{slug}/feature.md
+{featuresRoot}/{PREFIX}-{slug}/feature.md
 ```
 
-Example: `docs/features/FTR-003-supplier-onboarding/feature.md`
+Example: `{featuresRoot}/FTR-003-supplier-onboarding/feature.md`
 
-The directory was created in Phase 1c. If for any reason it doesn't exist, create it now.
+The directory was created in Phase 1d using `featuresRoot`. If for any reason it doesn't exist, create it now using the same `featuresRoot` path — do not substitute a different root.
 
 ### feature.md template
 
@@ -352,34 +349,13 @@ For each entity: name, key fields (name, type, constraints), relationships.
 
 ### 4b. Finalize ledger entry
 
-After writing `feature.md`, update the ledger entry to record successful completion:
+After writing `feature.md`, close the ledger entry via the facade. Run the following command via Bash (quote the `--dir` path to handle spaces):
 
-1. Capture the current UTC timestamp via Bash:
-   ```bash
-   completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && echo $completed_at
-   ```
+```bash
+ai-toolkit ledger close --dir "{featureDir}" --prefix {PREFIX} --agent define-feature:define --attempt 1
+```
 
-2. Read the ledger file at `{featureDir}/{PREFIX}-token-ledger.json` using the Read tool.
-
-3. Write the updated ledger file using the Write tool, replacing the entry's fields:
-   - `"status"`: `"done"`
-   - `"completed_at"`: the timestamp captured in step 1
-   - `"phase_delta_tokens"`: leave as `0` — token measurement is not available to the agent directly
-
-   Example final ledger content:
-   ```json
-   [
-     {
-       "agent": "define-feature:define",
-       "phase": "define",
-       "model": "sonnet",
-       "status": "done",
-       "phase_delta_tokens": 0,
-       "started_at": "<original started_at>",
-       "completed_at": "<completed_at from step 1>"
-     }
-   ]
-   ```
+**Important:** `--tokens` is intentionally omitted. The ledger facade records `phase_delta_tokens` as `null` when `--tokens` is not supplied. `define-feature` is an interactive/LLM activity whose token consumption cannot be observed from within the agent itself — do **not** pass `0` or any estimate.
 
 ---
 
@@ -392,7 +368,7 @@ After writing `feature.md`:
 3. Tell the user the next step:
 
 ```
-✅ feature.md written at docs/features/{PREFIX}-{slug}/feature.md
+✅ feature.md written at {featuresRoot}/{PREFIX}-{slug}/feature.md
 
 Summary:
   Actors:               N
@@ -400,7 +376,7 @@ Summary:
   Acceptance criteria:  N (Must: N, Should: N, Could: N)
   Open questions:       N
 
-Next step: run /implement-feature docs/features/{PREFIX}-{slug}/feature.md
+Next step: run /implement-feature {featuresRoot}/{PREFIX}-{slug}/feature.md
            to start the full pipeline (requirements → spec → implementation → PR).
 ```
 
