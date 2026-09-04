@@ -668,6 +668,18 @@
     "verification": "Verification command passes: execution-ledger.test.js --testNamePattern 'stale.*lock|orphan|reclaim|ABA|blocked' selects and passes 5 real END-TO-END tests (no manual unlink of the stale/orphan lock; reclaim driven through open()/_acquireLock): stale lock (dead pid + old startedAt/mtime) reclaimed by open() -> running entry; orphan young mtime waited/timeout + lock intact; orphan old mtime reclaimed via ABA-guarded acquire (lock now owned by process.pid); ledger never blocked permanently (open+close cycle succeeds on valid JSON after reclaim); _releaseLock ABA-safe. Plus real tests for O_EXCL owner token, second-acquire timeout, young-malformed waited-on. Independently confirmed no fs.unlink fakes reclaim (grep: only the ABA-release test + do-not-unlink comments). Module suite stable 37 passed/12 todo x2 runs, 0 failures (AC-08, AC-26). Scope clean: execution-ledger.test.js + ledger."
   },
   {
+    "started_at": "2026-09-04T08:22:00.000Z",
+    "agent": "developer-backend:US-11-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "task_id": "US-11-TASK-BE-01",
+    "model": "sonnet",
+    "status": "done",
+    "completed_at": "2026-09-04T08:28:00.000Z",
+    "phase_delta_tokens": 64301,
+    "tool_uses": 9,
+    "verification": "Both verification commands pass: unavailability marker (null/0/not_available => data unavailable) present in src/claude/skills/implement-feature/SKILL.md; 'tokens || 0' coercion absent. Step 7 gained a Null-compatibility blockquote (render null/0/not_available as '—' in Actual tokens/cost, exclude from sums/averages/grand totals, never coerce to observable real zero); actuals-vs-estimate + estimation-accuracy row placeholders updated accordingly (AC-18). Reader-side mirror of US-03-TASK-BE-04; other pipeline steps/gates/cost formula for positive values unchanged. tests/cli green 29 suites, 463 passed, 15 todo, 0 failures (no suite reads SKILL.md prose). Scope clean: SKILL.md + ledger."
+  },
+  {
     "started_at": "2026-09-04T08:00:00.000Z",
     "agent": "developer-backend:US-10-TASK-BE-01:phase3",
     "phase": "phase3",
