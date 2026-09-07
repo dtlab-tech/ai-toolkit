@@ -1,0 +1,172 @@
+[
+  {
+    "operation_id": "adae8b1f67982d7448f320b1b378158f",
+    "agent": "define-feature:define",
+    "phase": "define",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-04T10:06:44.079Z",
+    "completed_at": "2026-09-04T10:12:38.300Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "4a9d6cda8dc1e33238835c13d2cebccf",
+    "agent": "generate-requirements:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-04T12:36:56.501Z",
+    "completed_at": "2026-09-04T12:40:30.585Z",
+    "phase_delta_tokens": 17867
+  },
+  {
+    "operation_id": "7cc5dfd5b4cd2df018c9923151a65850",
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-04T12:40:44.028Z",
+    "completed_at": "2026-09-04T13:04:26.153Z",
+    "phase_delta_tokens": 25096
+  },
+  {
+    "operation_id": "26315ae55f874faccb22278fe1846050",
+    "agent": "validate-feature-docs:phase1:cycle1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-04T13:04:40.731Z",
+    "completed_at": "2026-09-04T13:05:26.661Z",
+    "phase_delta_tokens": 1253
+  },
+  {
+    "operation_id": "ad15990363f53dbc2159823117047483",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-04T14:44:56.643Z",
+    "completed_at": "2026-09-04T14:47:29.864Z",
+    "phase_delta_tokens": 16099
+  },
+  {
+    "operation_id": "aa049b4d00ff082b7db4cd0d789c405d",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-04T14:47:43.122Z",
+    "completed_at": "2026-09-04T15:01:24.278Z",
+    "phase_delta_tokens": 19550
+  },
+  {
+    "operation_id": "f743fe33b431546c1ac9ee11d9bc0b39",
+    "agent": "remediation:work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-07T08:50:45.790Z",
+    "completed_at": "2026-09-07T09:40:38.704Z",
+    "phase_delta_tokens": 143171
+  },
+  {
+    "operation_id": "6d52adaba1030e40408a1a609210aede",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-07T09:30:41.170Z",
+    "completed_at": "2026-09-07T09:30:41.332Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "d1cff023579ac5daf11e23ab1bfffeb1",
+    "agent": "validate-work-breakdown-semantic:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-07T09:40:38.027Z",
+    "completed_at": "2026-09-07T09:40:38.191Z",
+    "phase_delta_tokens": 71333
+  },
+  {
+    "operation_id": "a8952ac2c6129bc264a7c0c4c896b694",
+    "agent": "wb-render:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-07T09:40:38.343Z",
+    "completed_at": "2026-09-07T09:40:38.497Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "1650665408813f1c507db08139fe76c1",
+    "agent": "remediation:work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-07T10:23:21.098Z",
+    "completed_at": "2026-09-07T22:06:45.839Z",
+    "phase_delta_tokens": 160156
+  },
+  {
+    "operation_id": "721de55139fca8da339e7d0f08040b1d",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-07T14:58:04.686Z",
+    "completed_at": "2026-09-07T14:58:04.854Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "786941af372aaaa90c5be7b9298218e7",
+    "agent": "wb-render:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-07T14:58:05.021Z",
+    "completed_at": "2026-09-07T14:58:05.182Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "15fa805b28e7bffd200b9eba2a953e6f",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-07T22:06:44.602Z",
+    "completed_at": "2026-09-07T22:06:44.762Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "c1d536b81f582a51e4cafe14ebccd6b8",
+    "agent": "wb-render:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-07T22:06:44.918Z",
+    "completed_at": "2026-09-07T22:06:45.078Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "808f7583c7b9f9060fc2c2c6db9d5e0c",
+    "agent": "validate-work-breakdown-semantic:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-07T22:06:45.249Z",
+    "completed_at": "2026-09-07T22:06:45.404Z",
+    "phase_delta_tokens": 74028
+  },
+  {
+    "operation_id": "224765a96e860e1d1ae7bbd9c1fcad78",
+    "agent": "validate-work-breakdown-semantic:phase2",
+    "phase": "phase2",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-07T22:06:45.551Z",
+    "completed_at": "2026-09-07T22:06:45.691Z",
+    "phase_delta_tokens": 65916
+  }
+]
