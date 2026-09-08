@@ -541,7 +541,7 @@ describe('agents resolve --require-verified — not-found exits non-zero (AC-39)
   beforeEach(() => {
     projDir  = mktmp('resolve-rv-notfound');
     fakeHome = mktmp('resolve-rv-notfound-home');
-    // No manifest installed — agent will be manifest-missing
+    // Manifest present but agent not listed in files → not-installed
     writeManifestJSON(projDir, {
       version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
       installationMode: 'local', files: [], fileHashes: {},
@@ -572,5 +572,83 @@ describe('agents resolve --require-verified — not-found exits non-zero (AC-39)
     const errRecord = JSON.parse(result.stderr);
     expect(errRecord.agentId).toBe('gaia.agent.developer.backend');
     expect(errRecord.status).toBe('not-installed');
+  });
+
+  test('stderr error record includes the RESOLUTION_FAILED code (AC-39)', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+    const errRecord = JSON.parse(result.stderr);
+    expect(errRecord.code).toBe('RESOLUTION_FAILED');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// agents resolve --require-verified — hash-mismatch exits non-zero
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('agents resolve --require-verified — hash-mismatch exits non-zero', () => {
+  const AGENT_ID = 'gaia.agent.developer.backend';
+  const REL_PATH = '.claude/agents/developer-backend.md';
+
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('resolve-rv-mismatch');
+    fakeHome = mktmp('resolve-rv-mismatch-home');
+
+    // Write the agent file on disk with known content...
+    writeFileAt(projDir, REL_PATH, '---\nname: developer-backend\n---\n');
+    // ...but put a wrong hash in the manifest so resolveAgent() returns hash-mismatch.
+    writeManifestJSON(projDir, {
+      version:          '0.13.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [REL_PATH],
+      fileHashes:       { [REL_PATH]: 'sha256:' + 'c'.repeat(64) },
+    });
+  });
+
+  test('exits non-zero for a tampered agent file under --require-verified', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+
+  test('stderr error record has status "hash-mismatch" and code RESOLUTION_FAILED', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+    const errRecord = JSON.parse(result.stderr);
+    expect(errRecord.status).toBe('hash-mismatch');
+    expect(errRecord.code).toBe('RESOLUTION_FAILED');
+  });
+
+  test('stdout is empty when --require-verified fails (error goes to stderr only)', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout.trim()).toBe('');
   });
 });
