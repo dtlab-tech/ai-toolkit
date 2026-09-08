@@ -2,7 +2,7 @@
 
 /**
  * Manifest hash integrity tests.
- * US-11-TASK-TEST-01 (FTR-017).
+ * US-11-TASK-TEST-01 / US-13-TASK-TEST-01 (FTR-017).
  *
  * Contracts verified:
  *  1. A fresh install produces a manifest with fileHashes whose keys equal
@@ -14,6 +14,9 @@
  *     - fileHashes present with exactly one key per files entry
  *     - doctor agents transitions from hash-unverifiable to verified for the agent
  *  4. The set(files) == set(keys(fileHashes)) invariant is enforced by writeManifest.
+ *  5. A tampered installed file (hash mismatch) is reported as hash-mismatch,
+ *     --require-verified exits non-zero, doctor agents shows [!!], and preflight hard-stops
+ *     (AC-12).
  */
 
 const crypto = require('crypto');
@@ -270,5 +273,103 @@ describe('manifest hashes — writeManifest invariant set(files)==set(keys(fileH
     expect(() => {
       CLI_MODULE.writeManifest(projDir, [REL_PATH], 'local', { [REL_PATH]: 'sha256:abc', [EXTRA_PATH]: 'sha256:def' });
     }).toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Tampered installed file is reported as hash-mismatch (AC-12)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('manifest hashes — tampered file is reported as hash-mismatch (AC-12)', () => {
+  const REL_PATH = '.claude/agents/developer-backend.md';
+  const AGENT_ID = 'gaia.agent.developer.backend';
+  const ORIGINAL_CONTENT = '---\nname: developer-backend\n---\n# Developer Backend\n';
+  const TAMPERED_CONTENT = '---\nname: developer-backend\n---\n# TAMPERED\n';
+
+  function sha256hex(str) {
+    return crypto.createHash('sha256').update(Buffer.from(str, 'utf8')).digest('hex');
+  }
+
+  function setupTamperedInstall(projDir, fakeHome) {
+    // Write the agent file with its ORIGINAL content and record the hash for that content.
+    writeFileAt(projDir, REL_PATH, ORIGINAL_CONTENT);
+    const recordedHash = 'sha256:' + sha256hex(ORIGINAL_CONTENT);
+    writeManifestJSON(projDir, {
+      version:          '0.13.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [REL_PATH],
+      fileHashes:       { [REL_PATH]: recordedHash },
+    });
+    // Now overwrite the file with tampered content so the hash on disk no longer matches.
+    writeFileAt(projDir, REL_PATH, TAMPERED_CONTENT);
+  }
+
+  test('resolveAgent returns hash-mismatch when installed file was modified after install', () => {
+    const projDir  = mktmp('mismatch-resolve');
+    const fakeHome = mktmp('mismatch-resolve-home');
+    setupTamperedInstall(projDir, fakeHome);
+    const result = runCLI(['agents', 'resolve', '--project', projDir, '--id', AGENT_ID, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    const rec = JSON.parse(result.stdout);
+    expect(rec.status).toBe('hash-mismatch');
+  });
+
+  test('agents resolve --require-verified exits non-zero for a hash-mismatch agent', () => {
+    const projDir  = mktmp('mismatch-require');
+    const fakeHome = mktmp('mismatch-require-home');
+    setupTamperedInstall(projDir, fakeHome);
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+
+  test('agents resolve --require-verified output contains hash-mismatch detail', () => {
+    const projDir  = mktmp('mismatch-require-detail');
+    const fakeHome = mktmp('mismatch-require-detail-home');
+    setupTamperedInstall(projDir, fakeHome);
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.stderr + result.stdout).toMatch(/hash-mismatch/);
+  });
+
+  test('doctor agents shows [!!] marker for a hash-mismatch agent (AC-12)', () => {
+    const projDir  = mktmp('mismatch-doctor');
+    const fakeHome = mktmp('mismatch-doctor-home');
+    setupTamperedInstall(projDir, fakeHome);
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('[!!]');
+  });
+
+  test('doctor agents exits 0 even for a hash-mismatch agent (read-only diagnostic, AC-14)', () => {
+    const projDir  = mktmp('mismatch-doctor-exit');
+    const fakeHome = mktmp('mismatch-doctor-exit-home');
+    setupTamperedInstall(projDir, fakeHome);
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+  });
+
+  test('agents preflight exits non-zero for a hash-mismatch agent (dispatch blocked, AC-12)', () => {
+    const projDir  = mktmp('mismatch-preflight');
+    const fakeHome = mktmp('mismatch-preflight-home');
+    setupTamperedInstall(projDir, fakeHome);
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--home', fakeHome,
+      '--pipeline', 'implement-feature',
+    ]);
+    expect(result.status).not.toBe(0);
   });
 });
