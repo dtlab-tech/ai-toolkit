@@ -78,6 +78,25 @@ function writeVerifiedInstall(projDir, relPath, agentContent) {
   return sha256;
 }
 
+// Do a real install then stamp correct sha256 hashes into the manifest so every
+// installed agent reports "verified" rather than "hash-unverifiable".  This
+// simulates what US-11 will do once the installer writes hashes during install.
+function makeInstallVerified(projDir) {
+  realInstall(projDir);
+  const manifestPath = path.join(projDir, '.claude', '.ai-toolkit-manifest.json');
+  const manifest     = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const fileHashes   = {};
+  for (const relPath of manifest.files) {
+    const absPath = path.join(projDir, relPath);
+    if (fs.existsSync(absPath)) {
+      const buf = fs.readFileSync(absPath);
+      fileHashes[relPath] = 'sha256:' + crypto.createHash('sha256').update(buf).digest('hex');
+    }
+  }
+  manifest.fileHashes = fileHashes;
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+}
+
 // ── Per-test temp-dir pool ────────────────────────────────────────────────────
 const tmpDirs = [];
 function mktmp(label) {
@@ -702,6 +721,92 @@ describe('agents preflight — missing required flags', () => {
     const result  = runCLI(['agents', 'preflight', '--project', projDir]);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/--pipeline/);
+  });
+});
+
+describe('agents preflight — fully verified install exits 0 (AC-19 happy path)', () => {
+  const PIPELINE = 'implement-feature';
+
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('preflight-ok');
+    fakeHome = mktmp('preflight-ok-home');
+    makeInstallVerified(projDir);
+  });
+
+  test('exits 0 when all pipeline agents are verified (v0.13.0+ manifest with hashes)', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', PIPELINE,
+      '--home', fakeHome,
+    ]);
+    expect(result.status).toBe(0);
+  });
+
+  test('stdout contains preflight-ok status with an agents array', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', PIPELINE,
+      '--home', fakeHome,
+    ]);
+    expect(result.status).toBe(0);
+    const rec = JSON.parse(result.stdout);
+    expect(rec.status).toBe('preflight-ok');
+    expect(Array.isArray(rec.agents)).toBe(true);
+    expect(rec.agents.length).toBeGreaterThan(0);
+    for (const a of rec.agents) {
+      expect(a.status).toBe('verified');
+    }
+  });
+});
+
+describe('agents preflight — v0.12.0 manifest hard-stop (AC-19)', () => {
+  const PIPELINE = 'implement-feature';
+  const REL_PATH = '.claude/agents/developer-backend.md';
+
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('preflight-hashless');
+    fakeHome = mktmp('preflight-hashless-home');
+
+    // v0.12.0-style manifest without fileHashes → agents resolve to hash-unverifiable
+    writeFileAt(projDir, REL_PATH, '---\nname: developer-backend\n---\n');
+    writeManifestJSON(projDir, {
+      version:          '0.12.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [REL_PATH],
+    });
+  });
+
+  test('exits non-zero for a v0.12.0 manifest (hash-unverifiable is a HARD STOP)', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', PIPELINE,
+      '--home', fakeHome,
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+
+  test('stderr preflight-failed record contains at least one hash-unverifiable agent', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', PIPELINE,
+      '--home', fakeHome,
+    ]);
+    expect(result.status).not.toBe(0);
+    const errRecord = JSON.parse(result.stderr);
+    expect(errRecord.status).toBe('preflight-failed');
+    const failedStatuses = errRecord.agents.map(a => a.status);
+    expect(failedStatuses).toContain('hash-unverifiable');
   });
 });
 
