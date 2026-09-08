@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * CLI integration tests for `agents list` and `agents resolve` commands.
- * US-01-TASK-BE-02 (FTR-017).
+ * CLI integration tests for `agents list`, `agents resolve`, and
+ * `agents resolve --require-verified` commands.
+ * US-01-TASK-BE-02 + US-02-TASK-BE-01 (FTR-017).
  *
  * Scenarios covered:
  *   1. agents list returns a JSON array of catalog agents with documented fields
@@ -15,12 +16,16 @@
  *      with status "conflict"
  *   6. agents resolve against a corrupt manifest exits non-zero with status
  *      "manifest-missing"
+ *   7. agents resolve --require-verified exits 0 only for verified agents (AC-04)
+ *   8. agents resolve --require-verified exits non-zero for v0.12.0 manifest (AC-05)
+ *   9. agents resolve --require-verified writes structured JSON error to stderr (AC-39)
  *
  * Isolation: every test uses fresh temp directories; never touches the real ~/.
  * Installs are produced by the real CLI installer rather than a parallel
  * reimplementation of the catalog/traversal logic.
  */
 
+const crypto = require('crypto');
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
@@ -55,6 +60,22 @@ function writeFileAt(installRoot, relPath, content) {
   const absPath = path.join(installRoot, relPath);
   fs.mkdirSync(path.dirname(absPath), { recursive: true });
   fs.writeFileSync(absPath, content, 'utf8');
+}
+
+// Write a minimal verified installation for a single agent.
+// Computes the real sha256 of the written content so resolveAgent() returns "verified".
+function writeVerifiedInstall(projDir, relPath, agentContent) {
+  writeFileAt(projDir, relPath, agentContent);
+  const buf  = Buffer.from(agentContent, 'utf8');
+  const sha256 = 'sha256:' + crypto.createHash('sha256').update(buf).digest('hex');
+  writeManifestJSON(projDir, {
+    version:          '0.13.0',
+    installedAt:      '2026-01-01T00:00:00.000Z',
+    installationMode: 'local',
+    files:            [relPath],
+    fileHashes:       { [relPath]: sha256 },
+  });
+  return sha256;
 }
 
 // ── Per-test temp-dir pool ────────────────────────────────────────────────────
@@ -413,5 +434,143 @@ describe('agents resolve — corrupt manifest', () => {
     expect(result.status).not.toBe(0);
     const record = JSON.parse(result.stdout);
     expect(record.status).toBe('manifest-missing');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// agents resolve --require-verified — operational mode (AC-04, AC-05, AC-39)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('agents resolve --require-verified — verified agent exits 0 (AC-04)', () => {
+  const AGENT_ID = 'gaia.agent.developer.backend';
+  const REL_PATH = '.claude/agents/developer-backend.md';
+  const CONTENT  = '---\nname: developer-backend\nmodel: sonnet\n---\n# developer-backend\n';
+
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('resolve-rv-ok');
+    fakeHome = mktmp('resolve-rv-ok-home');
+    // Write a real hash-verified installation (v0.13.0 manifest + matching fileHashes)
+    writeVerifiedInstall(projDir, REL_PATH, CONTENT);
+  });
+
+  test('exits 0 when the agent is fully verified (v0.13.0+ manifest, hash matches)', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).toBe(0);
+  });
+
+  test('stdout contains the full resolution record with status "verified"', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).toBe(0);
+    const record = JSON.parse(result.stdout);
+    expect(record.status).toBe('verified');
+    expect(record.agentId).toBe(AGENT_ID);
+    expect(typeof record.nativeName).toBe('string');
+  });
+});
+
+describe('agents resolve --require-verified — legacy manifest is a HARD STOP (AC-05)', () => {
+  const AGENT_ID = 'gaia.agent.developer.backend';
+  const REL_PATH = '.claude/agents/developer-backend.md';
+
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('resolve-rv-hashless');
+    fakeHome = mktmp('resolve-rv-hashless-home');
+
+    // v0.12.0-style manifest: has `files` but no `fileHashes`.
+    writeManifestJSON(projDir, {
+      version:          '0.12.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [REL_PATH],
+    });
+    writeFileAt(projDir, REL_PATH, '---\nname: developer-backend\nmodel: sonnet\n---\n');
+  });
+
+  test('exits non-zero for a v0.12.0 manifest under --require-verified (HARD STOP, AC-05)', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+
+  test('structured error is written to stderr (not stdout) under --require-verified', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+    // stdout must be empty; error record on stderr
+    expect(result.stdout.trim()).toBe('');
+    const errRecord = JSON.parse(result.stderr);
+    expect(errRecord.agentId).toBe(AGENT_ID);
+    expect(errRecord.status).toBe('hash-unverifiable');
+  });
+});
+
+describe('agents resolve --require-verified — not-found exits non-zero (AC-39)', () => {
+  const AGENT_ID = 'gaia.agent.developer.backend';
+
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('resolve-rv-notfound');
+    fakeHome = mktmp('resolve-rv-notfound-home');
+    // No manifest installed — agent will be manifest-missing
+    writeManifestJSON(projDir, {
+      version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'local', files: [], fileHashes: {},
+    });
+  });
+
+  test('exits non-zero when agent is not installed under --require-verified', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', AGENT_ID,
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+
+  test('no fuzzy match or fallback — original agentId preserved in error record (AC-39)', () => {
+    const result = runCLI([
+      'agents', 'resolve',
+      '--project', projDir,
+      '--id', 'gaia.agent.developer.backend',
+      '--home', fakeHome,
+      '--require-verified',
+    ]);
+    expect(result.status).not.toBe(0);
+    // Error written to stderr under --require-verified
+    const errRecord = JSON.parse(result.stderr);
+    expect(errRecord.agentId).toBe('gaia.agent.developer.backend');
+    expect(errRecord.status).toBe('not-installed');
   });
 });

@@ -2103,28 +2103,34 @@ function handleLedgerCommand(argv) {
 //   list    --project <dir> [--format json] [--home <dir>]
 //             → calls listRegisteredAgents(); enumerates ONLY catalog toolkit
 //               agents (never foreign/plugin); exits 0 on success.
-//   resolve --project <dir> --id <canonicalId> [--home <dir>]
-//             → diagnostic mode (no --require-verified).
-//               Calls resolveAgent() and prints the JSON resolution record.
+//   resolve --project <dir> --id <canonicalId> [--home <dir>] [--require-verified]
+//             → without --require-verified: diagnostic mode.
 //               Exit-code contract:
 //                 exit 0 — verified | hash-unverifiable | hash-mismatch
 //                 exit 1 — not-found | conflict | manifest-missing |
 //                          not-installed | not-applicable
+//             → with --require-verified: operational mode.
+//               Exit-code contract:
+//                 exit 0 — verified ONLY (v0.13.0+ manifest with matching hash)
+//                 exit 1 — any other status; structured JSON error written to stderr
+//               A v0.12.0 manifest (no fileHashes) is a HARD STOP under --require-verified.
 async function handleAgentsCommand(argv) {
   const os = require('os');
   const subcommand = argv[0];
   const remaining  = argv.slice(1);
 
-  let projectDir = null;
-  let home       = undefined;
-  let format     = 'json';
-  let agentId    = null;
+  let projectDir      = null;
+  let home            = undefined;
+  let format          = 'json';
+  let agentId         = null;
+  let requireVerified = false;
 
   for (let i = 0; i < remaining.length; i++) {
-    if      (remaining[i] === '--project' && remaining[i + 1]) { projectDir = remaining[++i]; }
-    else if (remaining[i] === '--home'    && remaining[i + 1]) { home       = remaining[++i]; }
-    else if (remaining[i] === '--format'  && remaining[i + 1]) { format     = remaining[++i]; }
-    else if (remaining[i] === '--id'      && remaining[i + 1]) { agentId    = remaining[++i]; }
+    if      (remaining[i] === '--project'          && remaining[i + 1]) { projectDir      = remaining[++i]; }
+    else if (remaining[i] === '--home'             && remaining[i + 1]) { home            = remaining[++i]; }
+    else if (remaining[i] === '--format'           && remaining[i + 1]) { format          = remaining[++i]; }
+    else if (remaining[i] === '--id'               && remaining[i + 1]) { agentId         = remaining[++i]; }
+    else if (remaining[i] === '--require-verified')                      { requireVerified = true; }
   }
 
   if (subcommand === 'list') {
@@ -2161,22 +2167,30 @@ async function handleAgentsCommand(argv) {
     let record;
     try {
       record = await agentRegistry.resolveAgent({
-        projectDir: effectiveProject,
-        agentId:    agentId,
-        homeDir:    effectiveHome,
+        projectDir:      effectiveProject,
+        agentId:         agentId,
+        homeDir:         effectiveHome,
+        requireVerified: requireVerified,
       });
     } catch (err) {
-      process.stderr.write('Error: ' + err.message + '\n');
+      // requireVerified=true throws RESOLUTION_FAILED for non-verified agents;
+      // the thrown error carries err.record with the full resolution record.
+      const errorRecord = err.record
+        ? Object.assign({}, err.record, { code: err.code })
+        : { agentId: agentId, status: 'resolution-failed', error: err.message, code: err.code || 'UNKNOWN' };
+      process.stderr.write(JSON.stringify(errorRecord, null, 2) + '\n');
       process.exitCode = 1;
       return;
     }
     process.stdout.write(JSON.stringify(record, null, 2) + '\n');
-    // Diagnostic exit-code contract (no --require-verified):
-    //   exit 0 — agent is known and present (integrity state may vary)
-    //   exit 1 — unresolvable: unknown ID, ambiguous install, missing/corrupt manifest,
-    //            or agent not present in the installation
-    const exitZeroStatuses = new Set(['verified', 'hash-unverifiable', 'hash-mismatch']);
-    process.exitCode = exitZeroStatuses.has(record.status) ? 0 : 1;
+    if (requireVerified) {
+      // Operational mode: exit 0 only for verified (non-verified would have thrown above)
+      process.exitCode = record.status === 'verified' ? 0 : 1;
+    } else {
+      // Diagnostic mode: exit 0 for agent present in any integrity state
+      const exitZeroStatuses = new Set(['verified', 'hash-unverifiable', 'hash-mismatch']);
+      process.exitCode = exitZeroStatuses.has(record.status) ? 0 : 1;
+    }
 
   } else {
     process.stderr.write(
