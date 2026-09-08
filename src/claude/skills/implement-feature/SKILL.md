@@ -58,14 +58,53 @@ Before starting the pipeline, verify that every pipeline agent is installed and 
 
 ## Step 1 — Invoke pm-phase1 (Documentation Phase)
 
-Invoke the `pm-phase1` workflow with the feature path:
+### Step 1a — Tier 1 dispatch guard (AC-06, AC-07, AC-20)
+
+Before dispatching, resolve and verify the pm-phase1 orchestrator:
+
+```bash
+ai-toolkit agents resolve \
+  --project . \
+  --id gaia.orchestrator.feature.phase1 \
+  --require-verified
+```
+
+If exit non-zero → **HARD STOP**: report the error, do not dispatch pm-phase1.
+
+Store the resolution record fields: `nativeName`, `sha256` (definitionHash), `scope` (resolutionScope), `toolkitVersion`.
+
+Open the dispatch ledger entry (fail-closed):
+
+```bash
+ai-toolkit ledger open \
+  --prefix {PREFIX} \
+  --agent pm-phase1:dispatch \
+  --phase phase3 \
+  --dir {LEDGER_DIR} \
+  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase1","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
+```
+
+If exit non-zero → **HARD STOP** (fail-closed): do not dispatch.
+
+### Step 1b — Invoke pm-phase1 using verified nativeName
+
+Invoke the workflow using ONLY the resolved `nativeName` (never a hardcoded name):
 
 ```
-subagent_type: pm-phase1
+subagent_type: {nativeName}
 prompt: <path-to-feature.md>
 ```
 
 Wait for the workflow to complete. Do NOT proceed until it returns.
+
+After the workflow returns, close the dispatch ledger entry:
+
+```bash
+ai-toolkit ledger close \
+  --prefix {PREFIX} --agent pm-phase1:dispatch --dir {LEDGER_DIR}
+```
+
+If ledger close fails → **HARD STOP**: report the error and do not continue.
 
 Extract from the result:
 - `prefix` — feature prefix (e.g. `FTR-009`)
@@ -135,10 +174,36 @@ If the file is missing or incomplete, write it again before proceeding.
 
 ## Step 3 — Invoke pm-phase2 (Work Breakdown Phase)
 
-Invoke the `pm-phase2` workflow:
+### Step 3a — Tier 1 dispatch guard
+
+Resolve and verify pm-phase2:
+
+```bash
+ai-toolkit agents resolve \
+  --project . \
+  --id gaia.orchestrator.feature.phase2 \
+  --require-verified
+```
+
+If exit non-zero → **HARD STOP**: do not dispatch pm-phase2.
+
+Open the dispatch ledger entry (fail-closed):
+
+```bash
+ai-toolkit ledger open \
+  --prefix {PREFIX} \
+  --agent pm-phase2:dispatch \
+  --phase phase3 \
+  --dir {LEDGER_DIR} \
+  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase2","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
+```
+
+If exit non-zero → **HARD STOP** (fail-closed).
+
+### Step 3b — Invoke pm-phase2 using verified nativeName
 
 ```
-subagent_type: pm-phase2
+subagent_type: {nativeName}
 prompt: <path-to-feature.md>
 ```
 
@@ -221,10 +286,38 @@ git checkout feature/{PREFIX}-{short-slug}
 Pre-condition check: read `{PREFIX}-Approvals.md` and verify BOTH Gate 1 ✅ and Gate 2 ✅.
 If either is missing, return to the missing gate.
 
-Invoke the `pm-phase3` workflow:
+### Step 6a — Tier 1 dispatch guard (Gate 2 post-approval, AC-06, AC-07)
+
+After Gate 2 approval, resolve and verify pm-phase3 with `--require-verified`. Only a `verified` status permits dispatch:
+
+```bash
+ai-toolkit agents resolve \
+  --project . \
+  --id gaia.orchestrator.feature.phase3 \
+  --require-verified
+```
+
+If exit non-zero → **HARD STOP**: pm-phase3 is absent or tampered. Report the error with remediation instructions. Do NOT use any alternative workflow name or fallback.
+
+Open the dispatch ledger entry (fail-closed):
+
+```bash
+ai-toolkit ledger open \
+  --prefix {PREFIX} \
+  --agent pm-phase3:dispatch \
+  --phase phase3 \
+  --dir {LEDGER_DIR} \
+  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase3","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
+```
+
+If exit non-zero → **HARD STOP** (fail-closed): do not dispatch.
+
+### Step 6b — Invoke pm-phase3 using verified nativeName
+
+Invoke the workflow using ONLY the resolved `nativeName` (never a hardcoded name):
 
 ```
-subagent_type: pm-phase3
+subagent_type: {nativeName}
 prompt: <path-to-feature.md> --branch feature/{PREFIX}-{short-slug}
 ```
 
@@ -235,6 +328,15 @@ Wait for the workflow to complete. Capture its full result, including the `<usag
 - `issues_summary` — escalation and issues counts
 
 If `issues_summary.escalations > 0`, report the escalation details to the user.
+
+Close the dispatch ledger entry:
+
+```bash
+ai-toolkit ledger close \
+  --prefix {PREFIX} --agent pm-phase3:dispatch --dir {LEDGER_DIR}
+```
+
+If ledger close fails → **HARD STOP**: report the error. The pipeline does not silently swallow ledger failures.
 
 ---
 

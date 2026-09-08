@@ -1948,7 +1948,7 @@ function shellQuotePosix(arg) {
 
 function parseLedgerArgs(argv) {
   const PREFIX_RE = /^[A-Za-z]+-\d+$/;
-  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined, error: undefined };
+  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined, error: undefined, metadata: undefined };
 
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -2006,6 +2006,16 @@ function parseLedgerArgs(argv) {
         throw new Error('parseLedgerArgs: --error must be a non-empty string');
       }
       result.error = val;
+    } else if (flag === '--metadata-json') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --metadata-json must be a non-empty JSON string');
+      }
+      try {
+        result.metadata = JSON.parse(val);
+      } catch (_) {
+        throw new Error('parseLedgerArgs: --metadata-json is not valid JSON: ' + val);
+      }
     }
   }
 
@@ -2050,7 +2060,7 @@ function handleLedgerCommand(argv) {
 
   if (subcommand === 'open') {
     try {
-      const result = executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+      const result = executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt, args.metadata);
       process.stdout.write(sortedJson(result) + '\n');
       process.exitCode = 0;
     } catch (err) {
