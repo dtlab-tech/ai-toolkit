@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
 const executionLedger = require('../lib/execution-ledger');
+const agentRegistry   = require('../lib/agent-registry');
 const packageRoot = path.join(__dirname, '..');
 
 // ── colors ────────────────────────────────────────────────────────────────────
@@ -1925,6 +1926,8 @@ async function main() {
       process.stderr.write(err.message + '\n');
       process.exit(1);
     }
+  } else if (argv[0] === 'agents') {
+    await handleAgentsCommand(argv.slice(1));
   } else if (argv[0] === 'ledger') {
     handleLedgerCommand(argv.slice(1));
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
@@ -2090,6 +2093,99 @@ function handleLedgerCommand(argv) {
   }
 }
 
+// ── agents dispatcher ─────────────────────────────────────────────────────────
+// Routes `ai-toolkit agents <subcommand> [flags]` to the appropriate
+// registry function.  All domain logic lives in lib/agent-registry.js;
+// this function only parses CLI flags and invokes registry functions —
+// it is NOT a second registry.
+//
+// Subcommands:
+//   list    --project <dir> [--format json] [--home <dir>]
+//             → calls listRegisteredAgents(); enumerates ONLY catalog toolkit
+//               agents (never foreign/plugin); exits 0 on success.
+//   resolve --project <dir> --id <canonicalId> [--home <dir>]
+//             → diagnostic mode (no --require-verified).
+//               Calls resolveAgent() and prints the JSON resolution record.
+//               Exit-code contract:
+//                 exit 0 — verified | hash-unverifiable | hash-mismatch
+//                 exit 1 — not-found | conflict | manifest-missing |
+//                          not-installed | not-applicable
+async function handleAgentsCommand(argv) {
+  const os = require('os');
+  const subcommand = argv[0];
+  const remaining  = argv.slice(1);
+
+  let projectDir = null;
+  let home       = undefined;
+  let format     = 'json';
+  let agentId    = null;
+
+  for (let i = 0; i < remaining.length; i++) {
+    if      (remaining[i] === '--project' && remaining[i + 1]) { projectDir = remaining[++i]; }
+    else if (remaining[i] === '--home'    && remaining[i + 1]) { home       = remaining[++i]; }
+    else if (remaining[i] === '--format'  && remaining[i + 1]) { format     = remaining[++i]; }
+    else if (remaining[i] === '--id'      && remaining[i + 1]) { agentId    = remaining[++i]; }
+  }
+
+  if (subcommand === 'list') {
+    if (!projectDir) {
+      process.stderr.write('Error: agents list requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+    const records = agentRegistry.listRegisteredAgents(effectiveProject, effectiveHome);
+    if (format === 'json') {
+      process.stdout.write(JSON.stringify(records, null, 2) + '\n');
+    } else {
+      for (const r of records) {
+        process.stdout.write(r.agentId + '\t' + r.nativeName + '\t' + r.status + '\n');
+      }
+    }
+    process.exitCode = 0;
+
+  } else if (subcommand === 'resolve') {
+    if (!projectDir) {
+      process.stderr.write('Error: agents resolve requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    if (!agentId) {
+      process.stderr.write('Error: agents resolve requires --id <canonicalId>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+    let record;
+    try {
+      record = await agentRegistry.resolveAgent({
+        projectDir: effectiveProject,
+        agentId:    agentId,
+        homeDir:    effectiveHome,
+      });
+    } catch (err) {
+      process.stderr.write('Error: ' + err.message + '\n');
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(JSON.stringify(record, null, 2) + '\n');
+    // Diagnostic exit-code contract (no --require-verified):
+    //   exit 0 — agent is known and present (integrity state may vary)
+    //   exit 1 — unresolvable: unknown ID, ambiguous install, missing/corrupt manifest,
+    //            or agent not present in the installation
+    const exitZeroStatuses = new Set(['verified', 'hash-unverifiable', 'hash-mismatch']);
+    process.exitCode = exitZeroStatuses.has(record.status) ? 0 : 1;
+
+  } else {
+    process.stderr.write(
+      'Error: unknown agents subcommand: ' + (subcommand || '(none)') + '\n'
+    );
+    process.exitCode = 1;
+  }
+}
+
 // ── entry point guard ─────────────────────────────────────────────────────────
 // Run the CLI only when invoked directly (node bin/cli.js).
 // When required as a module (e.g., by Jest), skip main() and export pure
@@ -2135,5 +2231,6 @@ if (require.main === module) {
     sortedJson,
     resolveFeaturesRoot,
     computeFileSha256,
+    handleAgentsCommand,
   };
 }
