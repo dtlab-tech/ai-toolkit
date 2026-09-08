@@ -216,6 +216,15 @@ Wait for the workflow to complete. Extract from the result:
 - `agent_estimate` — agent parallel estimate
 - `token_ledger` — per-agent token data from phase 2
 
+Close the dispatch ledger entry after the workflow returns:
+
+```bash
+ai-toolkit ledger close \
+  --prefix {PREFIX} --agent pm-phase2:dispatch --dir {LEDGER_DIR}
+```
+
+If ledger close fails → **HARD STOP**: report the error. Do not continue to Gate 2. The error is not swallowed (AC-22).
+
 ---
 
 ## Step 4 — Present Gate 2 (HARD STOP — present in main loop)
@@ -286,7 +295,7 @@ git checkout feature/{PREFIX}-{short-slug}
 Pre-condition check: read `{PREFIX}-Approvals.md` and verify BOTH Gate 1 ✅ and Gate 2 ✅.
 If either is missing, return to the missing gate.
 
-### Step 6a — Tier 1 dispatch guard (Gate 2 post-approval, AC-06, AC-07)
+### Step 6a — Tier 1 dispatch guard (Gate 2 post-approval, AC-06, AC-07, AC-08)
 
 After Gate 2 approval, resolve and verify pm-phase3 with `--require-verified`. Only a `verified` status permits dispatch:
 
@@ -297,7 +306,21 @@ ai-toolkit agents resolve \
   --require-verified
 ```
 
-If exit non-zero → **HARD STOP**: pm-phase3 is absent or tampered. Report the error with remediation instructions. Do NOT use any alternative workflow name or fallback.
+If exit non-zero → **HARD STOP** (AC-08): pm-phase3 is absent or tampered. Report the error with remediation instructions:
+
+```
+⛔ HARD STOP — pm-phase3 cannot be dispatched.
+
+Remediation:
+  1. Run: ai-toolkit agents resolve --project . --id gaia.orchestrator.feature.phase3
+  2. Check the status field in the output for the failure reason.
+  3. Re-install the toolkit if the status is not-installed or hash-mismatch.
+  4. Contact the toolkit team if the issue persists.
+
+Do NOT use an alternative workflow name or any fallback. This pipeline requires verified agents.
+```
+
+Do NOT use any alternative workflow name or fallback.
 
 Open the dispatch ledger entry (fail-closed):
 
@@ -329,14 +352,25 @@ Wait for the workflow to complete. Capture its full result, including the `<usag
 
 If `issues_summary.escalations > 0`, report the escalation details to the user.
 
-Close the dispatch ledger entry:
+**If pm-phase3 returned an error or escalation:** mark the dispatch ledger entry failed before stopping:
+
+```bash
+ai-toolkit ledger fail \
+  --prefix {PREFIX} --agent pm-phase3:dispatch \
+  --error "pm-phase3 returned an error or escalation" \
+  --dir {LEDGER_DIR}
+```
+
+If `ledger fail` itself exits non-zero → **HARD STOP** (AC-22): report both the original workflow error and the ledger failure. The error is NOT swallowed.
+
+**On successful completion:** close the dispatch ledger entry:
 
 ```bash
 ai-toolkit ledger close \
   --prefix {PREFIX} --agent pm-phase3:dispatch --dir {LEDGER_DIR}
 ```
 
-If ledger close fails → **HARD STOP**: report the error. The pipeline does not silently swallow ledger failures.
+If ledger close fails → **HARD STOP** (AC-22): report the error. The pipeline does not silently swallow ledger failures after dispatch returns.
 
 ---
 
