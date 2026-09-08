@@ -2193,10 +2193,30 @@ function parseLedgerArgs(argv) {
         throw new Error('parseLedgerArgs: --metadata-json must be a non-empty JSON string');
       }
       try {
-        result.metadata = JSON.parse(val);
+        result.metadata = Object.assign(result.metadata || {}, JSON.parse(val));
       } catch (_) {
         throw new Error('parseLedgerArgs: --metadata-json is not valid JSON: ' + val);
       }
+    } else if (flag === '--agent-id') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --agent-id must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { agentId: val });
+    } else if (flag === '--native-name') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --native-name must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { nativeAgentName: val });
+    } else if (flag === '--toolkit-version') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --toolkit-version must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { toolkitVersion: val });
+    } else if (flag === '--scope') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --scope must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { resolutionScope: val });
+    } else if (flag === '--hash') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --hash must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { definitionHash: val });
     }
   }
 
