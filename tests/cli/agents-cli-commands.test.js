@@ -855,3 +855,223 @@ describe('agents preflight — uninstalled agents hard-stop (AC-19)', () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// doctor agents — output format and status vocabulary (AC-13, AC-14, AC-09, AC-33)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('doctor agents — exits 0 and writes to stdout (AC-14)', () => {
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('doctor-ok');
+    fakeHome = mktmp('doctor-ok-home');
+    realInstall(projDir);
+  });
+
+  test('exits 0 with a valid local installation', () => {
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+  });
+
+  test('exits 0 with no installation present (not-installed agents)', () => {
+    const projEmpty = mktmp('doctor-empty');
+    const homeEmpty = mktmp('doctor-empty-home');
+    const result = runCLI(['doctor', 'agents', '--project', projEmpty, '--home', homeEmpty]);
+    expect(result.status).toBe(0);
+  });
+
+  test('stdout is non-empty and contains the command header', () => {
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.stdout).toContain('ai-toolkit doctor agents');
+  });
+
+  test('stdout contains a Summary section', () => {
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.stdout).toContain('Summary:');
+  });
+});
+
+describe('doctor agents — each agent gets exactly one of the six status values (AC-13)', () => {
+  const REL_PATH = '.claude/agents/developer-backend.md';
+
+  test('verified install: agents show [OK] status markers', () => {
+    const projDir  = mktmp('doctor-verified');
+    const fakeHome = mktmp('doctor-verified-home');
+    makeInstallVerified(projDir);
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('[OK]');
+  });
+
+  test('hash-unverifiable install: agents show [??] markers and hash-unverifiable label', () => {
+    const projDir  = mktmp('doctor-hashless');
+    const fakeHome = mktmp('doctor-hashless-home');
+    writeFileAt(projDir, REL_PATH, '---\nname: developer-backend\n---\n');
+    writeManifestJSON(projDir, {
+      version:          '0.12.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [REL_PATH],
+    });
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('[??]');
+    expect(result.stdout).toContain('hash-unverifiable');
+  });
+
+  test('not-installed: absent agents show [--] markers', () => {
+    const projDir  = mktmp('doctor-notinst');
+    const fakeHome = mktmp('doctor-notinst-home');
+    writeManifestJSON(projDir, {
+      version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'local', files: [], fileHashes: {},
+    });
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('[--]');
+    expect(result.stdout).toContain('not-installed');
+  });
+
+  test('conflict (both project and global manifest): agents show [!!] markers', () => {
+    const projDir  = mktmp('doctor-conflict');
+    const fakeHome = mktmp('doctor-conflict-home');
+    writeManifestJSON(projDir, {
+      version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'local', files: [REL_PATH], fileHashes: {},
+    });
+    writeManifestJSON(fakeHome, {
+      version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'global', files: [REL_PATH], fileHashes: {},
+    });
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('[!!]');
+    expect(result.stdout).toContain('conflict');
+  });
+});
+
+describe('doctor agents — hash-mismatch reported as conflict + detail (AC-13)', () => {
+  const REL_PATH = '.claude/agents/developer-backend.md';
+
+  test('tampered file: shows [!!] and hash-mismatch detail', () => {
+    const projDir  = mktmp('doctor-hashmismatch');
+    const fakeHome = mktmp('doctor-hashmismatch-home');
+    const content  = '---\nname: developer-backend\n---\n';
+    writeFileAt(projDir, REL_PATH, content + '\n<!-- tampered -->');
+    const buf    = Buffer.from(content, 'utf8');
+    const sha256 = 'sha256:' + require('crypto').createHash('sha256').update(buf).digest('hex');
+    writeManifestJSON(projDir, {
+      version:          '0.13.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [REL_PATH],
+      fileHashes:       { [REL_PATH]: sha256 },
+    });
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('[!!]');
+    expect(result.stdout).toContain('hash-mismatch');
+  });
+});
+
+describe('doctor agents — hash-unverifiable remediation message (AC-13)', () => {
+  const REL_PATH = '.claude/agents/developer-backend.md';
+
+  test('shows remediation instruction referencing --force', () => {
+    const projDir  = mktmp('doctor-remediation');
+    const fakeHome = mktmp('doctor-remediation-home');
+    writeFileAt(projDir, REL_PATH, '---\nname: developer-backend\n---\n');
+    writeManifestJSON(projDir, {
+      version: '0.12.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'local', files: [REL_PATH],
+    });
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/Remediation for hash-unverifiable/);
+    expect(result.stdout).toMatch(/--force/);
+  });
+});
+
+describe('doctor agents — foreign observable agents flagged (AC-09)', () => {
+  test('foreign agent file in .claude/agents/ is reported as foreign (not blocking)', () => {
+    const projDir  = mktmp('doctor-foreign');
+    const fakeHome = mktmp('doctor-foreign-home');
+    realInstall(projDir);
+    fs.writeFileSync(
+      path.join(projDir, '.claude', 'agents', 'my-old-project-manager.md'),
+      '# old project manager',
+      'utf8'
+    );
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Foreign observable agents');
+    expect(result.stdout).toContain('my-old-project-manager');
+  });
+
+  test('toolkit catalog agents are never reported as foreign', () => {
+    const projDir  = mktmp('doctor-noforeign');
+    const fakeHome = mktmp('doctor-noforeign-home');
+    makeInstallVerified(projDir);
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    // If a foreign section appears, it must not list any catalog-native names
+    if (result.stdout.includes('Foreign observable agents')) {
+      const lines = result.stdout.split('\n');
+      const idx   = lines.findIndex(l => l.includes('Foreign observable agents'));
+      const foreignLines = lines.slice(idx);
+      for (const line of foreignLines) {
+        expect(line).not.toMatch(/\bdeveloper-backend\b|\bdeveloper-frontend\b|\bdeveloper-testing\b|\breview-solution\b/);
+      }
+    }
+  });
+});
+
+describe('doctor agents — unobservable WARNING emitted without blocking (AC-33)', () => {
+  test('exits 0 even with no installation (non-observable entries must not block)', () => {
+    const projDir  = mktmp('doctor-unobservable');
+    const fakeHome = mktmp('doctor-unobservable-home');
+    const result = runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+  });
+});
+
+describe('doctor agents — read-only: no files modified or created (AC-14)', () => {
+  test('no new files created in project dir after doctor agents runs', () => {
+    const projDir  = mktmp('doctor-readonly');
+    const fakeHome = mktmp('doctor-readonly-home');
+    realInstall(projDir);
+    const before = walkDirRecursive(projDir);
+    runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    const after  = walkDirRecursive(projDir);
+    expect(after.sort()).toEqual(before.sort());
+  });
+
+  test('no new files created in home dir after doctor agents runs', () => {
+    const projDir  = mktmp('doctor-readonly2');
+    const fakeHome = mktmp('doctor-readonly2-home');
+    writeManifestJSON(fakeHome, {
+      version: '0.12.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'global', files: [],
+    });
+    const before = walkDirRecursive(fakeHome);
+    runCLI(['doctor', 'agents', '--project', projDir, '--home', fakeHome]);
+    const after  = walkDirRecursive(fakeHome);
+    expect(after.sort()).toEqual(before.sort());
+  });
+});
+
+function walkDirRecursive(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const results = [];
+  function walk(d) {
+    for (const entry of fs.readdirSync(d)) {
+      const full = path.join(d, entry);
+      if (fs.statSync(full).isDirectory()) walk(full);
+      else results.push(full);
+    }
+  }
+  walk(dir);
+  return results;
+}

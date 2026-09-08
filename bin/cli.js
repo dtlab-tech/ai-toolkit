@@ -1494,6 +1494,157 @@ function runDoctorResolution(options) {
   L('');
 }
 
+// ── runDoctorAgents ───────────────────────────────────────────────────────────
+
+// US-08-TASK-BE-01 (FTR-017):
+// Read-only diagnostic report for all registered toolkit agents.
+// Never modifies, creates, or deletes any file (AC-14).
+//
+// Parameters (via options object):
+//   projectDir (string): target project directory (defaults to process.cwd())
+//   home       (string): override for os.homedir() to enable test isolation
+//
+// Output: human-readable report on stdout; always exits 0.
+function runDoctorAgents(options) {
+  const os = require('os');
+
+  const opts             = options || {};
+  const effectiveHome    = opts.home       !== undefined ? path.resolve(opts.home)       : os.homedir();
+  const effectiveProject = opts.projectDir !== undefined ? path.resolve(opts.projectDir) : process.cwd();
+
+  const records = agentRegistry.listRegisteredAgents(effectiveProject, effectiveHome);
+
+  const STATUS_ICON = {
+    'verified':          '[OK]',
+    'conflict':          '[!!]',
+    'hash-unverifiable': '[??]',
+    'unobservable':      '[??]',
+    'not-installed':     '[--]',
+    'not-applicable':    '[NA]',
+  };
+
+  const lines = [];
+  lines.push('');
+  lines.push('ai-toolkit doctor agents');
+  lines.push('─'.repeat(72));
+  lines.push('');
+
+  const statusCounts      = {};
+  const unobservable      = [];
+  const conflicts         = [];
+  const hashUnverifiable  = [];
+
+  for (const rec of records) {
+    const status = rec.status;
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+
+    const icon = STATUS_ICON[status] || '[??]';
+    lines.push('  ' + icon + ' ' + rec.agentId);
+    lines.push('      native:  ' + rec.nativeName);
+    lines.push('      scope:   ' + (rec.scope          || '—'));
+    lines.push('      version: ' + (rec.toolkitVersion || '—'));
+    if (rec.path)            lines.push('      path:    ' + rec.path);
+    if (rec.sha256)          lines.push('      sha256:  ' + rec.sha256);
+    if (rec.integrityDetail) lines.push('      detail:  ' + rec.integrityDetail);
+    if (rec.error)           lines.push('      error:   ' + rec.error);
+    if (rec.deprecated)      lines.push('      DEPRECATED — target: ' + (rec.deprecationTarget || '(unspecified)'));
+    lines.push('');
+
+    if (status === 'unobservable')      unobservable.push(rec);
+    else if (status === 'conflict')     conflicts.push(rec);
+    else if (status === 'hash-unverifiable') hashUnverifiable.push(rec);
+  }
+
+  // ── Summary ──────────────────────────────────────────────────────────────────
+  lines.push('─'.repeat(72));
+  lines.push('Summary:');
+  for (const [status, count] of Object.entries(statusCounts)) {
+    lines.push('  ' + (STATUS_ICON[status] || '[??]') + ' ' + status + ': ' + count);
+  }
+  lines.push('');
+
+  // ── Unobservable WARNING (AC-33) ──────────────────────────────────────────────
+  if (unobservable.length > 0) {
+    lines.push('WARNING: unobservable scope(s) detected.');
+    lines.push('  The following agents exist in plugin or session scopes that cannot be');
+    lines.push('  enumerated from the filesystem. Dispatch is NOT blocked. The mandatory');
+    lines.push('  mitigation is gaia-* namespacing — a uniquely prefixed native name is');
+    lines.push('  extremely unlikely to collide with a plugin or session agent.');
+    for (const rec of unobservable) {
+      lines.push('    - ' + rec.agentId + ' (' + rec.nativeName + ')');
+    }
+    lines.push('');
+  }
+
+  // ── hash-unverifiable remediation ────────────────────────────────────────────
+  if (hashUnverifiable.length > 0) {
+    lines.push('Remediation for hash-unverifiable agent(s):');
+    lines.push('  Reinstall or upgrade the toolkit runtime to generate integrity hashes.');
+    lines.push('  Command: ai-toolkit --local <project-dir> --force');
+    lines.push('');
+  }
+
+  // ── Conflict detail ───────────────────────────────────────────────────────────
+  if (conflicts.length > 0) {
+    lines.push('Conflicts:');
+    for (const rec of conflicts) {
+      const detail = rec.integrityDetail || rec.error || 'ambiguous installation';
+      lines.push('  ' + rec.agentId + ': ' + detail);
+      if (rec.path) lines.push('    path: ' + rec.path);
+    }
+    lines.push('');
+  }
+
+  // ── Foreign observable agents (AC-09) ────────────────────────────────────────
+  const catalogNativeNames = new Set(agentRegistry.CATALOG.map(function (e) { return e.nativeNames.claude; }));
+  const agentsDirs = [];
+  var projectAgentsDir = path.join(effectiveProject, '.claude', 'agents');
+  var globalAgentsDir  = path.join(effectiveHome,    '.claude', 'agents');
+  if (fs.existsSync(projectAgentsDir)) agentsDirs.push({ dir: projectAgentsDir, scope: 'project' });
+  if (fs.existsSync(globalAgentsDir))  agentsDirs.push({ dir: globalAgentsDir,  scope: 'global'  });
+
+  var foreignAgents = [];
+  for (var di = 0; di < agentsDirs.length; di++) {
+    var entry = agentsDirs[di];
+    try {
+      var files = fs.readdirSync(entry.dir).filter(function (f) { return f.endsWith('.md'); });
+      for (var fi = 0; fi < files.length; fi++) {
+        var nativeName = files[fi].replace(/\.md$/, '');
+        if (!catalogNativeNames.has(nativeName)) {
+          foreignAgents.push({ nativeName: nativeName, path: path.join(entry.dir, files[fi]), scope: entry.scope });
+        }
+      }
+    } catch (_) { /* ignore unreadable dirs */ }
+  }
+
+  if (foreignAgents.length > 0) {
+    lines.push('Foreign observable agents (not in toolkit catalog):');
+    lines.push('  These agents are present in an observable scope but are NOT registered');
+    lines.push('  toolkit agents. They do NOT block dispatch. Review and remove if stale.');
+    for (var fai = 0; fai < foreignAgents.length; fai++) {
+      var fa = foreignAgents[fai];
+      lines.push('  [foreign/' + fa.scope + '] ' + fa.nativeName);
+      lines.push('    path: ' + fa.path);
+    }
+    lines.push('');
+  }
+
+  // ── Deprecated / legacy agents ───────────────────────────────────────────────
+  var deprecated = records.filter(function (r) { return r.deprecated; });
+  if (deprecated.length > 0) {
+    lines.push('Deprecated agents (Phase A legacy names):');
+    for (var dpi = 0; dpi < deprecated.length; dpi++) {
+      var drec = deprecated[dpi];
+      lines.push('  ' + drec.agentId + ' (' + drec.nativeName + ')');
+      if (drec.deprecationTarget) lines.push('    rename target: ' + drec.deprecationTarget);
+    }
+    lines.push('  Remediation: reinstall the toolkit after Phase B renames are complete.');
+    lines.push('');
+  }
+
+  process.stdout.write(lines.join('\n') + '\n');
+}
+
 // ── validatePurityGuard ───────────────────────────────────────────────────────
 
 // US-05-TASK-BE-03 (FTR-015):
@@ -1771,6 +1922,14 @@ async function main() {
     const projectDir = projectIdx !== -1 ? remaining[projectIdx + 1] : process.cwd();
     const home       = homeIdx    !== -1 ? remaining[homeIdx    + 1] : undefined;
     runDoctorResolution({ projectDir, home });
+    process.exit(0);
+  } else if (argv[0] === 'doctor' && argv[1] === 'agents') {
+    const remaining  = argv.slice(2);
+    const projectIdx = remaining.indexOf('--project');
+    const homeIdx    = remaining.indexOf('--home');
+    const projectDir = projectIdx !== -1 ? remaining[projectIdx + 1] : process.cwd();
+    const home       = homeIdx    !== -1 ? remaining[homeIdx    + 1] : undefined;
+    runDoctorAgents({ projectDir, home });
     process.exit(0);
   } else if (argv[0] === 'validate-purity') {
     runValidatePurity(argv[1]);
