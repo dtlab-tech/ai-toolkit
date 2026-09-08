@@ -652,3 +652,101 @@ describe('agents resolve --require-verified — hash-mismatch exits non-zero', (
     expect(result.stdout.trim()).toBe('');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// agents preflight — pipeline verification (AC-19)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('agents preflight — unknown pipeline exits non-zero', () => {
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('preflight-unknown-pipeline');
+    fakeHome = mktmp('preflight-unknown-pipeline-home');
+    realInstall(projDir);
+  });
+
+  test('exits non-zero for an unknown pipeline name', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', 'nonexistent-pipeline',
+      '--home', fakeHome,
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+
+  test('stderr contains preflight-failed status for unknown pipeline', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', 'nonexistent-pipeline',
+      '--home', fakeHome,
+    ]);
+    expect(result.status).not.toBe(0);
+    const errRecord = JSON.parse(result.stderr);
+    expect(errRecord.status).toBe('preflight-failed');
+  });
+});
+
+describe('agents preflight — missing required flags', () => {
+  test('missing --project exits non-zero with --project diagnostic', () => {
+    const result = runCLI(['agents', 'preflight', '--pipeline', 'implement-feature']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/--project/);
+  });
+
+  test('missing --pipeline exits non-zero with --pipeline diagnostic', () => {
+    const projDir = mktmp('preflight-nopipeline');
+    const result  = runCLI(['agents', 'preflight', '--project', projDir]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/--pipeline/);
+  });
+});
+
+describe('agents preflight — uninstalled agents hard-stop (AC-19)', () => {
+  const PIPELINE = 'implement-feature';
+
+  let projDir;
+  let fakeHome;
+
+  beforeEach(() => {
+    projDir  = mktmp('preflight-fail');
+    fakeHome = mktmp('preflight-fail-home');
+    // Empty manifest: no agents installed
+    writeManifestJSON(projDir, {
+      version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'local', files: [], fileHashes: {},
+    });
+  });
+
+  test('exits non-zero when pipeline agents are not installed (AC-19)', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', PIPELINE,
+      '--home', fakeHome,
+    ]);
+    expect(result.status).not.toBe(0);
+  });
+
+  test('stderr contains preflight-failed with a per-agent result array', () => {
+    const result = runCLI([
+      'agents', 'preflight',
+      '--project', projDir,
+      '--pipeline', PIPELINE,
+      '--home', fakeHome,
+    ]);
+    expect(result.status).not.toBe(0);
+    const errRecord = JSON.parse(result.stderr);
+    expect(errRecord.status).toBe('preflight-failed');
+    expect(Array.isArray(errRecord.agents)).toBe(true);
+    expect(errRecord.agents.length).toBeGreaterThan(0);
+    // All agents are not-installed
+    for (const a of errRecord.agents) {
+      expect(typeof a.agentId).toBe('string');
+      expect(a.agentId.startsWith('gaia.')).toBe(true);
+    }
+  });
+});

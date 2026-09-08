@@ -2100,20 +2100,26 @@ function handleLedgerCommand(argv) {
 // it is NOT a second registry.
 //
 // Subcommands:
-//   list    --project <dir> [--format json] [--home <dir>]
-//             → calls listRegisteredAgents(); enumerates ONLY catalog toolkit
-//               agents (never foreign/plugin); exits 0 on success.
-//   resolve --project <dir> --id <canonicalId> [--home <dir>] [--require-verified]
-//             → without --require-verified: diagnostic mode.
-//               Exit-code contract:
-//                 exit 0 — verified | hash-unverifiable | hash-mismatch
-//                 exit 1 — not-found | conflict | manifest-missing |
-//                          not-installed | not-applicable
-//             → with --require-verified: operational mode.
-//               Exit-code contract:
-//                 exit 0 — verified ONLY (v0.13.0+ manifest with matching hash)
-//                 exit 1 — any other status; structured JSON error written to stderr
-//               A v0.12.0 manifest (no fileHashes) is a HARD STOP under --require-verified.
+//   list      --project <dir> [--format json] [--home <dir>]
+//               → calls listRegisteredAgents(); enumerates ONLY catalog toolkit
+//                 agents (never foreign/plugin); exits 0 on success.
+//   resolve   --project <dir> --id <canonicalId> [--home <dir>] [--require-verified]
+//               → without --require-verified: diagnostic mode.
+//                 Exit-code contract:
+//                   exit 0 — verified | hash-unverifiable | hash-mismatch
+//                   exit 1 — not-found | conflict | manifest-missing |
+//                            not-installed | not-applicable
+//               → with --require-verified: operational mode.
+//                 Exit-code contract:
+//                   exit 0 — verified ONLY (v0.13.0+ manifest with matching hash)
+//                   exit 1 — any other status; structured JSON error written to stderr
+//                 A v0.12.0 manifest (no fileHashes) is a HARD STOP under --require-verified.
+//   preflight --project <dir> --pipeline <name> [--home <dir>]
+//               → verifies every agent in the named pipeline using --require-verified semantics.
+//                 Required agent set is derived from CATALOG.allowedPipelines.
+//                 Exit-code contract:
+//                   exit 0 — all agents verified; JSON summary on stdout
+//                   exit 1 — any agent unverified or pipeline unknown; JSON error on stderr
 async function handleAgentsCommand(argv) {
   const os = require('os');
   const subcommand = argv[0];
@@ -2124,12 +2130,14 @@ async function handleAgentsCommand(argv) {
   let format          = 'json';
   let agentId         = null;
   let requireVerified = false;
+  let pipeline        = null;
 
   for (let i = 0; i < remaining.length; i++) {
     if      (remaining[i] === '--project'          && remaining[i + 1]) { projectDir      = remaining[++i]; }
     else if (remaining[i] === '--home'             && remaining[i + 1]) { home            = remaining[++i]; }
     else if (remaining[i] === '--format'           && remaining[i + 1]) { format          = remaining[++i]; }
     else if (remaining[i] === '--id'               && remaining[i + 1]) { agentId         = remaining[++i]; }
+    else if (remaining[i] === '--pipeline'         && remaining[i + 1]) { pipeline        = remaining[++i]; }
     else if (remaining[i] === '--require-verified')                      { requireVerified = true; }
   }
 
@@ -2190,6 +2198,65 @@ async function handleAgentsCommand(argv) {
       // Diagnostic mode: exit 0 for agent present in any integrity state
       const exitZeroStatuses = new Set(['verified', 'hash-unverifiable', 'hash-mismatch']);
       process.exitCode = exitZeroStatuses.has(record.status) ? 0 : 1;
+    }
+
+  } else if (subcommand === 'preflight') {
+    if (!projectDir) {
+      process.stderr.write('Error: agents preflight requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    if (!pipeline) {
+      process.stderr.write('Error: agents preflight requires --pipeline <name>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+
+    // Derive the required agent set from the CATALOG's allowedPipelines field.
+    const pipelineAgents = agentRegistry.CATALOG.filter(function (e) {
+      return Array.isArray(e.allowedPipelines) && e.allowedPipelines.indexOf(pipeline) !== -1;
+    });
+    if (pipelineAgents.length === 0) {
+      process.stderr.write(
+        JSON.stringify({ status: 'preflight-failed', error: 'Unknown pipeline: ' + pipeline }, null, 2) + '\n'
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const results    = [];
+    let   allPassed  = true;
+    for (let i = 0; i < pipelineAgents.length; i++) {
+      const entry = pipelineAgents[i];
+      try {
+        const rec = await agentRegistry.resolveAgent({
+          projectDir:      effectiveProject,
+          agentId:         entry.agentId,
+          homeDir:         effectiveHome,
+          requireVerified: true,
+        });
+        results.push({ agentId: rec.agentId, status: rec.status });
+      } catch (err) {
+        allPassed = false;
+        const errRec = err.record
+          ? Object.assign({}, err.record, { code: err.code })
+          : { agentId: entry.agentId, status: 'resolution-failed', error: err.message, code: err.code || 'RESOLUTION_FAILED' };
+        results.push(errRec);
+      }
+    }
+
+    if (allPassed) {
+      process.stdout.write(
+        JSON.stringify({ status: 'preflight-ok', pipeline: pipeline, agents: results }, null, 2) + '\n'
+      );
+      process.exitCode = 0;
+    } else {
+      process.stderr.write(
+        JSON.stringify({ status: 'preflight-failed', pipeline: pipeline, agents: results }, null, 2) + '\n'
+      );
+      process.exitCode = 1;
     }
 
   } else {

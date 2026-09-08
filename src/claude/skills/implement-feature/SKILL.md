@@ -14,6 +14,48 @@ with their declared `model:` frontmatter honoured and producing accurate per-age
 
 ---
 
+## Step 0 — Agent Preflight (fail-closed, AC-19)
+
+Before starting the pipeline, verify that every pipeline agent is installed and verified.
+
+1. **Derive the feature prefix** from the `<path-to-feature.md>` argument (e.g. path contains `FTR-017` → prefix = `FTR-017`). Derive the ledger directory as the directory containing the feature.md file.
+
+2. **Open the preflight ledger entry** (fail-closed — if this fails, do NOT proceed):
+   ```bash
+   ai-toolkit ledger open \
+     --prefix {PREFIX} \
+     --agent agent-preflight:implement-feature \
+     --phase phase3 \
+     --dir {LEDGER_DIR}
+   ```
+   If the command exits non-zero, **STOP IMMEDIATELY** — report the error and do not continue.
+
+3. **Run the preflight check:**
+   ```bash
+   ai-toolkit agents preflight --project . --pipeline implement-feature
+   ```
+
+4. **On success** (exit 0): close the ledger entry:
+   ```bash
+   ai-toolkit ledger close \
+     --prefix {PREFIX} \
+     --agent agent-preflight:implement-feature \
+     --dir {LEDGER_DIR}
+   ```
+   Then continue to Step 1.
+
+5. **On failure** (exit non-zero): mark the ledger entry failed and STOP:
+   ```bash
+   ai-toolkit ledger fail \
+     --prefix {PREFIX} \
+     --agent agent-preflight:implement-feature \
+     --error "agent preflight failed — one or more pipeline agents unverified" \
+     --dir {LEDGER_DIR}
+   ```
+   Report the preflight error to the user. Do NOT continue to Step 1.
+
+---
+
 ## Step 1 — Invoke pm-phase1 (Documentation Phase)
 
 Invoke the `pm-phase1` workflow with the feature path:
