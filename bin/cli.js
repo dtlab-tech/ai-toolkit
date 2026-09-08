@@ -46,6 +46,10 @@ function fileHash(filePath) {
   return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+function computeFileSha256(filePath) {
+  return 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
 function readJsonSafe(filePath) {
   try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch { return null; }
 }
@@ -2127,5 +2131,6 @@ if (require.main === module) {
     handleLedgerCommand,
     sortedJson,
     resolveFeaturesRoot,
+    computeFileSha256,
   };
 }
