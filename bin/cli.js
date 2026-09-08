@@ -293,7 +293,7 @@ function moveToTrash(destRoot, relativePath) {
   }
 }
 
-function writeManifest(destRoot, fileList, installationMode) {
+function writeManifest(destRoot, fileList, installationMode, fileHashes) {
   const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
   const trashDir = path.join(destRoot, '.claude', '.ai-toolkit-trash');
   const filtered = fileList.filter(rel => {
@@ -306,6 +306,9 @@ function writeManifest(destRoot, fileList, installationMode) {
     installationMode: installationMode,
     files: filtered.map(f => f.replace(/\\/g, '/')),
   };
+  if (fileHashes !== undefined && fileHashes !== null) {
+    manifest.fileHashes = fileHashes;
+  }
   try {
     ensureDir(manifestPath);
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
