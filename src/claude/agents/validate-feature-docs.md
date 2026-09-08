@@ -18,7 +18,7 @@ A QA agent that cross-references `feature.md` against `{PREFIX}-Requirements.md`
    - `feature.md` — source of truth
    - `{PREFIX}-Requirements.md`
    - `{PREFIX}-Tech-Spec.md`
-3. If either output document is missing, abort and report: "Cannot validate: `{file}` not found. Run /agent-project-manager first."
+3. If either output document is missing, abort and report: "Cannot validate: `{file}` not found. Run /implement-feature first."
 
 ---
 

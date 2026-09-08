@@ -24,7 +24,7 @@ The user provides the path to a `feature.md` file. From the same directory, read
 ```
 Cannot generate work breakdown: `{file}` not found.
 The work breakdown requires validated and approved Requirements + Tech-Spec.
-Run /agent-project-manager to orchestrate the full pipeline (including validation and approval gates).
+Run /implement-feature to orchestrate the full pipeline (including validation and approval gates).
 ```
 
 ---
