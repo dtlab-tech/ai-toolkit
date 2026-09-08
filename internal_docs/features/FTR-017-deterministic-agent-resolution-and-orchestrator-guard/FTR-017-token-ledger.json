@@ -228,5 +228,14 @@
     "started_at": "2026-09-08T13:08:42.030Z",
     "completed_at": "2026-09-08T19:03:02.638Z",
     "phase_delta_tokens": 97504
+  },
+  {
+    "operation_id": "de47130ed022c1565702f0637ea8150b",
+    "agent": "developer-testing:US-01-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-08T19:23:34.047Z",
+    "completed_at": "2026-09-08T19:27:19.277Z",
+    "phase_delta_tokens": null
   }
 ]

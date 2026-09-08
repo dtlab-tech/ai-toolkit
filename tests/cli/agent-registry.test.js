@@ -368,6 +368,44 @@ describe('resolveAgent()', () => {
     expect(rec.status).toBe('verified');
     expect(rec.nativeName).toBe('pm-phase3');
   });
+
+  // ── AC-03 — no fuzzy / no fallback selection ─────────────────────────────────
+
+  test('partial prefix of a valid ID resolves to "not-found" (no fuzzy match, AC-03)', async () => {
+    const rec = await resolveAgent({
+      projectDir,
+      homeDir:  fakeHome,
+      agentId:  'gaia.agent.developer',        // truncated — not a catalog entry
+    });
+    expect(rec.status).toBe('not-found');
+  });
+
+  test('case-variant of a valid ID resolves to "not-found" (resolution is case-sensitive, AC-03)', async () => {
+    const rec = await resolveAgent({
+      projectDir,
+      homeDir:  fakeHome,
+      agentId:  'gaia.agent.Developer.Backend', // wrong case
+    });
+    expect(rec.status).toBe('not-found');
+  });
+
+  test('near-miss ID does not fall back to a similar catalog entry (no fallback, AC-03)', async () => {
+    // "gaia.agent.developer.backend" exists but "gaia.agent.developer.back-end" does not
+    const rec = await resolveAgent({
+      projectDir,
+      homeDir:  fakeHome,
+      agentId:  'gaia.agent.developer.back-end',
+    });
+    expect(rec.status).toBe('not-found');
+    expect(rec.agentId).toBe('gaia.agent.developer.back-end');
+  });
+
+  test('"not-found" result carries the original agentId unchanged (no substitution, AC-03)', async () => {
+    const unknownId = 'gaia.agent.totally.unknown.XYZ';
+    const rec = await resolveAgent({ projectDir, homeDir: fakeHome, agentId: unknownId });
+    expect(rec.status).toBe('not-found');
+    expect(rec.agentId).toBe(unknownId);
+  });
 });
 
 // ── validateAgentSet() ────────────────────────────────────────────────────────
