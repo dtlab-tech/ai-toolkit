@@ -11,6 +11,40 @@ export const meta = {
   ],
 }
 
+// ── Tier 2 resolution guard ───────────────────────────────────────────────────
+// All worker agents must be resolved via the CLI before dispatch.
+// No direct require('lib/agent-registry') — resolution goes through the CLI facade.
+const RESOLVE_SCHEMA = {
+  type: 'object',
+  properties: {
+    nativeName:  { type: 'string' },
+    status:      { type: 'string' },
+    agentId:     { type: 'string' },
+    exitNonZero: { type: 'boolean' },
+    error:       { type: 'string' },
+  },
+}
+
+async function resolveAgentTier2(agentId, label, phaseName) {
+  const result = await agent(
+    `Run this command via Bash:\n\nai-toolkit agents resolve --project . --id ${agentId} --require-verified\n\nIf the command exits 0: parse the JSON from stdout and return it with exitNonZero: false.\nIf the command exits non-zero: return {"exitNonZero": true, "error": "<stderr text>", "agentId": "${agentId}"}.`,
+    { label, phase: phaseName, model: 'haiku', schema: RESOLVE_SCHEMA }
+  )
+  if (!result || result.exitNonZero || !result.nativeName) {
+    throw new Error(`HARD STOP — Tier 2 resolution failed for ${agentId}: ${result && result.error ? result.error : 'no nativeName returned'}`)
+  }
+  return result.nativeName
+}
+
+// Map from Work-Breakdown agent_type values to canonical agent IDs.
+// Used by the Tier 2 guard to resolve before each dispatch.
+const IMPL_AGENT_IDS = {
+  'developer-backend':  'gaia.agent.developer.backend',
+  'developer-frontend': 'gaia.agent.developer.frontend',
+  'developer-testing':  'gaia.agent.developer.testing',
+  'review-solution':    'gaia.agent.review.solution',
+}
+
 // ── Ledger facade helpers ─────────────────────────────────────────────────────
 // Route all ledger I/O through the ai-toolkit CLI facade.
 // Open calls fire-and-forget (matching pm-phase1/pm-phase2 pattern).
@@ -160,6 +194,13 @@ const buildWaves = (phases) => {
 const waves = buildWaves(wb.phases)
 log(`Execution plan: ${waves.length} wave(s) — ${waves.map((w, i) => `wave${i+1}:[${w.map(p => p.phase_id).join(',')}]`).join(' ')}`)
 
+// Pre-resolve all implementation agent types (Tier 2 guard, fail-closed before any phase runs)
+const resolvedNativeNames = {}
+for (const [legacyName, canonicalId] of Object.entries(IMPL_AGENT_IDS)) {
+  resolvedNativeNames[legacyName] = await resolveAgentTier2(canonicalId, `resolve-${legacyName}`, 'Parse')
+}
+log(`Tier 2 resolution complete: ${Object.keys(resolvedNativeNames).join(', ')}`)
+
 let phasesDone   = 0
 const usPassed   = []
 const usEscalated = []
@@ -203,16 +244,18 @@ const executePhase = async (implPhase) => {
       let implFailed = false
       let implErrMsg = ''
       try {
-        await parallel(implPhase.impl_groups.map(group => () =>
-          agent(
+        await parallel(implPhase.impl_groups.map(group => () => {
+          const nativeName = resolvedNativeNames[group.agent_type]
+          if (!nativeName) throw new Error(`HARD STOP — Tier 2: no resolved nativeName for agent_type: ${group.agent_type}`)
+          return agent(
             `${featurePath} ${group.task_ids.join(',')}${reworkSuffix}`,
             {
-              agentType: group.agent_type,
+              agentType: nativeName,
               label:     `${group.agent_type}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`,
               phase:     'Implementation',
             }
           )
-        ))
+        }))
       } catch (err) {
         implFailed = true
         implErrMsg = err && err.message ? err.message.slice(0, 120) : 'impl dispatch failed'
@@ -244,16 +287,18 @@ const executePhase = async (implPhase) => {
       let testFailed = false
       let testErrMsg = ''
       try {
-        await parallel(implPhase.test_groups.map(group => () =>
-          agent(
+        await parallel(implPhase.test_groups.map(group => () => {
+          const nativeName = resolvedNativeNames[group.agent_type]
+          if (!nativeName) throw new Error(`HARD STOP — Tier 2: no resolved nativeName for agent_type: ${group.agent_type}`)
+          return agent(
             `${featurePath} ${group.task_ids.join(',')}${reworkSuffix}`,
             {
-              agentType: group.agent_type,
+              agentType: nativeName,
               label:     `${group.agent_type}:${implPhase.phase_id}${reworkCycle > 0 ? ':rework' + reworkCycle : ''}`,
               phase:     'Implementation',
             }
           )
-        ))
+        }))
       } catch (err) {
         testFailed = true
         testErrMsg = err && err.message ? err.message.slice(0, 120) : 'test dispatch failed'
@@ -284,7 +329,7 @@ const executePhase = async (implPhase) => {
     const review = await agent(
       `${featurePath} --scope ${implPhase.phase_id}`,
       {
-        agentType: 'review-solution',
+        agentType: resolvedNativeNames['review-solution'],
         label:     `review-solution:${implPhase.phase_id}`,
         phase:     'Implementation',
         schema:    REVIEW_SCHEMA,

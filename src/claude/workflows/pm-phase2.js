@@ -49,6 +49,31 @@ function normalizeError(err) {
   try { return JSON.stringify(err) } catch (_) { return '<unknown error>' }
 }
 
+// ── Tier 2 resolution guard ───────────────────────────────────────────────────
+// All worker agents must be resolved via the CLI before dispatch.
+// No direct require('lib/agent-registry') — resolution goes through the CLI facade.
+const RESOLVE_SCHEMA = {
+  type: 'object',
+  properties: {
+    nativeName:  { type: 'string' },
+    status:      { type: 'string' },
+    agentId:     { type: 'string' },
+    exitNonZero: { type: 'boolean' },
+    error:       { type: 'string' },
+  },
+}
+
+async function resolveAgentTier2(agentId, label, phaseName) {
+  const result = await agent(
+    `Run this command via Bash:\n\nai-toolkit agents resolve --project . --id ${agentId} --require-verified\n\nIf the command exits 0: parse the JSON from stdout and return it with exitNonZero: false.\nIf the command exits non-zero: return {"exitNonZero": true, "error": "<stderr text>", "agentId": "${agentId}"}.`,
+    { label, phase: phaseName, model: 'haiku', schema: RESOLVE_SCHEMA }
+  )
+  if (!result || result.exitNonZero || !result.nativeName) {
+    throw new Error(`HARD STOP — Tier 2 resolution failed for ${agentId}: ${result && result.error ? result.error : 'no nativeName returned'}`)
+  }
+  return result.nativeName
+}
+
 // ── Parse args ────────────────────────────────────────────────────────────────
 
 // args: "<path-to-feature.md>"
@@ -78,6 +103,7 @@ phase('Work Breakdown')
 const tokenLedger = []
 
 log(`Running generate-work-breakdown for ${featurePath}`)
+const wbNativeName = await resolveAgentTier2('gaia.agent.planner.work-breakdown', 'resolve-generate-work-breakdown', 'Work Breakdown')
 const wbKey = 'generate-work-breakdown:phase2'
 await agent(
   `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${wbKey} --phase phase2 --model haiku --attempt 1\n\nReturn no output.`,
@@ -85,7 +111,7 @@ await agent(
 )
 const beforeWB = budget.spent()
 await agent(featurePath, {
-  agentType: 'generate-work-breakdown',
+  agentType: wbNativeName,
   label:     'generate-work-breakdown',
   phase:     'Work Breakdown',
 })
@@ -165,6 +191,7 @@ const semanticKey = 'validate-work-breakdown-semantic:phase2'
 if (!wbValidatorPassed) {
   log('validate-work-breakdown-semantic: skipped (wb-validate did not pass)')
 } else {
+  const semanticNativeName = await resolveAgentTier2('gaia.agent.planner.validate-work-breakdown', 'resolve-validate-work-breakdown-semantic', 'Work Breakdown')
   await agent(
     `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${semanticKey} --phase phase2 --model sonnet --attempt 1\n\nReturn no output.`,
     { label: 'ledger-open-semantic-validator', phase: 'Work Breakdown', model: 'haiku' }
@@ -176,7 +203,7 @@ if (!wbValidatorPassed) {
       {
         label:     'validate-work-breakdown-semantic',
         phase:     'Work Breakdown',
-        agentType: 'validate-work-breakdown-semantic',
+        agentType: semanticNativeName,
         schema:    WB_SEMANTIC_SCHEMA,
       }
     )

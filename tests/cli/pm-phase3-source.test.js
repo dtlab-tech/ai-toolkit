@@ -337,12 +337,12 @@ describe('pm-phase3.js — executePhase agent calls use facade (AC-04, AC-07)', 
     const wavesLoopIdx      = source.indexOf('for (const wave of waves)');
     const executePhaseBody  = source.slice(executePhaseStart, wavesLoopIdx);
 
-    // Assert: review-solution agent is dispatched inside executePhase
-    expect(executePhaseBody).toMatch(/agentType:\s*'review-solution'/);
+    // Assert: review-solution is dispatched via the Tier 2 resolved nativeName
+    expect(executePhaseBody).toMatch(/agentType:\s*resolvedNativeNames\['review-solution'\]/);
 
     // Assert: ledger open appears before review-solution dispatch in the body
     const openInBody   = executePhaseBody.indexOf('ai-toolkit ledger open');
-    const reviewInBody = executePhaseBody.indexOf("agentType: 'review-solution'");
+    const reviewInBody = executePhaseBody.indexOf("resolvedNativeNames['review-solution']");
     expect(openInBody).toBeGreaterThan(-1);
     expect(reviewInBody).toBeGreaterThan(-1);
     expect(openInBody).toBeLessThan(reviewInBody);
