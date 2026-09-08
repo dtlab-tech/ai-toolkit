@@ -372,5 +372,23 @@
     "started_at": "2026-09-08T21:19:11.684Z",
     "completed_at": "2026-09-08T21:21:35.951Z",
     "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "6e248f6f08b0e56c83c2ee66f3577a46",
+    "agent": "developer-backend:US-10-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-08T21:21:52.968Z",
+    "completed_at": "2026-09-08T21:23:43.953Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "568f197fa44ba39c8feadc4cb2bb9b2d",
+    "agent": "developer-testing:US-10-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-08T21:23:44.124Z",
+    "completed_at": "2026-09-08T21:26:22.627Z",
+    "phase_delta_tokens": null
   }
 ]
