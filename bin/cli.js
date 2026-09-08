@@ -308,6 +308,15 @@ function writeManifest(destRoot, fileList, installationMode, fileHashes) {
     files: filtered.map(f => f.replace(/\\/g, '/')),
   };
   if (fileHashes !== undefined && fileHashes !== null) {
+    // Enforce set(files) == set(keys(fileHashes)) invariant (AC-40).
+    const filesSet  = new Set(manifest.files);
+    const hashesSet = new Set(Object.keys(fileHashes).map(k => k.replace(/\\/g, '/')));
+    if (filesSet.size !== hashesSet.size || [...filesSet].some(f => !hashesSet.has(f))) {
+      throw new Error(
+        'writeManifest: set(files) ≠ set(keys(fileHashes)). ' +
+        'Every installed file must have exactly one hash entry.'
+      );
+    }
     manifest.fileHashes = fileHashes;
   }
   try {
@@ -423,7 +432,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
 
   if (modified.length === 0) {
     console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
-    writeManifest(destRoot, newFileSet, installationMode);
+    writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
     return;
   }
 
@@ -434,7 +443,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
       fs.copyFileSync(e.src, e.dest);
       console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
-    writeManifest(destRoot, newFileSet, installationMode);
+    writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
     return;
   }
 
@@ -463,7 +472,20 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
     `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
   );
 
-  writeManifest(destRoot, newFileSet, installationMode);
+  writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
+}
+
+// Compute SHA-256 for every relative path in relPaths under destRoot.
+// Files that cannot be read are silently skipped (they won't appear in fileHashes).
+function _buildFileHashes(destRoot, relPaths) {
+  const fileHashes = {};
+  for (const relPath of relPaths) {
+    const absPath = path.join(destRoot, relPath);
+    try {
+      fileHashes[relPath] = computeFileSha256(absPath);
+    } catch (_) { /* ignore unreadable files */ }
+  }
+  return fileHashes;
 }
 
 // ── subagent spawn-depth check (verify & advise only — never write) ────────────
