@@ -98,6 +98,12 @@ const prefixMatch = featureDir.match(/([A-Z]+-\d+)/)
 const prefix      = prefixMatch ? prefixMatch[1] : 'FTR-000'
 const csvPath     = `${featureDir}/${prefix}-Work-Breakdown.csv`
 
+// ── Tier 3 self-registration (open BEFORE any main logic, fail-closed) ────────
+await ledgerTerminal(
+  `ai-toolkit ledger open --prefix ${prefix} --agent pm-phase3:self --phase phase3 --dir "${featureDir}" --attempt 1`,
+  'ledger-open-pm-phase3-self', 'Parse'
+)
+
 log(`Reading CSV: ${csvPath}`)
 
 const csvKey = 'read-wb-csv:phase3'
@@ -802,6 +808,12 @@ Run these exact git commands in the repository root:
 
 If there is nothing to commit (all files already committed), that is fine — report success.`,
   { label: 'commit-actuals', phase: 'Actuals' }
+)
+
+// ── Tier 3 self-registration — close on successful completion ─────────────────
+await ledgerTerminal(
+  `ai-toolkit ledger close --prefix ${prefix} --agent pm-phase3:self --dir "${featureDir}" --attempt 1`,
+  'ledger-close-pm-phase3-self', 'Actuals'
 )
 
 return {

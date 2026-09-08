@@ -97,6 +97,34 @@ const featureDir  = deriveFeatureDir(featurePath)
 const prefixMatch = featureDir.match(/([A-Z]+-\d+)/)
 const prefix      = prefixMatch ? prefixMatch[1] : 'FTR-000'
 
+// ── Tier 3 — self-ledger helper ───────────────────────────────────────────────
+const SELF_LEDGER_SCHEMA = {
+  type: 'object',
+  properties: {
+    exitCode: { type: 'number' },
+    stdout:   { type: 'string' },
+    stderr:   { type: 'string' },
+  },
+  required: ['exitCode'],
+}
+
+async function selfLedgerOp(cmd, label, phaseName) {
+  const result = await agent(
+    `Run this shell command via Bash and return the exit code as structured output.\n\nCommand: ${cmd}\n\nCapture: exitCode (integer), stdout (string), stderr (string). Return all three.`,
+    { label, phase: phaseName, model: 'haiku', schema: SELF_LEDGER_SCHEMA }
+  )
+  const status = (result && typeof result.exitCode === 'number') ? result.exitCode : 1
+  if (status !== 0) {
+    throw new Error(`HARD STOP — self-ledger operation failed. Exit code: ${status}. Command: ${cmd}`)
+  }
+}
+
+// ── Tier 3 self-registration (open BEFORE any main logic, fail-closed) ────────
+await selfLedgerOp(
+  `ai-toolkit ledger open --prefix ${prefix} --agent pm-phase2:self --phase phase2 --dir "${featureDir}" --attempt 1`,
+  'ledger-open-pm-phase2-self', 'Work Breakdown'
+)
+
 // ── generate-work-breakdown ───────────────────────────────────────────────────
 phase('Work Breakdown')
 
@@ -520,6 +548,12 @@ Steps:
 Events to append:
 ${phase2Events}`,
   { label: 'append-process-log', phase: 'Effort Estimate' }
+)
+
+// ── Tier 3 self-registration — close on successful completion ─────────────────
+await selfLedgerOp(
+  `ai-toolkit ledger close --prefix ${prefix} --agent pm-phase2:self --dir "${featureDir}" --attempt 1`,
+  'ledger-close-pm-phase2-self', 'Effort Estimate'
 )
 
 return {

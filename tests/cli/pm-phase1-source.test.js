@@ -216,12 +216,15 @@ describe('pm-phase1.js — ensure-ledger startup step present (AC-08)', () => {
     expect(ensureIdx).toBeLessThan(reqPhaseIdx);
   });
 
-  test('ensure-ledger step appears before the first "ai-toolkit ledger open" call site', () => {
-    // Arrange: the ensure step must run before any ledger entry is opened
+  test('ensure-ledger step appears before the first agent-level "ai-toolkit ledger open" call site', () => {
+    // Arrange: the ensure step must run before any agent-specific ledger entry is opened.
+    // The pm-phase1:self open runs first (Tier 3 self-registration) and is allowed to
+    // precede ensure-ledger because the ledger CLI creates the file atomically on open.
     const ensureIdx = source.indexOf('ensure-ledger');
-    const openIdx   = source.indexOf('ai-toolkit ledger open');
+    // Use the first agent-specific ledger open label (not the self-registration one)
+    const openIdx   = source.indexOf('ledger-open-requirements');
 
-    // Assert: ledger file is guaranteed to exist before pm-phase1 opens its first entry
+    // Assert: ledger file is guaranteed to exist before pm-phase1 opens its first agent entry
     expect(ensureIdx).toBeGreaterThan(-1);
     expect(openIdx).toBeGreaterThan(-1);
     expect(ensureIdx).toBeLessThan(openIdx);

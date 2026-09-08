@@ -34,10 +34,43 @@ async function resolveAgentTier2(agentId, label, phaseName) {
   return result.nativeName
 }
 
+// ── Tier 3 — self-ledger helper ───────────────────────────────────────────────
+const SELF_LEDGER_SCHEMA = {
+  type: 'object',
+  properties: {
+    exitCode: { type: 'number' },
+    stdout:   { type: 'string' },
+    stderr:   { type: 'string' },
+  },
+  required: ['exitCode'],
+}
+
+async function selfLedgerOp(cmd, label, phaseName) {
+  const result = await agent(
+    `Run this shell command via Bash and return the exit code as structured output.\n\nCommand: ${cmd}\n\nCapture: exitCode (integer), stdout (string), stderr (string). Return all three.`,
+    { label, phase: phaseName, model: 'haiku', schema: SELF_LEDGER_SCHEMA }
+  )
+  const status = (result && typeof result.exitCode === 'number') ? result.exitCode : 1
+  if (status !== 0) {
+    throw new Error(`HARD STOP — self-ledger operation failed. Exit code: ${status}. Command: ${cmd}`)
+  }
+}
+
 // ── Parse args ────────────────────────────────────────────────────────────────
 // args is the raw prompt string: "<path-to-feature.md> [--force]"
 const featurePath = args.split(/\s+/)[0]
 const force       = typeof args === 'string' && args.includes('--force')
+
+// Derive prefix and feature dir early (before Discovery agent) for self-registration
+const featureDirEarly  = featurePath.replace(/[/\\][^/\\]+$/, '')
+const prefixEarlyMatch = featureDirEarly.match(/([A-Z]+-\d+)/)
+const prefixEarly      = prefixEarlyMatch ? prefixEarlyMatch[1] : 'FTR-000'
+
+// ── Tier 3 self-registration (open BEFORE any main logic, fail-closed) ────────
+await selfLedgerOp(
+  `ai-toolkit ledger open --prefix ${prefixEarly} --agent pm-phase1:self --phase phase1 --dir "${featureDirEarly}" --attempt 1`,
+  'ledger-open-pm-phase1-self', 'Discovery'
+)
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
 phase('Discovery')
@@ -320,6 +353,12 @@ const gate1Payload = {
   token_ledger: tokenLedger,
   errors,
 }
+
+// ── Tier 3 self-registration — close on successful completion ─────────────────
+await selfLedgerOp(
+  `ai-toolkit ledger close --prefix ${prefix} --agent pm-phase1:self --dir "${feature_dir}" --attempt 1`,
+  'ledger-close-pm-phase1-self', 'Validation'
+)
 
 log(`pm-phase1 complete — gate1_payload ready`)
 return gate1Payload
