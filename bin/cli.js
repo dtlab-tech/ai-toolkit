@@ -2428,6 +2428,82 @@ async function handleAgentsCommand(argv) {
       process.exitCode = 1;
     }
 
+  } else if (subcommand === 'cleanup') {
+    // Reject any mutating flags up-front (AC-15).
+    const hasDelete = remaining.indexOf('--delete') !== -1;
+    const hasForce  = remaining.indexOf('--force')  !== -1;
+    if (hasDelete || hasForce) {
+      process.stderr.write(
+        'Error: agents cleanup does not support mutating flags (--delete, --force) in this version.\n' +
+        '       Only --dry-run is supported; no files are ever modified or deleted.\n'
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    if (!projectDir) {
+      process.stderr.write('Error: agents cleanup requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+
+    // Locate the active manifest (project-scoped takes precedence over global).
+    const projectManifestPath = path.join(effectiveProject, '.claude', MANIFEST_FILE);
+    const globalManifestPath  = path.join(effectiveHome,    '.claude', MANIFEST_FILE);
+
+    let installRoot    = null;
+    let manifestData   = null;
+
+    if (fs.existsSync(projectManifestPath)) {
+      installRoot  = effectiveProject;
+      manifestData = readJsonSafe(projectManifestPath);
+    } else if (fs.existsSync(globalManifestPath)) {
+      installRoot  = effectiveHome;
+      manifestData = readJsonSafe(globalManifestPath);
+    }
+
+    if (!installRoot || !manifestData || !Array.isArray(manifestData.files)) {
+      process.stdout.write(
+        JSON.stringify({ status: 'no-manifest', candidates: [], missing: [] }, null, 2) + '\n'
+      );
+      process.exitCode = 0;
+      return;
+    }
+
+    // Build the set of absolute paths that the current payload would install
+    // into the same install root.  Anything NOT in this set is a potential orphan.
+    // buildExpectedPayload takes the .claude dir (same convention as the installer).
+    const expectedPayload = buildExpectedPayload(path.join(installRoot, '.claude'));
+
+    const candidates = [];
+    const missing    = [];
+
+    for (const relPath of manifestData.files) {
+      if (typeof relPath !== 'string') continue;
+      const absPath = path.resolve(installRoot, relPath);
+
+      // If still in the current payload → not a cleanup candidate.
+      if (expectedPayload.has(absPath)) continue;
+
+      // Not in current payload: check disk state.
+      if (fs.existsSync(absPath)) {
+        candidates.push({ path: relPath, absPath: absPath, status: 'candidate' });
+      } else {
+        missing.push({ path: relPath, absPath: absPath, status: 'missing' });
+      }
+    }
+
+    const output = {
+      status:     'dry-run',
+      installRoot: installRoot,
+      candidates: candidates.map(function (c) { return { path: c.path, status: c.status }; }),
+      missing:    missing.map(function (m)    { return { path: m.path, status: m.status }; }),
+    };
+    process.stdout.write(JSON.stringify(output, null, 2) + '\n');
+    process.exitCode = 0;
+
   } else {
     process.stderr.write(
       'Error: unknown agents subcommand: ' + (subcommand || '(none)') + '\n'

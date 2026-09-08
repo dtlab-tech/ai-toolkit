@@ -1075,3 +1075,154 @@ function walkDirRecursive(dir) {
   walk(dir);
   return results;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// agents cleanup — dry-run classification (AC-15, AC-16)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('agents cleanup — mutating flags rejected (AC-15)', () => {
+  test('--delete flag rejected with non-zero exit', () => {
+    const projDir = mktmp('cleanup-delete');
+    const result  = runCLI(['agents', 'cleanup', '--project', projDir, '--delete']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/--delete/);
+  });
+
+  test('--force flag rejected with non-zero exit', () => {
+    const projDir = mktmp('cleanup-force');
+    const result  = runCLI(['agents', 'cleanup', '--project', projDir, '--force']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/--force/);
+  });
+
+  test('missing --project exits non-zero with --project diagnostic', () => {
+    const result = runCLI(['agents', 'cleanup']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/--project/);
+  });
+});
+
+describe('agents cleanup — no manifest returns dry-run with empty lists (AC-15)', () => {
+  test('exits 0 and returns no-manifest status when no toolkit is installed', () => {
+    const projDir  = mktmp('cleanup-nomanifest');
+    const fakeHome = mktmp('cleanup-nomanifest-home');
+    const result   = runCLI(['agents', 'cleanup', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.status).toBe('no-manifest');
+    expect(out.candidates).toEqual([]);
+    expect(out.missing).toEqual([]);
+  });
+});
+
+describe('agents cleanup — genuine candidates listed correctly (AC-15, AC-16)', () => {
+  const STALE_PATH  = '.claude/agents/old-removed-agent.md';
+  const ACTIVE_PATH = '.claude/agents/developer-backend.md';
+
+  test('a manifest entry no longer in current payload and still on disk is a candidate', () => {
+    const projDir  = mktmp('cleanup-candidate');
+    const fakeHome = mktmp('cleanup-candidate-home');
+
+    // Write both files on disk
+    writeFileAt(projDir, STALE_PATH,  '# old agent\n');
+    writeFileAt(projDir, ACTIVE_PATH, '---\nname: developer-backend\n---\n');
+
+    // Manifest lists both; but STALE_PATH is NOT in the current toolkit payload
+    writeManifestJSON(projDir, {
+      version:          '0.13.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [STALE_PATH, ACTIVE_PATH],
+      fileHashes:       {},
+    });
+
+    const result = runCLI(['agents', 'cleanup', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.status).toBe('dry-run');
+    // Stale agent must appear as a candidate
+    const candidatePaths = out.candidates.map(c => c.path.replace(/\\/g, '/'));
+    expect(candidatePaths).toContain(STALE_PATH);
+    // Active agent must NOT be a candidate
+    expect(candidatePaths).not.toContain(ACTIVE_PATH);
+  });
+});
+
+describe('agents cleanup — missing manifest entry is never a candidate (AC-16)', () => {
+  const MISSING_PATH = '.claude/agents/missing-agent.md';
+
+  test('a manifest entry absent from disk is reported as missing, not a candidate', () => {
+    const projDir  = mktmp('cleanup-missing');
+    const fakeHome = mktmp('cleanup-missing-home');
+
+    // Manifest lists the file but it does NOT exist on disk
+    writeManifestJSON(projDir, {
+      version:          '0.13.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [MISSING_PATH],
+      fileHashes:       {},
+    });
+
+    const result = runCLI(['agents', 'cleanup', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    // Must appear in missing, not candidates
+    const missingPaths   = out.missing.map(m => m.path.replace(/\\/g, '/'));
+    const candidatePaths = out.candidates.map(c => c.path.replace(/\\/g, '/'));
+    expect(missingPaths).toContain(MISSING_PATH);
+    expect(candidatePaths).not.toContain(MISSING_PATH);
+  });
+});
+
+describe('agents cleanup — user-owned files never proposed (AC-16)', () => {
+  test('a file on disk not in the manifest is never a candidate', () => {
+    const projDir    = mktmp('cleanup-userowned');
+    const fakeHome   = mktmp('cleanup-userowned-home');
+    const userFile   = '.claude/agents/user-custom-agent.md';
+
+    // Write a user file on disk but do NOT list it in the manifest
+    writeFileAt(projDir, userFile, '# my custom agent\n');
+    writeManifestJSON(projDir, {
+      version:          '0.13.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [],
+      fileHashes:       {},
+    });
+
+    const result = runCLI(['agents', 'cleanup', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    const candidatePaths = out.candidates.map(c => c.path.replace(/\\/g, '/'));
+    const missingPaths   = out.missing.map(m => m.path.replace(/\\/g, '/'));
+    expect(candidatePaths).not.toContain(userFile);
+    expect(missingPaths).not.toContain(userFile);
+  });
+});
+
+describe('agents cleanup — no files touched (AC-15)', () => {
+  const STALE_PATH = '.claude/agents/old-removed-agent.md';
+
+  test('dry-run does not delete or modify any file on disk', () => {
+    const projDir  = mktmp('cleanup-readonly');
+    const fakeHome = mktmp('cleanup-readonly-home');
+
+    writeFileAt(projDir, STALE_PATH, '# old agent\n');
+    writeManifestJSON(projDir, {
+      version:          '0.13.0',
+      installedAt:      '2026-01-01T00:00:00.000Z',
+      installationMode: 'local',
+      files:            [STALE_PATH],
+      fileHashes:       {},
+    });
+
+    const before = walkDirRecursive(projDir);
+    runCLI(['agents', 'cleanup', '--project', projDir, '--home', fakeHome]);
+    const after  = walkDirRecursive(projDir);
+
+    expect(after.sort()).toEqual(before.sort());
+    // Stale file must still exist — dry-run never deletes
+    expect(fs.existsSync(path.join(projDir, STALE_PATH))).toBe(true);
+  });
+});

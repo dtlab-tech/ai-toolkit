@@ -354,5 +354,23 @@
     "started_at": "2026-09-08T21:14:51.664Z",
     "completed_at": "2026-09-08T21:17:25.295Z",
     "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "204a4f06db65f0ce9e9c54282c742507",
+    "agent": "developer-backend:US-09-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-08T21:17:47.269Z",
+    "completed_at": "2026-09-08T21:19:11.497Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "43d102de462e2ff23e68566dc9134b78",
+    "agent": "developer-testing:US-09-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-08T21:19:11.684Z",
+    "completed_at": "2026-09-08T21:21:35.951Z",
+    "phase_delta_tokens": null
   }
 ]
