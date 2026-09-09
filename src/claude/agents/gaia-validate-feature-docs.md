@@ -1,5 +1,5 @@
 ---
-name: validate-feature-docs
+name: gaia-validate-feature-docs
 description: "Validates Requirements and Tech-Spec documents against feature.md. Triggers targeted revision of failing documents if gaps are found. Input: path to feature.md"
 model: haiku
 tools: Read, Glob, Grep, Write
