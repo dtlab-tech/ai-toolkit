@@ -1,5 +1,5 @@
 ---
-name: generate-requirements
+name: gaia-generate-requirements
 description: "Generates a functional requirements document from a feature description. Input: path to feature.md"
 model: haiku
 tools: Read, Glob, Grep, Write

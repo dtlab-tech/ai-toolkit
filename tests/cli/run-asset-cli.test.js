@@ -78,7 +78,7 @@ describe('run-asset CLI — security: category and extension restrictions', () =
 
   test('rejects assets outside scripts/ category — exit 1, stderr mentions category', () => {
     const result = runCLI([
-      'run-asset', 'agents/developer-backend.md',
+      'run-asset', 'agents/gaia-developer-backend.md',
       '--project', emptyProject, '--home', emptyHome,
     ]);
     expect(result.status).toBe(1);
@@ -116,7 +116,7 @@ describe('run-asset CLI — security: category and extension restrictions', () =
 
   test('stdout is empty on category rejection', () => {
     const result = runCLI([
-      'run-asset', 'agents/developer-backend.md',
+      'run-asset', 'agents/gaia-developer-backend.md',
       '--project', emptyProject, '--home', emptyHome,
     ]);
     expect(result.stdout.trim()).toBe('');

@@ -165,8 +165,8 @@ describe('pm-phase2.js — facade open-before / close-after pattern in source (A
   test('first "ai-toolkit ledger open" call site appears before generate-work-breakdown dispatch in source', () => {
     // Arrange: find the first facade open invocation
     const openIdx     = source.indexOf('ai-toolkit ledger open');
-    // The generate-work-breakdown dispatch is identified by its agentType label
-    const dispatchIdx = source.indexOf("agentType: 'generate-work-breakdown'");
+    // The generate-work-breakdown dispatch is identified by its agent label (agentType is now resolved dynamically)
+    const dispatchIdx = source.indexOf("label:     'generate-work-breakdown'");
 
     // Assert: open precedes dispatch (liveness: status "running" visible before agent fires)
     expect(openIdx).toBeGreaterThan(-1);
@@ -176,7 +176,7 @@ describe('pm-phase2.js — facade open-before / close-after pattern in source (A
 
   test('first "ai-toolkit ledger close" call site appears after generate-work-breakdown dispatch in source', () => {
     // Arrange: find the dispatch marker and then the first facade close invocation
-    const dispatchIdx = source.indexOf("agentType: 'generate-work-breakdown'");
+    const dispatchIdx = source.indexOf("label:     'generate-work-breakdown'");
     const closeIdx    = source.indexOf('ai-toolkit ledger close');
 
     // Assert: close follows dispatch (liveness: status updated only after agent completes)

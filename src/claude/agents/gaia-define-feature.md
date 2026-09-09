@@ -1,5 +1,5 @@
 ---
-name: define-feature
+name: gaia-define-feature
 description: "Define Feature — grills the user with targeted questions to define a new feature, then writes feature.md in docs/features/FTR-XXX-slug/. Output: feature.md ready for /implement-feature"
 model: sonnet
 ---

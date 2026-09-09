@@ -9,10 +9,68 @@ export const meta = {
   ],
 }
 
+// ── Tier 2 resolution guard ───────────────────────────────────────────────────
+// All worker agents must be resolved via the CLI before dispatch.
+// No direct require('lib/agent-registry') — resolution goes through the CLI facade.
+const RESOLVE_SCHEMA = {
+  type: 'object',
+  properties: {
+    nativeName:  { type: 'string' },
+    status:      { type: 'string' },
+    agentId:     { type: 'string' },
+    exitNonZero: { type: 'boolean' },
+    error:       { type: 'string' },
+  },
+}
+
+async function resolveAgentTier2(agentId, label, phaseName) {
+  const result = await agent(
+    `Run this command via Bash:\n\nai-toolkit agents resolve --project . --id ${agentId} --require-verified\n\nIf the command exits 0: parse the JSON from stdout and return it with exitNonZero: false.\nIf the command exits non-zero: return {"exitNonZero": true, "error": "<stderr text>", "agentId": "${agentId}"}.`,
+    { label, phase: phaseName, model: 'haiku', schema: RESOLVE_SCHEMA }
+  )
+  if (!result || result.exitNonZero || !result.nativeName) {
+    throw new Error(`HARD STOP — Tier 2 resolution failed for ${agentId}: ${result && result.error ? result.error : 'no nativeName returned'}`)
+  }
+  return result.nativeName
+}
+
+// ── Tier 3 — self-ledger helper ───────────────────────────────────────────────
+const SELF_LEDGER_SCHEMA = {
+  type: 'object',
+  properties: {
+    exitCode: { type: 'number' },
+    stdout:   { type: 'string' },
+    stderr:   { type: 'string' },
+  },
+  required: ['exitCode'],
+}
+
+async function selfLedgerOp(cmd, label, phaseName) {
+  const result = await agent(
+    `Run this shell command via Bash and return the exit code as structured output.\n\nCommand: ${cmd}\n\nCapture: exitCode (integer), stdout (string), stderr (string). Return all three.`,
+    { label, phase: phaseName, model: 'haiku', schema: SELF_LEDGER_SCHEMA }
+  )
+  const status = (result && typeof result.exitCode === 'number') ? result.exitCode : 1
+  if (status !== 0) {
+    throw new Error(`HARD STOP — self-ledger operation failed. Exit code: ${status}. Command: ${cmd}`)
+  }
+}
+
 // ── Parse args ────────────────────────────────────────────────────────────────
 // args is the raw prompt string: "<path-to-feature.md> [--force]"
 const featurePath = args.split(/\s+/)[0]
 const force       = typeof args === 'string' && args.includes('--force')
+
+// Derive prefix and feature dir early (before Discovery agent) for self-registration
+const featureDirEarly  = featurePath.replace(/[/\\][^/\\]+$/, '')
+const prefixEarlyMatch = featureDirEarly.match(/([A-Z]+-\d+)/)
+const prefixEarly      = prefixEarlyMatch ? prefixEarlyMatch[1] : 'FTR-000'
+
+// ── Tier 3 self-registration (open BEFORE any main logic, fail-closed) ────────
+await selfLedgerOp(
+  `ai-toolkit ledger open --prefix ${prefixEarly} --agent pm-phase1:self --phase phase1 --dir "${featureDirEarly}" --attempt 1`,
+  'ledger-open-pm-phase1-self', 'Discovery'
+)
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
 phase('Discovery')
@@ -87,13 +145,14 @@ const tokenLedger = []
 const errors      = []
 
 if (discoveryResult.needs_requirements) {
+  const reqNativeName = await resolveAgentTier2('gaia.agent.planner.requirements', 'resolve-generate-requirements', 'Requirements')
   const reqKey = 'generate-requirements:phase1'
   await agent(
     `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${reqKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
     { label: 'ledger-open-requirements', phase: 'Requirements', model: 'haiku' }
   )
   const beforeReq = budget.spent()
-  const reqResult = await agent(featurePath, { agentType: 'generate-requirements', label: 'generate-requirements', phase: 'Requirements' })
+  const reqResult = await agent(featurePath, { agentType: reqNativeName, label: 'generate-requirements', phase: 'Requirements' })
   const reqTokens = budget.spent() - beforeReq
   await agent(
     `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${reqKey} --tokens ${reqTokens} --attempt 1\n\nReturn no output.`,
@@ -109,13 +168,14 @@ if (discoveryResult.needs_requirements) {
 phase('Tech-Spec')
 
 if (discoveryResult.needs_tech_spec) {
+  const specNativeName = await resolveAgentTier2('gaia.agent.planner.tech-spec', 'resolve-generate-tech-spec', 'Tech-Spec')
   const specKey = 'generate-tech-spec:phase1'
   await agent(
     `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${specKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
     { label: 'ledger-open-tech-spec', phase: 'Tech-Spec', model: 'haiku' }
   )
   const beforeSpec = budget.spent()
-  const specResult = await agent(featurePath, { agentType: 'generate-tech-spec', label: 'generate-tech-spec', phase: 'Tech-Spec' })
+  const specResult = await agent(featurePath, { agentType: specNativeName, label: 'generate-tech-spec', phase: 'Tech-Spec' })
   const specTokens = budget.spent() - beforeSpec
   await agent(
     `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${specKey} --tokens ${specTokens} --attempt 1\n\nReturn no output.`,
@@ -130,6 +190,11 @@ if (discoveryResult.needs_tech_spec) {
 // ── validate-feature-docs (revision loop, max 3 cycles) ──────────────────────
 phase('Validation')
 
+// Resolve all validation-phase agents once before the loop (Tier 2 guard)
+const valNativeName = await resolveAgentTier2('gaia.agent.planner.validate-feature-docs', 'resolve-validate-feature-docs', 'Validation')
+const reqRevNativeName = await resolveAgentTier2('gaia.agent.planner.requirements', 'resolve-generate-requirements-rev', 'Validation')
+const specRevNativeName = await resolveAgentTier2('gaia.agent.planner.tech-spec', 'resolve-generate-tech-spec-rev', 'Validation')
+
 let validationSummary = 'skipped'
 let lastValText       = ''
 const MAX_CYCLES = 3
@@ -142,7 +207,7 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
     { label: `ledger-open-validate-cycle-${cycle}`, phase: 'Validation', model: 'haiku' }
   )
   const beforeVal = budget.spent()
-  const valResult = await agent(featurePath, { agentType: 'validate-feature-docs', label: `validate-feature-docs (cycle ${cycle})`, phase: 'Validation' })
+  const valResult = await agent(featurePath, { agentType: valNativeName, label: `validate-feature-docs (cycle ${cycle})`, phase: 'Validation' })
   const valTokens = budget.spent() - beforeVal
   await agent(
     `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${valKey} --tokens ${valTokens} --attempt 1\n\nReturn no output.`,
@@ -167,10 +232,10 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   if (cycle < MAX_CYCLES) {
     // Re-run failing docs before next validation cycle
     if (resultText.includes('Requirements')) {
-      await agent(featurePath, { agentType: 'generate-requirements', label: `generate-requirements (revision ${cycle})`, phase: 'Validation' })
+      await agent(featurePath, { agentType: reqRevNativeName, label: `generate-requirements (revision ${cycle})`, phase: 'Validation' })
     }
     if (resultText.includes('Tech-Spec')) {
-      await agent(featurePath, { agentType: 'generate-tech-spec', label: `generate-tech-spec (revision ${cycle})`, phase: 'Validation' })
+      await agent(featurePath, { agentType: specRevNativeName, label: `generate-tech-spec (revision ${cycle})`, phase: 'Validation' })
     }
   } else {
     validationSummary = 'gaps remain after 3 cycles'
@@ -288,6 +353,12 @@ const gate1Payload = {
   token_ledger: tokenLedger,
   errors,
 }
+
+// ── Tier 3 self-registration — close on successful completion ─────────────────
+await selfLedgerOp(
+  `ai-toolkit ledger close --prefix ${prefix} --agent pm-phase1:self --dir "${feature_dir}" --attempt 1`,
+  'ledger-close-pm-phase1-self', 'Validation'
+)
 
 log(`pm-phase1 complete — gate1_payload ready`)
 return gate1Payload

@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
 const executionLedger = require('../lib/execution-ledger');
+const agentRegistry   = require('../lib/agent-registry');
 const packageRoot = path.join(__dirname, '..');
 
 // ── colors ────────────────────────────────────────────────────────────────────
@@ -44,6 +45,10 @@ function banner() {
 
 function fileHash(filePath) {
   return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function computeFileSha256(filePath) {
+  return 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
 function readJsonSafe(filePath) {
@@ -289,7 +294,7 @@ function moveToTrash(destRoot, relativePath) {
   }
 }
 
-function writeManifest(destRoot, fileList, installationMode) {
+function writeManifest(destRoot, fileList, installationMode, fileHashes) {
   const manifestPath = path.join(destRoot, '.claude', MANIFEST_FILE);
   const trashDir = path.join(destRoot, '.claude', '.ai-toolkit-trash');
   const filtered = fileList.filter(rel => {
@@ -302,6 +307,18 @@ function writeManifest(destRoot, fileList, installationMode) {
     installationMode: installationMode,
     files: filtered.map(f => f.replace(/\\/g, '/')),
   };
+  if (fileHashes !== undefined && fileHashes !== null) {
+    // Enforce set(files) == set(keys(fileHashes)) invariant (AC-40).
+    const filesSet  = new Set(manifest.files);
+    const hashesSet = new Set(Object.keys(fileHashes).map(k => k.replace(/\\/g, '/')));
+    if (filesSet.size !== hashesSet.size || [...filesSet].some(f => !hashesSet.has(f))) {
+      throw new Error(
+        'writeManifest: set(files) ≠ set(keys(fileHashes)). ' +
+        'Every installed file must have exactly one hash entry.'
+      );
+    }
+    manifest.fileHashes = fileHashes;
+  }
   try {
     ensureDir(manifestPath);
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
@@ -415,7 +432,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
 
   if (modified.length === 0) {
     console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
-    writeManifest(destRoot, newFileSet, installationMode);
+    writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
     return;
   }
 
@@ -426,7 +443,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
       fs.copyFileSync(e.src, e.dest);
       console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
-    writeManifest(destRoot, newFileSet, installationMode);
+    writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
     return;
   }
 
@@ -455,7 +472,20 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
     `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
   );
 
-  writeManifest(destRoot, newFileSet, installationMode);
+  writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
+}
+
+// Compute SHA-256 for every relative path in relPaths under destRoot.
+// Files that cannot be read are silently skipped (they won't appear in fileHashes).
+function _buildFileHashes(destRoot, relPaths) {
+  const fileHashes = {};
+  for (const relPath of relPaths) {
+    const absPath = path.join(destRoot, relPath);
+    try {
+      fileHashes[relPath] = computeFileSha256(absPath);
+    } catch (_) { /* ignore unreadable files */ }
+  }
+  return fileHashes;
 }
 
 // ── subagent spawn-depth check (verify & advise only — never write) ────────────
@@ -1486,6 +1516,157 @@ function runDoctorResolution(options) {
   L('');
 }
 
+// ── runDoctorAgents ───────────────────────────────────────────────────────────
+
+// US-08-TASK-BE-01 (FTR-017):
+// Read-only diagnostic report for all registered toolkit agents.
+// Never modifies, creates, or deletes any file (AC-14).
+//
+// Parameters (via options object):
+//   projectDir (string): target project directory (defaults to process.cwd())
+//   home       (string): override for os.homedir() to enable test isolation
+//
+// Output: human-readable report on stdout; always exits 0.
+function runDoctorAgents(options) {
+  const os = require('os');
+
+  const opts             = options || {};
+  const effectiveHome    = opts.home       !== undefined ? path.resolve(opts.home)       : os.homedir();
+  const effectiveProject = opts.projectDir !== undefined ? path.resolve(opts.projectDir) : process.cwd();
+
+  const records = agentRegistry.listRegisteredAgents(effectiveProject, effectiveHome);
+
+  const STATUS_ICON = {
+    'verified':          '[OK]',
+    'conflict':          '[!!]',
+    'hash-unverifiable': '[??]',
+    'unobservable':      '[??]',
+    'not-installed':     '[--]',
+    'not-applicable':    '[NA]',
+  };
+
+  const lines = [];
+  lines.push('');
+  lines.push('ai-toolkit doctor agents');
+  lines.push('─'.repeat(72));
+  lines.push('');
+
+  const statusCounts      = {};
+  const unobservable      = [];
+  const conflicts         = [];
+  const hashUnverifiable  = [];
+
+  for (const rec of records) {
+    const status = rec.status;
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+
+    const icon = STATUS_ICON[status] || '[??]';
+    lines.push('  ' + icon + ' ' + rec.agentId);
+    lines.push('      native:  ' + rec.nativeName);
+    lines.push('      scope:   ' + (rec.scope          || '—'));
+    lines.push('      version: ' + (rec.toolkitVersion || '—'));
+    if (rec.path)            lines.push('      path:    ' + rec.path);
+    if (rec.sha256)          lines.push('      sha256:  ' + rec.sha256);
+    if (rec.integrityDetail) lines.push('      detail:  ' + rec.integrityDetail);
+    if (rec.error)           lines.push('      error:   ' + rec.error);
+    if (rec.deprecated)      lines.push('      DEPRECATED — target: ' + (rec.deprecationTarget || '(unspecified)'));
+    lines.push('');
+
+    if (status === 'unobservable')      unobservable.push(rec);
+    else if (status === 'conflict')     conflicts.push(rec);
+    else if (status === 'hash-unverifiable') hashUnverifiable.push(rec);
+  }
+
+  // ── Summary ──────────────────────────────────────────────────────────────────
+  lines.push('─'.repeat(72));
+  lines.push('Summary:');
+  for (const [status, count] of Object.entries(statusCounts)) {
+    lines.push('  ' + (STATUS_ICON[status] || '[??]') + ' ' + status + ': ' + count);
+  }
+  lines.push('');
+
+  // ── Unobservable WARNING (AC-33) ──────────────────────────────────────────────
+  if (unobservable.length > 0) {
+    lines.push('WARNING: unobservable scope(s) detected.');
+    lines.push('  The following agents exist in plugin or session scopes that cannot be');
+    lines.push('  enumerated from the filesystem. Dispatch is NOT blocked. The mandatory');
+    lines.push('  mitigation is gaia-* namespacing — a uniquely prefixed native name is');
+    lines.push('  extremely unlikely to collide with a plugin or session agent.');
+    for (const rec of unobservable) {
+      lines.push('    - ' + rec.agentId + ' (' + rec.nativeName + ')');
+    }
+    lines.push('');
+  }
+
+  // ── hash-unverifiable remediation ────────────────────────────────────────────
+  if (hashUnverifiable.length > 0) {
+    lines.push('Remediation for hash-unverifiable agent(s):');
+    lines.push('  Reinstall or upgrade the toolkit runtime to generate integrity hashes.');
+    lines.push('  Command: ai-toolkit --local <project-dir> --force');
+    lines.push('');
+  }
+
+  // ── Conflict detail ───────────────────────────────────────────────────────────
+  if (conflicts.length > 0) {
+    lines.push('Conflicts:');
+    for (const rec of conflicts) {
+      const detail = rec.integrityDetail || rec.error || 'ambiguous installation';
+      lines.push('  ' + rec.agentId + ': ' + detail);
+      if (rec.path) lines.push('    path: ' + rec.path);
+    }
+    lines.push('');
+  }
+
+  // ── Foreign observable agents (AC-09) ────────────────────────────────────────
+  const catalogNativeNames = new Set(agentRegistry.CATALOG.map(function (e) { return e.nativeNames.claude; }));
+  const agentsDirs = [];
+  var projectAgentsDir = path.join(effectiveProject, '.claude', 'agents');
+  var globalAgentsDir  = path.join(effectiveHome,    '.claude', 'agents');
+  if (fs.existsSync(projectAgentsDir)) agentsDirs.push({ dir: projectAgentsDir, scope: 'project' });
+  if (fs.existsSync(globalAgentsDir))  agentsDirs.push({ dir: globalAgentsDir,  scope: 'global'  });
+
+  var foreignAgents = [];
+  for (var di = 0; di < agentsDirs.length; di++) {
+    var entry = agentsDirs[di];
+    try {
+      var files = fs.readdirSync(entry.dir).filter(function (f) { return f.endsWith('.md'); });
+      for (var fi = 0; fi < files.length; fi++) {
+        var nativeName = files[fi].replace(/\.md$/, '');
+        if (!catalogNativeNames.has(nativeName)) {
+          foreignAgents.push({ nativeName: nativeName, path: path.join(entry.dir, files[fi]), scope: entry.scope });
+        }
+      }
+    } catch (_) { /* ignore unreadable dirs */ }
+  }
+
+  if (foreignAgents.length > 0) {
+    lines.push('Foreign observable agents (not in toolkit catalog):');
+    lines.push('  These agents are present in an observable scope but are NOT registered');
+    lines.push('  toolkit agents. They do NOT block dispatch. Review and remove if stale.');
+    for (var fai = 0; fai < foreignAgents.length; fai++) {
+      var fa = foreignAgents[fai];
+      lines.push('  [foreign/' + fa.scope + '] ' + fa.nativeName);
+      lines.push('    path: ' + fa.path);
+    }
+    lines.push('');
+  }
+
+  // ── Deprecated / legacy agents ───────────────────────────────────────────────
+  var deprecated = records.filter(function (r) { return r.deprecated; });
+  if (deprecated.length > 0) {
+    lines.push('Deprecated agents (Phase A legacy names):');
+    for (var dpi = 0; dpi < deprecated.length; dpi++) {
+      var drec = deprecated[dpi];
+      lines.push('  ' + drec.agentId + ' (' + drec.nativeName + ')');
+      if (drec.deprecationTarget) lines.push('    rename target: ' + drec.deprecationTarget);
+    }
+    lines.push('  Remediation: reinstall the toolkit after Phase B renames are complete.');
+    lines.push('');
+  }
+
+  process.stdout.write(lines.join('\n') + '\n');
+}
+
 // ── validatePurityGuard ───────────────────────────────────────────────────────
 
 // US-05-TASK-BE-03 (FTR-015):
@@ -1554,7 +1735,7 @@ function runValidatePurity(sourceDir) {
 // projects. Keyed by category name; value is a Set of item names to skip.
 // See AGENTS.md hard constraints.
 const TOOLKIT_INTERNAL_ASSETS = {
-  agents: new Set(['install-toolkit.md']),
+  agents: new Set(['gaia-install-toolkit.md']),
   skills: new Set(['install-toolkit']),
 };
 
@@ -1764,6 +1945,14 @@ async function main() {
     const home       = homeIdx    !== -1 ? remaining[homeIdx    + 1] : undefined;
     runDoctorResolution({ projectDir, home });
     process.exit(0);
+  } else if (argv[0] === 'doctor' && argv[1] === 'agents') {
+    const remaining  = argv.slice(2);
+    const projectIdx = remaining.indexOf('--project');
+    const homeIdx    = remaining.indexOf('--home');
+    const projectDir = projectIdx !== -1 ? remaining[projectIdx + 1] : process.cwd();
+    const home       = homeIdx    !== -1 ? remaining[homeIdx    + 1] : undefined;
+    runDoctorAgents({ projectDir, home });
+    process.exit(0);
   } else if (argv[0] === 'validate-purity') {
     runValidatePurity(argv[1]);
   } else if (argv[0] === 'resolve-asset') {
@@ -1918,6 +2107,8 @@ async function main() {
       process.stderr.write(err.message + '\n');
       process.exit(1);
     }
+  } else if (argv[0] === 'agents') {
+    await handleAgentsCommand(argv.slice(1));
   } else if (argv[0] === 'ledger') {
     handleLedgerCommand(argv.slice(1));
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
@@ -1938,7 +2129,7 @@ function shellQuotePosix(arg) {
 
 function parseLedgerArgs(argv) {
   const PREFIX_RE = /^[A-Za-z]+-\d+$/;
-  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined, error: undefined };
+  const result = { prefix: undefined, agent: undefined, attempt: 1, tokens: undefined, dir: undefined, phase: undefined, model: undefined, error: undefined, metadata: undefined };
 
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -1996,6 +2187,36 @@ function parseLedgerArgs(argv) {
         throw new Error('parseLedgerArgs: --error must be a non-empty string');
       }
       result.error = val;
+    } else if (flag === '--metadata-json') {
+      i++;
+      if (!val) {
+        throw new Error('parseLedgerArgs: --metadata-json must be a non-empty JSON string');
+      }
+      try {
+        result.metadata = Object.assign(result.metadata || {}, JSON.parse(val));
+      } catch (_) {
+        throw new Error('parseLedgerArgs: --metadata-json is not valid JSON: ' + val);
+      }
+    } else if (flag === '--agent-id') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --agent-id must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { agentId: val });
+    } else if (flag === '--native-name') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --native-name must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { nativeAgentName: val });
+    } else if (flag === '--toolkit-version') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --toolkit-version must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { toolkitVersion: val });
+    } else if (flag === '--scope') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --scope must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { resolutionScope: val });
+    } else if (flag === '--hash') {
+      i++;
+      if (!val) throw new Error('parseLedgerArgs: --hash must be a non-empty string');
+      result.metadata = Object.assign(result.metadata || {}, { definitionHash: val });
     }
   }
 
@@ -2040,7 +2261,7 @@ function handleLedgerCommand(argv) {
 
   if (subcommand === 'open') {
     try {
-      const result = executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt);
+      const result = executionLedger.open(args.dir, args.prefix, args.agent, args.phase, args.model, args.attempt, args.metadata);
       process.stdout.write(sortedJson(result) + '\n');
       process.exitCode = 0;
     } catch (err) {
@@ -2080,6 +2301,256 @@ function handleLedgerCommand(argv) {
     return;
   } else {
     throw new Error('handleLedgerCommand: unknown subcommand: ' + subcommand);
+  }
+}
+
+// ── agents dispatcher ─────────────────────────────────────────────────────────
+// Routes `ai-toolkit agents <subcommand> [flags]` to the appropriate
+// registry function.  All domain logic lives in lib/agent-registry.js;
+// this function only parses CLI flags and invokes registry functions —
+// it is NOT a second registry.
+//
+// Subcommands:
+//   list      --project <dir> [--format json] [--home <dir>]
+//               → calls listRegisteredAgents(); enumerates ONLY catalog toolkit
+//                 agents (never foreign/plugin); exits 0 on success.
+//   resolve   --project <dir> --id <canonicalId> [--home <dir>] [--require-verified]
+//               → without --require-verified: diagnostic mode.
+//                 Exit-code contract:
+//                   exit 0 — verified | hash-unverifiable | hash-mismatch
+//                   exit 1 — not-found | conflict | manifest-missing |
+//                            not-installed | not-applicable
+//               → with --require-verified: operational mode.
+//                 Exit-code contract:
+//                   exit 0 — verified ONLY (v0.13.0+ manifest with matching hash)
+//                   exit 1 — any other status; structured JSON error written to stderr
+//                 A v0.12.0 manifest (no fileHashes) is a HARD STOP under --require-verified.
+//   preflight --project <dir> --pipeline <name> [--home <dir>]
+//               → verifies every agent in the named pipeline using --require-verified semantics.
+//                 Required agent set is derived from CATALOG.allowedPipelines.
+//                 Exit-code contract:
+//                   exit 0 — all agents verified; JSON summary on stdout
+//                   exit 1 — any agent unverified or pipeline unknown; JSON error on stderr
+async function handleAgentsCommand(argv) {
+  const os = require('os');
+  const subcommand = argv[0];
+  const remaining  = argv.slice(1);
+
+  let projectDir      = null;
+  let home            = undefined;
+  let format          = 'json';
+  let agentId         = null;
+  let requireVerified = false;
+  let pipeline        = null;
+
+  for (let i = 0; i < remaining.length; i++) {
+    if      (remaining[i] === '--project'          && remaining[i + 1]) { projectDir      = remaining[++i]; }
+    else if (remaining[i] === '--home'             && remaining[i + 1]) { home            = remaining[++i]; }
+    else if (remaining[i] === '--format'           && remaining[i + 1]) { format          = remaining[++i]; }
+    else if (remaining[i] === '--id'               && remaining[i + 1]) { agentId         = remaining[++i]; }
+    else if (remaining[i] === '--pipeline'         && remaining[i + 1]) { pipeline        = remaining[++i]; }
+    else if (remaining[i] === '--require-verified')                      { requireVerified = true; }
+  }
+
+  if (subcommand === 'list') {
+    if (!projectDir) {
+      process.stderr.write('Error: agents list requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+    const records = agentRegistry.listRegisteredAgents(effectiveProject, effectiveHome);
+    if (format === 'json') {
+      process.stdout.write(JSON.stringify(records, null, 2) + '\n');
+    } else {
+      for (const r of records) {
+        process.stdout.write(r.agentId + '\t' + r.nativeName + '\t' + r.status + '\n');
+      }
+    }
+    process.exitCode = 0;
+
+  } else if (subcommand === 'resolve') {
+    if (!projectDir) {
+      process.stderr.write('Error: agents resolve requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    if (!agentId) {
+      process.stderr.write('Error: agents resolve requires --id <canonicalId>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+    let record;
+    try {
+      record = await agentRegistry.resolveAgent({
+        projectDir:      effectiveProject,
+        agentId:         agentId,
+        homeDir:         effectiveHome,
+        requireVerified: requireVerified,
+      });
+    } catch (err) {
+      // requireVerified=true throws RESOLUTION_FAILED for non-verified agents;
+      // the thrown error carries err.record with the full resolution record.
+      const errorRecord = err.record
+        ? Object.assign({}, err.record, { code: err.code })
+        : { agentId: agentId, status: 'resolution-failed', error: err.message, code: err.code || 'UNKNOWN' };
+      process.stderr.write(JSON.stringify(errorRecord, null, 2) + '\n');
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(JSON.stringify(record, null, 2) + '\n');
+    if (requireVerified) {
+      // Operational mode: exit 0 only for verified (non-verified would have thrown above)
+      process.exitCode = record.status === 'verified' ? 0 : 1;
+    } else {
+      // Diagnostic mode: exit 0 for agent present in any integrity state
+      const exitZeroStatuses = new Set(['verified', 'hash-unverifiable', 'hash-mismatch']);
+      process.exitCode = exitZeroStatuses.has(record.status) ? 0 : 1;
+    }
+
+  } else if (subcommand === 'preflight') {
+    if (!projectDir) {
+      process.stderr.write('Error: agents preflight requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    if (!pipeline) {
+      process.stderr.write('Error: agents preflight requires --pipeline <name>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+
+    // Derive the required agent set from the CATALOG's allowedPipelines field.
+    const pipelineAgents = agentRegistry.CATALOG.filter(function (e) {
+      return Array.isArray(e.allowedPipelines) && e.allowedPipelines.indexOf(pipeline) !== -1;
+    });
+    if (pipelineAgents.length === 0) {
+      process.stderr.write(
+        JSON.stringify({ status: 'preflight-failed', error: 'Unknown pipeline: ' + pipeline }, null, 2) + '\n'
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const results    = [];
+    let   allPassed  = true;
+    for (let i = 0; i < pipelineAgents.length; i++) {
+      const entry = pipelineAgents[i];
+      try {
+        const rec = await agentRegistry.resolveAgent({
+          projectDir:      effectiveProject,
+          agentId:         entry.agentId,
+          homeDir:         effectiveHome,
+          requireVerified: true,
+        });
+        results.push({ agentId: rec.agentId, status: rec.status });
+      } catch (err) {
+        allPassed = false;
+        const errRec = err.record
+          ? Object.assign({}, err.record, { code: err.code })
+          : { agentId: entry.agentId, status: 'resolution-failed', error: err.message, code: err.code || 'RESOLUTION_FAILED' };
+        results.push(errRec);
+      }
+    }
+
+    if (allPassed) {
+      process.stdout.write(
+        JSON.stringify({ status: 'preflight-ok', pipeline: pipeline, agents: results }, null, 2) + '\n'
+      );
+      process.exitCode = 0;
+    } else {
+      process.stderr.write(
+        JSON.stringify({ status: 'preflight-failed', pipeline: pipeline, agents: results }, null, 2) + '\n'
+      );
+      process.exitCode = 1;
+    }
+
+  } else if (subcommand === 'cleanup') {
+    // Reject any mutating flags up-front (AC-15).
+    const hasDelete = remaining.indexOf('--delete') !== -1;
+    const hasForce  = remaining.indexOf('--force')  !== -1;
+    if (hasDelete || hasForce) {
+      process.stderr.write(
+        'Error: agents cleanup does not support mutating flags (--delete, --force) in this version.\n' +
+        '       Only --dry-run is supported; no files are ever modified or deleted.\n'
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    if (!projectDir) {
+      process.stderr.write('Error: agents cleanup requires --project <dir>\n');
+      process.exitCode = 1;
+      return;
+    }
+    const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
+    const effectiveProject = path.resolve(projectDir);
+
+    // Locate the active manifest (project-scoped takes precedence over global).
+    const projectManifestPath = path.join(effectiveProject, '.claude', MANIFEST_FILE);
+    const globalManifestPath  = path.join(effectiveHome,    '.claude', MANIFEST_FILE);
+
+    let installRoot    = null;
+    let manifestData   = null;
+
+    if (fs.existsSync(projectManifestPath)) {
+      installRoot  = effectiveProject;
+      manifestData = readJsonSafe(projectManifestPath);
+    } else if (fs.existsSync(globalManifestPath)) {
+      installRoot  = effectiveHome;
+      manifestData = readJsonSafe(globalManifestPath);
+    }
+
+    if (!installRoot || !manifestData || !Array.isArray(manifestData.files)) {
+      process.stdout.write(
+        JSON.stringify({ status: 'no-manifest', candidates: [], missing: [] }, null, 2) + '\n'
+      );
+      process.exitCode = 0;
+      return;
+    }
+
+    // Build the set of absolute paths that the current payload would install
+    // into the same install root.  Anything NOT in this set is a potential orphan.
+    // buildExpectedPayload takes the .claude dir (same convention as the installer).
+    const expectedPayload = buildExpectedPayload(path.join(installRoot, '.claude'));
+
+    const candidates = [];
+    const missing    = [];
+
+    for (const relPath of manifestData.files) {
+      if (typeof relPath !== 'string') continue;
+      const absPath = path.resolve(installRoot, relPath);
+
+      // If still in the current payload → not a cleanup candidate.
+      if (expectedPayload.has(absPath)) continue;
+
+      // Not in current payload: check disk state.
+      if (fs.existsSync(absPath)) {
+        candidates.push({ path: relPath, absPath: absPath, status: 'candidate' });
+      } else {
+        missing.push({ path: relPath, absPath: absPath, status: 'missing' });
+      }
+    }
+
+    const output = {
+      status:     'dry-run',
+      installRoot: installRoot,
+      candidates: candidates.map(function (c) { return { path: c.path, status: c.status }; }),
+      missing:    missing.map(function (m)    { return { path: m.path, status: m.status }; }),
+    };
+    process.stdout.write(JSON.stringify(output, null, 2) + '\n');
+    process.exitCode = 0;
+
+  } else {
+    process.stderr.write(
+      'Error: unknown agents subcommand: ' + (subcommand || '(none)') + '\n'
+    );
+    process.exitCode = 1;
   }
 }
 
@@ -2127,5 +2598,7 @@ if (require.main === module) {
     handleLedgerCommand,
     sortedJson,
     resolveFeaturesRoot,
+    computeFileSha256,
+    handleAgentsCommand,
   };
 }

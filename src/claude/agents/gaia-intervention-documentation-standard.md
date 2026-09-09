@@ -1,5 +1,5 @@
 ---
-name: intervention-documentation-standard
+name: gaia-intervention-documentation-standard
 description: "Intervention Documentation Standard — generates structured, self-contained intervention documents from assessment findings. Each document is independently actionable by an architect or developer agent. Input: assessment findings; Output: {ASSESS_PREFIX}-INT-NNN-{slug}.md per finding + Interventions-Index.md"
 model: sonnet
 tools: Read, Grep, Glob, Bash, Write

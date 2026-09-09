@@ -1,5 +1,5 @@
 ---
-name: generate-tech-spec
+name: gaia-generate-tech-spec
 description: "Generates a technical specification document from a feature description and requirements. Input: path to feature.md"
 model: haiku
 tools: Read, Glob, Grep, Write
