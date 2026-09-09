@@ -1,4 +1,41 @@
 ## 0.1.4 (2026-07-21)
+## [0.12.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.11.0...v0.12.0) (2026-09-04)
+
+
+### Features
+
+* add atomic temp+fsync+rename ledger I/O primitives ([846e911](https://github.com/dtlab-tech/ai-toolkit/commit/846e9110c7c3df52168649346246eedf9fd9a12f))
+* add close() with resume-safe token preservation ([fbd6d3b](https://github.com/dtlab-tech/ai-toolkit/commit/fbd6d3b1114949aa509eb9f244943af1f30e5d0c))
+* add deterministic features-root resolution and grammar ([a21b99c](https://github.com/dtlab-tech/ai-toolkit/commit/a21b99c0245a6b7a7010c2a93fc296ac10831fcf))
+* add fail-closed corrupt-ledger backup handling ([87c2b06](https://github.com/dtlab-tech/ai-toolkit/commit/87c2b0679e083cc064eb00f9b70f920f9abd4f97))
+* add fail() with clear never-opened rejection ([c24226d](https://github.com/dtlab-tech/ai-toolkit/commit/c24226d4f8700ce12233e0dea95ce4cc0542ca40))
+* add ledger CLI argument validator ([825d4a7](https://github.com/dtlab-tech/ai-toolkit/commit/825d4a71a05ef14e0ed0e0206bd3efbb624a086d))
+* add ledger CLI dispatcher wired to the module ([5658ec5](https://github.com/dtlab-tech/ai-toolkit/commit/5658ec583921ddca663221167f4c0d3c21f4c841))
+* add ledger close subcommand with --tokens validation ([ff17cf1](https://github.com/dtlab-tech/ai-toolkit/commit/ff17cf186bae8c4d89225a2d000ce9a2c575ad4c))
+* add ledger fail subcommand with fail-closed exit contract ([c71c9ad](https://github.com/dtlab-tech/ai-toolkit/commit/c71c9ad9d9078b35f74955c9b2ae03eb31ac9bdd))
+* add ledger open subcommand with fail-closed exit contract ([6aa5c1f](https://github.com/dtlab-tech/ai-toolkit/commit/6aa5c1f301d9fb031ab05b8c0c2d62e0f8ecec3a))
+* add ledger skip subcommand with fail-closed exit contract ([5e22856](https://github.com/dtlab-tech/ai-toolkit/commit/5e22856793add03e903653dec47f4a49f8adf6de))
+* add O_EXCL lock with owner token and ABA-safe release ([9e4b774](https://github.com/dtlab-tech/ai-toolkit/commit/9e4b774e1c890c1120cf4933e697a5c9c4e497eb))
+* add open() operation with JS-generated ISO timestamps ([11f7205](https://github.com/dtlab-tech/ai-toolkit/commit/11f72050c9d033944d568b859576387e8da04253))
+* add POSIX shell quoting helper ([bf79da2](https://github.com/dtlab-tech/ai-toolkit/commit/bf79da28100b1a23b1c3e5e7c756074db6dbbf24))
+* add resolve-features-root invocable command ([ab64250](https://github.com/dtlab-tech/ai-toolkit/commit/ab642505f8b682caa47b361b899d87ec8b0fa9d6))
+* add skip() with atomic create-or-update semantics ([455deaf](https://github.com/dtlab-tech/ai-toolkit/commit/455deaf19f864b33a77f37e0539f2c09619296fa))
+* add stale and orphan lock classification ([78fcf85](https://github.com/dtlab-tech/ai-toolkit/commit/78fcf85559af5e632bc760c2f7ef03fd419671ff))
+* implement 128-bit collision-resistant operation_id ([926a38a](https://github.com/dtlab-tech/ai-toolkit/commit/926a38aa41e8bc9a216d5b6f365b8174f78ded75))
+* scaffold lib/execution-ledger.js public API surface ([ba65c53](https://github.com/dtlab-tech/ai-toolkit/commit/ba65c53fc5e29bd028168de8f8379efd5cefbc01))
+
+
+### Bug Fixes
+
+* **FTR-015:** stamp real package version in complete-install test fixtures (CI fix) ([c032ded](https://github.com/dtlab-tech/ai-toolkit/commit/c032ded8eb392f60e60ad36d5192b2a2dfe65fff))
+* **pm-phase2:** derive featureDir with a separator-agnostic parser ([4ae54ed](https://github.com/dtlab-tech/ai-toolkit/commit/4ae54ed893d253882efa4247ae9d7adccbd60988))
+* reclaim stale/orphan locks in _acquireLock (AC-08/AC-26) ([14d0deb](https://github.com/dtlab-tech/ai-toolkit/commit/14d0deb6b25759b912b44980c054ebe99c244f05))
+* treat null/0/not_available tokens as unavailable in actuals reader ([7bf2c08](https://github.com/dtlab-tech/ai-toolkit/commit/7bf2c08af2158fe0b9a73bdf7ca6c33cdd673a48))
+* treat null/0/not_available tokens as unavailable in pm-phase3 ([505edda](https://github.com/dtlab-tech/ai-toolkit/commit/505eddaf9ed0d63908ddc7f79f0444d5b285a28d))
+* **wb-render:** preserve verification commands verbatim in Markdown ([b57e06c](https://github.com/dtlab-tech/ai-toolkit/commit/b57e06cacf99dc4f9c950509c9684eed1ea273fd))
+* **wb-render:** render complete authoritative task details ([b696c12](https://github.com/dtlab-tech/ai-toolkit/commit/b696c12e8c7e5f0fb30e0681b2e6123fe8cb2501))
+* **wb-validate:** treat escaped pipe (\|) as literal inside table cells ([c604810](https://github.com/dtlab-tech/ai-toolkit/commit/c60481021b5c7f4b6664952200d7022fc9e2767d))
+
 ## [0.11.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.10.1...v0.11.0) (2026-08-26)
 
 
