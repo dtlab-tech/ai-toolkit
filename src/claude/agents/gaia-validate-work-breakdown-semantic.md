@@ -1,5 +1,5 @@
 ---
-name: validate-work-breakdown-semantic
+name: gaia-validate-work-breakdown-semantic
 description: "Semantic validator for Work Breakdown JSON — analyzes task coherence, scope alignment, and estimate realism. Runs after wb-validate.js exits 0. Input: path to {PREFIX}-Work-Breakdown.json"
 model: sonnet
 tools: Read, Glob, Grep

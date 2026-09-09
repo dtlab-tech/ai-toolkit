@@ -49,6 +49,31 @@ function normalizeError(err) {
   try { return JSON.stringify(err) } catch (_) { return '<unknown error>' }
 }
 
+// ── Tier 2 resolution guard ───────────────────────────────────────────────────
+// All worker agents must be resolved via the CLI before dispatch.
+// No direct require('lib/agent-registry') — resolution goes through the CLI facade.
+const RESOLVE_SCHEMA = {
+  type: 'object',
+  properties: {
+    nativeName:  { type: 'string' },
+    status:      { type: 'string' },
+    agentId:     { type: 'string' },
+    exitNonZero: { type: 'boolean' },
+    error:       { type: 'string' },
+  },
+}
+
+async function resolveAgentTier2(agentId, label, phaseName) {
+  const result = await agent(
+    `Run this command via Bash:\n\nai-toolkit agents resolve --project . --id ${agentId} --require-verified\n\nIf the command exits 0: parse the JSON from stdout and return it with exitNonZero: false.\nIf the command exits non-zero: return {"exitNonZero": true, "error": "<stderr text>", "agentId": "${agentId}"}.`,
+    { label, phase: phaseName, model: 'haiku', schema: RESOLVE_SCHEMA }
+  )
+  if (!result || result.exitNonZero || !result.nativeName) {
+    throw new Error(`HARD STOP — Tier 2 resolution failed for ${agentId}: ${result && result.error ? result.error : 'no nativeName returned'}`)
+  }
+  return result.nativeName
+}
+
 // ── Parse args ────────────────────────────────────────────────────────────────
 
 // args: "<path-to-feature.md>"
@@ -72,12 +97,41 @@ const featureDir  = deriveFeatureDir(featurePath)
 const prefixMatch = featureDir.match(/([A-Z]+-\d+)/)
 const prefix      = prefixMatch ? prefixMatch[1] : 'FTR-000'
 
+// ── Tier 3 — self-ledger helper ───────────────────────────────────────────────
+const SELF_LEDGER_SCHEMA = {
+  type: 'object',
+  properties: {
+    exitCode: { type: 'number' },
+    stdout:   { type: 'string' },
+    stderr:   { type: 'string' },
+  },
+  required: ['exitCode'],
+}
+
+async function selfLedgerOp(cmd, label, phaseName) {
+  const result = await agent(
+    `Run this shell command via Bash and return the exit code as structured output.\n\nCommand: ${cmd}\n\nCapture: exitCode (integer), stdout (string), stderr (string). Return all three.`,
+    { label, phase: phaseName, model: 'haiku', schema: SELF_LEDGER_SCHEMA }
+  )
+  const status = (result && typeof result.exitCode === 'number') ? result.exitCode : 1
+  if (status !== 0) {
+    throw new Error(`HARD STOP — self-ledger operation failed. Exit code: ${status}. Command: ${cmd}`)
+  }
+}
+
+// ── Tier 3 self-registration (open BEFORE any main logic, fail-closed) ────────
+await selfLedgerOp(
+  `ai-toolkit ledger open --prefix ${prefix} --agent pm-phase2:self --phase phase2 --dir "${featureDir}" --attempt 1`,
+  'ledger-open-pm-phase2-self', 'Work Breakdown'
+)
+
 // ── generate-work-breakdown ───────────────────────────────────────────────────
 phase('Work Breakdown')
 
 const tokenLedger = []
 
 log(`Running generate-work-breakdown for ${featurePath}`)
+const wbNativeName = await resolveAgentTier2('gaia.agent.planner.work-breakdown', 'resolve-generate-work-breakdown', 'Work Breakdown')
 const wbKey = 'generate-work-breakdown:phase2'
 await agent(
   `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${wbKey} --phase phase2 --model haiku --attempt 1\n\nReturn no output.`,
@@ -85,7 +139,7 @@ await agent(
 )
 const beforeWB = budget.spent()
 await agent(featurePath, {
-  agentType: 'generate-work-breakdown',
+  agentType: wbNativeName,
   label:     'generate-work-breakdown',
   phase:     'Work Breakdown',
 })
@@ -165,6 +219,7 @@ const semanticKey = 'validate-work-breakdown-semantic:phase2'
 if (!wbValidatorPassed) {
   log('validate-work-breakdown-semantic: skipped (wb-validate did not pass)')
 } else {
+  const semanticNativeName = await resolveAgentTier2('gaia.agent.planner.validate-work-breakdown', 'resolve-validate-work-breakdown-semantic', 'Work Breakdown')
   await agent(
     `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${featureDir} --prefix ${prefix} --agent ${semanticKey} --phase phase2 --model sonnet --attempt 1\n\nReturn no output.`,
     { label: 'ledger-open-semantic-validator', phase: 'Work Breakdown', model: 'haiku' }
@@ -176,7 +231,7 @@ if (!wbValidatorPassed) {
       {
         label:     'validate-work-breakdown-semantic',
         phase:     'Work Breakdown',
-        agentType: 'validate-work-breakdown-semantic',
+        agentType: semanticNativeName,
         schema:    WB_SEMANTIC_SCHEMA,
       }
     )
@@ -493,6 +548,12 @@ Steps:
 Events to append:
 ${phase2Events}`,
   { label: 'append-process-log', phase: 'Effort Estimate' }
+)
+
+// ── Tier 3 self-registration — close on successful completion ─────────────────
+await selfLedgerOp(
+  `ai-toolkit ledger close --prefix ${prefix} --agent pm-phase2:self --dir "${featureDir}" --attempt 1`,
+  'ledger-close-pm-phase2-self', 'Effort Estimate'
 )
 
 return {

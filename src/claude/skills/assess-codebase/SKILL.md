@@ -157,7 +157,7 @@ Append a horizontal rule (`---`) followed by:
 |-------|------------|-------|-------------|---------------|-------|---------------|-----------------|----------|
 | {agent} | {scope} | {model} | {est} | {actual} | {±delta} | {est_cost} | {actual_cost} | {Xmin Ys} |
 ...
-| assessment-manager/am-phase1 (orchestrator) | — | sonnet | 80,000 | {actual} | ±{delta} | $0.4320 | ${actual_cost} | {duration} |
+| am-phase1 (orchestrator) | — | sonnet | 80,000 | {actual} | ±{delta} | $0.4320 | ${actual_cost} | {duration} |
 ```
 
 Column rules:

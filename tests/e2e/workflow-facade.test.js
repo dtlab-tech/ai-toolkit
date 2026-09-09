@@ -165,7 +165,7 @@ describe('E2E workflow facade — security invariants', () => {
   });
 
   test('cannot run agents/ assets via run-asset (category restriction)', () => {
-    const result = runAsset('agents/developer-backend.md', { projectDir: tmpDir, home: fakeHome });
+    const result = runAsset('agents/gaia-developer-backend.md', { projectDir: tmpDir, home: fakeHome });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/scripts category/i);
   });

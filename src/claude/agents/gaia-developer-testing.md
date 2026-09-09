@@ -1,5 +1,5 @@
 ---
-name: developer-testing
+name: gaia-developer-testing
 description: "Senior Test Engineer — creates unit/integration tests for implemented features (TEST domain). Input: path to feature.md + task IDs"
 model: sonnet
 ---

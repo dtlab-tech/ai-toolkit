@@ -1,5 +1,5 @@
 ---
-name: validate-feature-docs
+name: gaia-validate-feature-docs
 description: "Validates Requirements and Tech-Spec documents against feature.md. Triggers targeted revision of failing documents if gaps are found. Input: path to feature.md"
 model: haiku
 tools: Read, Glob, Grep, Write
@@ -18,7 +18,7 @@ A QA agent that cross-references `feature.md` against `{PREFIX}-Requirements.md`
    - `feature.md` — source of truth
    - `{PREFIX}-Requirements.md`
    - `{PREFIX}-Tech-Spec.md`
-3. If either output document is missing, abort and report: "Cannot validate: `{file}` not found. Run /agent-project-manager first."
+3. If either output document is missing, abort and report: "Cannot validate: `{file}` not found. Run /implement-feature first."
 
 ---
 

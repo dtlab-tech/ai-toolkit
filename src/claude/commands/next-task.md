@@ -23,14 +23,14 @@ Steps:
 
    Suggested agent: <subagent_type>
    Suggested invocation:
-     subagent_type: <developer-backend | developer-frontend | developer-testing>
+     subagent_type: <gaia-developer-backend | gaia-developer-frontend | gaia-developer-testing>
      prompt: <feature-md-path> <task-id>
    ```
 
    Domain → agent mapping:
-   - `DB`, `BE`, `INFRA` → `developer-backend`
-   - `FE` → `developer-frontend`
-   - `TEST` → `developer-testing`
+   - `DB`, `BE`, `INFRA` → `gaia-developer-backend`
+   - `FE` → `gaia-developer-frontend`
+   - `TEST` → `gaia-developer-testing`
 
 5. If no unblocked task remains, output: `✅ All tasks are either done, in progress, or blocked. Check blockers.`
 

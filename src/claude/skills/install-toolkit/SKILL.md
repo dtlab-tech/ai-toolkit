@@ -4,10 +4,10 @@ argument-hint: "[path-to-destination] [--force]"
 disable-model-invocation: true
 ---
 
-Spawn the `install-toolkit` agent with the arguments provided by the user:
+Spawn the `gaia-install-toolkit` agent with the arguments provided by the user:
 
 ```
-subagent_type: install-toolkit
+subagent_type: gaia-install-toolkit
 prompt: <path-to-destination> [--force]
 ```
 

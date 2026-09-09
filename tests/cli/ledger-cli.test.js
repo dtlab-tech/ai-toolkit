@@ -465,9 +465,9 @@ describe('ledger CLI', () => {
       expect(matches.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('define-feature.md is included in the installer catalog payload', () => {
+    it('gaia-define-feature.md is included in the installer catalog payload', () => {
       // Arrange/Act
-      const matches = catalogBasenames.filter(b => b === 'define-feature.md');
+      const matches = catalogBasenames.filter(b => b === 'gaia-define-feature.md');
       // Assert: present in the catalog
       expect(matches.length).toBeGreaterThanOrEqual(1);
     });
@@ -479,7 +479,7 @@ describe('ledger CLI', () => {
         'pm-phase1.js',
         'pm-phase2.js',
         'pm-phase3.js',
-        'define-feature.md',
+        'gaia-define-feature.md',
       ];
 
       // Act / Assert: each asset appears in exactly ONE catalog entry

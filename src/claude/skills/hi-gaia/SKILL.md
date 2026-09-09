@@ -37,7 +37,7 @@ Here's what I know and what's available for you:
 - `/feature-status`, `/check-docs`, `/next-task`, `/pr-description`
 - `/assessment-status`
 
-**Specialized agents** (spawnable): project-manager, developer-backend, developer-frontend, developer-testing, review-solution, assessment-manager, and more.
+**Specialized agents** (spawnable): developer-backend, developer-frontend, developer-testing, review-solution, and more.
 
 Let me take a look at your workspace to understand the context…
 

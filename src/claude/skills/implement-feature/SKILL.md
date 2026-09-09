@@ -14,16 +14,97 @@ with their declared `model:` frontmatter honoured and producing accurate per-age
 
 ---
 
+## Step 0 — Agent Preflight (fail-closed, AC-19)
+
+Before starting the pipeline, verify that every pipeline agent is installed and verified.
+
+1. **Derive the feature prefix** from the `<path-to-feature.md>` argument (e.g. path contains `FTR-017` → prefix = `FTR-017`). Derive the ledger directory as the directory containing the feature.md file.
+
+2. **Open the preflight ledger entry** (fail-closed — if this fails, do NOT proceed):
+   ```bash
+   ai-toolkit ledger open \
+     --prefix {PREFIX} \
+     --agent agent-preflight:implement-feature \
+     --phase phase3 \
+     --dir {LEDGER_DIR}
+   ```
+   If the command exits non-zero, **STOP IMMEDIATELY** — report the error and do not continue.
+
+3. **Run the preflight check:**
+   ```bash
+   ai-toolkit agents preflight --project . --pipeline implement-feature
+   ```
+
+4. **On success** (exit 0): close the ledger entry:
+   ```bash
+   ai-toolkit ledger close \
+     --prefix {PREFIX} \
+     --agent agent-preflight:implement-feature \
+     --dir {LEDGER_DIR}
+   ```
+   Then continue to Step 1.
+
+5. **On failure** (exit non-zero): mark the ledger entry failed and STOP:
+   ```bash
+   ai-toolkit ledger fail \
+     --prefix {PREFIX} \
+     --agent agent-preflight:implement-feature \
+     --error "agent preflight failed — one or more pipeline agents unverified" \
+     --dir {LEDGER_DIR}
+   ```
+   Report the preflight error to the user. Do NOT continue to Step 1.
+
+---
+
 ## Step 1 — Invoke pm-phase1 (Documentation Phase)
 
-Invoke the `pm-phase1` workflow with the feature path:
+### Step 1a — Tier 1 dispatch guard (AC-06, AC-07, AC-20)
+
+Before dispatching, resolve and verify the pm-phase1 orchestrator:
+
+```bash
+ai-toolkit agents resolve \
+  --project . \
+  --id gaia.orchestrator.feature.phase1 \
+  --require-verified
+```
+
+If exit non-zero → **HARD STOP**: report the error, do not dispatch pm-phase1.
+
+Store the resolution record fields: `nativeName`, `sha256` (definitionHash), `scope` (resolutionScope), `toolkitVersion`.
+
+Open the dispatch ledger entry (fail-closed):
+
+```bash
+ai-toolkit ledger open \
+  --prefix {PREFIX} \
+  --agent pm-phase1:dispatch \
+  --phase phase3 \
+  --dir {LEDGER_DIR} \
+  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase1","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
+```
+
+If exit non-zero → **HARD STOP** (fail-closed): do not dispatch.
+
+### Step 1b — Invoke pm-phase1 using verified nativeName
+
+Invoke the workflow using ONLY the resolved `nativeName` (never a hardcoded name):
 
 ```
-subagent_type: pm-phase1
+subagent_type: {nativeName}
 prompt: <path-to-feature.md>
 ```
 
 Wait for the workflow to complete. Do NOT proceed until it returns.
+
+After the workflow returns, close the dispatch ledger entry:
+
+```bash
+ai-toolkit ledger close \
+  --prefix {PREFIX} --agent pm-phase1:dispatch --dir {LEDGER_DIR}
+```
+
+If ledger close fails → **HARD STOP**: report the error and do not continue.
 
 Extract from the result:
 - `prefix` — feature prefix (e.g. `FTR-009`)
@@ -93,10 +174,36 @@ If the file is missing or incomplete, write it again before proceeding.
 
 ## Step 3 — Invoke pm-phase2 (Work Breakdown Phase)
 
-Invoke the `pm-phase2` workflow:
+### Step 3a — Tier 1 dispatch guard
+
+Resolve and verify pm-phase2:
+
+```bash
+ai-toolkit agents resolve \
+  --project . \
+  --id gaia.orchestrator.feature.phase2 \
+  --require-verified
+```
+
+If exit non-zero → **HARD STOP**: do not dispatch pm-phase2.
+
+Open the dispatch ledger entry (fail-closed):
+
+```bash
+ai-toolkit ledger open \
+  --prefix {PREFIX} \
+  --agent pm-phase2:dispatch \
+  --phase phase3 \
+  --dir {LEDGER_DIR} \
+  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase2","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
+```
+
+If exit non-zero → **HARD STOP** (fail-closed).
+
+### Step 3b — Invoke pm-phase2 using verified nativeName
 
 ```
-subagent_type: pm-phase2
+subagent_type: {nativeName}
 prompt: <path-to-feature.md>
 ```
 
@@ -108,6 +215,15 @@ Wait for the workflow to complete. Extract from the result:
 - `human_estimate` — human sequential estimate
 - `agent_estimate` — agent parallel estimate
 - `token_ledger` — per-agent token data from phase 2
+
+Close the dispatch ledger entry after the workflow returns:
+
+```bash
+ai-toolkit ledger close \
+  --prefix {PREFIX} --agent pm-phase2:dispatch --dir {LEDGER_DIR}
+```
+
+If ledger close fails → **HARD STOP**: report the error. Do not continue to Gate 2. The error is not swallowed (AC-22).
 
 ---
 
@@ -179,10 +295,52 @@ git checkout feature/{PREFIX}-{short-slug}
 Pre-condition check: read `{PREFIX}-Approvals.md` and verify BOTH Gate 1 ✅ and Gate 2 ✅.
 If either is missing, return to the missing gate.
 
-Invoke the `pm-phase3` workflow:
+### Step 6a — Tier 1 dispatch guard (Gate 2 post-approval, AC-06, AC-07, AC-08)
+
+After Gate 2 approval, resolve and verify pm-phase3 with `--require-verified`. Only a `verified` status permits dispatch:
+
+```bash
+ai-toolkit agents resolve \
+  --project . \
+  --id gaia.orchestrator.feature.phase3 \
+  --require-verified
+```
+
+If exit non-zero → **HARD STOP** (AC-08): pm-phase3 is absent or tampered. Report the error with remediation instructions:
 
 ```
-subagent_type: pm-phase3
+⛔ HARD STOP — pm-phase3 cannot be dispatched.
+
+Remediation:
+  1. Run: ai-toolkit agents resolve --project . --id gaia.orchestrator.feature.phase3
+  2. Check the status field in the output for the failure reason.
+  3. Re-install the toolkit if the status is not-installed or hash-mismatch.
+  4. Contact the toolkit team if the issue persists.
+
+Do NOT use an alternative workflow name or any fallback. This pipeline requires verified agents.
+```
+
+Do NOT use any alternative workflow name or fallback.
+
+Open the dispatch ledger entry (fail-closed):
+
+```bash
+ai-toolkit ledger open \
+  --prefix {PREFIX} \
+  --agent pm-phase3:dispatch \
+  --phase phase3 \
+  --dir {LEDGER_DIR} \
+  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase3","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
+```
+
+If exit non-zero → **HARD STOP** (fail-closed): do not dispatch.
+
+### Step 6b — Invoke pm-phase3 using verified nativeName
+
+Invoke the workflow using ONLY the resolved `nativeName` (never a hardcoded name):
+
+```
+subagent_type: {nativeName}
 prompt: <path-to-feature.md> --branch feature/{PREFIX}-{short-slug}
 ```
 
@@ -193,6 +351,26 @@ Wait for the workflow to complete. Capture its full result, including the `<usag
 - `issues_summary` — escalation and issues counts
 
 If `issues_summary.escalations > 0`, report the escalation details to the user.
+
+**If pm-phase3 returned an error or escalation:** mark the dispatch ledger entry failed before stopping:
+
+```bash
+ai-toolkit ledger fail \
+  --prefix {PREFIX} --agent pm-phase3:dispatch \
+  --error "pm-phase3 returned an error or escalation" \
+  --dir {LEDGER_DIR}
+```
+
+If `ledger fail` itself exits non-zero → **HARD STOP** (AC-22): report both the original workflow error and the ledger failure. The error is NOT swallowed.
+
+**On successful completion:** close the dispatch ledger entry:
+
+```bash
+ai-toolkit ledger close \
+  --prefix {PREFIX} --agent pm-phase3:dispatch --dir {LEDGER_DIR}
+```
+
+If ledger close fails → **HARD STOP** (AC-22): report the error. The pipeline does not silently swallow ledger failures after dispatch returns.
 
 ---
 
@@ -207,7 +385,7 @@ Read `{PREFIX}-Token-Estimate.md`. Append the orchestrator row and grand total:
 > **Null-compatibility — actuals reading and cost calculation:** Treat a token value of `null`, `0`, or `not_available` as **data unavailable** — never as a real, observable zero consumption. Render unavailable values as `—` in the Actual tokens and Actual cost columns; exclude them from sums, averages, and grand totals. Preventing resume clobber and legacy misinterpretation requires that no unavailable measurement is coerced into a real zero.
 
 ```markdown
-| project-manager/pm-phase3 (orchestrator) | — | sonnet | 80,000 (estimated) | {subagent_tokens} (actual) | ±{delta} | {duration} |
+| pm-phase3 (orchestrator) | — | sonnet | 80,000 (estimated) | {subagent_tokens} (actual) | ±{delta} | {duration} |
 
 ---
 
@@ -216,7 +394,7 @@ Read `{PREFIX}-Token-Estimate.md`. Append the orchestrator row and grand total:
 | Agent | Task / Scope | Model | Est. tokens | Actual tokens | Delta | Est. cost ($) | Actual cost ($) | Duration |
 |-------|-------------|-------|------------|---------------|-------|--------------|----------------|----------|
 {one row per entry in token_ledger — from phase 1, 2, and 3; for any entry where actual tokens is null, 0, or not_available show — in Actual tokens and Actual cost and exclude that row from totals}
-| project-manager/pm-phase3 (orchestrator) | — | sonnet | 80,000 | {subagent_tokens} | ±{delta} | $0.4320 | ${actual_cost} | {duration} |
+| pm-phase3 (orchestrator) | — | sonnet | 80,000 | {subagent_tokens} | ±{delta} | $0.4320 | ${actual_cost} | {duration} |
 
 ## Estimation accuracy by agent type
 

@@ -118,7 +118,7 @@ describe('resolve-asset CLI — Tier 1 (clean success)', () => {
 
   test('exit 0 for a known catalog agent asset', () => {
     const result = runCLI([
-      'resolve-asset', 'agents/developer-backend.md',
+      'resolve-asset', 'agents/gaia-developer-backend.md',
       '--project', tmpDir, '--home', fakeHome,
     ]);
     expect(result.status).toBe(0);
@@ -126,17 +126,17 @@ describe('resolve-asset CLI — Tier 1 (clean success)', () => {
 
   test('stdout contains the resolved path to the asset', () => {
     const result = runCLI([
-      'resolve-asset', 'agents/developer-backend.md',
+      'resolve-asset', 'agents/gaia-developer-backend.md',
       '--project', tmpDir, '--home', fakeHome,
     ]);
     const resolved = result.stdout.trim();
-    expect(resolved).toContain('developer-backend.md');
+    expect(resolved).toContain('gaia-developer-backend.md');
     expect(path.isAbsolute(resolved)).toBe(true);
   });
 
   test('stderr is empty on Tier 1 success', () => {
     const result = runCLI([
-      'resolve-asset', 'agents/developer-backend.md',
+      'resolve-asset', 'agents/gaia-developer-backend.md',
       '--project', tmpDir, '--home', fakeHome,
     ]);
     expect(result.stderr.trim()).toBe('');
@@ -178,7 +178,7 @@ describe('resolve-asset CLI — Tier 2 (warnings, condC only)', () => {
 
   test('exit 0 even without manifest (condC satisfies presence)', () => {
     const result = runCLI([
-      'resolve-asset', 'agents/developer-backend.md',
+      'resolve-asset', 'agents/gaia-developer-backend.md',
       '--project', tmpDir, '--home', fakeHome,
     ]);
     expect(result.status).toBe(0);
@@ -186,15 +186,15 @@ describe('resolve-asset CLI — Tier 2 (warnings, condC only)', () => {
 
   test('stdout contains resolved path (Tier 2)', () => {
     const result = runCLI([
-      'resolve-asset', 'agents/developer-backend.md',
+      'resolve-asset', 'agents/gaia-developer-backend.md',
       '--project', tmpDir, '--home', fakeHome,
     ]);
-    expect(result.stdout.trim()).toContain('developer-backend.md');
+    expect(result.stdout.trim()).toContain('gaia-developer-backend.md');
   });
 
   test('stderr contains warning about missing manifest (Tier 2)', () => {
     const result = runCLI([
-      'resolve-asset', 'agents/developer-backend.md',
+      'resolve-asset', 'agents/gaia-developer-backend.md',
       '--project', tmpDir, '--home', fakeHome,
     ]);
     expect(result.stderr).toMatch(/[Ww]arning/);
@@ -224,7 +224,7 @@ describe('resolve-asset CLI — Tier 3 (errors)', () => {
     const emptyHome    = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-t3b-home-'));
     try {
       const result = runCLI([
-        'resolve-asset', 'agents/developer-backend.md',
+        'resolve-asset', 'agents/gaia-developer-backend.md',
         '--project', emptyProject, '--home', emptyHome,
       ]);
       expect(result.status).toBe(1);

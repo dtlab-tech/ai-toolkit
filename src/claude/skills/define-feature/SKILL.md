@@ -3,10 +3,10 @@ description: "Define Feature — reads existing repo context, then grills only o
 disable-model-invocation: true
 ---
 
-Spawn the `define-feature` agent, passing through whatever the user provided as a source reference (a backlog entry, ticket path, spec path, or free-text description). If the user gave nothing, pass an empty source.
+Spawn the `gaia-define-feature` agent, passing through whatever the user provided as a source reference (a backlog entry, ticket path, spec path, or free-text description). If the user gave nothing, pass an empty source.
 
 ```
-subagent_type: define-feature
+subagent_type: gaia-define-feature
 prompt: |
   Start the feature definition session.
   Source reference (may be empty): {{user arguments verbatim}}

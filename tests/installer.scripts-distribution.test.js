@@ -16,7 +16,7 @@ const WB_VALIDATE     = path.join(SCRIPTS, 'wb-validate.js');
 const WB_RENDER       = path.join(SCRIPTS, 'wb-render.js');
 const CLI_SRC         = fs.readFileSync(CLI_PATH, 'utf8');
 const INSTALL_TOOLKIT_SRC = fs.readFileSync(
-  path.join(ROOT, 'src', 'claude', 'agents', 'install-toolkit.md'), 'utf8'
+  path.join(ROOT, 'src', 'claude', 'agents', 'gaia-install-toolkit.md'), 'utf8'
 );
 
 // Helper: extract the body of installLocal from CLI_SRC (up to installGlobal)
@@ -439,9 +439,9 @@ describe('installer.scripts-distribution — Group 10: install-toolkit excluded 
     expect(installResult.status).toBe(0);
   });
 
-  test('install-toolkit agent (agents/install-toolkit.md) is NOT installed to destination', () => {
+  test('install-toolkit agent (agents/gaia-install-toolkit.md) is NOT installed to destination', () => {
     expect(
-      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'install-toolkit.md'))
+      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'gaia-install-toolkit.md'))
     ).toBe(false);
   });
 
@@ -455,7 +455,7 @@ describe('installer.scripts-distribution — Group 10: install-toolkit excluded 
     const manifest = JSON.parse(
       fs.readFileSync(path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json'), 'utf8')
     );
-    const hasAgent = manifest.files.some(f => f.includes('agents/install-toolkit.md'));
+    const hasAgent = manifest.files.some(f => f.includes('agents/gaia-install-toolkit.md'));
     expect(hasAgent).toBe(false);
   });
 
@@ -469,7 +469,7 @@ describe('installer.scripts-distribution — Group 10: install-toolkit excluded 
 
   test('other agents are still installed (exclusion is targeted)', () => {
     expect(
-      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'developer-backend.md'))
+      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'gaia-developer-backend.md'))
     ).toBe(true);
   });
 
