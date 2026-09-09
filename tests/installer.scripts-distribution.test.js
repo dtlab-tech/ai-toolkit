@@ -469,7 +469,7 @@ describe('installer.scripts-distribution — Group 10: install-toolkit excluded 
 
   test('other agents are still installed (exclusion is targeted)', () => {
     expect(
-      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'developer-backend.md'))
+      fs.existsSync(path.join(tmpDir, '.claude', 'agents', 'gaia-developer-backend.md'))
     ).toBe(true);
   });
 

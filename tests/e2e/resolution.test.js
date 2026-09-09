@@ -111,14 +111,14 @@ describe('E2E resolution — local-only mode', () => {
   });
 
   test('resolves an agent asset — exit 0, returns absolute path', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.status).toBe(0);
     expect(path.isAbsolute(result.stdout)).toBe(true);
-    expect(result.stdout).toContain('developer-backend.md');
+    expect(result.stdout).toContain('gaia-developer-backend.md');
   });
 
   test('resolved path is inside projectDir/.claude/', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     const expected = path.resolve(path.join(projectDir, '.claude'));
     expect(result.stdout.startsWith(expected)).toBe(true);
   });
@@ -132,7 +132,7 @@ describe('E2E resolution — local-only mode', () => {
   test('path with spaces in projectDir handled correctly', () => {
     // The projectDir was created with spaces — verify it works
     expect(projectDir).toContain(' ');
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.status).toBe(0);
   });
 });
@@ -156,12 +156,12 @@ describe('E2E resolution — global-only mode', () => {
   });
 
   test('resolves from global installation — exit 0', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.status).toBe(0);
   });
 
   test('resolved path is inside home/.claude/', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     const expected = path.resolve(path.join(home, '.claude'));
     expect(result.stdout.startsWith(expected)).toBe(true);
   });
@@ -186,12 +186,12 @@ describe('E2E resolution — both installations present (ambiguous)', () => {
   });
 
   test('exits 1 when both local and global installations are detected', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.status).toBe(1);
   });
 
   test('stderr mentions ambiguity', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.stderr).toMatch(/[Aa]mbiguous/);
   });
 });
@@ -214,12 +214,12 @@ describe('E2E resolution — no installation found', () => {
   });
 
   test('exits 1 when no installation found', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.status).toBe(1);
   });
 
   test('stderr describes the missing installation', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.stderr).toBeTruthy();
     expect(result.stdout).toBe('');
   });
@@ -263,8 +263,8 @@ describe('E2E resolution — fresh CLI local install → resolve-asset', () => {
     expect(result.stdout.startsWith(expected)).toBe(true);
   });
 
-  test('fresh local install → resolve-asset agents/developer-backend.md exits 0', () => {
-    const result = resolveAsset('agents/developer-backend.md', { projectDir, home });
+  test('fresh local install → resolve-asset agents/gaia-developer-backend.md exits 0', () => {
+    const result = resolveAsset('agents/gaia-developer-backend.md', { projectDir, home });
     expect(result.status).toBe(0);
   });
 

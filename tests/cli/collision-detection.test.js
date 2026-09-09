@@ -115,7 +115,7 @@ function setupScopeCollision(projDir, fakeHome, agentRelPath, agentContent) {
 
 describe('collision detection — agents resolve returns conflict when agent in both scopes (AC-10)', () => {
   const AGENT_ID  = 'gaia.agent.developer.backend';
-  const REL_PATH  = '.claude/agents/developer-backend.md';
+  const REL_PATH  = '.claude/agents/gaia-developer-backend.md';
 
   let projDir;
   let fakeHome;
@@ -185,7 +185,7 @@ describe('collision detection — agents resolve returns conflict when agent in 
 
 describe('collision detection — --require-verified exits non-zero for conflict (AC-10)', () => {
   const AGENT_ID  = 'gaia.agent.developer.backend';
-  const REL_PATH  = '.claude/agents/developer-backend.md';
+  const REL_PATH  = '.claude/agents/gaia-developer-backend.md';
 
   let projDir;
   let fakeHome;
@@ -241,7 +241,7 @@ describe('collision detection — --require-verified exits non-zero for conflict
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('collision detection — preflight exits non-zero when a pipeline agent is in conflict', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   test('preflight exits non-zero when both project and global manifests are present (ambiguous)', () => {
     const projDir  = mktmp('preflight-conflict');
@@ -331,7 +331,7 @@ describe('collision detection — foreign observable agent does not block dispat
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('collision detection — real home is never read or written (AC-28, AC-29)', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   test('collision test does not create files in the real home directory', () => {
     const projDir    = mktmp('home-isolation');

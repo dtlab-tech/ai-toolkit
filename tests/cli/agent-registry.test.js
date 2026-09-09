@@ -80,11 +80,11 @@ describe('CATALOG', () => {
     expect(ids.has('gaia.orchestrator.assessment.phase1')).toBe(true);
   });
 
-  test('developer-backend maps to the expected Phase A transitional native name', () => {
+  test('developer-backend maps to the expected Phase B canonical native name', () => {
     const entry = CATALOG.find(e => e.agentId === 'gaia.agent.developer.backend');
     expect(entry).toBeDefined();
-    expect(entry.nativeNames.claude).toBe('developer-backend');
-    expect(entry.relativeInstallPath).toBe('.claude/agents/developer-backend.md');
+    expect(entry.nativeNames.claude).toBe('gaia-developer-backend');
+    expect(entry.relativeInstallPath).toBe('.claude/agents/gaia-developer-backend.md');
   });
 });
 
@@ -129,7 +129,7 @@ describe('resolveAgent()', () => {
     });
     expect(rec.status).toBe('manifest-missing');
     expect(rec.agentId).toBe('gaia.agent.developer.backend');
-    expect(rec.nativeName).toBe('developer-backend');
+    expect(rec.nativeName).toBe('gaia-developer-backend');
   });
 
   test('returns status "not-installed" when agent absent from manifest files list', async () => {
@@ -150,7 +150,7 @@ describe('resolveAgent()', () => {
   });
 
   test('returns status "not-installed" when agent in manifest files but file absent on disk', async () => {
-    const relPath = '.claude/agents/developer-backend.md';
+    const relPath = '.claude/agents/gaia-developer-backend.md';
     writeManifestJSON(projectDir, {
       version:          '0.13.0',
       installedAt:      new Date().toISOString(),
@@ -169,8 +169,8 @@ describe('resolveAgent()', () => {
   });
 
   test('returns status "hash-unverifiable" when manifest lacks fileHashes (v0.12.0)', async () => {
-    const relPath = '.claude/agents/developer-backend.md';
-    writeAgentFile(projectDir, relPath, '# developer-backend\n');
+    const relPath = '.claude/agents/gaia-developer-backend.md';
+    writeAgentFile(projectDir, relPath, '# gaia-developer-backend\n');
     writeManifestJSON(projectDir, {
       version:          '0.12.0',
       installedAt:      new Date().toISOString(),
@@ -185,13 +185,13 @@ describe('resolveAgent()', () => {
     });
     expect(rec.status).toBe('hash-unverifiable');
     expect(rec.agentId).toBe('gaia.agent.developer.backend');
-    expect(rec.nativeName).toBe('developer-backend');
+    expect(rec.nativeName).toBe('gaia-developer-backend');
     expect(rec.scope).toBe('project');
   });
 
   test('returns status "hash-mismatch" when on-disk hash differs from manifest record', async () => {
-    const relPath        = '.claude/agents/developer-backend.md';
-    const { absPath }    = writeAgentFile(projectDir, relPath, '# developer-backend agent\n');
+    const relPath        = '.claude/agents/gaia-developer-backend.md';
+    const { absPath }    = writeAgentFile(projectDir, relPath, '# gaia-developer-backend agent\n');
     writeManifestJSON(projectDir, {
       version:          '0.13.0',
       installedAt:      new Date().toISOString(),
@@ -211,8 +211,8 @@ describe('resolveAgent()', () => {
   });
 
   test('returns status "verified" with complete record when hash matches (happy path)', async () => {
-    const relPath           = '.claude/agents/developer-backend.md';
-    const content           = '# developer-backend agent v0.13.0\n';
+    const relPath           = '.claude/agents/gaia-developer-backend.md';
+    const content           = '# gaia-developer-backend agent v0.13.0\n';
     const { absPath, sha256 } = writeAgentFile(projectDir, relPath, content);
     writeManifestJSON(projectDir, {
       version:          '0.13.0',
@@ -231,7 +231,7 @@ describe('resolveAgent()', () => {
     expect(rec.status).toBe('verified');
     expect(rec.agentId).toBe('gaia.agent.developer.backend');
     expect(rec.platform).toBe('claude');
-    expect(rec.nativeName).toBe('developer-backend');
+    expect(rec.nativeName).toBe('gaia-developer-backend');
     expect(rec.scope).toBe('project');
     expect(rec.path).toBe(absPath);
     expect(rec.toolkitVersion).toBe('0.13.0');
@@ -242,7 +242,7 @@ describe('resolveAgent()', () => {
   });
 
   test('resolution is deterministic: two calls with identical inputs produce identical records', async () => {
-    const relPath  = '.claude/agents/developer-backend.md';
+    const relPath  = '.claude/agents/gaia-developer-backend.md';
     const content  = '# determinism check\n';
     const { sha256 } = writeAgentFile(projectDir, relPath, content);
     writeManifestJSON(projectDir, {
@@ -280,7 +280,7 @@ describe('resolveAgent()', () => {
   });
 
   test('uses "global" scope when only a global manifest (in fakeHome) is present', async () => {
-    const relPath           = '.claude/agents/developer-backend.md';
+    const relPath           = '.claude/agents/gaia-developer-backend.md';
     const content           = '# global agent\n';
     const { absPath, sha256 } = writeAgentFile(fakeHome, relPath, content);
     writeManifestJSON(fakeHome, {
@@ -314,7 +314,7 @@ describe('resolveAgent()', () => {
   });
 
   test('does NOT throw when requireVerified is true and status is "verified"', async () => {
-    const relPath    = '.claude/agents/developer-backend.md';
+    const relPath    = '.claude/agents/gaia-developer-backend.md';
     const content    = '# verified agent\n';
     const { sha256 } = writeAgentFile(projectDir, relPath, content);
     writeManifestJSON(projectDir, {
@@ -333,7 +333,7 @@ describe('resolveAgent()', () => {
   });
 
   test('throws on requireVerified when manifest lacks fileHashes (v0.12.0 hard-stop, BR-05)', async () => {
-    const relPath = '.claude/agents/developer-backend.md';
+    const relPath = '.claude/agents/gaia-developer-backend.md';
     writeAgentFile(projectDir, relPath, '# old agent\n');
     writeManifestJSON(projectDir, {
       version: '0.12.0', installedAt: new Date().toISOString(),
@@ -428,7 +428,7 @@ describe('validateAgentSet()', () => {
   });
 
   test('returns empty array when all specified agents resolve to "verified"', async () => {
-    const relPath    = '.claude/agents/developer-backend.md';
+    const relPath    = '.claude/agents/gaia-developer-backend.md';
     const content    = '# backend agent\n';
     const { sha256 } = writeAgentFile(projectDir, relPath, content);
     writeManifestJSON(projectDir, {
@@ -474,7 +474,7 @@ describe('validateAgentSet()', () => {
   });
 
   test('accepts mixed valid and invalid IDs and reports only error entries', async () => {
-    const relPath    = '.claude/agents/developer-backend.md';
+    const relPath    = '.claude/agents/gaia-developer-backend.md';
     const content    = '# backend\n';
     const { sha256 } = writeAgentFile(projectDir, relPath, content);
     writeManifestJSON(projectDir, {
@@ -556,8 +556,8 @@ describe('listRegisteredAgents()', () => {
   });
 
   test('returns "hash-unverifiable" for an agent in a v0.12.0 manifest without fileHashes', () => {
-    const relPath = '.claude/agents/developer-backend.md';
-    writeAgentFile(projectDir, relPath, '# developer-backend\n');
+    const relPath = '.claude/agents/gaia-developer-backend.md';
+    writeAgentFile(projectDir, relPath, '# gaia-developer-backend\n');
     writeManifestJSON(projectDir, {
       version: '0.12.0', installedAt: new Date().toISOString(),
       installationMode: 'local', files: [relPath],
@@ -569,7 +569,7 @@ describe('listRegisteredAgents()', () => {
   });
 
   test('returns "verified" status for an agent with a matching hash', () => {
-    const relPath    = '.claude/agents/developer-backend.md';
+    const relPath    = '.claude/agents/gaia-developer-backend.md';
     const content    = '# verified backend agent\n';
     const { sha256 } = writeAgentFile(projectDir, relPath, content);
     writeManifestJSON(projectDir, {
@@ -581,13 +581,13 @@ describe('listRegisteredAgents()', () => {
     const records = listRegisteredAgents(projectDir, fakeHome);
     const be      = records.find(r => r.agentId === 'gaia.agent.developer.backend');
     expect(be.status).toBe('verified');
-    expect(be.nativeName).toBe('developer-backend');
+    expect(be.nativeName).toBe('gaia-developer-backend');
     expect(be.scope).toBe('project');
     expect(be.sha256).toBe(sha256);
   });
 
   test('returns "conflict" with integrityDetail "hash-mismatch" when file hash diverges (AC-13)', () => {
-    const relPath = '.claude/agents/developer-backend.md';
+    const relPath = '.claude/agents/gaia-developer-backend.md';
     writeAgentFile(projectDir, relPath, '# backend agent\n');
     writeManifestJSON(projectDir, {
       version: '0.13.0', installedAt: new Date().toISOString(),

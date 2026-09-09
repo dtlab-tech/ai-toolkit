@@ -317,7 +317,7 @@ describe('agents resolve — missing required flags', () => {
 
 describe('agents resolve — legacy manifest without fileHashes (hash-unverifiable)', () => {
   const AGENT_ID = 'gaia.agent.developer.backend';
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   let projDir;
   let fakeHome;
@@ -462,7 +462,7 @@ describe('agents resolve — corrupt manifest', () => {
 
 describe('agents resolve --require-verified — verified agent exits 0 (AC-04)', () => {
   const AGENT_ID = 'gaia.agent.developer.backend';
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
   const CONTENT  = '---\nname: developer-backend\nmodel: sonnet\n---\n# developer-backend\n';
 
   let projDir;
@@ -504,7 +504,7 @@ describe('agents resolve --require-verified — verified agent exits 0 (AC-04)',
 
 describe('agents resolve --require-verified — legacy manifest is a HARD STOP (AC-05)', () => {
   const AGENT_ID = 'gaia.agent.developer.backend';
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   let projDir;
   let fakeHome;
@@ -613,7 +613,7 @@ describe('agents resolve --require-verified — not-found exits non-zero (AC-39)
 
 describe('agents resolve --require-verified — hash-mismatch exits non-zero', () => {
   const AGENT_ID = 'gaia.agent.developer.backend';
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   let projDir;
   let fakeHome;
@@ -766,7 +766,7 @@ describe('agents preflight — fully verified install exits 0 (AC-19 happy path)
 
 describe('agents preflight — v0.12.0 manifest hard-stop (AC-19)', () => {
   const PIPELINE = 'implement-feature';
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   let projDir;
   let fakeHome;
@@ -894,7 +894,7 @@ describe('doctor agents — exits 0 and writes to stdout (AC-14)', () => {
 });
 
 describe('doctor agents — each agent gets exactly one of the six status values (AC-13)', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   test('verified install: agents show [OK] status markers', () => {
     const projDir  = mktmp('doctor-verified');
@@ -953,7 +953,7 @@ describe('doctor agents — each agent gets exactly one of the six status values
 });
 
 describe('doctor agents — hash-mismatch reported as conflict + detail (AC-13)', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   test('tampered file: shows [!!] and hash-mismatch detail', () => {
     const projDir  = mktmp('doctor-hashmismatch');
@@ -977,7 +977,7 @@ describe('doctor agents — hash-mismatch reported as conflict + detail (AC-13)'
 });
 
 describe('doctor agents — hash-unverifiable remediation message (AC-13)', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   test('shows remediation instruction referencing --force', () => {
     const projDir  = mktmp('doctor-remediation');
@@ -1117,7 +1117,7 @@ describe('agents cleanup — no manifest returns dry-run with empty lists (AC-15
 
 describe('agents cleanup — genuine candidates listed correctly (AC-15, AC-16)', () => {
   const STALE_PATH  = '.claude/agents/old-removed-agent.md';
-  const ACTIVE_PATH = '.claude/agents/developer-backend.md';
+  const ACTIVE_PATH = '.claude/agents/gaia-developer-backend.md';
 
   test('a manifest entry no longer in current payload and still on disk is a candidate', () => {
     const projDir  = mktmp('cleanup-candidate');

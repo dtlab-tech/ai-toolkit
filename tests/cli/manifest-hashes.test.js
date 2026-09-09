@@ -129,7 +129,7 @@ describe('manifest hashes — fresh install produces fileHashes (AC-11, AC-38)',
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('manifest hashes — v0.12.0 manifest (no fileHashes) backward-compatible (AC-40)', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
 
   test('resolveAgent returns hash-unverifiable (not a crash) for v0.12.0 manifest', () => {
     const projDir  = mktmp('v12-compat');
@@ -177,7 +177,7 @@ describe('manifest hashes — v0.12.0 manifest (no fileHashes) backward-compatib
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('manifest hashes — v0.12.0 to v0.13.0 upgrade transitions doctor agents to verified', () => {
-  const REL_PATH  = '.claude/agents/developer-backend.md';
+  const REL_PATH  = '.claude/agents/gaia-developer-backend.md';
   const AGENT_ID  = 'gaia.agent.developer.backend';
 
   test('before upgrade: resolveAgent returns hash-unverifiable', () => {
@@ -240,7 +240,7 @@ describe('manifest hashes — v0.12.0 to v0.13.0 upgrade transitions doctor agen
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('manifest hashes — writeManifest invariant set(files)==set(keys(fileHashes)) (AC-40)', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
   const CLI_MODULE = require(path.join(TOOLKIT_ROOT, 'bin', 'cli.js'));
 
   test('writeManifest with matching files and fileHashes writes successfully', () => {
@@ -281,7 +281,7 @@ describe('manifest hashes — writeManifest invariant set(files)==set(keys(fileH
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('manifest hashes — tampered file is reported as hash-mismatch (AC-12)', () => {
-  const REL_PATH = '.claude/agents/developer-backend.md';
+  const REL_PATH = '.claude/agents/gaia-developer-backend.md';
   const AGENT_ID = 'gaia.agent.developer.backend';
   const ORIGINAL_CONTENT = '---\nname: developer-backend\n---\n# Developer Backend\n';
   const TAMPERED_CONTENT = '---\nname: developer-backend\n---\n# TAMPERED\n';
