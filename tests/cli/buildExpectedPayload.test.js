@@ -47,9 +47,9 @@ describe('buildExpectedPayload()', () => {
     expect(payload.has(expected)).toBe(true);
   });
 
-  test('excludes agents/install-toolkit.md (TOOLKIT_INTERNAL_ASSETS)', () => {
+  test('excludes agents/gaia-install-toolkit.md (TOOLKIT_INTERNAL_ASSETS)', () => {
     const payload  = buildExpectedPayload(FAKE_ROOT);
-    const excluded = path.resolve(path.join(FAKE_ROOT, 'agents', 'install-toolkit.md'));
+    const excluded = path.resolve(path.join(FAKE_ROOT, 'agents', 'gaia-install-toolkit.md'));
     expect(payload.has(excluded)).toBe(false);
   });
 

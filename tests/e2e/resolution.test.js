@@ -268,8 +268,8 @@ describe('E2E resolution — fresh CLI local install → resolve-asset', () => {
     expect(result.status).toBe(0);
   });
 
-  test('fresh local install → install-toolkit.md is NOT resolvable (excluded from distribution)', () => {
-    const result = resolveAsset('agents/install-toolkit.md', { projectDir, home });
+  test('fresh local install → gaia-install-toolkit.md is NOT resolvable (excluded from distribution)', () => {
+    const result = resolveAsset('agents/gaia-install-toolkit.md', { projectDir, home });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('not a registered catalog asset');
   });
@@ -310,8 +310,8 @@ describe('E2E resolution — fresh CLI global install → resolve-asset', () => 
     expect(result.stdout.startsWith(expected)).toBe(true);
   });
 
-  test('fresh global install → install-toolkit.md is NOT resolvable (excluded from distribution)', () => {
-    const result = resolveAsset('agents/install-toolkit.md', { projectDir, home });
+  test('fresh global install → gaia-install-toolkit.md is NOT resolvable (excluded from distribution)', () => {
+    const result = resolveAsset('agents/gaia-install-toolkit.md', { projectDir, home });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('not a registered catalog asset');
   });

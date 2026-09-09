@@ -4,10 +4,10 @@ argument-hint: "[path-to-project-root]"
 disable-model-invocation: true
 ---
 
-Spawn the `init-agents-md` agent with the arguments provided by the user:
+Spawn the `gaia-init-agents-md` agent with the arguments provided by the user:
 
 ```
-subagent_type: init-agents-md
+subagent_type: gaia-init-agents-md
 prompt: [path-to-project-root]
 ```
 

@@ -1,5 +1,5 @@
 ---
-name: install-toolkit
+name: gaia-install-toolkit
 description: "Installs the ai-toolkit into a destination project by copying agents, skills, commands, and procedures. Input: [path-to-destination] [--force] — defaults to current working directory"
 model: sonnet
 ---

@@ -325,10 +325,10 @@ describe('list-assets CLI — foreign file exclusion (P1-A)', () => {
     expect(files.some(f => f.includes('gaia-developer-backend.md'))).toBe(true);
   });
 
-  test('install-toolkit.md is NOT returned by list-assets (excluded from distribution)', () => {
+  test('gaia-install-toolkit.md is NOT returned by list-assets (excluded from distribution)', () => {
     const result = runCLI(['list-assets', '--category', 'agents', '--format', 'json', '--project', projDir, '--home', fakeHome]);
     expect(result.status).toBe(0);
     const files = JSON.parse(result.stdout);
-    expect(files.some(f => f.includes('install-toolkit.md'))).toBe(false);
+    expect(files.some(f => f.includes('gaia-install-toolkit.md'))).toBe(false);
   });
 });

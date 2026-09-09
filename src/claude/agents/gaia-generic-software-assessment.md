@@ -1,5 +1,5 @@
 ---
-name: generic-software-assessment
+name: gaia-generic-software-assessment
 description: "Generic Software Assessment — performs a broad quality analysis across architecture, code quality, security, testability, observability, and DevOps. Reads AGENTS.md for project conventions. Output: {ASSESS_PREFIX}-Generic-Assessment.md"
 tools: Read, Grep, Glob, Bash, Write
 model: haiku

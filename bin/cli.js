@@ -1735,7 +1735,7 @@ function runValidatePurity(sourceDir) {
 // projects. Keyed by category name; value is a Set of item names to skip.
 // See AGENTS.md hard constraints.
 const TOOLKIT_INTERNAL_ASSETS = {
-  agents: new Set(['install-toolkit.md']),
+  agents: new Set(['gaia-install-toolkit.md']),
   skills: new Set(['install-toolkit']),
 };
 
