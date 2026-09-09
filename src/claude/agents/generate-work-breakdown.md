@@ -63,7 +63,7 @@ Every task must be the **smallest independently implementable, verifiable, and c
 
 - **One observable outcome** — the task produces exactly one concrete artifact or behavioral change (one file, one endpoint, one migration, one test suite for one check). State it in the `outcome` field as a factual sentence describing what exists after the task is done.
 - **One domain** — choose exactly one: `BE`, `FE`, `DB`, `DevOps`, `INFRA`, or `TEST`.
-- **One agent type** — choose exactly one: `developer-backend`, `developer-frontend`, `developer-testing`, `developer-database`, or `review-solution`.
+- **One agent type** — choose exactly one: `developer-backend`, `developer-frontend`, `developer-testing`, or `review-solution`. (`developer-database` is deprecated — use `developer-backend` for DB domain tasks.)
 - **One commit** — supply a single `commit.subject` describing the change.
 - **Estimated ≤ 15 minutes of agent time** — this is the target. If a task cannot be scoped to ≤ 15 minutes, split it further. Tasks up to 20 minutes are acceptable but above target. Tasks over 30 minutes are invalid and will be rejected by the validator.
 
@@ -126,7 +126,7 @@ Decomposition strategy by domain:
 | `title` | string | Short descriptive title; must not contain `\|`, CR, or LF |
 | `outcome` | string | Single observable outcome — what exists after this task is done |
 | `domain` | string | One of: `BE`, `FE`, `DB`, `DevOps`, `INFRA`, `TEST` |
-| `agentType` | string | One of: `developer-backend`, `developer-frontend`, `developer-testing`, `developer-database`, `review-solution` |
+| `agentType` | string | One of: `developer-backend`, `developer-frontend`, `developer-testing`, `review-solution` (deprecated: `developer-database` — maps to `developer-backend`) |
 | `dependsOn` | array of strings | Task IDs this task depends on; may be empty `[]`; all IDs must be defined within this same JSON |
 | `acceptanceCriteria` | array of strings | AC IDs from Requirements that this task covers; may be empty `[]` |
 | `verification` | object | `{ "commands": ["..."] }` — one or more shell commands that verify the task output; array must be non-empty |
@@ -136,7 +136,7 @@ Decomposition strategy by domain:
 | `commit` | object | `{ "type": "feat", "subject": "..." }` — subject must not contain `\|`, CR, or LF |
 
 **Domain → agentType mapping (default):**
-- `DB` → `developer-database`
+- `DB` → `developer-backend` (note: `developer-database` is a deprecated alias that still resolves — do NOT use it in new Work Breakdowns)
 - `BE`, `INFRA`, `DevOps` → `developer-backend`
 - `FE` → `developer-frontend`
 - `TEST` → `developer-testing`

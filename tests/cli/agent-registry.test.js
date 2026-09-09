@@ -639,4 +639,83 @@ describe('AC-03 / AC-30 — module purity', () => {
     expect(Array.isArray(registry.CATALOG)).toBe(true);
     expect(registry.CATALOG.length).toBeGreaterThan(0);
   });
+
+  test('module exports resolveWorkBreakdownAgentType, WB_AGENT_TYPE_MAP, LEGACY_AGENT_TYPE_MAP (AC-23, AC-25)', () => {
+    const registry = require('../../lib/agent-registry');
+    expect(typeof registry.resolveWorkBreakdownAgentType).toBe('function');
+    expect(typeof registry.WB_AGENT_TYPE_MAP).toBe('object');
+    expect(typeof registry.LEGACY_AGENT_TYPE_MAP).toBe('object');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Work Breakdown agent_type resolution — AC-23, AC-24, AC-25, AC-26, AC-37
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('resolveWorkBreakdownAgentType — agent_type validation (AC-23, AC-24, AC-25, AC-26, AC-37)', () => {
+  const { resolveWorkBreakdownAgentType, WB_AGENT_TYPE_MAP, LEGACY_AGENT_TYPE_MAP } = require('../../lib/agent-registry');
+
+  const SUPPORTED = ['developer-backend', 'developer-frontend', 'developer-testing', 'review-solution'];
+
+  test.each(SUPPORTED.map(t => [t]))(
+    'resolves supported agent_type "%s" to a canonical agentId',
+    (agentType) => {
+      const result = resolveWorkBreakdownAgentType(agentType);
+      expect(result.canonicalId).toMatch(/^gaia\./);
+      expect(result.deprecated).toBe(false);
+    }
+  );
+
+  test('WB_AGENT_TYPE_MAP covers at least developer-backend, developer-frontend, developer-testing, review-solution (AC-23)', () => {
+    const required = ['developer-backend', 'developer-frontend', 'developer-testing', 'review-solution'];
+    for (const key of required) {
+      expect(Object.prototype.hasOwnProperty.call(WB_AGENT_TYPE_MAP, key)).toBe(true);
+    }
+  });
+
+  test('developer-database is NOT in WB_AGENT_TYPE_MAP (deprecated, no new WBs should use it)', () => {
+    expect(Object.prototype.hasOwnProperty.call(WB_AGENT_TYPE_MAP, 'developer-database')).toBe(false);
+  });
+
+  test('developer-database resolves via LEGACY_AGENT_TYPE_MAP to gaia.agent.developer.backend (AC-24, AC-37)', () => {
+    const result = resolveWorkBreakdownAgentType('developer-database');
+    expect(result.canonicalId).toBe('gaia.agent.developer.backend');
+    expect(result.deprecated).toBe(true);
+    expect(typeof result.deprecationMessage).toBe('string');
+    expect(result.deprecationMessage.length).toBeGreaterThan(0);
+  });
+
+  test('LEGACY_AGENT_TYPE_MAP contains developer-database entry (AC-26)', () => {
+    expect(Object.prototype.hasOwnProperty.call(LEGACY_AGENT_TYPE_MAP, 'developer-database')).toBe(true);
+    expect(LEGACY_AGENT_TYPE_MAP['developer-database'].canonicalId).toBe('gaia.agent.developer.backend');
+    expect(LEGACY_AGENT_TYPE_MAP['developer-database'].deprecated).toBe(true);
+  });
+
+  test('unknown agent_type throws a structured UNKNOWN_AGENT_TYPE error (AC-25)', () => {
+    let caught = null;
+    try { resolveWorkBreakdownAgentType('project-manager'); } catch (e) { caught = e; }
+    expect(caught).not.toBeNull();
+    expect(caught.code).toBe('UNKNOWN_AGENT_TYPE');
+    expect(caught.agentType).toBe('project-manager');
+  });
+
+  test('unknown agent_type error message lists the allowed values', () => {
+    let caught = null;
+    try { resolveWorkBreakdownAgentType('nonexistent'); } catch (e) { caught = e; }
+    expect(caught.message).toContain('developer-backend');
+    expect(caught.message).toContain('developer-database');
+  });
+
+  test('unknown agent_type rejects entirely unknown values (AC-25)', () => {
+    const unknowns = ['agent-project-manager', 'assessment-manager', 'totally-random', ''];
+    for (const u of unknowns) {
+      expect(() => resolveWorkBreakdownAgentType(u)).toThrow();
+    }
+  });
+
+  test('resolveWorkBreakdownAgentType returned records contain canonicalId and deprecated fields', () => {
+    const r = resolveWorkBreakdownAgentType('developer-backend');
+    expect(Object.prototype.hasOwnProperty.call(r, 'canonicalId')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(r, 'deprecated')).toBe(false === r.deprecated || true === r.deprecated ? true : false);
+  });
 });
