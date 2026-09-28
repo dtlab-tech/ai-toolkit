@@ -258,5 +258,23 @@
     "started_at": "2026-09-28T11:00:31.063Z",
     "completed_at": "2026-09-28T11:00:32.238Z",
     "phase_delta_tokens": 52098
+  },
+  {
+    "operation_id": "821328cc538c8c963b9e54f1bcbc6675",
+    "agent": "agent-preflight:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:23:39.862Z",
+    "completed_at": "2026-09-28T14:23:40.860Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "31b9d0e8b6fb3e22b495c2434f05eec0",
+    "agent": "INFRA-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:24:11.088Z",
+    "completed_at": "2026-09-28T14:37:30.336Z",
+    "phase_delta_tokens": 133144
   }
 ]
