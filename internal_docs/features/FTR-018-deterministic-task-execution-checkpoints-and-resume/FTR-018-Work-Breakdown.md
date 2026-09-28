@@ -5,7 +5,7 @@
 |-------|-------|
 | Feature | FTR-018 |
 | Schema | v2 |
-| Generated | 2026-09-28T10:47:50.803Z |
+| Generated | 2026-09-28T14:47:20.272Z |
 
 ## Summary
 | Metric | Value |
@@ -26,9 +26,9 @@ feat(FTR-018): setup executor infrastructure: state protocol, ledger extension, 
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| INFRA-TASK-BE-01 | Define and implement executor state protocol schema | lib/task-executor/store.js exports versioned State class with schema validation, atomic write, readback, and recovery methods for runs, tasks, attempts, receipts, and intents | BE | 18 | — | 2 cmd — [details](#task-INFRA-TASK-BE-01) |
-| INFRA-TASK-BE-02 | Implement backward-compatible ledger extension | lib/execution-ledger.js exports finalizeActivity function with status/tokens/reason/completedAt; preserves all existing open/close/fail/skip behavior; adds no duplicate counter | BE | 14 | — | 2 cmd — [details](#task-INFRA-TASK-BE-02) |
-| INFRA-TASK-BE-03 | Create task-executor module skeleton with public interface | lib/task-executor/index.js exports execute, status, diagnose, stop, reconcile, resume, replan functions with documented signatures; module loads store, ownership, plan, claude-process, git, ledger modules | BE | 12 | INFRA-TASK-BE-01, INFRA-TASK-BE-02 | 2 cmd — [details](#task-INFRA-TASK-BE-03) |
+| INFRA-TASK-BE-01 | Define and implement executor state protocol schema | lib/task-executor/store.js exports versioned State class with schema validation, atomic write, readback, and recovery methods for runs, tasks, attempts, receipts, and intents | BE | 18 | — | 1 cmd — [details](#task-INFRA-TASK-BE-01) |
+| INFRA-TASK-BE-02 | Implement backward-compatible ledger extension | lib/execution-ledger.js exports finalizeActivity function with status/tokens/reason/completedAt; preserves all existing open/close/fail/skip behavior; adds no duplicate counter | BE | 14 | — | 1 cmd — [details](#task-INFRA-TASK-BE-02) |
+| INFRA-TASK-BE-03 | Create task-executor module skeleton with public interface | lib/task-executor/index.js exports execute, status, diagnose, stop, reconcile, resume, replan functions with documented signatures; module loads store, ownership, plan, claude-process, git, ledger modules | BE | 12 | INFRA-TASK-BE-01, INFRA-TASK-BE-02 | 1 cmd — [details](#task-INFRA-TASK-BE-03) |
 
 ## User Story Phases
 
@@ -40,11 +40,11 @@ feat(FTR-018): implement US-01 approved-plan parsing and validation
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-01-TASK-BE-01 | Implement MD task detail parser | lib/task-executor/plan.js exports parseMarkdown function that extracts all 14 task fields from rendered Work Breakdown Markdown with lossless command fence preservation | BE | 13 | — | 2 cmd — [details](#task-US-01-TASK-BE-01) |
-| US-01-TASK-BE-02 | Implement CSV parser and phase-task mapping | lib/task-executor/plan.js exports parseCSV and mapPhases functions; validates eight-column pipe-separated format, aggregates phase dependencies, reconciles task IDs with MD | BE | 11 | US-01-TASK-BE-01 | 2 cmd — [details](#task-US-01-TASK-BE-02) |
-| US-01-TASK-BE-03 | Implement DAG validation and cycle detection | lib/task-executor/plan.js exports validateDAG function; rejects non-DAG graphs, duplicate task IDs, missing fields, and MD/CSV parity mismatches before any state mutation | BE | 12 | US-01-TASK-BE-02 | 2 cmd — [details](#task-US-01-TASK-BE-03) |
-| US-01-TASK-BE-04 | Implement content digest and immutable plan snapshot | lib/task-executor/plan.js exports createPlanSnapshot; computes SHA256 over MD/CSV bytes and format version; binds digest to normalized task objects; snapshot is read-only for run lifetime | BE | 11 | US-01-TASK-BE-03 | 2 cmd — [details](#task-US-01-TASK-BE-04) |
-| US-01-TASK-BE-05 | Implement stable topological scheduler (Kahn's algorithm) | lib/task-executor/plan.js exports computeReadyQueue; returns stable, deterministic task ordering by phase then source index then ID; two identical inputs produce identical schedules | BE | 14 | US-01-TASK-BE-04 | 2 cmd — [details](#task-US-01-TASK-BE-05) |
+| US-01-TASK-BE-01 | Implement MD task detail parser | lib/task-executor/plan.js exports parseMarkdown function that extracts all 14 task fields from rendered Work Breakdown Markdown with lossless command fence preservation | BE | 13 | — | 1 cmd — [details](#task-US-01-TASK-BE-01) |
+| US-01-TASK-BE-02 | Implement CSV parser and phase-task mapping | lib/task-executor/plan.js exports parseCSV and mapPhases functions; validates eight-column pipe-separated format, aggregates phase dependencies, reconciles task IDs with MD | BE | 11 | US-01-TASK-BE-01 | 1 cmd — [details](#task-US-01-TASK-BE-02) |
+| US-01-TASK-BE-03 | Implement DAG validation and cycle detection | lib/task-executor/plan.js exports validateDAG function; rejects non-DAG graphs, duplicate task IDs, missing fields, and MD/CSV parity mismatches before any state mutation | BE | 12 | US-01-TASK-BE-02 | 1 cmd — [details](#task-US-01-TASK-BE-03) |
+| US-01-TASK-BE-04 | Implement content digest and immutable plan snapshot | lib/task-executor/plan.js exports createPlanSnapshot; computes SHA256 over MD/CSV bytes and format version; binds digest to normalized task objects; snapshot is read-only for run lifetime | BE | 11 | US-01-TASK-BE-03 | 1 cmd — [details](#task-US-01-TASK-BE-04) |
+| US-01-TASK-BE-05 | Implement stable topological scheduler (Kahn's algorithm) | lib/task-executor/plan.js exports computeReadyQueue; returns stable, deterministic task ordering by phase then source index then ID; two identical inputs produce identical schedules | BE | 14 | US-01-TASK-BE-04 | 1 cmd — [details](#task-US-01-TASK-BE-05) |
 
 ### US-02: As a coordinator, I want to acquire an exclusive lock and prevent duplicate coordinators, so that I own the execution
 
@@ -54,9 +54,9 @@ feat(FTR-018): implement US-02 exclusive lock and ownership protocol
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-02-TASK-BE-01 | Implement repo-wide execution lease protocol | lib/task-executor/ownership.js exports acquireLease, releaseLease, readLease; enforces one repo-wide coordinator; persists lease with nonce, host, PID, runId, generation | BE | 15 | INFRA-TASK-BE-01 | 2 cmd — [details](#task-US-02-TASK-BE-01) |
-| US-02-TASK-BE-02 | Implement stale lock detection with process liveness checks | lib/task-executor/ownership.js exports checkOwnerLiveness; checks OS process identity and start time; permits recovery only with confirmed dead evidence; never by age alone | BE | 13 | US-02-TASK-BE-01 | 2 cmd — [details](#task-US-02-TASK-BE-02) |
-| US-02-TASK-BE-03 | Implement ownership guard for atomic lease transitions | lib/task-executor/ownership.js exports createOwnershipGuard; atomic compare-and-swap for lease acquisition/release/reclaim; exclusive mkdir guard prevents concurrent transitions | BE | 12 | US-02-TASK-BE-02 | 2 cmd — [details](#task-US-02-TASK-BE-03) |
+| US-02-TASK-BE-01 | Implement repo-wide execution lease protocol | lib/task-executor/ownership.js exports acquireLease, releaseLease, readLease; enforces one repo-wide coordinator; persists lease with nonce, host, PID, runId, generation | BE | 15 | INFRA-TASK-BE-01 | 1 cmd — [details](#task-US-02-TASK-BE-01) |
+| US-02-TASK-BE-02 | Implement stale lock detection with process liveness checks | lib/task-executor/ownership.js exports checkOwnerLiveness; checks OS process identity and start time; permits recovery only with confirmed dead evidence; never by age alone | BE | 13 | US-02-TASK-BE-01 | 1 cmd — [details](#task-US-02-TASK-BE-02) |
+| US-02-TASK-BE-03 | Implement ownership guard for atomic lease transitions | lib/task-executor/ownership.js exports createOwnershipGuard; atomic compare-and-swap for lease acquisition/release/reclaim; exclusive mkdir guard prevents concurrent transitions | BE | 12 | US-02-TASK-BE-02 | 1 cmd — [details](#task-US-02-TASK-BE-03) |
 
 ### US-03: As a coordinator, I want to dispatch one implementation agent per task per attempt, so that I can track execution precisely
 
@@ -66,10 +66,10 @@ feat(FTR-018): implement US-03 single-task agent dispatch
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-03-TASK-BE-01 | Implement Claude subprocess adapter | lib/task-executor/claude-process.js exports spawnClaudeAgent; async spawn with shell:false, validated executable, stdin prompt feed, stdout/stderr buffering with result validation before verification | BE | 14 | INFRA-TASK-BE-03 | 2 cmd — [details](#task-US-03-TASK-BE-01) |
-| US-03-TASK-BE-02 | Implement agent provenance verification (FTR-017 contract) | lib/task-executor/claude-process.js exports verifyAgentIdentity; calls agents resolve --require-verified, caches nativeName/sha256/path, compares loaded definition with registry result | BE | 11 | US-03-TASK-BE-01 | 2 cmd — [details](#task-US-03-TASK-BE-02) |
-| US-03-TASK-BE-03 | Implement task dispatch orchestration with ownership coordination | lib/task-executor/index.js dispatches single task per attempt; persists run/task/attempt identity and ledger activity before invocation; blocks dispatch on missing lock, failed pre-dispatch checks, or identity verification failure | BE | 13 | US-03-TASK-BE-02, US-02-TASK-BE-03 | 2 cmd — [details](#task-US-03-TASK-BE-03) |
-| US-03-TASK-BE-04 | Implement result capture and immediate telemetry persistence | lib/task-executor/store.js persists implementation result receipt before verification; records tokens (or null with reason), elapsed/active time, exit code, outcome; does not overwrite existing attempts | BE | 12 | US-03-TASK-BE-03, INFRA-TASK-BE-01 | 2 cmd — [details](#task-US-03-TASK-BE-04) |
+| US-03-TASK-BE-01 | Implement Claude subprocess adapter | lib/task-executor/claude-process.js exports spawnClaudeAgent; async spawn with shell:false, validated executable, stdin prompt feed, stdout/stderr buffering with result validation before verification | BE | 14 | INFRA-TASK-BE-03 | 1 cmd — [details](#task-US-03-TASK-BE-01) |
+| US-03-TASK-BE-02 | Implement agent provenance verification (FTR-017 contract) | lib/task-executor/claude-process.js exports verifyAgentIdentity; calls agents resolve --require-verified, caches nativeName/sha256/path, compares loaded definition with registry result | BE | 11 | US-03-TASK-BE-01 | 1 cmd — [details](#task-US-03-TASK-BE-02) |
+| US-03-TASK-BE-03 | Implement task dispatch orchestration with ownership coordination | lib/task-executor/index.js dispatches single task per attempt; persists run/task/attempt identity and ledger activity before invocation; blocks dispatch on missing lock, failed pre-dispatch checks, or identity verification failure | BE | 13 | US-03-TASK-BE-02, US-02-TASK-BE-03 | 1 cmd — [details](#task-US-03-TASK-BE-03) |
+| US-03-TASK-BE-04 | Implement result capture and immediate telemetry persistence | lib/task-executor/store.js persists implementation result receipt before verification; records tokens (or null with reason), elapsed/active time, exit code, outcome; does not overwrite existing attempts | BE | 12 | US-03-TASK-BE-03, INFRA-TASK-BE-01 | 1 cmd — [details](#task-US-03-TASK-BE-04) |
 
 ### US-04: As a coordinator, I want to run verifications and review, so that I can validate task outcomes before commit
 
@@ -79,9 +79,9 @@ feat(FTR-018): implement US-04 verifications and review
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-04-TASK-BE-01 | Implement verification command executor | lib/task-executor/index.js runVerifications executes approved fenced command blocks from Work Breakdown; requires each command exit 0; persists each result before proceeding to review | BE | 13 | INFRA-TASK-BE-03 | 2 cmd — [details](#task-US-04-TASK-BE-01) |
-| US-04-TASK-BE-02 | Implement review agent dispatch with diff context | lib/task-executor/index.js runReview dispatches review-solution agent with task context, exact diff, and review criteria; reads review result and validation rules | BE | 12 | US-04-TASK-BE-01, US-03-TASK-BE-02 | 2 cmd — [details](#task-US-04-TASK-BE-02) |
-| US-04-TASK-BE-03 | Implement verification and review outcome persistence | lib/task-executor/store.js persists verification exit codes and review receipt with passed/failed status and blocking findings before proceeding to checkpoint | BE | 11 | US-04-TASK-BE-02 | 2 cmd — [details](#task-US-04-TASK-BE-03) |
+| US-04-TASK-BE-01 | Implement verification command executor | lib/task-executor/index.js runVerifications executes approved fenced command blocks from Work Breakdown; requires each command exit 0; persists each result before proceeding to review | BE | 13 | INFRA-TASK-BE-03 | 1 cmd — [details](#task-US-04-TASK-BE-01) |
+| US-04-TASK-BE-02 | Implement review agent dispatch with diff context | lib/task-executor/index.js runReview dispatches review-solution agent with task context, exact diff, and review criteria; reads review result and validation rules | BE | 12 | US-04-TASK-BE-01, US-03-TASK-BE-02 | 1 cmd — [details](#task-US-04-TASK-BE-02) |
+| US-04-TASK-BE-03 | Implement verification and review outcome persistence | lib/task-executor/store.js persists verification exit codes and review receipt with passed/failed status and blocking findings before proceeding to checkpoint | BE | 11 | US-04-TASK-BE-02 | 1 cmd — [details](#task-US-04-TASK-BE-03) |
 | US-04-TASK-TEST-01 | Write verification and review integration tests | tests/task-executor/verification-review.test.js covers full verification+review+outcome cycle with multiple command blocks, review pass/fail scenarios, and outcome persistence validation | TEST | 15 | US-04-TASK-BE-03 | 1 cmd — [details](#task-US-04-TASK-TEST-01) |
 
 ### US-05: As a coordinator, I want to checkpoint, stage, commit, and register SHA, so that I can persist verified work to the repository
@@ -92,11 +92,11 @@ feat(FTR-018): implement US-05 checkpoint and commit protocol
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-05-TASK-BE-01 | Implement checkpoint intent persistence | lib/task-executor/git.js exports persistCheckpointIntent; records feature/run/task/attempt/baseline SHA/expected tree/review/diff inventory/commit message before any commit attempt | BE | 12 | INFRA-TASK-BE-01 | 2 cmd — [details](#task-US-05-TASK-BE-01) |
-| US-05-TASK-BE-02 | Implement controlled staging with path enumeration | lib/task-executor/git.js exports stageTaskFiles; stages only task-attributable paths via argv, validates resulting tree equals intent, detects hook mutations or external changes | BE | 13 | US-05-TASK-BE-01 | 2 cmd — [details](#task-US-05-TASK-BE-02) |
-| US-05-TASK-BE-03 | Implement commit creation with task trailers | lib/task-executor/git.js exports createTaskCommit; commits with AI-Toolkit-Run/Task/Attempt/Plan trailers; validates parent/tree/ancestry on correct branch; detects hook failures | BE | 12 | US-05-TASK-BE-02 | 2 cmd — [details](#task-US-05-TASK-BE-03) |
-| US-05-TASK-BE-04 | Implement SHA registration outside worktree | lib/task-executor/store.js exports registerCommitSHA; persists SHA in executor state after commit confirmation; does not embed SHA in commit itself (no recursive commits) | BE | 11 | US-05-TASK-BE-03 | 2 cmd — [details](#task-US-05-TASK-BE-04) |
-| US-05-TASK-BE-05 | Implement commit/ledger reconciliation and task completion | lib/task-executor/index.js finalizes ledger entry only after SHA registered and verified on feature branch; marks task checkpointed; closes task activity in ledger | BE | 13 | US-05-TASK-BE-04, INFRA-TASK-BE-02 | 2 cmd — [details](#task-US-05-TASK-BE-05) |
+| US-05-TASK-BE-01 | Implement checkpoint intent persistence | lib/task-executor/git.js exports persistCheckpointIntent; records feature/run/task/attempt/baseline SHA/expected tree/review/diff inventory/commit message before any commit attempt | BE | 12 | INFRA-TASK-BE-01 | 1 cmd — [details](#task-US-05-TASK-BE-01) |
+| US-05-TASK-BE-02 | Implement controlled staging with path enumeration | lib/task-executor/git.js exports stageTaskFiles; stages only task-attributable paths via argv, validates resulting tree equals intent, detects hook mutations or external changes | BE | 13 | US-05-TASK-BE-01 | 1 cmd — [details](#task-US-05-TASK-BE-02) |
+| US-05-TASK-BE-03 | Implement commit creation with task trailers | lib/task-executor/git.js exports createTaskCommit; commits with AI-Toolkit-Run/Task/Attempt/Plan trailers; validates parent/tree/ancestry on correct branch; detects hook failures | BE | 12 | US-05-TASK-BE-02 | 1 cmd — [details](#task-US-05-TASK-BE-03) |
+| US-05-TASK-BE-04 | Implement SHA registration outside worktree | lib/task-executor/store.js exports registerCommitSHA; persists SHA in executor state after commit confirmation; does not embed SHA in commit itself (no recursive commits) | BE | 11 | US-05-TASK-BE-03 | 1 cmd — [details](#task-US-05-TASK-BE-04) |
+| US-05-TASK-BE-05 | Implement commit/ledger reconciliation and task completion | lib/task-executor/index.js finalizes ledger entry only after SHA registered and verified on feature branch; marks task checkpointed; closes task activity in ledger | BE | 13 | US-05-TASK-BE-04, INFRA-TASK-BE-02 | 1 cmd — [details](#task-US-05-TASK-BE-05) |
 
 ### US-06: As a coordinator, I want to resume from persisted evidence and reconcile without re-execution, so that I can recover from interruptions safely
 
@@ -106,9 +106,9 @@ feat(FTR-018): implement US-06 resume and replan
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-06-TASK-BE-01 | Implement resume and reconcile command logic | lib/task-executor/index.js exports resume and reconcile commands; loads persisted state and evidence; classifies task status per edge-cases table; returns next safe action | BE | 14 | INFRA-TASK-BE-03, US-05-TASK-BE-05 | 2 cmd — [details](#task-US-06-TASK-BE-01) |
-| US-06-TASK-BE-02 | Implement evidence evaluation per edge-cases table | lib/task-executor/index.js evaluates persisted evidence (checkpoint, commit, review, diff, worker liveness) and determines: no-reimplementation, reconcile-SHA, recheck-verification, preserve-diff, or block | BE | 13 | US-06-TASK-BE-01 | 2 cmd — [details](#task-US-06-TASK-BE-02) |
-| US-06-TASK-BE-03 | Implement replan command with approval validation | lib/task-executor/index.js exports replan command; validates successor plan Gate 2 approval; records old->new plan digest mapping; preserves original run and attempts; does not auto-start successor | BE | 12 | US-06-TASK-BE-02, US-01-TASK-BE-05 | 2 cmd — [details](#task-US-06-TASK-BE-03) |
+| US-06-TASK-BE-01 | Implement resume and reconcile command logic | lib/task-executor/index.js exports resume and reconcile commands; loads persisted state and evidence; classifies task status per edge-cases table; returns next safe action | BE | 14 | INFRA-TASK-BE-03, US-05-TASK-BE-05 | 1 cmd — [details](#task-US-06-TASK-BE-01) |
+| US-06-TASK-BE-02 | Implement evidence evaluation per edge-cases table | lib/task-executor/index.js evaluates persisted evidence (checkpoint, commit, review, diff, worker liveness) and determines: no-reimplementation, reconcile-SHA, recheck-verification, preserve-diff, or block | BE | 13 | US-06-TASK-BE-01 | 1 cmd — [details](#task-US-06-TASK-BE-02) |
+| US-06-TASK-BE-03 | Implement replan command with approval validation | lib/task-executor/index.js exports replan command; validates successor plan Gate 2 approval; records old->new plan digest mapping; preserves original run and attempts; does not auto-start successor | BE | 12 | US-06-TASK-BE-02, US-01-TASK-BE-05 | 1 cmd — [details](#task-US-06-TASK-BE-03) |
 | US-06-TASK-TEST-01 | Write resume and replan integration tests | tests/task-executor/resume-replan.test.js covers resume dedup (no re-dispatch while worker live), evidence classification, replan approval flow, repeated resume idempotency | TEST | 15 | US-06-TASK-BE-03 | 1 cmd — [details](#task-US-06-TASK-TEST-01) |
 
 ### US-07: As a coordinator, I want to run sequential execution with one active task, so that I can execute safely in a single worktree
@@ -119,8 +119,8 @@ feat(FTR-018): implement US-07 sequential execution
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-07-TASK-BE-01 | Implement sequential executor main loop with ready-queue dispatch | lib/task-executor/index.js execute with maxConcurrency=1 reserves one task slot; dispatches from ready queue; reserves slot through dispatch/verify/review/checkpoint/commit; releases after integration or safe stop | BE | 15 | US-03-TASK-BE-03, US-01-TASK-BE-05 | 2 cmd — [details](#task-US-07-TASK-BE-01) |
-| US-07-TASK-BE-02 | Implement cooperative and immediate stop modes | lib/task-executor/index.js stop command with mode graceful (complete running verification, block new dispatch) or immediate (request termination, await confirmed stop); persists stop request; status confirms stop | BE | 12 | US-07-TASK-BE-01 | 2 cmd — [details](#task-US-07-TASK-BE-02) |
+| US-07-TASK-BE-01 | Implement sequential executor main loop with ready-queue dispatch | lib/task-executor/index.js execute with maxConcurrency=1 reserves one task slot; dispatches from ready queue; reserves slot through dispatch/verify/review/checkpoint/commit; releases after integration or safe stop | BE | 15 | US-03-TASK-BE-03, US-01-TASK-BE-05 | 1 cmd — [details](#task-US-07-TASK-BE-01) |
+| US-07-TASK-BE-02 | Implement cooperative and immediate stop modes | lib/task-executor/index.js stop command with mode graceful (complete running verification, block new dispatch) or immediate (request termination, await confirmed stop); persists stop request; status confirms stop | BE | 12 | US-07-TASK-BE-01 | 1 cmd — [details](#task-US-07-TASK-BE-02) |
 | US-07-TASK-TEST-01 | Write sequential execution end-to-end tests | tests/task-executor/sequential.test.js covers task ordering, one-at-a-time capacity invariant, stop modes, partial results before stop, recovery on resume | TEST | 14 | US-07-TASK-BE-02 | 1 cmd — [details](#task-US-07-TASK-TEST-01) |
 
 ### US-08: As a coordinator, I want to run parallel execution with N isolated worktrees, so that I can execute independent tasks concurrently
@@ -131,12 +131,12 @@ feat(FTR-018): implement US-08 parallel execution with isolated worktrees
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-08-TASK-BE-01 | Implement isolated worktree creation and management | lib/task-executor/index.js creates worktree under run-owned root; unique path per attempt/task; returns worktree path and cleanup callback; validates worktree independence | BE | 13 | US-07-TASK-BE-01 | 2 cmd — [details](#task-US-08-TASK-BE-01) |
-| US-08-TASK-BE-02 | Implement N-limit concurrency control and slot reservation | lib/task-executor/index.js with maxConcurrency=N reserves N task slots; increments active slot counter at dispatch; decrements only after integration verified; enforces N limit | BE | 13 | US-08-TASK-BE-01 | 2 cmd — [details](#task-US-08-TASK-BE-02) |
-| US-08-TASK-BE-03 | Implement serial integration with dispatch-order sequencing | lib/task-executor/git.js exports integrateAttempt; cherry-picks from attempt branch to integration worktree; advances feature ref via compare-and-swap at expected HEAD; integrations serial by dispatch sequence | BE | 15 | US-08-TASK-BE-02, US-05-TASK-BE-05 | 2 cmd — [details](#task-US-08-TASK-BE-03) |
-| US-08-TASK-BE-04 | Implement original and integrated SHA tracking | lib/task-executor/store.js tracks originalSha (from attempt technical branch) and integratedSha (on feature branch after cherry-pick) separately; updates integration attempt record | BE | 11 | US-08-TASK-BE-03 | 2 cmd — [details](#task-US-08-TASK-BE-04) |
+| US-08-TASK-BE-01 | Implement isolated worktree creation and management | lib/task-executor/index.js creates worktree under run-owned root; unique path per attempt/task; returns worktree path and cleanup callback; validates worktree independence | BE | 13 | US-07-TASK-BE-01 | 1 cmd — [details](#task-US-08-TASK-BE-01) |
+| US-08-TASK-BE-02 | Implement N-limit concurrency control and slot reservation | lib/task-executor/index.js with maxConcurrency=N reserves N task slots; increments active slot counter at dispatch; decrements only after integration verified; enforces N limit | BE | 13 | US-08-TASK-BE-01 | 1 cmd — [details](#task-US-08-TASK-BE-02) |
+| US-08-TASK-BE-03 | Implement serial integration with dispatch-order sequencing | lib/task-executor/git.js exports integrateAttempt; cherry-picks from attempt branch to integration worktree; advances feature ref via compare-and-swap at expected HEAD; integrations serial by dispatch sequence | BE | 15 | US-08-TASK-BE-02, US-05-TASK-BE-05 | 1 cmd — [details](#task-US-08-TASK-BE-03) |
+| US-08-TASK-BE-04 | Implement original and integrated SHA tracking | lib/task-executor/store.js tracks originalSha (from attempt technical branch) and integratedSha (on feature branch after cherry-pick) separately; updates integration attempt record | BE | 11 | US-08-TASK-BE-03 | 1 cmd — [details](#task-US-08-TASK-BE-04) |
 | US-08-TASK-INFRA-01 | Configure and verify npm distribution payload | package.json "files" includes lib/task-executor/ and the bin CLI entry; tests/task-executor/ and fixtures are excluded; npm pack --dry-run confirms the executor module and CLI are present in the tarball and that test/fixture paths are absent | INFRA | 12 | INFRA-TASK-BE-03 | 3 cmd — [details](#task-US-08-TASK-INFRA-01) |
-| US-08-TASK-BE-05 | Implement platform qualification guard (refuse non-Windows execution) | lib/task-executor/index.js execute() aborts with a non-zero platform-unsupported error when process.platform is not win32 — before any agent dispatch or worktree creation — enforcing the E-02 process-supervision qualification which is proven for Windows only | BE | 10 | US-07-TASK-BE-01 | 2 cmd — [details](#task-US-08-TASK-BE-05) |
+| US-08-TASK-BE-05 | Implement platform qualification guard (refuse non-Windows execution) | lib/task-executor/index.js execute() aborts with a non-zero platform-unsupported error when process.platform is not win32 — before any agent dispatch or worktree creation — enforcing the E-02 process-supervision qualification which is proven for Windows only | BE | 10 | US-07-TASK-BE-01 | 1 cmd — [details](#task-US-08-TASK-BE-05) |
 | US-08-TASK-TEST-01 | Write parallel execution end-to-end tests | tests/task-executor/parallel.test.js covers N slot reservation, concurrent dispatch, serial integration, dedup prevention, integration conflict handling, N=2/3 scenarios | TEST | 15 | US-08-TASK-BE-04 | 1 cmd — [details](#task-US-08-TASK-TEST-01) |
 | US-08-TASK-TEST-02 | Test platform qualification guard prevents non-Windows execution | tests/task-executor/platform-guard.test.js asserts that with process.platform simulated as non-win32, execute() aborts with the platform-unsupported error and dispatches no agent and creates no worktree; and asserts win32 passes the guard | TEST | 10 | US-08-TASK-BE-05 | 1 cmd — [details](#task-US-08-TASK-TEST-02) |
 
@@ -148,8 +148,8 @@ feat(FTR-018): implement US-09 executor integration and end-to-end testing
 ### Tasks
 | ID | Title | Outcome | Domain | Est. (min) | Dependencies | Verification |
 |---|---|---|---|---|---|---|
-| US-09-TASK-BE-01 | Integrate new executor into implement-feature skill | src/claude/skills/implement-feature/SKILL.md dispatches executor start command after Gate 2; removes old pm-phase3 grouping path; presents run command to user | BE | 11 | INFRA-TASK-BE-03 | 1 cmd — [details](#task-US-09-TASK-BE-01) |
-| US-09-TASK-INFRA-01 | Add executor CLI commands to bin/cli.js | bin/cli.js exports executor command dispatcher; routes start/status/diagnose/stop/reconcile/resume/replan to lib/task-executor/index.js; implements CLI contract with exit codes and JSON output | INFRA | 12 | INFRA-TASK-BE-03 | 2 cmd — [details](#task-US-09-TASK-INFRA-01) |
+| US-09-TASK-BE-01 | Integrate new executor into implement-feature skill | src/claude/skills/implement-feature/SKILL.md dispatches executor start command after Gate 2; removes old pm-phase3 grouping path; presents run command to user | BE | 11 | INFRA-TASK-BE-03 | 2 cmd — [details](#task-US-09-TASK-BE-01) |
+| US-09-TASK-INFRA-01 | Add executor CLI commands to bin/cli.js | bin/cli.js exports executor command dispatcher; routes start/status/diagnose/stop/reconcile/resume/replan to lib/task-executor/index.js; implements CLI contract with exit codes and JSON output | INFRA | 12 | INFRA-TASK-BE-03 | 1 cmd — [details](#task-US-09-TASK-INFRA-01) |
 | US-09-TASK-INFRA-02 | Register executor module and CLI in asset catalog | lib/asset-catalog.js registers the task-executor module and its CLI commands so the toolkit resolver and preflight recognise them | INFRA | 8 | US-09-TASK-INFRA-01 | 1 cmd — [details](#task-US-09-TASK-INFRA-02) |
 | US-09-TASK-TEST-01 | Write fault injection and recovery tests | tests/task-executor/fault-injection.test.js covers crash windows: before/after dispatch, verification, checkpoint-prepared, commit, state-write, ledger-finalization; verifies no false completions and artifact preservation | TEST | 20 | US-08-TASK-TEST-01 | 1 cmd — [details](#task-US-09-TASK-TEST-01) |
 | US-09-TASK-INFRA-03 | Document executor CLI contract | docs/task-executor-cli.md documents the seven commands, their flags, exit codes, and the JSON result schema | INFRA | 8 | US-09-TASK-INFRA-02 | 2 cmd — [details](#task-US-09-TASK-INFRA-03) |
@@ -181,10 +181,6 @@ feat(FTR-018): implement US-09 executor integration and end-to-end testing
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=store.test
 ```
 
@@ -207,10 +203,6 @@ npm test -- --testPathPattern=store.test
 - **Commit subject:** add ledger finalizeActivity for executor task completion
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=execution-ledger.test
@@ -237,10 +229,6 @@ npm test -- --testPathPattern=execution-ledger.test
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 node -e "const e = require('./lib/task-executor'); console.log(typeof e.execute, typeof e.resume)"
 ```
 
@@ -263,10 +251,6 @@ node -e "const e = require('./lib/task-executor'); console.log(typeof e.execute,
 - **Commit subject:** add Work Breakdown Markdown parser (plan.js)
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=plan.*.markdown
@@ -293,10 +277,6 @@ npm test -- --testPathPattern=plan.*.markdown
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=plan.*.csv
 ```
 
@@ -319,10 +299,6 @@ npm test -- --testPathPattern=plan.*.csv
 - **Commit subject:** add DAG validation and cycle detection
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=plan.*.validation
@@ -349,10 +325,6 @@ npm test -- --testPathPattern=plan.*.validation
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=plan.*.digest
 ```
 
@@ -375,10 +347,6 @@ npm test -- --testPathPattern=plan.*.digest
 - **Commit subject:** add stable topological scheduler for task ordering
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=plan.*.scheduler
@@ -405,10 +373,6 @@ npm test -- --testPathPattern=plan.*.scheduler
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=ownership.*.lease
 ```
 
@@ -431,10 +395,6 @@ npm test -- --testPathPattern=ownership.*.lease
 - **Commit subject:** add stale lock detection with process liveness
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=ownership.*.liveness
@@ -461,10 +421,6 @@ npm test -- --testPathPattern=ownership.*.liveness
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=ownership.*.guard
 ```
 
@@ -487,10 +443,6 @@ npm test -- --testPathPattern=ownership.*.guard
 - **Commit subject:** add Claude subprocess adapter with result validation
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=claude-process.*.spawn
@@ -517,10 +469,6 @@ npm test -- --testPathPattern=claude-process.*.spawn
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=claude-process.*.identity
 ```
 
@@ -543,10 +491,6 @@ npm test -- --testPathPattern=claude-process.*.identity
 - **Commit subject:** add task dispatch orchestration
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=executor.*.dispatch
@@ -573,10 +517,6 @@ npm test -- --testPathPattern=executor.*.dispatch
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=store.*.receipt
 ```
 
@@ -599,10 +539,6 @@ npm test -- --testPathPattern=store.*.receipt
 - **Commit subject:** add verification command executor
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=verification.test
@@ -629,10 +565,6 @@ npm test -- --testPathPattern=verification.test
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=review.test
 ```
 
@@ -655,10 +587,6 @@ npm test -- --testPathPattern=review.test
 - **Commit subject:** add verification and review outcome persistence
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=store.*.verification
@@ -709,10 +637,6 @@ npm test -- --testPathPattern=task-executor.*verification-review
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=git.*.checkpoint-intent
 ```
 
@@ -735,10 +659,6 @@ npm test -- --testPathPattern=git.*.checkpoint-intent
 - **Commit subject:** add controlled staging with path enumeration
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=git.*.staging
@@ -765,10 +685,6 @@ npm test -- --testPathPattern=git.*.staging
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=git.*.commit
 ```
 
@@ -791,10 +707,6 @@ npm test -- --testPathPattern=git.*.commit
 - **Commit subject:** add SHA registration outside worktree
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=store.*.sha-registration
@@ -821,10 +733,6 @@ npm test -- --testPathPattern=store.*.sha-registration
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=reconciliation.test
 ```
 
@@ -847,10 +755,6 @@ npm test -- --testPathPattern=reconciliation.test
 - **Commit subject:** add resume and reconcile command logic
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=resume-reconcile.test
@@ -877,10 +781,6 @@ npm test -- --testPathPattern=resume-reconcile.test
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=evidence-table.test
 ```
 
@@ -903,10 +803,6 @@ npm test -- --testPathPattern=evidence-table.test
 - **Commit subject:** add replan command with approval validation
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=replan.test
@@ -957,10 +853,6 @@ npm test -- --testPathPattern=task-executor.*resume-replan
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=executor.*.sequential
 ```
 
@@ -983,10 +875,6 @@ npm test -- --testPathPattern=executor.*.sequential
 - **Commit subject:** add cooperative and immediate stop modes
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=stop.test
@@ -1037,10 +925,6 @@ npm test -- --testPathPattern=task-executor.*sequential
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=worktree.*.creation
 ```
 
@@ -1063,10 +947,6 @@ npm test -- --testPathPattern=worktree.*.creation
 - **Commit subject:** add N-limit concurrency control
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=concurrency.test
@@ -1093,10 +973,6 @@ npm test -- --testPathPattern=concurrency.test
 **Verification commands:**
 
 ```
-npx tsc --noEmit
-```
-
-```
 npm test -- --testPathPattern=git.*.integration
 ```
 
@@ -1119,10 +995,6 @@ npm test -- --testPathPattern=git.*.integration
 - **Commit subject:** add original and integrated SHA tracking
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=store.*.sha-tracking
@@ -1179,10 +1051,6 @@ test -z "$(npm pack --dry-run 2>/dev/null | grep -E 'tests/task-executor/')"
 - **Commit subject:** add platform qualification guard (Windows-only)
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=platform-guard.test
@@ -1257,7 +1125,11 @@ npm test -- --testPathPattern=task-executor.*platform-guard
 **Verification commands:**
 
 ```
-npx tsc --noEmit
+grep -q 'task-executor' src/claude/skills/implement-feature/SKILL.md
+```
+
+```
+! grep -q 'Invoke pm-phase3 (Implementation Phase)' src/claude/skills/implement-feature/SKILL.md
 ```
 
 <a id="task-US-09-TASK-INFRA-01"></a>
@@ -1279,10 +1151,6 @@ npx tsc --noEmit
 - **Commit subject:** add executor CLI commands to bin/cli.js
 
 **Verification commands:**
-
-```
-npx tsc --noEmit
-```
 
 ```
 npm test -- --testPathPattern=cli.*.executor
