@@ -1,0 +1,262 @@
+[
+  {
+    "operation_id": "e411903751457fe5adf845607e8eefd4",
+    "agent": "define-feature:define",
+    "phase": "define",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-09T20:03:22.908Z",
+    "completed_at": "2026-09-09T20:03:23.420Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "f3a01472daca4f29daae579420e3b30c",
+    "agent": "agent-preflight:implement-feature",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-09T20:15:12.126Z",
+    "completed_at": "2026-09-09T20:15:24.357Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "7a7add2e6c9b72be8230df2e16a1b87c",
+    "agent": "pm-phase1:dispatch",
+    "phase": "phase1",
+    "status": "failed",
+    "started_at": "2026-09-09T20:15:39.470Z",
+    "completed_at": "2026-09-09T20:49:52.078Z",
+    "phase_delta_tokens": null,
+    "agentId": "gaia.orchestrator.feature.phase1",
+    "nativeAgentName": "pm-phase1",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:d87bcf3c3f6ae6059cb34d83105a118edd7921b19f822e9bb70ed6b751f6c642",
+    "error": "pm-phase1 workflow stalled on agent attempt 6/6 (no progress for 180s); 9/10 agents completed"
+  },
+  {
+    "operation_id": "69e472db398f88a2ed40558e4bc884cb",
+    "agent": "pm-phase1:self",
+    "phase": "phase1",
+    "status": "failed",
+    "started_at": "2026-09-09T20:18:20.858Z",
+    "completed_at": "2026-09-10T15:38:50.374Z",
+    "phase_delta_tokens": null,
+    "error": "pm-phase1 workflow interrupted by runtime timeout: generate-tech-spec stalled on 6 consecutive 180s timeouts; pm-phase1 self-entry never closed"
+  },
+  {
+    "operation_id": "6bdb800395f2a9a5f265aca436d1ebfb",
+    "agent": "generate-requirements:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-09T20:19:27.004Z",
+    "completed_at": "2026-09-09T20:26:22.067Z",
+    "phase_delta_tokens": 15511
+  },
+  {
+    "operation_id": "f5e33de05694bf99567419466e1f19d5",
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "failed",
+    "started_at": "2026-09-09T20:26:47.200Z",
+    "completed_at": "2026-09-10T15:38:58.148Z",
+    "phase_delta_tokens": null,
+    "error": "agent timed out on all 6 attempts (180s each); agent was actively reading codebase files and producing output but exceeded per-attempt timeout before completing document"
+  },
+  {
+    "operation_id": "9707087995d5f92b4fba51ce0091a86c",
+    "agent": "runtime-bridge-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-10T15:39:19.341Z",
+    "completed_at": "2026-09-10T15:52:55.087Z",
+    "phase_delta_tokens": 40212
+  },
+  {
+    "operation_id": "b397f67a361391db7b796e5e109fea38",
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-10T15:53:20.430Z",
+    "completed_at": "2026-09-10T16:04:50.308Z",
+    "phase_delta_tokens": 99435,
+    "agentId": "gaia.agent.planner.tech-spec",
+    "nativeAgentName": "gaia-generate-tech-spec",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:e796d0cc4904f2323dfc1c76e67ee7ff9fa9c341ea6d4ff32b29e5623f78a386"
+  },
+  {
+    "operation_id": "a7e13dd78a3c8d2bf105cdfde19ac2a4",
+    "agent": "validate-feature-docs:phase1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-10T16:05:10.700Z",
+    "completed_at": "2026-09-10T16:07:43.536Z",
+    "phase_delta_tokens": 70575,
+    "agentId": "gaia.agent.planner.validate-feature-docs",
+    "nativeAgentName": "gaia-validate-feature-docs",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:62fedf1ddbaeda550de8ba0e8c4b2f9aa37a31553c3d5ac4e38bbf0025fb0ceb"
+  },
+  {
+    "operation_id": "b7bf7388d81dbacd9df3af2ff81e2ade",
+    "agent": "node-bridge-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-15T12:27:50.940Z",
+    "completed_at": "2026-09-15T13:40:06.708Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "64ecdd3b2f96eca492d13a017dd9dfa6",
+    "agent": "percorso-c-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-17T10:13:20.892Z",
+    "completed_at": "2026-09-18T08:57:33.369Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "07c0064e7ca2f7873f8b1c9926cb622d",
+    "agent": "validate-feature-docs:gate1-remediation",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-18T09:08:01.509Z",
+    "completed_at": "2026-09-18T09:13:01.934Z",
+    "phase_delta_tokens": 92569
+  },
+  {
+    "operation_id": "3c9468a36a4ccc0d12471f8acdf402eb",
+    "agent": "documentation-consolidation:2026-09-20",
+    "phase": "phase1",
+    "model": null,
+    "status": "done",
+    "started_at": "2026-09-20T21:34:01.019Z",
+    "completed_at": "2026-09-20T21:46:12.605Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "4d435ef2ea7889d709bebf8a179897a9",
+    "agent": "documentation-validation:2026-09-20",
+    "phase": "phase1",
+    "model": null,
+    "status": "done",
+    "started_at": "2026-09-20T21:46:12.575Z",
+    "completed_at": "2026-09-20T21:46:12.590Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "4ef99473ad5718b6a5d446449f743a02",
+    "agent": "oq01a-runproof:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-20T22:03:39.797Z",
+    "completed_at": "2026-09-20T22:03:40.266Z",
+    "phase_delta_tokens": 11680
+  },
+  {
+    "operation_id": "1c370cd9f86f59fdc6464588e3fda14b",
+    "agent": "oq01b-process-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-20T22:03:40.723Z",
+    "completed_at": "2026-09-20T22:03:41.205Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "7813678965d0138736508394b5a23de5",
+    "agent": "e01-provenance-audit:post-gate1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-22T13:22:36.571Z",
+    "completed_at": "2026-09-22T13:22:37.093Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "1c907c41a7b9aa37d53f89ca0181099e",
+    "agent": "e02-registration-window:post-gate1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-22T13:22:37.577Z",
+    "completed_at": "2026-09-22T13:22:38.082Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "679be0dc0ce6f4d853916066f6a0ab13",
+    "agent": "e01-isolated-provenance-proof:post-gate1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-28T07:20:45.239Z",
+    "completed_at": "2026-09-28T07:20:46.172Z",
+    "phase_delta_tokens": 1191
+  },
+  {
+    "operation_id": "b2e61975a3100d04414518967e95e38a",
+    "agent": "pm-phase2:dispatch",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T08:16:33.897Z",
+    "completed_at": "2026-09-28T08:34:35.591Z",
+    "phase_delta_tokens": null,
+    "agentId": "gaia.orchestrator.feature.phase2",
+    "nativeAgentName": "pm-phase2",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:bd6a6d8bf584b8601b206b6eee6a0782d03840f8b1e47df0910ea8c5b5fd2054"
+  },
+  {
+    "operation_id": "9c537fb952beebe077330e7798f19148",
+    "agent": "pm-phase2:self",
+    "phase": "phase2",
+    "status": "done",
+    "started_at": "2026-09-28T08:25:39.137Z",
+    "completed_at": "2026-09-28T08:34:13.480Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "a2b8705a9772de5177f98d3ac9e79152",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-28T08:26:03.370Z",
+    "completed_at": "2026-09-28T08:30:23.738Z",
+    "phase_delta_tokens": 24531
+  },
+  {
+    "operation_id": "57f7bf97efafb1242151380b886b1f64",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-28T08:30:41.975Z",
+    "completed_at": "2026-09-28T08:31:33.870Z",
+    "phase_delta_tokens": 4080
+  },
+  {
+    "operation_id": "5227f49cbc84d3a8202cce03821fca24",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-28T08:45:10.844Z",
+    "completed_at": "2026-09-28T09:37:21.764Z",
+    "phase_delta_tokens": 99548
+  },
+  {
+    "operation_id": "59129cc0ba364381b96429ae9782c38a",
+    "agent": "validate-work-breakdown:phase2-rework",
+    "phase": "phase2",
+    "status": "done",
+    "started_at": "2026-09-28T11:00:31.063Z",
+    "completed_at": "2026-09-28T11:00:32.238Z",
+    "phase_delta_tokens": 52098
+  }
+]
