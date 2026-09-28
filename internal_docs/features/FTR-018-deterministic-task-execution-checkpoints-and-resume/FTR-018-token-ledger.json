@@ -294,5 +294,14 @@
     "started_at": "2026-09-28T14:48:14.406Z",
     "completed_at": "2026-09-28T14:54:31.428Z",
     "phase_delta_tokens": 93507
+  },
+  {
+    "operation_id": "cbb947ab128056f706506ed655596c5a",
+    "agent": "INFRA-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:54:43.996Z",
+    "completed_at": "2026-09-28T15:00:46.529Z",
+    "phase_delta_tokens": 78997
   }
 ]
