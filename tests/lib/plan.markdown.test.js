@@ -287,11 +287,17 @@ describe('parseMarkdown() — real FTR-018-Work-Breakdown.md', () => {
   });
 
   test('preserves multiple verification commands with shell pipes and command substitution verbatim (US-08-TASK-INFRA-01)', () => {
+    // Verification commands corrected in commit 21c397d (a real npm-pack
+    // stdout/stderr defect found while implementing US-08-TASK-INFRA-01, the
+    // same class of issue as the earlier npx tsc --noEmit fix) — 2>/dev/null
+    // discarded npm's tarball-listing output on this npm version; fixed to
+    // 2>&1 with a tightened bin/cli.js pattern. This fixture is updated to
+    // match the corrected, real Work Breakdown content.
     const task = tasks.find(t => t.id === 'US-08-TASK-INFRA-01');
     expect(task.verificationCommands).toEqual([
-      "npm pack --dry-run 2>/dev/null | grep -E 'lib/task-executor/'",
-      "npm pack --dry-run 2>/dev/null | grep -E 'bin/cli.js'",
-      "test -z \"$(npm pack --dry-run 2>/dev/null | grep -E 'tests/task-executor/')\"",
+      'npm pack --dry-run 2>&1 | grep -E "lib/task-executor/"',
+      'npm pack --dry-run 2>&1 | grep -E "npm notice.*bin/cli.js"',
+      'test -z "$(npm pack --dry-run 2>&1 | grep -E "tests/task-executor/")"',
     ]);
   });
 
