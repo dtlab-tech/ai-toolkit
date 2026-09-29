@@ -29,6 +29,78 @@
 //     triggering some OTHER, already-existing validation error
 //     (DISPATCH_VALIDATION_ERROR for a missing args.project) instead of
 //     PLATFORM_NOT_QUALIFIED.
+//
+// WHY THIS FILE DOES NOT jest.spyOn dispatchTaskAttempt / createTaskWorktree
+// (US-08-TASK-TEST-02):
+//
+// This task was asked to add more DIRECT proof — alongside the indirect
+// reasoning above — by jest.spyOn-ing the real, already-exported
+// dispatchTaskAttempt and createTaskWorktree functions from
+// lib/task-executor/index.js and asserting execute() never calls either on a
+// simulated non-win32 platform. That approach was tried and empirically
+// rejected, not assumed away:
+//
+//   1. dispatchTaskAttempt's one and only call site in the whole file (inside
+//      the private helper that drives a single task attempt to resolution,
+//      itself called from execute()'s own run loop) invokes it by its bare
+//      local identifier — `dispatchTaskAttempt({...})` — never through
+//      `module.exports.dispatchTaskAttempt` / `exports.dispatchTaskAttempt`.
+//      `jest.spyOn(indexModule, 'dispatchTaskAttempt')` only replaces the
+//      property on the *exports object* this test itself required; it cannot
+//      rewrite the module-internal local binding the internal call site
+//      actually resolves at call time. This is the well-documented CommonJS
+//      "spying on an export used internally by its own module" limitation —
+//      verified here empirically, not assumed: a throwaway scratch module
+//      with the exact same shape as index.js (a local `function inner() {..}`,
+//      a local `function outer() { return inner(); }`, both re-exported via
+//      `module.exports = { inner, outer }`) was required into a disposable
+//      Jest test; `jest.spyOn(mod, 'inner')` followed by calling `mod.outer()`
+//      returned the real, correct value from `inner()` AND left the spy's own
+//      call count at 0. The spy silently never observes the internal call.
+//      A spy on `dispatchTaskAttempt` here would behave identically: it would
+//      report "never called" on every execute() invocation, guard-fired or
+//      not — which is not evidence of anything, and would be indistinguishable
+//      from a passing test even if the platform guard were deleted entirely.
+//   2. createTaskWorktree: independent of point 1, this function is not even
+//      wired into execute()'s run loop at all yet. Its own doc comment in
+//      lib/task-executor/index.js says so explicitly ("It is NOT wired into
+//      execute()'s existing sequential main loop ... which stays
+//      N=1/single-worktree-free"), and createSlotPool's neighboring comment
+//      repeats "execute() never calls this function". Under the only
+//      maxConcurrency value this codebase currently supports (1), execute()
+//      never calls createTaskWorktree on ANY platform, guard or no guard — a
+//      spy on it would read "never called" for every test in this entire
+//      suite, not just this one. Zero diagnostic value specific to this test.
+//
+// A spy-based assertion here would therefore be exactly the kind of test that
+// creates a false sense of security: syntactically present, permanently
+// green, and structurally incapable of ever catching a regression where the
+// guard stopped firing. None was added. Instead, Test 1 below leans harder on
+// — and this comment makes fully explicit — the SAME structural/indirect
+// reasoning the test already used, spelled out end to end:
+//
+//   - dispatchTaskAttempt's one call site is reachable ONLY from inside
+//     execute()'s run loop, which execute() only reaches after it has
+//     already: validated args, derived the plan snapshot, resolved
+//     executionRoot, generated a fresh runId, and — critically — successfully
+//     called ownership.acquireLease(executionRoot, runId) and then
+//     constructed and store.writeState()-persisted the initial run State.
+//     Every one of those steps sits AFTER the platform guard in execute()'s
+//     own source (the guard is its literal first statement). So
+//     "acquireLease was never called" is not merely correlated with
+//     "dispatchTaskAttempt was never called" — it is logically PRIOR to it:
+//     there is no code path in index.js that reaches the dispatch call site
+//     without first acquiring the lease this test already proves was never
+//     acquired. No lease, no state, no dispatch — full stop.
+//   - createTaskWorktree needs a runId/executionRoot/baseSha that only exist
+//     once a run has actually started the same way; but more directly, the
+//     physical check `fs.readdirSync(tmpDir)` returning `[]` below is
+//     stronger, more direct evidence that no worktree (or anything else) was
+//     ever created under tmpDir than a function-call spy could ever be — it
+//     inspects the real filesystem side effect a genuine createTaskWorktree
+//     call would have to leave behind (a `worktrees/` directory, populated by
+//     `git worktree add`), not merely whether some function reference was
+//     invoked.
 
 const fs = require('fs');
 const os = require('os');
@@ -73,11 +145,23 @@ describe('execute(): platform qualification guard', () => {
     }
 
     // No ownership lease was ever acquired, no run state was ever written —
-    // the guard is the very first thing execute() does.
+    // the guard is the very first thing execute() does. This is conclusive
+    // (not merely suggestive) proof that no agent was ever dispatched: per
+    // the file-header comment above, dispatchTaskAttempt's only call site in
+    // index.js is reachable exclusively from inside execute()'s run loop,
+    // which itself is only reached AFTER a successful acquireLease +
+    // writeState — both proven never to have happened here.
     expect(acquireLeaseSpy).not.toHaveBeenCalled();
     expect(writeStateSpy).not.toHaveBeenCalled();
 
-    // No run directory (or anything else) was created under tmpDir.
+    // No run directory (or anything else) was created under tmpDir — direct,
+    // physical proof that no worktree was ever created (createTaskWorktree's
+    // real side effect is a `worktrees/` directory materialized via `git
+    // worktree add`; an empty tmpDir means that never happened), stronger
+    // than a call-count spy could be. See the file-header comment above for
+    // why a jest.spyOn on dispatchTaskAttempt/createTaskWorktree themselves
+    // was deliberately not used instead (it would not intercept the real
+    // call path and would silently always pass).
     expect(fs.readdirSync(tmpDir)).toEqual([]);
 
     acquireLeaseSpy.mockRestore();
