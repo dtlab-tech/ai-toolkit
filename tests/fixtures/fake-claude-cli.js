@@ -71,6 +71,39 @@ function readStdin() {
       process.exit(0);
       return;
     }
+    case 'write-file-and-succeed': {
+      // Added for US-07-TASK-BE-01's sequential-executor integration test
+      // (tests/task-executor/executor.sequential.test.js). Derives a
+      // per-task output filename from the trailing "ai-toolkit-task:
+      // <runId>:<taskId>:<attempt>" tag lib/task-executor/index.js's
+      // dispatchTaskAttempt always appends as the LAST argv element before
+      // spawning (see its own "worker-liveness process tagging" file
+      // comment) — this lets one static spawnArgs configuration in a test
+      // produce a distinctly-named, REAL file per dispatched task/attempt,
+      // with no extra flags needed. Falls back to a fixed filename if the
+      // last argv element does not look like that tag (e.g. this mode
+      // invoked directly, without a real dispatchTaskAttempt call).
+      const lastArg = process.argv[process.argv.length - 1];
+      const tagParts = typeof lastArg === 'string' ? lastArg.split(':') : [];
+      const taskId = tagParts.length === 4 && tagParts[0] === 'ai-toolkit-task' ? tagParts[2] : 'unknown-task';
+      fs.writeFileSync(taskId + '.output.txt', 'implemented by fake-claude-cli (write-file-and-succeed)\n');
+      process.stdout.write(JSON.stringify({ is_error: false, result: 'implemented' }));
+      process.exit(0);
+      return;
+    }
+    case 'review-verdict-pass': {
+      // Added for the same US-07-TASK-BE-01 integration test. Fixed PASS
+      // verdict, independent of stdin/diff content — this mode exists only
+      // to exercise the executor's real wiring (a real subprocess spawn, a
+      // real parsed JSON envelope), never to simulate an actual review
+      // judgement.
+      process.stdout.write(JSON.stringify({
+        is_error: false,
+        result: 'Verdict: PASS\n\nCRITICAL (blocks merge):\n  none\n\nWARNING (should fix):\n  none\n',
+      }));
+      process.exit(0);
+      return;
+    }
     case 'hang-ignore-sigterm': {
       // Refuses graceful termination (SIGTERM) so tests can prove the
       // adapter's timeout path uses a forceful tree-kill (taskkill /F on
