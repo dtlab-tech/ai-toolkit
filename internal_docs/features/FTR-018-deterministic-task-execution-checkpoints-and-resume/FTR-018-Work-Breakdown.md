@@ -5,7 +5,7 @@
 |-------|-------|
 | Feature | FTR-018 |
 | Schema | v2 |
-| Generated | 2026-09-28T14:47:20.272Z |
+| Generated | 2026-09-29T13:38:38.813Z |
 
 ## Summary
 | Metric | Value |
@@ -1021,15 +1021,15 @@ npm test -- --testPathPattern=store.*.sha-tracking
 **Verification commands:**
 
 ```
-npm pack --dry-run 2>/dev/null | grep -E 'lib/task-executor/'
+npm pack --dry-run 2>&1 | grep -E "lib/task-executor/"
 ```
 
 ```
-npm pack --dry-run 2>/dev/null | grep -E 'bin/cli.js'
+npm pack --dry-run 2>&1 | grep -E "npm notice.*bin/cli.js"
 ```
 
 ```
-test -z "$(npm pack --dry-run 2>/dev/null | grep -E 'tests/task-executor/')"
+test -z "$(npm pack --dry-run 2>&1 | grep -E "tests/task-executor/")"
 ```
 
 <a id="task-US-08-TASK-BE-05"></a>

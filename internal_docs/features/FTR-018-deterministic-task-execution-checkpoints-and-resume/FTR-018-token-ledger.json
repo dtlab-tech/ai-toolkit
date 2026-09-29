@@ -582,5 +582,23 @@
     "started_at": "2026-09-29T13:23:37.575Z",
     "completed_at": "2026-09-29T13:33:05.332Z",
     "phase_delta_tokens": 88266
+  },
+  {
+    "operation_id": "761200bd9345f1e711067d785ba57279",
+    "agent": "US-08-TASK-INFRA-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T13:33:40.829Z",
+    "completed_at": "2026-09-29T13:39:08.548Z",
+    "phase_delta_tokens": 38370
+  },
+  {
+    "operation_id": "fd84ff0124ffb858e60d538b775ed60f",
+    "agent": "wb-verification-fix-2:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T13:38:53.243Z",
+    "completed_at": "2026-09-29T13:38:54.326Z",
+    "phase_delta_tokens": null
   }
 ]

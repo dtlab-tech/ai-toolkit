@@ -1095,9 +1095,9 @@
           ],
           "verification": {
             "commands": [
-              "npm pack --dry-run 2>/dev/null | grep -E 'lib/task-executor/'",
-              "npm pack --dry-run 2>/dev/null | grep -E 'bin/cli.js'",
-              "test -z \"$(npm pack --dry-run 2>/dev/null | grep -E 'tests/task-executor/')\""
+              "npm pack --dry-run 2>&1 | grep -E \"lib/task-executor/\"",
+              "npm pack --dry-run 2>&1 | grep -E \"npm notice.*bin/cli.js\"",
+              "test -z \"$(npm pack --dry-run 2>&1 | grep -E \"tests/task-executor/\")\""
             ]
           },
           "estimate": {
