@@ -104,6 +104,45 @@ function readStdin() {
       process.exit(0);
       return;
     }
+    case 'conditional-hang': {
+      // Added for US-07-TASK-TEST-01's tests/task-executor/sequential.test.js
+      // ("partial results before stop" scenario). A single static
+      // implementationSpawnArgs configuration applies uniformly to EVERY
+      // task dispatchTaskAttempt makes during one execute() run (see
+      // lib/task-executor/index.js's execute() — args.implementationSpawnArgs
+      // is one array for the whole run, not per-task), so a test that needs
+      // task A to succeed quickly while task B hangs indefinitely (to give a
+      // real stop({mode:'immediate'}) call something genuinely alive and
+      // "dispatching" to kill) cannot pick different modes per task via
+      // separate execute() args. This mode resolves that: it inspects the
+      // SAME trailing "ai-toolkit-task:<runId>:<taskId>:<attempt>" tag
+      // 'write-file-and-succeed' above already parses, and behaves like
+      // 'hang-ignore-sigterm' (never exits on its own, ignores SIGTERM,
+      // spawns a grandchild so a real process tree exists to kill) ONLY when
+      // the tag's taskId matches --hang-task-id=<taskId>; for every other
+      // task it behaves exactly like 'write-file-and-succeed' (writes its
+      // real output file and exits 0 immediately).
+      const hangTaskId = argValue('--hang-task-id');
+      const lastArg = process.argv[process.argv.length - 1];
+      const tagParts = typeof lastArg === 'string' ? lastArg.split(':') : [];
+      const taskId = tagParts.length === 4 && tagParts[0] === 'ai-toolkit-task' ? tagParts[2] : null;
+
+      if (hangTaskId && taskId === hangTaskId) {
+        process.on('SIGTERM', () => {});
+        spawn(
+          process.execPath,
+          ['-e', "process.on('SIGTERM', () => {}); setTimeout(() => {}, 120000);"],
+          { stdio: 'ignore' }
+        );
+        setTimeout(() => {}, 120000);
+        return;
+      }
+
+      fs.writeFileSync((taskId || 'unknown-task') + '.output.txt', 'implemented by fake-claude-cli (conditional-hang)\n');
+      process.stdout.write(JSON.stringify({ is_error: false, result: 'implemented' }));
+      process.exit(0);
+      return;
+    }
     case 'hang-ignore-sigterm': {
       // Refuses graceful termination (SIGTERM) so tests can prove the
       // adapter's timeout path uses a forceful tree-kill (taskkill /F on
