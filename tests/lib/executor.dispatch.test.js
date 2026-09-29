@@ -192,9 +192,17 @@ describe('dispatchTaskAttempt', () => {
       const ledgerPaths = store._executionPaths(executionRoot, RUN_ID);
       const ledgerFile = path.join(ledgerPaths.runDir, RUN_ID + '-token-ledger.json');
       const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
-      expect(entries).toHaveLength(1);
+      // Two activities are opened together at dispatch time (Tech-Spec
+      // section 6, kinds "task, implementation, ..."): 'implementation'
+      // (this one dispatch invocation) and 'task' (spans the whole task-
+      // attempt lifecycle; only closed later by finalizeTaskCheckpoint,
+      // US-05-TASK-BE-05 — never by dispatchTaskAttempt itself).
+      expect(entries).toHaveLength(2);
       expect(entries[0].agent).toBe('executor:' + RUN_ID + ':' + TASK_ID + ':implementation');
       expect(entries[0].operation_id).toBe(result.ledgerOperationId);
+      expect(entries[1].agent).toBe('executor:' + RUN_ID + ':' + TASK_ID + ':task');
+      expect(entries[1].phase).toBe('task');
+      expect(entries[1].status).toBe('running');
     });
 
     test('records ledger metadata from the verified identity', async () => {
