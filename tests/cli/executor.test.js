@@ -26,10 +26,25 @@ const {
   mapExecutorErrorToExitCode,
 } = require('../../bin/cli');
 
-// A real git repo (this toolkit's own checkout) — reconcile/resume/replan
-// derive executionRoot/taskRef via real `git` calls (see bin/cli.js's
-// _executorExecutionRoot/_executorCurrentBranchRef); using the real repo root
-// here exercises that real derivation rather than re-mocking child_process.
+// This toolkit's own checkout — used as a plausible --project path for every
+// subcommand. start/status/diagnose/stop never shell out to git at all, so
+// this is inert for them. reconcile/resume/replan DO derive
+// executionRoot/taskRef via real `git rev-parse` calls (see bin/cli.js's
+// _executorExecutionRoot/_executorCurrentBranchRef) — those two calls are
+// stubbed below (see the child_process.spawnSync mock in beforeEach) rather
+// than left to hit this checkout's real state, because CI checks out a PR's
+// merge commit in DETACHED HEAD (actions/checkout@v4's default for
+// pull_request events): `git rev-parse --abbrev-ref HEAD` then returns the
+// literal string "HEAD", which _executorCurrentBranchRef correctly treats as
+// EXECUTE_VALIDATION_ERROR ("a task ref cannot be derived automatically") —
+// entirely correct production behavior, but it means this CLI-ROUTING-only
+// test suite must not depend on the outer checkout's branch state to reach
+// the routing assertions it actually cares about. _executorExecutionRoot/
+// _executorCurrentBranchRef call child_process.spawnSync('git', [...]) via a
+// bare internal identifier, not through module.exports — so, per this
+// session's own established finding (a CommonJS module cannot intercept its
+// own internal calls via jest.spyOn on its exports), stubbing spawnSync
+// itself is the only mocking seam that actually reaches them.
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
 function makeErr(code, message) {
@@ -42,15 +57,37 @@ describe('executor CLI routing', () => {
   let stdoutSpy;
   let stderrSpy;
 
+  let spawnSyncSpy;
+
   beforeEach(() => {
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     process.exitCode = undefined;
+
+    // Stubs ONLY the two exact git rev-parse invocations
+    // _executorExecutionRoot/_executorCurrentBranchRef make, with a fixed,
+    // always-valid result — regardless of this checkout's real branch/HEAD
+    // state (see the REPO_ROOT comment above for why). Any other spawnSync
+    // call falls through to the real implementation unchanged.
+    const childProcess = require('child_process');
+    const realSpawnSync = childProcess.spawnSync;
+    spawnSyncSpy = jest.spyOn(childProcess, 'spawnSync').mockImplementation((cmd, args, opts) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'rev-parse') {
+        if (args[1] === '--git-common-dir') {
+          return { status: 0, stdout: '.git\n', stderr: '', error: null };
+        }
+        if (args[1] === '--abbrev-ref' && args[2] === 'HEAD') {
+          return { status: 0, stdout: 'main\n', stderr: '', error: null };
+        }
+      }
+      return realSpawnSync(cmd, args, opts);
+    });
   });
 
   afterEach(() => {
     stdoutSpy.mockRestore();
     stderrSpy.mockRestore();
+    spawnSyncSpy.mockRestore();
     process.exitCode = undefined;
     jest.clearAllMocks();
   });

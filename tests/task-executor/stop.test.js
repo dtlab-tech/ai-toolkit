@@ -469,8 +469,20 @@ describe('execute() + stop(): graceful loop-cooperation (US-07-TASK-BE-02)', () 
   let executionRoot;
   let verifyIdentitySpy;
   let writeStateSpy;
+  let originalPlatform;
 
   beforeEach(() => {
+    // US-08-TASK-BE-05's platform guard is execute()'s literal first
+    // statement, refusing to run at all on non-win32. This describe block's
+    // test exercises graceful stop-cooperation using the fake CLI fixture
+    // only (no real Windows-only process-liveness check) — overriding here
+    // lets execute() past the guard on any host OS. The file's other,
+    // genuinely Windows-only real-process tests use their own itWindowsOnly
+    // gating (evaluated at module load time from the real process.platform,
+    // unaffected by this runtime override) and are untouched.
+    originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stop-integ-test-'));
     repoDir = path.join(tmpDir, 'repo');
     featureDir = path.join(tmpDir, 'FTR-778-stop-test');
@@ -493,6 +505,7 @@ describe('execute() + stop(): graceful loop-cooperation (US-07-TASK-BE-02)', () 
       writeStateSpy = null;
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
   test(

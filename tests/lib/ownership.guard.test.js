@@ -142,7 +142,12 @@ describe('ownership: reclaimLease', () => {
     expect(readLease(executionRoot)).toEqual(lease);
   });
 
-  test('refuses to reclaim when checkOwnerLiveness would report alive: true (the current process)', () => {
+  // Real alive:true requires checkOwnerLiveness's real, Windows-only OS liveness
+  // query (E-02 qualification) — on any other platform it always returns
+  // 'unknown' by design, so this specific "confirmed alive" scenario cannot be
+  // produced for real elsewhere. The 'unknown' refusal path is covered
+  // cross-platform by the next test below.
+  itWindowsOnly('refuses to reclaim when checkOwnerLiveness would report alive: true (the current process)', () => {
     const original = acquireLease(executionRoot, 'run-live');
 
     let caught;

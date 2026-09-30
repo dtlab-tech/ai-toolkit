@@ -89,11 +89,24 @@ describe('ownership: checkOwnerLiveness', () => {
   });
 
   test('returns alive: unknown when the lease has no recorded startTime (legacy lease shape)', () => {
-    const lease = { host: os.hostname(), pid: process.pid };
-    const result = checkOwnerLiveness(lease);
+    // This test's intent is the "missing startTime" branch specifically — the
+    // separate, non-Windows-platform branch is already covered by its own
+    // test above. Force platform to 'win32' so this reaches the intended
+    // branch on ANY host OS (CI runs ubuntu-latest; without this override,
+    // the platform check would fire first there and return a different,
+    // unrelated reason string, making this assertion fail for the wrong
+    // reason rather than actually exercising the missing-startTime path).
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const lease = { host: os.hostname(), pid: process.pid };
+      const result = checkOwnerLiveness(lease);
 
-    expect(result.alive).toBe('unknown');
-    expect(result.reason).toMatch(/no recorded startTime/);
+      expect(result.alive).toBe('unknown');
+      expect(result.reason).toMatch(/no recorded startTime/);
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
   });
 
   itWindowsOnly('returns alive: true for the current process using the startTime acquireLease captured', () => {

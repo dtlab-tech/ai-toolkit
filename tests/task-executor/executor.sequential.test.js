@@ -186,8 +186,19 @@ describe('execute(): sequential (maxConcurrency=1) main loop (US-07-TASK-BE-01)'
   let featureDir;
   let executionRoot;
   let verifyIdentitySpy;
+  let originalPlatform;
 
   beforeEach(() => {
+    // US-08-TASK-BE-05's platform qualification guard is the very first
+    // statement in execute() — it refuses to run at all on non-win32. None
+    // of this file's tests exercise real Windows-only behavior (they use the
+    // fake CLI fixture and real-but-portable git/Bash operations only), so
+    // this override just lets execute() past that guard on any host OS
+    // (this project's own CI runs ubuntu-latest) to reach the real logic
+    // these tests actually verify.
+    originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'executor-sequential-test-'));
     repoDir = path.join(tmpDir, 'repo');
     featureDir = path.join(tmpDir, 'FTR-777-sequential-test');
@@ -206,6 +217,7 @@ describe('execute(): sequential (maxConcurrency=1) main loop (US-07-TASK-BE-01)'
   afterEach(() => {
     verifyIdentitySpy.mockRestore();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
   test(

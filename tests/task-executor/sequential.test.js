@@ -265,8 +265,19 @@ describe('sequential execution end-to-end (US-07-TASK-TEST-01)', () => {
   let featureDir;
   let executionRoot;
   let verifyIdentitySpy;
+  let originalPlatform;
 
   beforeEach(() => {
+    // US-08-TASK-BE-05's platform guard is execute()'s literal first
+    // statement, refusing to run at all on non-win32. Overriding here lets
+    // it past that guard on any host OS so the real logic below actually
+    // runs; this file's own itWindowsOnly gating (line ~122, evaluated at
+    // module load time from the REAL process.platform, before this runtime
+    // override ever applies) is unaffected — the genuinely Windows-only
+    // real-process scenario below still correctly skips on non-Windows.
+    originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'executor-seq-recovery-test-'));
     repoDir = path.join(tmpDir, 'repo');
     featureDir = path.join(tmpDir, 'FTR-779-seq-recovery-test');
@@ -285,6 +296,7 @@ describe('sequential execution end-to-end (US-07-TASK-TEST-01)', () => {
   afterEach(() => {
     verifyIdentitySpy.mockRestore();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
   // ── Scenario 1: one-at-a-time capacity invariant ──────────────────────────
