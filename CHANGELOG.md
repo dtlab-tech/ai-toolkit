@@ -1,4 +1,48 @@
 ## 0.1.4 (2026-07-21)
+## [0.14.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.13.0...v0.14.0) (2026-09-30)
+
+
+### Features
+
+* **FTR-018:** add agent provenance verification via agents resolve ([27fce79](https://github.com/dtlab-tech/ai-toolkit/commit/27fce7943bda58c546528e839fd83c7c7b2ee1ce))
+* **FTR-018:** add checkpoint intent persistence ([27332e3](https://github.com/dtlab-tech/ai-toolkit/commit/27332e3a38ece600af2f3c3964637dc5f09a5607))
+* **FTR-018:** add Claude subprocess adapter with result validation ([ddcfcd0](https://github.com/dtlab-tech/ai-toolkit/commit/ddcfcd07de8253465a4faf98805956491457706c))
+* **FTR-018:** add commit creation with task trailers ([b11c5af](https://github.com/dtlab-tech/ai-toolkit/commit/b11c5afd995b30c3c8ff136e1449d9c94397e1e7))
+* **FTR-018:** add controlled staging with path enumeration ([81cdc26](https://github.com/dtlab-tech/ai-toolkit/commit/81cdc26904191f189eb9aefc5f86941857368db7))
+* **FTR-018:** add cooperative and immediate stop modes ([2a410ba](https://github.com/dtlab-tech/ai-toolkit/commit/2a410ba0b28d6fdfa9369b439a10e098a250bdf0))
+* **FTR-018:** add DAG validation and cycle detection ([ae08348](https://github.com/dtlab-tech/ai-toolkit/commit/ae0834872f41e339d68a43088c229d6185528d2b))
+* **FTR-018:** add evidence evaluation per edge-cases table ([767a9e0](https://github.com/dtlab-tech/ai-toolkit/commit/767a9e040c6600ae6e7ce81816454bde9923c7ea))
+* **FTR-018:** add exclusive lease protocol ([68f42d1](https://github.com/dtlab-tech/ai-toolkit/commit/68f42d14b87ac6c2672415307248e5a47fada574))
+* **FTR-018:** add executor CLI commands to bin/cli.js ([6b59e65](https://github.com/dtlab-tech/ai-toolkit/commit/6b59e650aebe73b47593c7ee24ed2b803468e53c))
+* **FTR-018:** add executor state protocol (store.js) with versioned schema and atomic writes ([f6d989b](https://github.com/dtlab-tech/ai-toolkit/commit/f6d989b42796d8e37099770e2ebc7fa4f282cab3))
+* **FTR-018:** add ledger finalizeActivity for executor task completion ([be6187a](https://github.com/dtlab-tech/ai-toolkit/commit/be6187aead37c0ab7caf956be867df45c5db8fae))
+* **FTR-018:** add N-limit concurrency control and slot reservation ([6f6cfae](https://github.com/dtlab-tech/ai-toolkit/commit/6f6cfae15d47b6f7f371168bc1ef91db12091236))
+* **FTR-018:** add ownership guard for atomic lease transitions ([a2da308](https://github.com/dtlab-tech/ai-toolkit/commit/a2da3080c5bed54e375a5ce1467a2cc01b0482b7))
+* **FTR-018:** add plan snapshot with content digest ([512bfbf](https://github.com/dtlab-tech/ai-toolkit/commit/512bfbfa6d097d52f7e913f1be16031dd2f214fa))
+* **FTR-018:** add platform qualification guard (Windows-only) ([96c09a0](https://github.com/dtlab-tech/ai-toolkit/commit/96c09a0d00280f8a5893cdaa7bc2a1a190247f9c))
+* **FTR-018:** add replan command with approval validation ([094ef1a](https://github.com/dtlab-tech/ai-toolkit/commit/094ef1a683f91f33350feb314d02adcc932a7e66))
+* **FTR-018:** add resume and reconcile command logic ([be3d9a0](https://github.com/dtlab-tech/ai-toolkit/commit/be3d9a078b00666db8e9521e7e9c714c58f97554))
+* **FTR-018:** add review agent dispatch ([0a463e6](https://github.com/dtlab-tech/ai-toolkit/commit/0a463e6346af977f4bee66bd8b9c443df40112c5))
+* **FTR-018:** add sequential executor main loop (execute()) ([32895ad](https://github.com/dtlab-tech/ai-toolkit/commit/32895ad387d509620d143ca03e63d692aa47f102))
+* **FTR-018:** add serial integration with dispatch-order sequencing ([9681bb7](https://github.com/dtlab-tech/ai-toolkit/commit/9681bb7c853c4c42644a05e6a37fd424ec5e4c0b))
+* **FTR-018:** add stable topological scheduler for task ordering ([63ba632](https://github.com/dtlab-tech/ai-toolkit/commit/63ba632bcccb2ba9996836cf9280e5facec819c6))
+* **FTR-018:** add stale lock detection with process liveness ([391295c](https://github.com/dtlab-tech/ai-toolkit/commit/391295c862ac76e4def7ad6d74fcaac6f2cceb69))
+* **FTR-018:** add task dispatch orchestration ([429c892](https://github.com/dtlab-tech/ai-toolkit/commit/429c892d9f6d2b1b9c53bb2987a8104775e873f3))
+* **FTR-018:** add task-executor module skeleton (index.js) ([339fd57](https://github.com/dtlab-tech/ai-toolkit/commit/339fd5708aa02e55cddc8759be13de05b34aa367))
+* **FTR-018:** add verification command executor ([f03a342](https://github.com/dtlab-tech/ai-toolkit/commit/f03a3425144c3d807e30884874f55e5c76ad6e4b))
+* **FTR-018:** add Work Breakdown CSV parser and phase mapping ([84830ac](https://github.com/dtlab-tech/ai-toolkit/commit/84830ac35ca02615c628d6bd1a96c7cbc2dcc6ff))
+* **FTR-018:** add Work Breakdown Markdown parser (plan.js) ([b26ef0e](https://github.com/dtlab-tech/ai-toolkit/commit/b26ef0e2d949ab4d11278266e67ae8c57565de0c))
+* **FTR-018:** document executor CLI contract; fix unreachable exit code 8 ([3e7a02b](https://github.com/dtlab-tech/ai-toolkit/commit/3e7a02bb341dc8e98f964299b54427eedd06a1f2))
+* **FTR-018:** integrate executor into implement-feature skill ([24eb4cd](https://github.com/dtlab-tech/ai-toolkit/commit/24eb4cdacb477aeed2008199dbe44b56f29d16ce))
+* **runtime:** add deterministic workflow host and owned ledger lifecycle ([aa3c350](https://github.com/dtlab-tech/ai-toolkit/commit/aa3c3503a676c77ff3c76019464a738f8bbc060e))
+
+
+### Bug Fixes
+
+* **FTR-018:** fix CI failures on Linux (ubuntu-latest / GitHub Actions) ([7054af9](https://github.com/dtlab-tech/ai-toolkit/commit/7054af9eb4f9109063c0254fe29df75fcabe5a4e))
+* **workflows:** deterministic workflow control plane and owned ledger lifecycle ([aec810f](https://github.com/dtlab-tech/ai-toolkit/commit/aec810f2b93b2ccbb38034e66c0d25897f621298))
+* **workflows:** replace LLM control-plane wrappers with deterministic operations ([603ec2f](https://github.com/dtlab-tech/ai-toolkit/commit/603ec2fd197e3e381362ef2fc974977b45b56798))
+
 ## [0.13.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.12.0...v0.13.0) (2026-09-09)
 
 
