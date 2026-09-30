@@ -1,7 +1,7 @@
 'use strict';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Regression: pm-phase2.js must derive the feature directory from the feature.md
+// Regression: workflow-control.js must derive the feature directory from the feature.md
 // path in a SEPARATOR-AGNOSTIC way (POSIX "/" AND Windows "\").
 //
 // Root cause: the derivation used a POSIX-only regex (/\/[^/]+$/). On a Windows
@@ -10,7 +10,7 @@
 // LLM wrapper agent silently repaired the path — exactly the implicit-correction
 // dependency FTR-016 exists to eliminate.
 //
-// pm-phase2.js runs inside the Claude Code Workflow runtime, which exposes no
+// workflow-control.js runs inside the Claude Code Workflow runtime, which exposes no
 // `require`, `module`, `fs`, or `path`. The file therefore cannot be require()-d
 // or executed in Jest. To test the REAL shipped logic (not a drifting copy) we
 // lift the pure `deriveFeatureDir` function out of the source with `new Function`.
@@ -19,20 +19,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const PM_PHASE2_PATH = path.join(__dirname, '..', 'src', 'claude', 'workflows', 'pm-phase2.js');
+const PM_PHASE2_PATH = path.join(__dirname, '..', 'lib', 'workflow-control.js');
 
-function loadDeriveFeatureDir() {
-  const src = fs.readFileSync(PM_PHASE2_PATH, 'utf8');
-  const m = src.match(/function deriveFeatureDir\s*\(\s*featurePath\s*\)\s*\{([\s\S]*?)\n\}/);
-  if (!m) throw new Error('deriveFeatureDir(featurePath) not found in pm-phase2.js');
-  // eslint-disable-next-line no-new-func -- controlled: our own source, test-only
-  return new Function('featurePath', m[1]);
-}
+function loadDeriveFeatureDir() { return require('../lib/workflow-control').deriveFeatureDir; }
 
 let deriveFeatureDir;
 beforeAll(() => { deriveFeatureDir = loadDeriveFeatureDir(); });
 
-describe('pm-phase2.js — deriveFeatureDir() behaviour (separator-agnostic)', () => {
+describe('workflow-control.js — deriveFeatureDir() behaviour (separator-agnostic)', () => {
 
   test('POSIX path: strips the /feature.md tail', () => {
     expect(deriveFeatureDir('/home/proj/internal_docs/features/FTR-016-x/feature.md'))
@@ -82,12 +76,12 @@ describe('pm-phase2.js — deriveFeatureDir() behaviour (separator-agnostic)', (
   });
 });
 
-describe('pm-phase2.js — deriveFeatureDir source is separator-agnostic (live code, comments ignored)', () => {
+describe('workflow-control.js — deriveFeatureDir source is separator-agnostic (live code, comments ignored)', () => {
   let body;
   beforeAll(() => {
     const src = fs.readFileSync(PM_PHASE2_PATH, 'utf8');
     const m = src.match(/function deriveFeatureDir\s*\(\s*featurePath\s*\)\s*\{([\s\S]*?)\n\}/);
-    if (!m) throw new Error('deriveFeatureDir(featurePath) not found in pm-phase2.js');
+    if (!m) throw new Error('deriveFeatureDir(featurePath) not found in workflow-control.js');
     body = m[1];
   });
 

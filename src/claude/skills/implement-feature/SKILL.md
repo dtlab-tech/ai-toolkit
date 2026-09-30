@@ -5,12 +5,9 @@ argument-hint: <path-to-feature.md> [--force]
 
 # Implement Feature
 
-Orchestrates the full feature delivery pipeline by invoking three sequential workflow phases
-(`pm-phase1`, `pm-phase2`, `pm-phase3`), handling approval gates in the main loop between
-each phase, and recording the real token consumption at the end.
+Runs documentation and work breakdown through the deterministic Node workflow host, then implementation through the FTR-018 task executor. Approval gates remain in the main loop.
 
-Each workflow phase runs as a real subagent boundary, ensuring worker agents are dispatched
-with their declared `model:` frontmatter honoured and producing accurate per-agent `usage` data.
+Workflows are JavaScript assets, never agent types. Do not pass pm-phase1/2/3 or am-phase1/2 to agentType, subagent_type, or --agent. Use the workflow CLI below. Resolve the absolute Claude executable path as described in docs/task-executor-bootstrap.md.
 
 ---
 
@@ -58,53 +55,13 @@ Before starting the pipeline, verify that every pipeline agent is installed and 
 
 ## Step 1 — Invoke pm-phase1 (Documentation Phase)
 
-### Step 1a — Tier 1 dispatch guard (AC-06, AC-07, AC-20)
-
-Before dispatching, resolve and verify the pm-phase1 orchestrator:
+Run directly via the shell tool:
 
 ```bash
-ai-toolkit agents resolve \
-  --project . \
-  --id gaia.orchestrator.feature.phase1 \
-  --require-verified
+ai-toolkit workflow run pm-phase1 --project . --claude-path "{ABSOLUTE_CLAUDE_EXE}" -- "<path-to-feature.md>" [--force]
 ```
 
-If exit non-zero → **HARD STOP**: report the error, do not dispatch pm-phase1.
-
-Store the resolution record fields: `nativeName`, `sha256` (definitionHash), `scope` (resolutionScope), `toolkitVersion`.
-
-Open the dispatch ledger entry (fail-closed):
-
-```bash
-ai-toolkit ledger open \
-  --prefix {PREFIX} \
-  --agent pm-phase1:dispatch \
-  --phase phase3 \
-  --dir {LEDGER_DIR} \
-  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase1","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
-```
-
-If exit non-zero → **HARD STOP** (fail-closed): do not dispatch.
-
-### Step 1b — Invoke pm-phase1 using verified nativeName
-
-Invoke the workflow using ONLY the resolved `nativeName` (never a hardcoded name):
-
-```
-subagent_type: {nativeName}
-prompt: <path-to-feature.md>
-```
-
-Wait for the workflow to complete. Do NOT proceed until it returns.
-
-After the workflow returns, close the dispatch ledger entry:
-
-```bash
-ai-toolkit ledger close \
-  --prefix {PREFIX} --agent pm-phase1:dispatch --dir {LEDGER_DIR}
-```
-
-If ledger close fails → **HARD STOP**: report the error and do not continue.
+The host verifies the installed workflow and each worker and owns all ledger transitions. Do not manually open/close its entries. Nonzero exit is a HARD STOP: do not present the next gate or report successful completion. Parse stdout as JSON only on exit 0. Never dispatch the workflow as a subagent.
 
 Extract from the result:
 - `prefix` — feature prefix (e.g. `FTR-009`)
@@ -174,40 +131,15 @@ If the file is missing or incomplete, write it again before proceeding.
 
 ## Step 3 — Invoke pm-phase2 (Work Breakdown Phase)
 
-### Step 3a — Tier 1 dispatch guard
-
-Resolve and verify pm-phase2:
+Run directly via the shell tool:
 
 ```bash
-ai-toolkit agents resolve \
-  --project . \
-  --id gaia.orchestrator.feature.phase2 \
-  --require-verified
+ai-toolkit workflow run pm-phase2 --project . --claude-path "{ABSOLUTE_CLAUDE_EXE}" -- "<path-to-feature.md>"
 ```
 
-If exit non-zero → **HARD STOP**: do not dispatch pm-phase2.
+The host verifies the installed workflow and each worker and owns all ledger transitions. Do not manually open/close its entries. Nonzero exit is a HARD STOP: do not present the next gate or report successful completion. Parse stdout as JSON only on exit 0. Never dispatch the workflow as a subagent.
 
-Open the dispatch ledger entry (fail-closed):
-
-```bash
-ai-toolkit ledger open \
-  --prefix {PREFIX} \
-  --agent pm-phase2:dispatch \
-  --phase phase3 \
-  --dir {LEDGER_DIR} \
-  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase2","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
-```
-
-If exit non-zero → **HARD STOP** (fail-closed).
-
-### Step 3b — Invoke pm-phase2 using verified nativeName
-
-```
-subagent_type: {nativeName}
-prompt: <path-to-feature.md>
-```
-
-Wait for the workflow to complete. Extract from the result:
+Extract from the result:
 - `user_stories` — number of User Stories
 - `total_tasks` — total task count
 - `domain_breakdown` — tasks per domain
@@ -215,15 +147,6 @@ Wait for the workflow to complete. Extract from the result:
 - `human_estimate` — human sequential estimate
 - `agent_estimate` — agent parallel estimate
 - `token_ledger` — per-agent token data from phase 2
-
-Close the dispatch ledger entry after the workflow returns:
-
-```bash
-ai-toolkit ledger close \
-  --prefix {PREFIX} --agent pm-phase2:dispatch --dir {LEDGER_DIR}
-```
-
-If ledger close fails → **HARD STOP**: report the error. Do not continue to Gate 2. The error is not swallowed (AC-22).
 
 ---
 
@@ -276,7 +199,7 @@ Read back `{PREFIX}-Approvals.md` and verify Gate 2 ✅ is present before contin
 
 ## Step 5 — Create feature branch
 
-Before invoking pm-phase3, create the feature branch:
+Before launching the task executor, create the feature branch:
 
 ```bash
 git checkout -b feature/{PREFIX}-{short-slug}
@@ -354,19 +277,7 @@ grouping model is permitted.
 
 ## Step 7 — Complete Token Estimate file
 
-**Adjustment note:** phases 1 and 2 (pm-phase1, pm-phase2) are unchanged — they still run as
-in-chat workflow subagents and still return a `<usage>` block (`subagent_tokens`,
-`duration_ms`) exactly as before. Phase 3 no longer does: the implementation phase now runs
-as an external `task-executor` process, not a subagent, so there is no pm-phase3 `<usage>`
-block to read here. Per the CLI contract, `status` is explicitly documented as read-only with
-"ledger is sole cost source" — actual cost/token data for implementation now comes from the
-ledger, the same mechanism already used elsewhere in this skill, rather than from a
-subagent result captured in this conversation.
-
-For phases 1 and 2, read `subagent_tokens` / `duration_ms` from each workflow's `<usage>`
-block as before.
-
-For phase 3, query the executor run's ledger-backed status:
+Phases 1 and 2 return JSON token_ledger entries from measured worker subprocess usage. They do not return a workflow subagent usage block. Missing measurements stay unavailable. For phase 3 use the executor:
 
 ```bash
 ai-toolkit executor status --run-id {run_id} --format json
@@ -410,8 +321,7 @@ Read `{PREFIX}-Token-Estimate.md`. Append the executor run row and grand total:
 ```
 
 > Per-agent values marked *(proportional)* are estimated distributions of the phase total.
-> Phase 1/2 totals are exact measurements from workflow subagent_tokens; the phase 3 total is
-> an exact measurement read from the ledger via `executor status`, not a subagent `<usage>` block.
+> Phase 1/2 actuals come from worker usage in token_ledger; implementation actuals come from the task executor ledger. Missing measurements remain unavailable.
 
 If the Token Estimate file does not exist (a prior phase failed before writing it), create it
 from scratch using the data available in the token_ledger.

@@ -49,87 +49,16 @@ describe('static guard (AC-25) — no workflow imports lib/agent-registry direct
 // (b) Every agents resolve call includes --require-verified (AC-31)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('static guard (AC-31) — every agents resolve invocation includes --require-verified', () => {
-  const agentDispatchingFiles = readWorkflowFiles().filter(f =>
-    f.source.includes('agents resolve')
-  );
-
-  test('at least one workflow file contains an agents resolve call', () => {
-    expect(agentDispatchingFiles.length).toBeGreaterThan(0);
-  });
-
-  test.each(agentDispatchingFiles.map(f => [f.name, f.source]))(
-    '%s: every agents resolve call includes --require-verified',
-    (_name, source) => {
-      const lines = source.split('\n');
-      const resolveLines = lines.filter(l => l.includes('agents resolve'));
-      for (const line of resolveLines) {
-        expect(line).toContain('--require-verified');
-      }
-    }
-  );
+test('all workflow dispatches use the deterministic host, never bare agent()', () => {
+  for (const file of readWorkflowFiles()) expect(file.source).not.toMatch(/\bagent\s*\(/);
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// (c) Tier 2 dispatch uses resolvedNativeNames, not hardcoded agentType strings (AC-42)
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('static guard (AC-42) — pm-phase3 dispatches use resolved nativeName, not hardcoded strings', () => {
-  let source;
-  beforeAll(() => {
-    source = fs.readFileSync(path.join(WORKFLOW_DIR, 'pm-phase3.js'), 'utf8');
-  });
-
-  test('pm-phase3 defines IMPL_AGENT_IDS mapping from legacy names to canonical IDs', () => {
-    expect(source).toContain('IMPL_AGENT_IDS');
-    expect(source).toContain('gaia.agent.developer.backend');
-    expect(source).toContain('gaia.agent.developer.frontend');
-    expect(source).toContain('gaia.agent.developer.testing');
-    expect(source).toContain('gaia.agent.review.solution');
-  });
-
-  test('pm-phase3 resolves all IMPL_AGENT_IDS upfront before the wave execution loop', () => {
-    const preWaveIdx   = source.indexOf('resolvedNativeNames');
-    const wavesLoopIdx = source.indexOf('for (const wave of waves)');
-    expect(preWaveIdx).toBeGreaterThan(-1);
-    expect(wavesLoopIdx).toBeGreaterThan(-1);
-    expect(preWaveIdx).toBeLessThan(wavesLoopIdx);
-  });
-
-  test('pm-phase3 impl/test group dispatch uses nativeName (resolved), not group.agent_type directly', () => {
-    expect(source).toMatch(/agentType:\s*nativeName/);
-    expect(source).not.toMatch(/agentType:\s*group\.agent_type/);
-  });
-
-  test('pm-phase3 review-solution dispatch uses resolvedNativeNames, not a hardcoded literal string', () => {
-    expect(source).toMatch(/agentType:\s*resolvedNativeNames\['review-solution'\]/);
-    expect(source).not.toMatch(/agentType:\s*'review-solution'/);
-  });
+test('skills never route workflow native names to subagent_type', () => {
+  for (const name of ['implement-feature', 'assess-codebase']) {
+    const source = fs.readFileSync(path.join(__dirname, '../../src/claude/skills', name, 'SKILL.md'), 'utf8');
+    expect(source).not.toMatch(/subagent_type:\s*(?:[pa]m-phase|\{nativeName\})/);
+    expect(source).toContain('ai-toolkit workflow run');
+  }
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// (d) Unknown WB agent_type triggers HARD STOP — not passed unresolved to platform
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('static guard — unknown WB agent_type triggers HARD STOP (not passed to platform)', () => {
-  let source;
-  beforeAll(() => {
-    source = fs.readFileSync(path.join(WORKFLOW_DIR, 'pm-phase3.js'), 'utf8');
-  });
-
-  test('pm-phase3 throws a HARD STOP error for unresolved agent_type values', () => {
-    expect(source).toMatch(/HARD STOP.*no resolved nativeName for agent_type/);
-  });
-
-  test('pm-phase3 does not pass group.agent_type directly as agentType to agent()', () => {
-    expect(source).not.toMatch(/agentType:\s*group\.agent_type/);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// (e) No legacy orchestrator agent labels in src/claude runtime assets (AC-17, AC-18)
-// ─────────────────────────────────────────────────────────────────────────────
-
 describe('static guard (AC-17, AC-18) — no legacy orchestrator labels in src/claude runtime assets', () => {
   const SRC_CLAUDE_DIR = path.join(__dirname, '..', '..', 'src', 'claude');
 

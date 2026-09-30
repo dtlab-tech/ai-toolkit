@@ -38,6 +38,8 @@ test('am-phase1.js does not contain hardcoded ".claude/agents" scan instruction'
   expect(source).not.toContain('Scan .claude/agents/');
 });
 
-test('am-phase1.js prompt includes list-assets for catalog-based discovery', () => {
-  expect(source).toContain('list-assets');
+test('assessment discovery uses canonical assessor IDs, not an LLM catalog prompt', () => {
+  expect(source).toContain('gaia.agent.assessment.generic');
+  expect(source).not.toMatch(/\bagent\s*\(/);
+  expect(source).not.toMatch(/gaia.agent.(security|refactoring)/);
 });
