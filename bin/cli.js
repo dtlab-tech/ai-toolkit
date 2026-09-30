@@ -1876,7 +1876,9 @@ async function main() {
     return;
   }
 
-  if (argv[0] === '--local') {
+  if (argv[0] === 'workflow') {
+    await require('../lib/workflow-runner').main(argv.slice(1));
+  } else if (argv[0] === '--local') {
     await installLocal(argv[1] || '.', force, dryRun);
   } else if (argv[0] === '--global') {
     const homeIdx = argv.indexOf('--home');
@@ -2021,7 +2023,7 @@ async function main() {
         process.stderr.write(`Error spawning script: ${result.error.message}\n`);
         process.exit(1);
       }
-      process.exit(result.status || 0);
+      process.exit(Number.isInteger(result.status) ? result.status : 1);
     } catch (err) {
       process.stderr.write(err.message + '\n');
       process.exit(1);
