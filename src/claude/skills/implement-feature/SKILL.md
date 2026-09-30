@@ -290,102 +290,100 @@ git checkout feature/{PREFIX}-{short-slug}
 
 ---
 
-## Step 6 — Invoke pm-phase3 (Implementation Phase)
+## Step 6 — Launch the task executor (Implementation Phase)
 
 Pre-condition check: read `{PREFIX}-Approvals.md` and verify BOTH Gate 1 ✅ and Gate 2 ✅.
 If either is missing, return to the missing gate.
 
-### Step 6a — Tier 1 dispatch guard (Gate 2 post-approval, AC-06, AC-07, AC-08)
+Implementation is no longer dispatched as a subagent from this skill. There is no
+pm-phase3 workflow, no Tier-1 dispatch guard, and no `pm-phase3:dispatch` ledger entry for
+this step — none of that applies once implementation runs as an external process instead of
+an in-chat subagent. Once Gate 2 is approved, this skill's job is limited to presenting or
+launching **one explicit `task-executor` start command**; the executor process itself then
+owns the repo, plans, executes, checkpoints and resumes tasks deterministically, independent
+of this chat.
 
-After Gate 2 approval, resolve and verify pm-phase3 with `--require-verified`. Only a `verified` status permits dispatch:
+**No subagent orchestrates the run, and no assistant or agent involvement is required for
+each task transition once the run has started.** This is a deliberate behavioral change from
+the retired pm-phase3 grouping model: previously an assistant-driven subagent had to be
+present for the whole implementation phase; now a single durable command launch is enough,
+and the run may keep going, checkpointing and resuming, even after this conversation ends.
+
+### Step 6a — Present or launch the executor start command
+
+Build the start command:
 
 ```bash
-ai-toolkit agents resolve \
+ai-toolkit executor start \
   --project . \
-  --id gaia.orchestrator.feature.phase3 \
-  --require-verified
+  --feature <path-to-feature.md> \
+  --max-concurrency 1 \
+  --claude-path <resolved-claude-cli-path> \
+  --task-timeout-ms <task-timeout-ms, e.g. 900000> \
+  --agent-budget-usd <per-agent budget in USD, e.g. 5.00>
 ```
 
-If exit non-zero → **HARD STOP** (AC-08): pm-phase3 is absent or tampered. Report the error with remediation instructions:
+Placeholders:
+- `<path-to-feature.md>` — the feature.md path passed to this skill
+- `<resolved-claude-cli-path>` — the Claude CLI executable path on this host; ask the user if unknown
+- `<task-timeout-ms>` and `<agent-budget-usd>` — must be supplied explicitly; there is no hidden default timeout or spend
 
-```
-⛔ HARD STOP — pm-phase3 cannot be dispatched.
+**If the host's ordinary terminal capability can launch a durable external command**, launch
+it directly through that capability so the process persists independently of this chat.
 
-Remediation:
-  1. Run: ai-toolkit agents resolve --project . --id gaia.orchestrator.feature.phase3
-  2. Check the status field in the output for the failure reason.
-  3. Re-install the toolkit if the status is not-installed or hash-mismatch.
-  4. Contact the toolkit team if the issue persists.
+**If the host cannot launch a durable external command, show the exact command above for the
+user to run themselves in a terminal.** Do not attempt to fake a durable launch by running it
+as a blocking in-chat command — the run must be able to outlive this conversation.
 
-Do NOT use an alternative workflow name or any fallback. This pipeline requires verified agents.
-```
+In both cases, capture (or ask the user to report back) the `run-id` printed by `start` — it
+is required for every subsequent `status`, `diagnose`, `stop`, `reconcile`, `resume`, and
+`replan` call; there is no implicit last-run selection.
 
-Do NOT use any alternative workflow name or fallback.
-
-Open the dispatch ledger entry (fail-closed):
+Tell the user that implementation has been launched and that progress and cost can be
+checked at any time with:
 
 ```bash
-ai-toolkit ledger open \
-  --prefix {PREFIX} \
-  --agent pm-phase3:dispatch \
-  --phase phase3 \
-  --dir {LEDGER_DIR} \
-  --metadata-json '{"agentId":"gaia.orchestrator.feature.phase3","nativeAgentName":"{nativeName}","platform":"claude","toolkitVersion":"{toolkitVersion}","resolutionScope":"{scope}","definitionHash":"{sha256}"}'
+ai-toolkit executor status --run-id {run_id} --format json
 ```
 
-If exit non-zero → **HARD STOP** (fail-closed): do not dispatch.
-
-### Step 6b — Invoke pm-phase3 using verified nativeName
-
-Invoke the workflow using ONLY the resolved `nativeName` (never a hardcoded name):
-
-```
-subagent_type: {nativeName}
-prompt: <path-to-feature.md> --branch feature/{PREFIX}-{short-slug}
-```
-
-Wait for the workflow to complete. Capture its full result, including the `<usage>` block
-(format: `subagent_tokens: N`). Extract from the result:
-- `pr_url` — the created pull request URL
-- `token_ledger` — all per-agent token data from phase 3
-- `issues_summary` — escalation and issues counts
-
-If `issues_summary.escalations > 0`, report the escalation details to the user.
-
-**If pm-phase3 returned an error or escalation:** mark the dispatch ledger entry failed before stopping:
-
-```bash
-ai-toolkit ledger fail \
-  --prefix {PREFIX} --agent pm-phase3:dispatch \
-  --error "pm-phase3 returned an error or escalation" \
-  --dir {LEDGER_DIR}
-```
-
-If `ledger fail` itself exits non-zero → **HARD STOP** (AC-22): report both the original workflow error and the ledger failure. The error is NOT swallowed.
-
-**On successful completion:** close the dispatch ledger entry:
-
-```bash
-ai-toolkit ledger close \
-  --prefix {PREFIX} --agent pm-phase3:dispatch --dir {LEDGER_DIR}
-```
-
-If ledger close fails → **HARD STOP** (AC-22): report the error. The pipeline does not silently swallow ledger failures after dispatch returns.
+Do not block this skill on the run reaching a terminal state — proceed to Step 7 with
+whatever the latest `status` reports at this point. No fallback to the retired pm-phase3
+grouping model is permitted.
 
 ---
 
 ## Step 7 — Complete Token Estimate file
 
-From the `<usage>` block of the pm-phase3 result, read:
-- `subagent_tokens` — total tokens consumed by the pm-phase3 workflow
-- `duration_ms` — wall-clock duration of pm-phase3
+**Adjustment note:** phases 1 and 2 (pm-phase1, pm-phase2) are unchanged — they still run as
+in-chat workflow subagents and still return a `<usage>` block (`subagent_tokens`,
+`duration_ms`) exactly as before. Phase 3 no longer does: the implementation phase now runs
+as an external `task-executor` process, not a subagent, so there is no pm-phase3 `<usage>`
+block to read here. Per the CLI contract, `status` is explicitly documented as read-only with
+"ledger is sole cost source" — actual cost/token data for implementation now comes from the
+ledger, the same mechanism already used elsewhere in this skill, rather than from a
+subagent result captured in this conversation.
 
-Read `{PREFIX}-Token-Estimate.md`. Append the orchestrator row and grand total:
+For phases 1 and 2, read `subagent_tokens` / `duration_ms` from each workflow's `<usage>`
+block as before.
+
+For phase 3, query the executor run's ledger-backed status:
+
+```bash
+ai-toolkit executor status --run-id {run_id} --format json
+```
+
+Read the run's total actual tokens/cost and duration from that ledger-sourced summary. If the
+run has not yet reached a terminal state (it may still be executing or may outlive this
+chat), treat its actuals as **not yet available** for this pass — apply the same
+null-compatibility rule below, and note in the file that the run is still in progress and the
+row should be refreshed with a later `status` call.
+
+Read `{PREFIX}-Token-Estimate.md`. Append the executor run row and grand total:
 
 > **Null-compatibility — actuals reading and cost calculation:** Treat a token value of `null`, `0`, or `not_available` as **data unavailable** — never as a real, observable zero consumption. Render unavailable values as `—` in the Actual tokens and Actual cost columns; exclude them from sums, averages, and grand totals. Preventing resume clobber and legacy misinterpretation requires that no unavailable measurement is coerced into a real zero.
 
 ```markdown
-| pm-phase3 (orchestrator) | — | sonnet | 80,000 (estimated) | {subagent_tokens} (actual) | ±{delta} | {duration} |
+| task-executor (run {run_id}) | — | — | 80,000 (estimated) | {ledger_actual_tokens} (actual) | ±{delta} | {ledger_duration} |
 
 ---
 
@@ -393,8 +391,8 @@ Read `{PREFIX}-Token-Estimate.md`. Append the orchestrator row and grand total:
 
 | Agent | Task / Scope | Model | Est. tokens | Actual tokens | Delta | Est. cost ($) | Actual cost ($) | Duration |
 |-------|-------------|-------|------------|---------------|-------|--------------|----------------|----------|
-{one row per entry in token_ledger — from phase 1, 2, and 3; for any entry where actual tokens is null, 0, or not_available show — in Actual tokens and Actual cost and exclude that row from totals}
-| pm-phase3 (orchestrator) | — | sonnet | 80,000 | {subagent_tokens} | ±{delta} | $0.4320 | ${actual_cost} | {duration} |
+{one row per entry in token_ledger from phase 1 and 2, plus per-task ledger entries recorded by the executor run for phase 3; for any entry where actual tokens is null, 0, or not_available show — in Actual tokens and Actual cost and exclude that row from totals}
+| task-executor (run {run_id}) | — | — | 80,000 | {ledger_actual_tokens} | ±{delta} | $0.4320 | ${ledger_actual_cost} | {ledger_duration} |
 
 ## Estimation accuracy by agent type
 
@@ -412,9 +410,10 @@ Read `{PREFIX}-Token-Estimate.md`. Append the orchestrator row and grand total:
 ```
 
 > Per-agent values marked *(proportional)* are estimated distributions of the phase total.
-> Phase totals and grand total are exact measurements from workflow subagent_tokens.
+> Phase 1/2 totals are exact measurements from workflow subagent_tokens; the phase 3 total is
+> an exact measurement read from the ledger via `executor status`, not a subagent `<usage>` block.
 
-If the Token Estimate file does not exist (pm-phase3 failed before writing it), create it
+If the Token Estimate file does not exist (a prior phase failed before writing it), create it
 from scratch using the data available in the token_ledger.
 
 ---
@@ -424,8 +423,14 @@ from scratch using the data available in the token_ledger.
 After writing the token file, report:
 
 ```
-Feature pipeline complete.
+Feature pipeline complete through implementation launch.
    Token estimate + actuals → {PREFIX}-Token-Estimate.md
    Effort estimate + actuals → {PREFIX}-Effort-Estimate.md
-   Pull Request → {pr_url}
+   Implementation run       → run-id {run_id} (check with `ai-toolkit executor status --run-id {run_id}`)
 ```
+
+Unlike the retired pm-phase3 model, this skill does not itself produce a pull request: the
+executor's scope is task execution, checkpointing and branch integration, not PR creation.
+Once `executor status` reports the run has reached a terminal, fully-integrated state, open
+the pull request the same way you would for any other finished branch (e.g. `gh pr create`,
+or the toolkit's own `/pr-description` skill).
