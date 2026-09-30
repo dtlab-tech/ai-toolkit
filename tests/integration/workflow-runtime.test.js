@@ -29,6 +29,64 @@ test('worker exception leaves both activity and workflow failed', async () => {
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async () => { throw new Error('crash'); } })).rejects.toThrow('crash');
   expect(f.entries().map(e => e.status)).toEqual(['failed', 'failed']);
 });
+
+test.each([undefined, null, ''])('a written validation report without structured output fails explicitly: %s', async payload => {
+  const dispatch = async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-validate-feature-docs')) {
+      response.result.result = JSON.stringify({ valid: true, findings: [] });
+      response.result.structured_output = payload;
+    }
+    return response;
+  };
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
+    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings');
+  expect(fs.existsSync(path.join(f.dir, 'FTR-099-Validation-Report.md'))).toBe(true);
+  expect(f.entries()[0].status).toBe('failed');
+  expect(f.entries().find(e => e.agentId === 'gaia.agent.planner.validate-feature-docs').status).toBe('failed');
+  expect(fs.existsSync(path.join(f.dir, 'FTR-099-process-log.txt'))).toBe(false);
+});
+
+test('document findings trigger host revision followed by a clean structured verdict', async () => {
+  let validations = 0;
+  const dispatch = jest.fn(async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-validate-feature-docs')) {
+      const schema = JSON.parse(options.args[options.args.indexOf('--json-schema') + 1]);
+      expect(schema.required).toEqual(['valid', 'findings']);
+      if (++validations === 1) response.result.structured_output = { valid: false, findings: ['Requirements: missing acceptance criterion'] };
+    }
+    return response;
+  });
+  const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(result.validation.summary).toContain('clean on cycle 2');
+  expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).toEqual([
+    'gaia-generate-requirements', 'gaia-generate-tech-spec', 'gaia-validate-feature-docs',
+    'gaia-generate-requirements', 'gaia-validate-feature-docs',
+  ]);
+  expect(f.entries().every(e => e.status === 'done')).toBe(true);
+});
+
+test.each([{ valid: true }, { valid: 'true', findings: [] }, { valid: false, findings: [42] }])('malformed validation verdict blocks Gate 1: %j', async payload => {
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-validate-feature-docs')) response.result.structured_output = payload;
+    return response;
+  } })).rejects.toThrow(/structured/);
+  expect(f.entries()[0].status).toBe('failed');
+});
+
+test('a clean structured verdict without its report cannot complete pm-phase1', async () => {
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async options => {
+    if (options.args.includes('gaia-validate-feature-docs')) {
+      return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] } } };
+    }
+    return phase1Dispatch(options);
+  } })).rejects.toThrow('Validation agent did not produce its report');
+  expect(f.entries()[0].status).toBe('failed');
+  expect(fs.existsSync(path.join(f.dir, 'FTR-099-process-log.txt'))).toBe(false);
+});
+
 test('successful worker without required report fails the workflow', async () => {
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async () => success('ok') })).rejects.toThrow('output missing');
   expect(f.entries()[0].status).toBe('failed');

@@ -1,13 +1,13 @@
 ---
 name: gaia-validate-feature-docs
-description: "Validates Requirements and Tech-Spec documents against feature.md. Triggers targeted revision of failing documents if gaps are found. Input: path to feature.md"
+description: "Validates Requirements and Tech-Spec documents against feature.md. Writes a validation report and returns a structured verdict; the host owns revisions. Input: path to feature.md"
 model: haiku
 tools: Read, Glob, Grep, Write
 ---
 
 # Validate Feature Docs
 
-A QA agent that cross-references `feature.md` against `{PREFIX}-Requirements.md` and `{PREFIX}-Tech-Spec.md`, identifies coverage gaps, and triggers targeted revisions until full coverage is achieved.
+A QA agent that cross-references `feature.md` against `{PREFIX}-Requirements.md` and `{PREFIX}-Tech-Spec.md` and identifies coverage gaps in a single validation pass. The host workflow owns revisions and the three-cycle limit. Do not dispatch other agents or revise the input documents.
 
 ---
 
@@ -18,7 +18,7 @@ A QA agent that cross-references `feature.md` against `{PREFIX}-Requirements.md`
    - `feature.md` — source of truth
    - `{PREFIX}-Requirements.md`
    - `{PREFIX}-Tech-Spec.md`
-3. If either output document is missing, abort and report: "Cannot validate: `{file}` not found. Run /implement-feature first."
+3. If an input document is missing, record a finding identifying it, skip checks that require it, and complete Phases 6 and 7 with `valid: false`. Never claim full coverage when an input could not be read.
 
 ---
 
@@ -101,31 +101,21 @@ Result: ✅ Full coverage — all feature claims addressed in both documents
 
 ---
 
-## Phase 5 — Revision Loop
+## Phase 5 — Return Findings to the Host
 
-If gaps were found, trigger targeted revisions. **Only revise the documents that have gaps** — do not touch clean documents.
+Collect all remaining gaps for the host's revision loop. Do not invoke agents, edit Requirements or Tech-Spec, or run a revision loop yourself.
 
-### Revision instructions
+Each finding must be one string prefixed with `Requirements:` or `Tech-Spec:` to identify the affected document, followed by the exact section or claim and the missing coverage. If a gap affects both documents, emit one finding per document.
 
-For each document with gaps, invoke the corresponding agent with a **targeted revision prompt** that includes:
-1. The path to the existing document to revise (not regenerate from scratch)
-2. The exact list of gaps to address
-3. The instruction to revise only the affected sections
-
-### Revision rules
-
-- **Max iterations**: 3 revision cycles. If gaps persist after 3 rounds, write the remaining gaps to the report and stop.
-- **After each revision**: re-run Phase 3 on the updated document to verify gaps are resolved
-- **Document what changed**: after each revision, note which gaps were resolved
-- **Never revise a document that has no gaps** — even if the other document is being revised
+Use the same remaining gaps in the report and the structured verdict. Record a gap as resolved only when the current documents demonstrate that it is resolved.
 
 ---
 
-## Phase 6 — Write Validation Report (MANDATORY — your final action)
+## Phase 6 — Write Validation Report (MANDATORY — before returning the verdict)
 
 **This is not optional and not the same as the Phase 4 gap report.** The coverage report you produced in Phase 4 is on-screen text; it is NOT the deliverable. Your job is not complete until the file `{PREFIX}-Validation-Report.md` exists **on disk**. You MUST call the `Write` tool to create it — even when validation is clean and zero gaps were found. Returning a summary without having called `Write` is a failure.
 
-Execute this phase **last, always**, regardless of outcome. Downstream agents read this file as a hard precondition; if it is missing, the entire pipeline aborts.
+Execute this phase regardless of the validation outcome, then complete Phase 7. Downstream agents read this file as a hard precondition; if it is missing, the entire pipeline aborts.
 
 Write `{PREFIX}-Validation-Report.md` in the same directory:
 
@@ -154,23 +144,36 @@ Write `{PREFIX}-Validation-Report.md` in the same directory:
 
 ---
 
+## Phase 7 — Structured Completion (MANDATORY — your final response)
+
+After writing the report, return a single JSON object with exactly these fields, without Markdown fences or explanatory prose:
+
+```json
+{"valid": true, "findings": []}
+```
+
+For remaining gaps:
+
+```json
+{"valid": false, "findings": ["Requirements: UC-01 lacks an acceptance criterion", "Tech-Spec: POST /api/users lacks a response definition"]}
+```
+
+- `valid` is a boolean: `true` only when all required inputs were read, coverage is complete, and no unresolved gaps remain.
+- `findings` is an array of strings, empty only for a clean validation. Missing inputs and ambiguous claims are unresolved findings.
+- When the caller supplies `--json-schema`, use the runtime's structured-output mechanism to return this object in `structured_output`. Plain-text JSON alone does not satisfy that contract.
+- Both deliverables are required: the report on disk **and** the structured verdict. Writing the report does not finish the task.
+
 ## Clarification Protocol
 
-When a gap is found but the correct resolution is ambiguous (e.g., the feature.md itself is contradictory, or a gap could be filled in multiple valid ways), **stop and ask the user** before revising. Use the `AskUserQuestion` tool to present:
-
-1. A clear description of the gap and why the resolution is uncertain
-2. Concrete options (2–4) representing valid ways to address it
-3. **Always include** an option: "Leave as open point to discuss later" — which records the gap in the Validation Report as unresolved (not a failure) and skips revision for that item
-
-Do NOT guess how to fill ambiguous gaps. Ask first, then revise only with a clear direction.
+If a claim is contradictory or its correct resolution is ambiguous, do not guess or request interactive input inside this worker. Describe the ambiguity in the report and the affected document's finding, with `valid: false`, so the calling orchestration can surface it to the user. An open point must not be treated as clean coverage.
 
 ---
 
 ## Guidelines
 
-- **Always call `Write` for the Validation Report before finishing** (Phase 6) — the on-screen gap report is not the deliverable; the file on disk is. This is your last action, clean or not.
-- **Do not regenerate documents from scratch** — targeted revisions only
+- **Always call `Write` for the Validation Report before returning the structured verdict** (Phases 6 and 7), clean or not.
+- **Validate only** — the host owns document revisions and agent dispatch
 - **Be specific about gaps** — point to the exact section, claim, and what is missing
-- **Stop after 3 revision cycles** — if coverage is still incomplete, report remaining gaps and exit
+- **Perform one validation pass per invocation** — return remaining gaps to the host
 - **Out-of-scope items are also validated** — ensure they are not accidentally included in outputs
 - **Traceability is mandatory** — every Use Case ID in Requirements must appear in Tech-Spec
