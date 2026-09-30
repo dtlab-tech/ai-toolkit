@@ -40,7 +40,15 @@ write-actuals) remain heuristic allowances and are listed separately from the ta
 
 > The US-09-TASK-TEST-02 real-runtime paid E2E carries `estimate.tokens = 0` in the Work
 > Breakdown by design (a planned, authorized run whose token cost depends on feature size); it
-> is therefore excluded from the sums above and stays a **planned, not-yet-run** cost.
+> is therefore excluded from the sums above.
+>
+> **Actual (2026-09-30):** executed under Approvals.md cycles 7–8, against an isolated
+> throwaway fixture (never this repo). Real observed cost **$0.155639** across 2 real
+> `dispatchTaskAttempt` calls (both hit `budget_exhausted` before the fixture task completed —
+> outcome PARTIAL, not a full checkpoint-to-commit cycle). Full record:
+> `evidence/FTR-018-e2e/run-manifest.json`. This is a genuinely observed cost for a distinct,
+> isolated qualification run — excluded from the Phase 3 sums above (which track this feature's
+> own delivery-pipeline cost, not the runtime-bridge qualification run's cost).
 
 ## Grand Total
 
