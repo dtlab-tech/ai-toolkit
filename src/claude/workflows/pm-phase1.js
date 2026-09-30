@@ -1,364 +1,51 @@
 export const meta = {
+  controlPlaneVersion: 1,
   name: 'pm-phase1',
-  description: 'Feature delivery phase 1: discovery → generate-requirements → generate-tech-spec → validate-feature-docs (revision loop) → Effort-Estimate stub. Returns gate1_payload.',
-  phases: [
-    { title: 'Discovery', detail: 'Read feature.md, check existing outputs' },
-    { title: 'Requirements', detail: 'Run generate-requirements' },
-    { title: 'Tech-Spec', detail: 'Run generate-tech-spec' },
-    { title: 'Validation', detail: 'Run validate-feature-docs (revision loop, max 3×)' },
-  ],
+  description: 'Deterministic documentation workflow; returns Gate 1 evidence.',
+  phases: [{ title: 'Discovery' }, { title: 'Requirements' }, { title: 'Tech-Spec' }, { title: 'Validation' }],
 }
 
-// ── Tier 2 resolution guard ───────────────────────────────────────────────────
-// All worker agents must be resolved via the CLI before dispatch.
-// No direct require('lib/agent-registry') — resolution goes through the CLI facade.
-const RESOLVE_SCHEMA = {
-  type: 'object',
-  properties: {
-    nativeName:  { type: 'string' },
-    status:      { type: 'string' },
-    agentId:     { type: 'string' },
-    exitNonZero: { type: 'boolean' },
-    error:       { type: 'string' },
-  },
-}
-
-async function resolveAgentTier2(agentId, label, phaseName) {
-  const result = await agent(
-    `Run this command via Bash:\n\nai-toolkit agents resolve --project . --id ${agentId} --require-verified\n\nIf the command exits 0: parse the JSON from stdout and return it with exitNonZero: false.\nIf the command exits non-zero: return {"exitNonZero": true, "error": "<stderr text>", "agentId": "${agentId}"}.`,
-    { label, phase: phaseName, model: 'haiku', schema: RESOLVE_SCHEMA }
-  )
-  if (!result || result.exitNonZero || !result.nativeName) {
-    throw new Error(`HARD STOP — Tier 2 resolution failed for ${agentId}: ${result && result.error ? result.error : 'no nativeName returned'}`)
+const c = control
+const { featurePath, featureDir, prefix } = c.feature(args[0])
+const force = args.includes('--force')
+return c.run(meta.name, featureDir, prefix, async () => {
+  const file = suffix => `${featureDir}/${prefix}-${suffix}.md`
+  const fresh = (output, inputs = [featurePath]) => c.exists(output) && c.read(output).trim().length > 0 && inputs.every(input => c.exists(input) && c.mtime(output) >= c.mtime(input))
+  const reqId = 'gaia.agent.planner.requirements'
+  const specId = 'gaia.agent.planner.tech-spec'
+  const valId = 'gaia.agent.planner.validate-feature-docs'
+  let changed = false
+  if (force || !fresh(file('Requirements'))) {
+    await c.worker(reqId, featurePath)
+    if (!c.exists(file('Requirements'))) throw new Error('Requirements output missing')
+    changed = true
   }
-  return result.nativeName
-}
-
-// ── Tier 3 — self-ledger helper ───────────────────────────────────────────────
-const SELF_LEDGER_SCHEMA = {
-  type: 'object',
-  properties: {
-    exitCode: { type: 'number' },
-    stdout:   { type: 'string' },
-    stderr:   { type: 'string' },
-  },
-  required: ['exitCode'],
-}
-
-async function selfLedgerOp(cmd, label, phaseName) {
-  const result = await agent(
-    `Run this shell command via Bash and return the exit code as structured output.\n\nCommand: ${cmd}\n\nCapture: exitCode (integer), stdout (string), stderr (string). Return all three.`,
-    { label, phase: phaseName, model: 'haiku', schema: SELF_LEDGER_SCHEMA }
-  )
-  const status = (result && typeof result.exitCode === 'number') ? result.exitCode : 1
-  if (status !== 0) {
-    throw new Error(`HARD STOP — self-ledger operation failed. Exit code: ${status}. Command: ${cmd}`)
+  if (force || changed || !fresh(file('Tech-Spec'), [featurePath, file('Requirements')])) {
+    await c.worker(specId, featurePath)
+    if (!c.exists(file('Tech-Spec'))) throw new Error('Tech-Spec output missing')
+    changed = true
   }
-}
-
-// ── Parse args ────────────────────────────────────────────────────────────────
-// args is the raw prompt string: "<path-to-feature.md> [--force]"
-const featurePath = args.split(/\s+/)[0]
-const force       = typeof args === 'string' && args.includes('--force')
-
-// Derive prefix and feature dir early (before Discovery agent) for self-registration
-const featureDirEarly  = featurePath.replace(/[/\\][^/\\]+$/, '')
-const prefixEarlyMatch = featureDirEarly.match(/([A-Z]+-\d+)/)
-const prefixEarly      = prefixEarlyMatch ? prefixEarlyMatch[1] : 'FTR-000'
-
-// ── Tier 3 self-registration (open BEFORE any main logic, fail-closed) ────────
-await selfLedgerOp(
-  `ai-toolkit ledger open --prefix ${prefixEarly} --agent pm-phase1:self --phase phase1 --dir "${featureDirEarly}" --attempt 1`,
-  'ledger-open-pm-phase1-self', 'Discovery'
-)
-
-// ── Discovery ─────────────────────────────────────────────────────────────────
-phase('Discovery')
-
-const discoveryResult = await agent(
-  `You are a discovery agent for the feature delivery pipeline.
-
-Read the feature.md file at: ${featurePath}
-
-Extract:
-1. The feature PREFIX from the directory name (pattern [A-Z]+-[0-9]+, e.g. FTR-009)
-2. The feature directory path (parent of feature.md)
-3. Whether these files exist and are NOT stale vs feature.md (stale = older mtime):
-   - {PREFIX}-Requirements.md
-   - {PREFIX}-Tech-Spec.md
-   - {PREFIX}-Validation-Report.md
-
-Return a JSON object:
-{
-  "prefix": "FTR-009",
-  "feature_dir": "internal_docs/features/FTR-009-workflow-orchestrators",
-  "needs_requirements": true,
-  "needs_tech_spec": true,
-  "needs_validation": true,
-  "force": ${force}
-}
-
-If force=true, set all needs_* to true regardless of file state.
-If feature.md does not exist, return { "error": "feature.md not found: ${featurePath}" }.`,
-  {
-    label: 'discovery',
-    phase: 'Discovery',
-    schema: {
-      type: 'object',
-      properties: {
-        prefix:             { type: 'string' },
-        feature_dir:        { type: 'string' },
-        needs_requirements: { type: 'boolean' },
-        needs_tech_spec:    { type: 'boolean' },
-        needs_validation:   { type: 'boolean' },
-        force:              { type: 'boolean' },
-        error:              { type: 'string' },
-      },
-      required: ['prefix', 'feature_dir'],
-    },
-  }
-)
-
-if (discoveryResult.error) {
-  return { error: discoveryResult.error }
-}
-
-const { prefix, feature_dir } = discoveryResult
-
-log(`Prefix: ${prefix} | Dir: ${feature_dir}`)
-log(`needs_requirements=${discoveryResult.needs_requirements} needs_tech_spec=${discoveryResult.needs_tech_spec}`)
-
-// ── Ensure ledger file exists (US-02-T02) ─────────────────────────────────────
-// If define-feature was not used, the ledger file will not exist yet.
-// Touch it with an empty array so the ledger facade can always assume a valid base.
-const ledgerFilePath = `${feature_dir}/${prefix}-token-ledger.json`
-await agent(
-  `Check whether the file ${ledgerFilePath} exists.\n\n1. Try to read the file using the Read tool.\n2. If the file does NOT exist: write it now using the Write tool with contents: []\n3. If the file already exists and is a valid JSON array: do nothing.\n4. If the file exists but is not valid JSON: overwrite it with: []\n5. Return no output.`,
-  { label: 'ensure-ledger', phase: 'Discovery', model: 'haiku' }
-)
-log(`Ledger ensured at ${ledgerFilePath}`)
-
-// ── generate-requirements ─────────────────────────────────────────────────────
-phase('Requirements')
-
-const tokenLedger = []
-const errors      = []
-
-if (discoveryResult.needs_requirements) {
-  const reqNativeName = await resolveAgentTier2('gaia.agent.planner.requirements', 'resolve-generate-requirements', 'Requirements')
-  const reqKey = 'generate-requirements:phase1'
-  await agent(
-    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${reqKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
-    { label: 'ledger-open-requirements', phase: 'Requirements', model: 'haiku' }
-  )
-  const beforeReq = budget.spent()
-  const reqResult = await agent(featurePath, { agentType: reqNativeName, label: 'generate-requirements', phase: 'Requirements' })
-  const reqTokens = budget.spent() - beforeReq
-  await agent(
-    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${reqKey} --tokens ${reqTokens} --attempt 1\n\nReturn no output.`,
-    { label: 'ledger-close-requirements', phase: 'Requirements', model: 'haiku' }
-  )
-  tokenLedger.push({ agent: 'generate-requirements', model: 'haiku', phase_delta_tokens: reqTokens })
-  log(`generate-requirements done — phase delta: ${reqTokens} tokens`)
-} else {
-  log('generate-requirements: fresh — skipped')
-}
-
-// ── generate-tech-spec ────────────────────────────────────────────────────────
-phase('Tech-Spec')
-
-if (discoveryResult.needs_tech_spec) {
-  const specNativeName = await resolveAgentTier2('gaia.agent.planner.tech-spec', 'resolve-generate-tech-spec', 'Tech-Spec')
-  const specKey = 'generate-tech-spec:phase1'
-  await agent(
-    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${specKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
-    { label: 'ledger-open-tech-spec', phase: 'Tech-Spec', model: 'haiku' }
-  )
-  const beforeSpec = budget.spent()
-  const specResult = await agent(featurePath, { agentType: specNativeName, label: 'generate-tech-spec', phase: 'Tech-Spec' })
-  const specTokens = budget.spent() - beforeSpec
-  await agent(
-    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${specKey} --tokens ${specTokens} --attempt 1\n\nReturn no output.`,
-    { label: 'ledger-close-tech-spec', phase: 'Tech-Spec', model: 'haiku' }
-  )
-  tokenLedger.push({ agent: 'generate-tech-spec', model: 'haiku', phase_delta_tokens: specTokens })
-  log(`generate-tech-spec done — phase delta: ${specTokens} tokens`)
-} else {
-  log('generate-tech-spec: fresh — skipped')
-}
-
-// ── validate-feature-docs (revision loop, max 3 cycles) ──────────────────────
-phase('Validation')
-
-// Resolve all validation-phase agents once before the loop (Tier 2 guard)
-const valNativeName = await resolveAgentTier2('gaia.agent.planner.validate-feature-docs', 'resolve-validate-feature-docs', 'Validation')
-const reqRevNativeName = await resolveAgentTier2('gaia.agent.planner.requirements', 'resolve-generate-requirements-rev', 'Validation')
-const specRevNativeName = await resolveAgentTier2('gaia.agent.planner.tech-spec', 'resolve-generate-tech-spec-rev', 'Validation')
-
-let validationSummary = 'skipped'
-let lastValText       = ''
-const MAX_CYCLES = 3
-
-for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
-  log(`validate-feature-docs cycle ${cycle}`)
-  const valKey = `validate-feature-docs:phase1:cycle${cycle}`
-  await agent(
-    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger open --dir ${feature_dir} --prefix ${prefix} --agent ${valKey} --phase phase1 --model haiku --attempt 1\n\nReturn no output.`,
-    { label: `ledger-open-validate-cycle-${cycle}`, phase: 'Validation', model: 'haiku' }
-  )
-  const beforeVal = budget.spent()
-  const valResult = await agent(featurePath, { agentType: valNativeName, label: `validate-feature-docs (cycle ${cycle})`, phase: 'Validation' })
-  const valTokens = budget.spent() - beforeVal
-  await agent(
-    `Run this shell command via Bash. If the --dir path contains spaces, enclose it in double quotes.\n\nai-toolkit ledger close --dir ${feature_dir} --prefix ${prefix} --agent ${valKey} --tokens ${valTokens} --attempt 1\n\nReturn no output.`,
-    { label: `ledger-close-validate-cycle-${cycle}`, phase: 'Validation', model: 'haiku' }
-  )
-  tokenLedger.push({ agent: `validate-feature-docs (cycle ${cycle})`, model: 'haiku', phase_delta_tokens: valTokens })
-
-  // valResult is the agent's text output — check for gap indicators
-  // Use only 'MISSING:' as the gap signal: 'gaps found' also matches 'ZERO GAPS FOUND'
-  const resultText = typeof valResult === 'string' ? valResult : JSON.stringify(valResult)
-  lastValText      = resultText
-  const hasGaps    = resultText.includes('MISSING:')
-
-  if (!hasGaps) {
-    validationSummary = `0 gaps (clean on cycle ${cycle})`
-    log(`Validation clean on cycle ${cycle}`)
-    break
-  }
-
-  log(`Validation cycle ${cycle}: gaps found`)
-
-  if (cycle < MAX_CYCLES) {
-    // Re-run failing docs before next validation cycle
-    if (resultText.includes('Requirements')) {
-      await agent(featurePath, { agentType: reqRevNativeName, label: `generate-requirements (revision ${cycle})`, phase: 'Validation' })
+  let validationSummary = 'skipped (fresh)'
+  if (force || changed || !fresh(file('Validation-Report'), [featurePath, file('Requirements'), file('Tech-Spec')])) {
+    for (let cycle = 1; cycle <= 3; cycle++) {
+      const result = await c.worker(valId, featurePath + '\nValidate only; the host owns the revision loop. Write the validation report and return valid plus a findings array (one string per remaining gap). Do not dispatch other agents.', { label: `validation:${cycle}`, schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } } }, required: ['valid', 'findings'] } })
+      const text = result.findings.join('\n')
+      if (result.valid && result.findings.length === 0) {
+        if (!fresh(file('Validation-Report'), [featurePath, file('Requirements'), file('Tech-Spec')])) throw new Error('Validation agent did not produce its report')
+        validationSummary = `0 gaps (clean on cycle ${cycle})`
+        break
+      }
+      if (cycle === 3) throw new Error('Validation gaps remain after 3 cycles')
+      if (!text.includes('Tech-Spec') || text.includes('Requirements')) await c.worker(reqId, featurePath)
+      if (!text.includes('Requirements') || text.includes('Tech-Spec')) await c.worker(specId, featurePath)
     }
-    if (resultText.includes('Tech-Spec')) {
-      await agent(featurePath, { agentType: specRevNativeName, label: `generate-tech-spec (revision ${cycle})`, phase: 'Validation' })
-    }
-  } else {
-    validationSummary = 'gaps remain after 3 cycles'
-    errors.push('validate-feature-docs: gaps remain after 3 revision cycles')
   }
-}
-
-// ── Guarantee the Validation Report exists on disk ───────────────────────────
-// The validate-feature-docs agent (haiku) is instructed to write the report in its
-// Phase 6, but this is LLM-dependent and unreliable when validation is clean. Downstream
-// pm-phase2 (generate-work-breakdown) treats the report as a hard precondition, so its
-// absence aborts the whole pipeline. This step deterministically ensures the file exists.
-if (validationSummary !== 'skipped') {
-  const validationReportPath = `${feature_dir}/${prefix}-Validation-Report.md`
-  await agent(
-    `Ensure the Validation Report file exists on disk for this feature delivery run.
-
-File path: ${validationReportPath}
-
-Steps:
-1. Check whether the file already exists (use Read or Glob).
-2. If it ALREADY EXISTS: do nothing, return "exists".
-3. If it DOES NOT EXIST: write it now using the Write tool, based on the validation outcome below.
-   Get the current date via Bash: run \`date -u +"%Y-%m-%d"\`.
-
-Validation outcome summary: ${validationSummary}
-
-Validation agent output (source of truth for gaps found/resolved):
-──────────────────────────────────────────────────
-${lastValText.slice(0, 4000)}
-──────────────────────────────────────────────────
-
-File format to write (fill from the outcome above; if the run was clean, mark both documents Clean with 0 gaps):
-
-# Validation Report — ${prefix}
-
-## Summary
-| Document | Gaps found | Gaps resolved | Status |
-|----------|-----------|--------------|--------|
-| ${prefix}-Requirements.md | N | N | Clean / Gaps remain |
-| ${prefix}-Tech-Spec.md    | N | N | Clean / Gaps remain |
-
-## Gaps found and resolved
-(derive from the validation output above; write "(none)" if clean)
-
-## Remaining gaps (if any)
-(list any unresolved gaps, or "(none)")
-
-## Validation date
-{date from Bash}
-
-Return "written" if you created the file, or "exists" if it was already present.`,
-    { label: 'ensure-validation-report', phase: 'Validation' }
-  )
-  log(`Validation report ensured at ${validationReportPath}`)
-}
-
-// ── Write process-log (phase 1 snapshot) ─────────────────────────────────────
-const reqEntry   = tokenLedger.find(e => e.agent === 'generate-requirements')
-const specEntry  = tokenLedger.find(e => e.agent === 'generate-tech-spec')
-const valEntries = tokenLedger.filter(e => e.agent.startsWith('validate-feature-docs'))
-const phase1Events = [
-  `pm-phase1 START — documentation phase`,
-  reqEntry
-    ? `Agent DONE: generate-requirements — tokens: ${reqEntry.phase_delta_tokens}`
-    : `generate-requirements: skipped (fresh)`,
-  specEntry
-    ? `Agent DONE: generate-tech-spec — tokens: ${specEntry.phase_delta_tokens}`
-    : `generate-tech-spec: skipped (fresh)`,
-  ...valEntries.map(e => `Agent DONE: ${e.agent} — tokens: ${e.phase_delta_tokens}`),
-  `Validation result: ${validationSummary}`,
-  `APPROVAL REQUESTED — Gate 1`,
-].join('\n')
-
-await agent(
-  `Create the process-log file for this feature delivery run.
-
-File path: ${feature_dir}/${prefix}-process-log.txt
-
-Steps:
-1. Get current UTC datetime via Bash: run \`date -u +"%Y-%m-%dT%H:%M:%S"\`
-2. Read feature.md at: ${featurePath} — extract the feature title (first H1 heading after the frontmatter).
-3. Write the file using the Write tool. Use the datetime from step 1 for ALL timestamps.
-   Format each event line as: [{datetime}] {event text}
-
-File structure:
-════════════════════════════════════════════════════════
-RUN STARTED — {datetime}
-Feature: ${prefix} — {title from step 2}
-════════════════════════════════════════════════════════
-{one line per event below, each prefixed with [{datetime}]}
-
-Events to log:
-${phase1Events}`,
-  { label: 'write-process-log', phase: 'Validation' }
-)
-
-// ── Build gate1_payload ───────────────────────────────────────────────────────
-const gate1Payload = {
-  prefix,
-  feature_dir,
-  feature_path: featurePath,
-  requirements: {
-    path:    `${feature_dir}/${prefix}-Requirements.md`,
-    summary: `${prefix}-Requirements.md — generated`,
-  },
-  tech_spec: {
-    path:    `${feature_dir}/${prefix}-Tech-Spec.md`,
-    summary: `${prefix}-Tech-Spec.md — generated`,
-  },
-  validation: {
-    path:    `${feature_dir}/${prefix}-Validation-Report.md`,
-    summary: validationSummary,
-  },
-  token_ledger: tokenLedger,
-  errors,
-}
-
-// ── Tier 3 self-registration — close on successful completion ─────────────────
-await selfLedgerOp(
-  `ai-toolkit ledger close --prefix ${prefix} --agent pm-phase1:self --dir "${feature_dir}" --attempt 1`,
-  'ledger-close-pm-phase1-self', 'Validation'
-)
-
-log(`pm-phase1 complete — gate1_payload ready`)
-return gate1Payload
+  c.append(`${featureDir}/${prefix}-process-log.txt`, `[${new Date().toISOString()}] pm-phase1: ${validationSummary}; Gate 1 approval requested\n`)
+  return {
+    prefix, feature_dir: featureDir, feature_path: featurePath,
+    requirements: { path: file('Requirements'), summary: 'Requirements ready' },
+    tech_spec: { path: file('Tech-Spec'), summary: 'Tech-Spec ready' },
+    validation: { path: file('Validation-Report'), summary: validationSummary },
+    token_ledger: c.tokenLedger, errors: [],
+  }
+})

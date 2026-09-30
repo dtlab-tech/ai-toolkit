@@ -1,0 +1,694 @@
+[
+  {
+    "operation_id": "e411903751457fe5adf845607e8eefd4",
+    "agent": "define-feature:define",
+    "phase": "define",
+    "model": "sonnet",
+    "status": "done",
+    "started_at": "2026-09-09T20:03:22.908Z",
+    "completed_at": "2026-09-09T20:03:23.420Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "f3a01472daca4f29daae579420e3b30c",
+    "agent": "agent-preflight:implement-feature",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-09T20:15:12.126Z",
+    "completed_at": "2026-09-09T20:15:24.357Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "7a7add2e6c9b72be8230df2e16a1b87c",
+    "agent": "pm-phase1:dispatch",
+    "phase": "phase1",
+    "status": "failed",
+    "started_at": "2026-09-09T20:15:39.470Z",
+    "completed_at": "2026-09-09T20:49:52.078Z",
+    "phase_delta_tokens": null,
+    "agentId": "gaia.orchestrator.feature.phase1",
+    "nativeAgentName": "pm-phase1",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:d87bcf3c3f6ae6059cb34d83105a118edd7921b19f822e9bb70ed6b751f6c642",
+    "error": "pm-phase1 workflow stalled on agent attempt 6/6 (no progress for 180s); 9/10 agents completed"
+  },
+  {
+    "operation_id": "69e472db398f88a2ed40558e4bc884cb",
+    "agent": "pm-phase1:self",
+    "phase": "phase1",
+    "status": "failed",
+    "started_at": "2026-09-09T20:18:20.858Z",
+    "completed_at": "2026-09-10T15:38:50.374Z",
+    "phase_delta_tokens": null,
+    "error": "pm-phase1 workflow interrupted by runtime timeout: generate-tech-spec stalled on 6 consecutive 180s timeouts; pm-phase1 self-entry never closed"
+  },
+  {
+    "operation_id": "6bdb800395f2a9a5f265aca436d1ebfb",
+    "agent": "generate-requirements:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-09T20:19:27.004Z",
+    "completed_at": "2026-09-09T20:26:22.067Z",
+    "phase_delta_tokens": 15511
+  },
+  {
+    "operation_id": "f5e33de05694bf99567419466e1f19d5",
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "model": "haiku",
+    "status": "failed",
+    "started_at": "2026-09-09T20:26:47.200Z",
+    "completed_at": "2026-09-10T15:38:58.148Z",
+    "phase_delta_tokens": null,
+    "error": "agent timed out on all 6 attempts (180s each); agent was actively reading codebase files and producing output but exceeded per-attempt timeout before completing document"
+  },
+  {
+    "operation_id": "9707087995d5f92b4fba51ce0091a86c",
+    "agent": "runtime-bridge-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-10T15:39:19.341Z",
+    "completed_at": "2026-09-10T15:52:55.087Z",
+    "phase_delta_tokens": 40212
+  },
+  {
+    "operation_id": "b397f67a361391db7b796e5e109fea38",
+    "agent": "generate-tech-spec:phase1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-10T15:53:20.430Z",
+    "completed_at": "2026-09-10T16:04:50.308Z",
+    "phase_delta_tokens": 99435,
+    "agentId": "gaia.agent.planner.tech-spec",
+    "nativeAgentName": "gaia-generate-tech-spec",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:e796d0cc4904f2323dfc1c76e67ee7ff9fa9c341ea6d4ff32b29e5623f78a386"
+  },
+  {
+    "operation_id": "a7e13dd78a3c8d2bf105cdfde19ac2a4",
+    "agent": "validate-feature-docs:phase1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-10T16:05:10.700Z",
+    "completed_at": "2026-09-10T16:07:43.536Z",
+    "phase_delta_tokens": 70575,
+    "agentId": "gaia.agent.planner.validate-feature-docs",
+    "nativeAgentName": "gaia-validate-feature-docs",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:62fedf1ddbaeda550de8ba0e8c4b2f9aa37a31553c3d5ac4e38bbf0025fb0ceb"
+  },
+  {
+    "operation_id": "b7bf7388d81dbacd9df3af2ff81e2ade",
+    "agent": "node-bridge-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-15T12:27:50.940Z",
+    "completed_at": "2026-09-15T13:40:06.708Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "64ecdd3b2f96eca492d13a017dd9dfa6",
+    "agent": "percorso-c-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-17T10:13:20.892Z",
+    "completed_at": "2026-09-18T08:57:33.369Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "07c0064e7ca2f7873f8b1c9926cb622d",
+    "agent": "validate-feature-docs:gate1-remediation",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-18T09:08:01.509Z",
+    "completed_at": "2026-09-18T09:13:01.934Z",
+    "phase_delta_tokens": 92569
+  },
+  {
+    "operation_id": "3c9468a36a4ccc0d12471f8acdf402eb",
+    "agent": "documentation-consolidation:2026-09-20",
+    "phase": "phase1",
+    "model": null,
+    "status": "done",
+    "started_at": "2026-09-20T21:34:01.019Z",
+    "completed_at": "2026-09-20T21:46:12.605Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "4d435ef2ea7889d709bebf8a179897a9",
+    "agent": "documentation-validation:2026-09-20",
+    "phase": "phase1",
+    "model": null,
+    "status": "done",
+    "started_at": "2026-09-20T21:46:12.575Z",
+    "completed_at": "2026-09-20T21:46:12.590Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "4ef99473ad5718b6a5d446449f743a02",
+    "agent": "oq01a-runproof:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-20T22:03:39.797Z",
+    "completed_at": "2026-09-20T22:03:40.266Z",
+    "phase_delta_tokens": 11680
+  },
+  {
+    "operation_id": "1c370cd9f86f59fdc6464588e3fda14b",
+    "agent": "oq01b-process-spike:pre-gate1",
+    "phase": "preflight",
+    "status": "done",
+    "started_at": "2026-09-20T22:03:40.723Z",
+    "completed_at": "2026-09-20T22:03:41.205Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "7813678965d0138736508394b5a23de5",
+    "agent": "e01-provenance-audit:post-gate1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-22T13:22:36.571Z",
+    "completed_at": "2026-09-22T13:22:37.093Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "1c907c41a7b9aa37d53f89ca0181099e",
+    "agent": "e02-registration-window:post-gate1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-22T13:22:37.577Z",
+    "completed_at": "2026-09-22T13:22:38.082Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "679be0dc0ce6f4d853916066f6a0ab13",
+    "agent": "e01-isolated-provenance-proof:post-gate1",
+    "phase": "phase1",
+    "status": "done",
+    "started_at": "2026-09-28T07:20:45.239Z",
+    "completed_at": "2026-09-28T07:20:46.172Z",
+    "phase_delta_tokens": 1191
+  },
+  {
+    "operation_id": "b2e61975a3100d04414518967e95e38a",
+    "agent": "pm-phase2:dispatch",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T08:16:33.897Z",
+    "completed_at": "2026-09-28T08:34:35.591Z",
+    "phase_delta_tokens": null,
+    "agentId": "gaia.orchestrator.feature.phase2",
+    "nativeAgentName": "pm-phase2",
+    "platform": "claude",
+    "toolkitVersion": "0.13.0",
+    "resolutionScope": "global",
+    "definitionHash": "sha256:bd6a6d8bf584b8601b206b6eee6a0782d03840f8b1e47df0910ea8c5b5fd2054"
+  },
+  {
+    "operation_id": "9c537fb952beebe077330e7798f19148",
+    "agent": "pm-phase2:self",
+    "phase": "phase2",
+    "status": "done",
+    "started_at": "2026-09-28T08:25:39.137Z",
+    "completed_at": "2026-09-28T08:34:13.480Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "a2b8705a9772de5177f98d3ac9e79152",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-28T08:26:03.370Z",
+    "completed_at": "2026-09-28T08:30:23.738Z",
+    "phase_delta_tokens": 24531
+  },
+  {
+    "operation_id": "57f7bf97efafb1242151380b886b1f64",
+    "agent": "wb-validate:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-28T08:30:41.975Z",
+    "completed_at": "2026-09-28T08:31:33.870Z",
+    "phase_delta_tokens": 4080
+  },
+  {
+    "operation_id": "5227f49cbc84d3a8202cce03821fca24",
+    "agent": "generate-work-breakdown:phase2",
+    "phase": "phase2",
+    "model": "haiku",
+    "status": "done",
+    "started_at": "2026-09-28T08:45:10.844Z",
+    "completed_at": "2026-09-28T09:37:21.764Z",
+    "phase_delta_tokens": 99548
+  },
+  {
+    "operation_id": "59129cc0ba364381b96429ae9782c38a",
+    "agent": "validate-work-breakdown:phase2-rework",
+    "phase": "phase2",
+    "status": "done",
+    "started_at": "2026-09-28T11:00:31.063Z",
+    "completed_at": "2026-09-28T11:00:32.238Z",
+    "phase_delta_tokens": 52098
+  },
+  {
+    "operation_id": "821328cc538c8c963b9e54f1bcbc6675",
+    "agent": "agent-preflight:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:23:39.862Z",
+    "completed_at": "2026-09-28T14:23:40.860Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "31b9d0e8b6fb3e22b495c2434f05eec0",
+    "agent": "INFRA-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:24:11.088Z",
+    "completed_at": "2026-09-28T14:37:30.336Z",
+    "phase_delta_tokens": 133144
+  },
+  {
+    "operation_id": "836eb6ef6eea918355e411f65599d432",
+    "agent": "wb-verification-fix:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:47:34.455Z",
+    "completed_at": "2026-09-28T14:47:36.506Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "4e3d0c18e8b960779498bd0831ddda0f",
+    "agent": "INFRA-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:48:14.406Z",
+    "completed_at": "2026-09-28T14:54:31.428Z",
+    "phase_delta_tokens": 93507
+  },
+  {
+    "operation_id": "cbb947ab128056f706506ed655596c5a",
+    "agent": "INFRA-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T14:54:43.996Z",
+    "completed_at": "2026-09-28T15:00:46.529Z",
+    "phase_delta_tokens": 78997
+  },
+  {
+    "operation_id": "025841649186c571e92d805d5bfd0793",
+    "agent": "US-01-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T15:01:00.980Z",
+    "completed_at": "2026-09-28T15:09:28.418Z",
+    "phase_delta_tokens": 114734
+  },
+  {
+    "operation_id": "2aa95b73e2b2845dad251e65e7189411",
+    "agent": "US-01-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T15:09:43.000Z",
+    "completed_at": "2026-09-28T15:33:01.759Z",
+    "phase_delta_tokens": 66631
+  },
+  {
+    "operation_id": "7dba49c99515b4cb86dae793bd9f137e",
+    "agent": "US-01-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T15:33:15.308Z",
+    "completed_at": "2026-09-28T15:38:59.031Z",
+    "phase_delta_tokens": 92516
+  },
+  {
+    "operation_id": "3244ac58c0c462dde0d1429c14a1ddcc",
+    "agent": "US-01-TASK-BE-04:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T15:39:15.821Z",
+    "completed_at": "2026-09-28T15:46:12.176Z",
+    "phase_delta_tokens": 91967
+  },
+  {
+    "operation_id": "79c6c7c640fb93b1b32797f1d758d993",
+    "agent": "US-01-TASK-BE-05:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T15:46:25.385Z",
+    "completed_at": "2026-09-28T15:53:01.146Z",
+    "phase_delta_tokens": 77267
+  },
+  {
+    "operation_id": "d542e5d2dbceab40ae7f3bb837332828",
+    "agent": "US-02-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T15:53:16.956Z",
+    "completed_at": "2026-09-28T15:59:41.198Z",
+    "phase_delta_tokens": 91585
+  },
+  {
+    "operation_id": "b5247b356566fcaeec8a96cce5d72c3c",
+    "agent": "US-02-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T15:59:53.757Z",
+    "completed_at": "2026-09-28T16:08:18.483Z",
+    "phase_delta_tokens": 76638
+  },
+  {
+    "operation_id": "cfe1c89cfe878f3101d52df4454bc6f9",
+    "agent": "US-02-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T16:08:31.204Z",
+    "completed_at": "2026-09-28T16:16:35.892Z",
+    "phase_delta_tokens": 103142
+  },
+  {
+    "operation_id": "890ebddcd369e3cc427d4d2fc5c48d26",
+    "agent": "US-03-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T16:16:51.532Z",
+    "completed_at": "2026-09-28T16:27:53.687Z",
+    "phase_delta_tokens": 135039
+  },
+  {
+    "operation_id": "de16c2c7e76871f384e6f97c6f2ed32d",
+    "agent": "US-03-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T16:29:11.522Z",
+    "completed_at": "2026-09-28T16:42:03.670Z",
+    "phase_delta_tokens": 116206
+  },
+  {
+    "operation_id": "57ee9533586008f01643a7c96da9c729",
+    "agent": "US-03-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T16:42:38.630Z",
+    "completed_at": "2026-09-28T16:59:31.379Z",
+    "phase_delta_tokens": 187921
+  },
+  {
+    "operation_id": "1dc4107f245c3c61d4bf10f17f0e78dd",
+    "agent": "US-04-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T17:00:06.745Z",
+    "completed_at": "2026-09-28T17:10:43.401Z",
+    "phase_delta_tokens": 134942
+  },
+  {
+    "operation_id": "7ff81dae0def3e659dccd8f906311f34",
+    "agent": "US-04-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T17:11:17.022Z",
+    "completed_at": "2026-09-28T17:20:58.326Z",
+    "phase_delta_tokens": 138247
+  },
+  {
+    "operation_id": "64dc1ac98a21a28544923426d04ff7a2",
+    "agent": "US-04-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T17:21:30.128Z",
+    "completed_at": "2026-09-28T17:38:20.388Z",
+    "phase_delta_tokens": 123373
+  },
+  {
+    "operation_id": "4643a24b1d05ec44291fa45b4ff8d226",
+    "agent": "US-04-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T17:38:54.894Z",
+    "completed_at": "2026-09-28T17:46:14.597Z",
+    "phase_delta_tokens": 128299
+  },
+  {
+    "operation_id": "9f43d0dfb5f31481e9aade7c2b8533b3",
+    "agent": "US-05-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T17:46:50.327Z",
+    "completed_at": "2026-09-28T17:56:03.689Z",
+    "phase_delta_tokens": 101040
+  },
+  {
+    "operation_id": "af68dc7aa99d1b02210f51b4ea47ba3a",
+    "agent": "US-05-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-28T17:56:37.136Z",
+    "completed_at": "2026-09-29T06:48:32.218Z",
+    "phase_delta_tokens": 135698
+  },
+  {
+    "operation_id": "8e8c57b5639b4c5db5d4b6072223cae4",
+    "agent": "US-05-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T06:48:56.840Z",
+    "completed_at": "2026-09-29T07:02:10.370Z",
+    "phase_delta_tokens": 104529
+  },
+  {
+    "operation_id": "24a1a140b9c7ddd5aeffe7b720bb3c49",
+    "agent": "US-05-TASK-BE-04:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T07:02:40.269Z",
+    "completed_at": "2026-09-29T07:08:39.429Z",
+    "phase_delta_tokens": 101448
+  },
+  {
+    "operation_id": "2f033a85a7f8ab50fc1f44e77bac7ba1",
+    "agent": "US-05-TASK-BE-05:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T07:09:03.369Z",
+    "completed_at": "2026-09-29T07:29:04.619Z",
+    "phase_delta_tokens": 230625
+  },
+  {
+    "operation_id": "82d296a94b543b9b79855713e12b0036",
+    "agent": "US-06-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T08:27:54.339Z",
+    "completed_at": "2026-09-29T08:55:32.878Z",
+    "phase_delta_tokens": 306465
+  },
+  {
+    "operation_id": "b85f7c5d745a2d8cbd74ca530dc49ddb",
+    "agent": "US-06-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T09:09:50.943Z",
+    "completed_at": "2026-09-29T09:33:34.304Z",
+    "phase_delta_tokens": 230556
+  },
+  {
+    "operation_id": "fe8c9235719b14e3b063b0ac0a3c265f",
+    "agent": "US-06-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T09:34:06.902Z",
+    "completed_at": "2026-09-29T09:55:57.515Z",
+    "phase_delta_tokens": 213639
+  },
+  {
+    "operation_id": "bc81b2a443858d84b24f3b768eed542e",
+    "agent": "US-06-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T09:56:26.708Z",
+    "completed_at": "2026-09-29T10:16:19.094Z",
+    "phase_delta_tokens": 169441
+  },
+  {
+    "operation_id": "cfa07c321826d7f43eb3e55952286a4d",
+    "agent": "US-07-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T10:16:50.837Z",
+    "completed_at": "2026-09-29T10:53:19.767Z",
+    "phase_delta_tokens": 294739
+  },
+  {
+    "operation_id": "de872a06c8e32a1678df9f842cf89a29",
+    "agent": "US-07-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T10:53:58.551Z",
+    "completed_at": "2026-09-29T11:20:03.522Z",
+    "phase_delta_tokens": 216069
+  },
+  {
+    "operation_id": "3633f0f4f1d029c6278ea5ed1783f907",
+    "agent": "US-07-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T11:20:47.235Z",
+    "completed_at": "2026-09-29T12:02:25.764Z",
+    "phase_delta_tokens": 374708
+  },
+  {
+    "operation_id": "0701b529a645a7e8d9fba851899a29d1",
+    "agent": "US-08-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T12:03:01.600Z",
+    "completed_at": "2026-09-29T12:26:06.158Z",
+    "phase_delta_tokens": 212052
+  },
+  {
+    "operation_id": "6f329aeeda9746607176f1cc73df4588",
+    "agent": "US-08-TASK-BE-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T12:26:33.314Z",
+    "completed_at": "2026-09-29T12:49:42.650Z",
+    "phase_delta_tokens": 84664
+  },
+  {
+    "operation_id": "243756441de13a4b87f5b63a5d434c14",
+    "agent": "US-08-TASK-BE-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T12:50:19.574Z",
+    "completed_at": "2026-09-29T13:23:03.416Z",
+    "phase_delta_tokens": 202784
+  },
+  {
+    "operation_id": "4236553a1ed92b83da0f5e4dcca6f26f",
+    "agent": "US-08-TASK-BE-04:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T13:23:37.575Z",
+    "completed_at": "2026-09-29T13:33:05.332Z",
+    "phase_delta_tokens": 88266
+  },
+  {
+    "operation_id": "761200bd9345f1e711067d785ba57279",
+    "agent": "US-08-TASK-INFRA-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T13:33:40.829Z",
+    "completed_at": "2026-09-29T13:39:08.548Z",
+    "phase_delta_tokens": 38370
+  },
+  {
+    "operation_id": "fd84ff0124ffb858e60d538b775ed60f",
+    "agent": "wb-verification-fix-2:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T13:38:53.243Z",
+    "completed_at": "2026-09-29T13:38:54.326Z",
+    "phase_delta_tokens": null
+  },
+  {
+    "operation_id": "9abe69310883d1f7cd41d08960d1c611",
+    "agent": "US-08-TASK-BE-05:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T13:39:54.995Z",
+    "completed_at": "2026-09-29T13:54:38.904Z",
+    "phase_delta_tokens": 96202
+  },
+  {
+    "operation_id": "417f08d7dc9b54acb26cf835424bd349",
+    "agent": "US-08-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T13:55:05.628Z",
+    "completed_at": "2026-09-29T16:28:45.953Z",
+    "phase_delta_tokens": 273634
+  },
+  {
+    "operation_id": "188c338365d4f83d164b7c783e87bbe6",
+    "agent": "US-08-TASK-TEST-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-29T16:29:48.854Z",
+    "completed_at": "2026-09-29T16:40:18.774Z",
+    "phase_delta_tokens": 100989
+  },
+  {
+    "operation_id": "f92c0ef4d56f29c8e07f04abe0935407",
+    "agent": "US-09-TASK-BE-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-30T06:22:58.386Z",
+    "completed_at": "2026-09-30T06:28:27.142Z",
+    "phase_delta_tokens": 69918
+  },
+  {
+    "operation_id": "ec96c38b06687d5a74e1c60cc245a70b",
+    "agent": "US-09-TASK-INFRA-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-30T06:28:52.748Z",
+    "completed_at": "2026-09-30T06:48:46.320Z",
+    "phase_delta_tokens": 236751
+  },
+  {
+    "operation_id": "30b0db8a0e0e5dd4b204714009fca9f2",
+    "agent": "US-09-TASK-INFRA-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-30T06:49:11.011Z",
+    "completed_at": "2026-09-30T06:56:20.781Z",
+    "phase_delta_tokens": 90583
+  },
+  {
+    "operation_id": "bd7fa3f05c722d8a6414f7d33bcfe569",
+    "agent": "US-09-TASK-TEST-01:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-30T06:56:50.858Z",
+    "completed_at": "2026-09-30T07:19:35.159Z",
+    "phase_delta_tokens": 272881
+  },
+  {
+    "operation_id": "d87926e365db7e91d6b6ab751698512b",
+    "agent": "US-09-TASK-INFRA-03:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-30T07:20:04.504Z",
+    "completed_at": "2026-09-30T07:36:41.444Z",
+    "phase_delta_tokens": 224888
+  },
+  {
+    "operation_id": "a837d924df9c1870d595eeb1dc5c38f2",
+    "agent": "US-09-TASK-INFRA-04:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-30T07:37:07.086Z",
+    "completed_at": "2026-09-30T07:41:38.355Z",
+    "phase_delta_tokens": 82848
+  },
+  {
+    "operation_id": "50c02b5294a9407d0893bdf93563b8e8",
+    "agent": "US-09-TASK-TEST-02:phase3",
+    "phase": "phase3",
+    "status": "done",
+    "started_at": "2026-09-30T08:06:20.397Z",
+    "completed_at": "2026-09-30T08:06:20.854Z",
+    "phase_delta_tokens": null
+  }
+]
