@@ -2678,10 +2678,12 @@ function _executorCurrentBranchRef(projectDir) {
 //     error surface through this same mapping table honestly — it is not
 //     hidden or special-cased, it simply falls into the default bucket.
 //
-// 8 (paused awaiting human decision) has no known throw site in the current
-// codebase: execute()'s 'paused' run status is a SUCCESS-path result field
-// (returned, not thrown), so no error code maps to exit 8 here — nothing in
-// this task's scope invents one.
+// 8 (paused awaiting human decision) has no throw site and is deliberately
+// absent from this table: execute()'s/resume()'s 'paused' run status is a
+// SUCCESS-path result field (returned, not thrown), so no error code maps to
+// exit 8 here. It is instead selected on the success path, in
+// handleExecutorCommand's own emitSuccess helper below, by inspecting
+// result.runStatus.
 const EXECUTOR_EXIT_CODE_BY_ERROR_CODE = {
   // 3 — ownership / live worker conflict
   LEASE_HELD: 3, LEASE_NOT_OWNER: 3, LEASE_STILL_LIVE: 3, LEASE_LIVENESS_UNKNOWN: 3,
@@ -2780,7 +2782,15 @@ async function handleExecutorCommand(argv) {
 
   function emitSuccess(result) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-    process.exitCode = 0;
+    // Tech-Spec section 10 exit code 8 ("paused awaiting human decision") is a
+    // SUCCESS-path outcome, not an error — only execute()'s and resume()'s
+    // result objects can legitimately carry `runStatus: 'paused'` (see the
+    // exit-code mapping comment above EXECUTOR_EXIT_CODE_BY_ERROR_CODE for why
+    // no *_ERROR code maps to 8). reconcile/stop/replan results never carry a
+    // `runStatus` field at all, and status/diagnose never reach this success
+    // path (still NOT_IMPLEMENTED) — so this check is a no-op for every other
+    // subcommand's result shape and never needs to be scoped by subcommand.
+    process.exitCode = result && result.runStatus === 'paused' ? 8 : 0;
   }
 
   function emitError(err) {

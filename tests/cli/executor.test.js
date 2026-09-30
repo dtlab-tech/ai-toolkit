@@ -6,8 +6,9 @@
  * Scope: this suite proves the CLI ROUTING layer only — that each of the 7
  * subcommands (start/status/diagnose/stop/reconcile/resume/replan) calls the
  * correct lib/task-executor/index.js function with the expected argument
- * shape, that a successful call prints JSON to stdout and exits 0, and that
- * the CLI's documented error-code -> exit-code mapping
+ * shape, that a successful call prints JSON to stdout and exits 0 (or 8 for a
+ * `runStatus: 'paused'` result — see the "exit code 8" describe block below),
+ * and that the CLI's documented error-code -> exit-code mapping
  * (bin/cli.js's EXECUTOR_EXIT_CODE_BY_ERROR_CODE / mapExecutorErrorToExitCode)
  * is applied correctly for a representative sample of error codes (at least
  * one per bucket). lib/task-executor/index.js's own execute()/stop()/
@@ -192,6 +193,79 @@ describe('executor CLI routing', () => {
       ]);
       expect(process.exitCode).toBe(2);
       expect(taskExecutor.replan).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── exit code 8: paused-awaiting-human-decision success outcome ─────────
+  // Tech-Spec section 10 exit code 8. Only execute() (the `start` subcommand)
+  // and resume() can legitimately return `runStatus: 'paused'` — reconcile()/
+  // stop()/replan() results never carry a runStatus field at all, and
+  // status()/diagnose() never reach the success path (still NOT_IMPLEMENTED,
+  // covered above). See bin/cli.js's emitSuccess helper.
+  describe('exit code 8 (paused awaiting human decision)', () => {
+    test('start with runStatus "paused" exits 8, not 0', async () => {
+      taskExecutor.execute.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'paused', tasks: [],
+      });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(8);
+      expect(stdoutJSON()).toEqual({ protocolVersion: 1, runId: 'r1', runStatus: 'paused', tasks: [] });
+    });
+
+    test('start with runStatus "completed" still exits 0 (regression)', async () => {
+      taskExecutor.execute.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [],
+      });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('start with runStatus "blocked" still exits 0 (regression)', async () => {
+      taskExecutor.execute.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'blocked', tasks: [],
+      });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('resume with runStatus "paused" exits 8, not 0', async () => {
+      taskExecutor.resume.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'paused', tasks: [], repairsApplied: [],
+      });
+      await handleExecutorCommand(['resume', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(8);
+    });
+
+    test('resume with runStatus "blocked" still exits 0 (regression)', async () => {
+      taskExecutor.resume.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'blocked', tasks: [], repairsApplied: [],
+      });
+      await handleExecutorCommand(['resume', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('reconcile result never carries runStatus, so it is unaffected and exits 0', async () => {
+      taskExecutor.reconcile.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', repairsApplied: [], classifications: [],
+      });
+      await handleExecutorCommand(['reconcile', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('stop result never carries runStatus, so it is unaffected and exits 0', async () => {
+      taskExecutor.stop.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', requestAccepted: true, mode: 'graceful',
+      });
+      await handleExecutorCommand(['stop', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('replan result never carries runStatus, so it is unaffected and exits 0', async () => {
+      taskExecutor.replan.mockResolvedValue({
+        protocolVersion: 1, originalRunId: 'r1', successorPlanDigest: 'd', taskMapping: [],
+      });
+      await handleExecutorCommand(['replan', '--project', REPO_ROOT, '--run-id', 'r1', '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(0);
     });
   });
 
