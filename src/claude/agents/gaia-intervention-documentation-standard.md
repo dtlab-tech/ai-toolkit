@@ -89,12 +89,12 @@ Other interventions that must be completed first (blocking) or should be coordin
 What to do if the intervention fails mid-way: rollback strategy, branch isolation, partial revert steps.
 
 ### 17. Suggested Agent Assignment
-Which agent type should execute this intervention:
-- `developer-backend` — backend/infrastructure implementation
-- `developer-frontend` — frontend/UI implementation
-- `developer-testing` — test writing
-- `review-solution` — post-intervention validation
-- Specialised agent (e.g. `security-hardening`) if available in `.claude/agents/`
+Which verified native agent should implement this intervention (recommendations only, never assessment dispatch):
+- `gaia-developer-backend` — backend/infrastructure implementation
+- `gaia-developer-frontend` — frontend/UI implementation
+- `gaia-developer-testing` — test writing
+- `gaia-review-solution` — post-intervention validation
+- Specialised agent (e.g. `gaia-security-hardening`) if available in `.claude/agents/`
 
 ### 18. Expected Outputs
 List of files to be created or modified. Each entry: `file path` → what changes.
@@ -124,9 +124,9 @@ After writing all intervention documents, produce `{ASSESS_PREFIX}-Interventions
 
 | ID | Title | Area | Criticality | Depends on | Suggested Agent |
 |---|---|---|---|---|---|
-| INT-001 | ... | Security | CRITICAL | — | developer-backend |
-| INT-002 | ... | Code Quality | HIGH | INT-003 | developer-backend |
-| INT-003 | ... | Architecture | HIGH | — | developer-backend |
+| INT-001 | ... | Security | CRITICAL | — | gaia-developer-backend |
+| INT-002 | ... | Code Quality | HIGH | INT-003 | gaia-developer-backend |
+| INT-003 | ... | Architecture | HIGH | — | gaia-developer-backend |
 ```
 
 Order by criticality (CRITICAL first), then by dependency (prerequisites before dependents).

@@ -227,3 +227,19 @@ describe('verifyAgentIdentity: caching behavior', () => {
     );
   });
 });
+
+
+describe('control-plane identity regressions', () => {
+  let dir;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-scope-')); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+  test.each(['gaia.orchestrator.feature.phase1', 'gaia.orchestrator.feature.phase3', 'pm-phase1', 'pm-phase3'])('rejects workflow identities before worker dispatch: %s', agentId => {
+    expect(() => verifyAgentIdentity({ projectDir: dir, agentId })).toThrow(expect.objectContaining({ code: 'AGENT_NOT_VERIFIED' }));
+  });
+  test('a verified identity in one project cannot authorize an uninstalled second project', () => {
+    const fixture = makeVerifiedFixture(dir, '# verified first project\n');
+    verifyAgentIdentity({ projectDir: fixture.projectDir, home: fixture.fakeHome, agentId: AGENT_ID });
+    const second = path.join(dir, 'second'); fs.mkdirSync(second);
+    expect(() => verifyAgentIdentity({ projectDir: second, home: fixture.fakeHome, agentId: AGENT_ID })).toThrow(expect.objectContaining({ code: 'AGENT_NOT_VERIFIED' }));
+  });
+});
