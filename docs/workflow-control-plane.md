@@ -89,6 +89,13 @@ calls, parallel rejection/drain, identity mismatch, cross-project cache leakage,
 negative semantic verdict, unknown scopes, paths with spaces and explicit approval.
 
 The live paid Claude model/permission flow has not been exercised by these tests.
+Document validation requires both a written Validation Report and a structured
+verdict (`valid: boolean`, `findings: string[]`). The validator performs one pass;
+the host owns revisions. A report or JSON in the plain-text result cannot replace
+`structured_output` from `--json-schema`. Missing structured output stops the
+workflow with an error naming the worker and required fields. Regression tests
+cover missing/malformed verdicts, a clean verdict without a report, and a negative
+verdict followed by host revision and a clean result; model responses are mocked.
 The subprocess adapter reuses FTR-018's existing qualification; no new cross-platform
 process-supervision guarantee is claimed. On Windows, the full executor test suite
 requires Git Bash ahead of the WSL launcher in PATH. User-level installations are
