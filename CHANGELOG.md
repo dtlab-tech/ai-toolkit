@@ -1,4 +1,32 @@
 ## 0.1.4 (2026-07-21)
+## [0.13.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.12.0...v0.13.0) (2026-09-09)
+
+
+### Features
+
+* add --require-verified operational mode to agents resolve ([c8cf8c1](https://github.com/dtlab-tech/ai-toolkit/commit/c8cf8c1d3db4ccbcf109408a4029381db1b21479))
+* add agents cleanup dry-run command ([d773ce2](https://github.com/dtlab-tech/ai-toolkit/commit/d773ce257eb00c988f6218c603a88a9c9df91b86))
+* add agents list and diagnostic resolve CLI commands ([0cd71bd](https://github.com/dtlab-tech/ai-toolkit/commit/0cd71bd037ff11a576c69476ebfd22b1d9025711))
+* add agents preflight command with fail-closed ledger tracking ([3c16268](https://github.com/dtlab-tech/ai-toolkit/commit/3c1626873997ce205cd68f7f7314431d39cc8e9e))
+* add canonical agent registry module with deterministic resolution ([21d5c02](https://github.com/dtlab-tech/ai-toolkit/commit/21d5c028d9c1978952dde234c4241db254383477))
+* add computeFileSha256() helper for manifest integrity ([7fdf938](https://github.com/dtlab-tech/ai-toolkit/commit/7fdf9386d189954eafba8d24d229016510a0f127))
+* add doctor agents command with comprehensive diagnostics ([ce47a78](https://github.com/dtlab-tech/ai-toolkit/commit/ce47a78cfa67ac44209dfa6cb4d2b8aba36ebf51))
+* add ledger CLI facade with whitelisted metadata flags ([f26c6a6](https://github.com/dtlab-tech/ai-toolkit/commit/f26c6a61c83bdca154e4600041025a59a95ce1ff))
+* add pm-phaseN:self ledger self-registration with fail-closed lifecycle ([8a04899](https://github.com/dtlab-tech/ai-toolkit/commit/8a048999943bf6b28e9bca7a4be0f659a11d1fec))
+* add Tier 1 dispatch guard to implement-feature skill ([5326f5f](https://github.com/dtlab-tech/ai-toolkit/commit/5326f5fd6159a8fce67a01e2b41c1a60e2ad4258))
+* add Tier 2 resolution guard to pm-phase workflows ([4f2e4e5](https://github.com/dtlab-tech/ai-toolkit/commit/4f2e4e5d72a57d211b86bc04c44102e1d6d4ef68))
+* add WB agent_type inventory, legacy mapping, and rejection guard ([fc4228b](https://github.com/dtlab-tech/ai-toolkit/commit/fc4228b732fbb3e1d3332f3e24750b86108207e0))
+* detect observable-scope collisions and add collision tests ([9857004](https://github.com/dtlab-tech/ai-toolkit/commit/9857004118aa0b77a39a9f9f7b1961fb2abcaa4f))
+* extend ledger open() with whitelisted metadata and safety invariants ([cbc8cdc](https://github.com/dtlab-tech/ai-toolkit/commit/cbc8cdc600614b8e91daacc737b0e7f8493447f7))
+* extend writeManifest() with optional fileHashes parameter ([9583aff](https://github.com/dtlab-tech/ai-toolkit/commit/9583affb26b97348def78b6973f645533c9cdbbe))
+* **FTR-017:** deterministic agent resolution and orchestrator guard ([57e1e9b](https://github.com/dtlab-tech/ai-toolkit/commit/57e1e9b42a27937cd06a6cf2d1449f37cfeea4a7))
+* **FTR-017:** Phase B completion gate (BE-24) — all 15 agents renamed to gaia-* prefix ([118f6e3](https://github.com/dtlab-tech/ai-toolkit/commit/118f6e3278457f81aea77d0e4a2b95bb661f6b7c))
+* **FTR-017:** Phase B rename developer-* and review-solution agents to gaia-* (BE-09..12) ([2ff27e8](https://github.com/dtlab-tech/ai-toolkit/commit/2ff27e86519cfbdb57404c36860ab2ce5e1af7c3))
+* **FTR-017:** Phase B rename remaining 11 agents to gaia-* prefix (BE-13..23) ([23ceb1f](https://github.com/dtlab-tech/ai-toolkit/commit/23ceb1f4ab5163c1e05ccdd67f7cd0e771800410))
+* hard-stop on missing pm-phase3 and post-return ledger failure ([43e095c](https://github.com/dtlab-tech/ai-toolkit/commit/43e095cfc2f65ea984ae73f687313f9d298502a9))
+* record per-file SHA-256 hashes in installer manifest ([26c9d74](https://github.com/dtlab-tech/ai-toolkit/commit/26c9d7448adc05585b2181bf14f5afadca6c72dd))
+* remove legacy orchestrator references from runtime assets ([76177e3](https://github.com/dtlab-tech/ai-toolkit/commit/76177e3b7f0d78e470a9898ca37cb1a060575bff))
+
 ## [0.12.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.11.0...v0.12.0) (2026-09-04)
 
 
