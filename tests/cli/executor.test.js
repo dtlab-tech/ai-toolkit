@@ -1,0 +1,402 @@
+'use strict';
+
+/**
+ * CLI routing tests for `ai-toolkit executor <subcommand>` (US-09-TASK-INFRA-01, FTR-018).
+ *
+ * Scope: this suite proves the CLI ROUTING layer only — that each of the 7
+ * subcommands (start/status/diagnose/stop/reconcile/resume/replan) calls the
+ * correct lib/task-executor/index.js function with the expected argument
+ * shape, that a successful call prints JSON to stdout and exits 0 (or 8 for a
+ * `runStatus: 'paused'` result — see the "exit code 8" describe block below),
+ * and that the CLI's documented error-code -> exit-code mapping
+ * (bin/cli.js's EXECUTOR_EXIT_CODE_BY_ERROR_CODE / mapExecutorErrorToExitCode)
+ * is applied correctly for a representative sample of error codes (at least
+ * one per bucket). lib/task-executor/index.js's own execute()/stop()/
+ * reconcile()/resume()/replan() internals are already exhaustively
+ * unit/integration tested elsewhere (tests/lib/*.test.js) — that module is
+ * mocked out entirely here so this file never re-tests their bodies.
+ */
+
+jest.mock('../../lib/task-executor');
+
+const path = require('path');
+const taskExecutor = require('../../lib/task-executor');
+const {
+  handleExecutorCommand,
+  mapExecutorErrorToExitCode,
+} = require('../../bin/cli');
+
+// This toolkit's own checkout — used as a plausible --project path for every
+// subcommand. start/status/diagnose/stop never shell out to git at all, so
+// this is inert for them. reconcile/resume/replan DO derive
+// executionRoot/taskRef via real `git rev-parse` calls (see bin/cli.js's
+// _executorExecutionRoot/_executorCurrentBranchRef) — those two calls are
+// stubbed below (see the child_process.spawnSync mock in beforeEach) rather
+// than left to hit this checkout's real state, because CI checks out a PR's
+// merge commit in DETACHED HEAD (actions/checkout@v4's default for
+// pull_request events): `git rev-parse --abbrev-ref HEAD` then returns the
+// literal string "HEAD", which _executorCurrentBranchRef correctly treats as
+// EXECUTE_VALIDATION_ERROR ("a task ref cannot be derived automatically") —
+// entirely correct production behavior, but it means this CLI-ROUTING-only
+// test suite must not depend on the outer checkout's branch state to reach
+// the routing assertions it actually cares about. _executorExecutionRoot/
+// _executorCurrentBranchRef call child_process.spawnSync('git', [...]) via a
+// bare internal identifier, not through module.exports — so, per this
+// session's own established finding (a CommonJS module cannot intercept its
+// own internal calls via jest.spyOn on its exports), stubbing spawnSync
+// itself is the only mocking seam that actually reaches them.
+const REPO_ROOT = path.join(__dirname, '..', '..');
+
+function makeErr(code, message) {
+  const err = new Error(message || code);
+  err.code = code;
+  return err;
+}
+
+describe('executor CLI routing', () => {
+  let stdoutSpy;
+  let stderrSpy;
+
+  let spawnSyncSpy;
+
+  beforeEach(() => {
+    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    process.exitCode = undefined;
+
+    // Stubs ONLY the two exact git rev-parse invocations
+    // _executorExecutionRoot/_executorCurrentBranchRef make, with a fixed,
+    // always-valid result — regardless of this checkout's real branch/HEAD
+    // state (see the REPO_ROOT comment above for why). Any other spawnSync
+    // call falls through to the real implementation unchanged.
+    const childProcess = require('child_process');
+    const realSpawnSync = childProcess.spawnSync;
+    spawnSyncSpy = jest.spyOn(childProcess, 'spawnSync').mockImplementation((cmd, args, opts) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'rev-parse') {
+        if (args[1] === '--git-common-dir') {
+          return { status: 0, stdout: '.git\n', stderr: '', error: null };
+        }
+        if (args[1] === '--abbrev-ref' && args[2] === 'HEAD') {
+          return { status: 0, stdout: 'main\n', stderr: '', error: null };
+        }
+      }
+      return realSpawnSync(cmd, args, opts);
+    });
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    spawnSyncSpy.mockRestore();
+    process.exitCode = undefined;
+    jest.clearAllMocks();
+  });
+
+  function stdoutJSON() {
+    return JSON.parse(stdoutSpy.mock.calls.map((c) => c[0]).join(''));
+  }
+
+  function stderrJSON() {
+    return JSON.parse(stderrSpy.mock.calls.map((c) => c[0]).join(''));
+  }
+
+  // ── routing: each subcommand calls the right index.js function ──────────
+  describe('subcommand routing', () => {
+    test('start routes to execute() with the parsed flags and prints JSON on success', async () => {
+      taskExecutor.execute.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [],
+      });
+
+      await handleExecutorCommand([
+        'start',
+        '--project', REPO_ROOT,
+        '--feature', 'internal_docs/features/FTR-999/feature.md',
+        '--max-concurrency', '1',
+        '--claude-path', 'C:\\claude.exe',
+        '--task-timeout-ms', '5000',
+        '--agent-budget-usd', '2.5',
+      ]);
+
+      expect(taskExecutor.execute).toHaveBeenCalledTimes(1);
+      const callArgs = taskExecutor.execute.mock.calls[0][0];
+      expect(callArgs.project).toBe(REPO_ROOT);
+      expect(callArgs.feature).toBe('internal_docs/features/FTR-999/feature.md');
+      expect(callArgs.maxConcurrency).toBe(1);
+      expect(callArgs.claudePath).toBe('C:\\claude.exe');
+      expect(callArgs.taskTimeoutMs).toBe(5000);
+      expect(callArgs.agentBudgetUsd).toBe(2.5);
+      expect(process.exitCode).toBe(0);
+      expect(stdoutJSON()).toEqual({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
+    });
+
+    test('start ignores an unrecognized --force flag (never special-cased, never forwarded)', async () => {
+      taskExecutor.execute.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
+      await handleExecutorCommand([
+        'start', '--project', REPO_ROOT, '--feature', 'x/feature.md', '--force',
+      ]);
+      expect(process.exitCode).toBe(0);
+      const callArgs = taskExecutor.execute.mock.calls[0][0];
+      expect(callArgs.force).toBeUndefined();
+    });
+
+    test('status routes to status() with project/runId', async () => {
+      taskExecutor.status.mockResolvedValue({ protocolVersion: 1, runId: 'r1' });
+      await handleExecutorCommand(['status', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(taskExecutor.status).toHaveBeenCalledWith({ project: REPO_ROOT, runId: 'r1' });
+      expect(process.exitCode).toBe(0);
+      expect(stdoutJSON()).toEqual({ protocolVersion: 1, runId: 'r1' });
+    });
+
+    test('diagnose routes to diagnose() with project/runId', async () => {
+      taskExecutor.diagnose.mockResolvedValue({ protocolVersion: 1, runId: 'r1' });
+      await handleExecutorCommand(['diagnose', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(taskExecutor.diagnose).toHaveBeenCalledWith({ project: REPO_ROOT, runId: 'r1' });
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('stop routes to stop() with project/runId/mode defaulting to graceful', async () => {
+      taskExecutor.stop.mockResolvedValue({ protocolVersion: 1, runId: 'r1', requestAccepted: true, mode: 'graceful' });
+      await handleExecutorCommand(['stop', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(taskExecutor.stop).toHaveBeenCalledWith({ project: REPO_ROOT, runId: 'r1', mode: 'graceful' });
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('stop forwards --mode immediate', async () => {
+      taskExecutor.stop.mockResolvedValue({ protocolVersion: 1, runId: 'r1', requestAccepted: true, mode: 'immediate' });
+      await handleExecutorCommand(['stop', '--project', REPO_ROOT, '--run-id', 'r1', '--mode', 'immediate']);
+      expect(taskExecutor.stop).toHaveBeenCalledWith({ project: REPO_ROOT, runId: 'r1', mode: 'immediate' });
+    });
+
+    test('reconcile routes to reconcile() with executionRoot/runId/projectDir/taskRef', async () => {
+      taskExecutor.reconcile.mockResolvedValue({ protocolVersion: 1, runId: 'r1', repairsApplied: [], classifications: [] });
+      await handleExecutorCommand(['reconcile', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(taskExecutor.reconcile).toHaveBeenCalledTimes(1);
+      const callArgs = taskExecutor.reconcile.mock.calls[0][0];
+      expect(callArgs.runId).toBe('r1');
+      expect(callArgs.projectDir).toBe(REPO_ROOT);
+      expect(typeof callArgs.executionRoot).toBe('string');
+      expect(callArgs.executionRoot.length).toBeGreaterThan(0);
+      expect(typeof callArgs.taskRef).toBe('string');
+      expect(callArgs.taskRef.length).toBeGreaterThan(0);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('resume routes to resume() with executionRoot/runId/projectDir/taskRef', async () => {
+      taskExecutor.resume.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'blocked', tasks: [] });
+      await handleExecutorCommand(['resume', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(taskExecutor.resume).toHaveBeenCalledTimes(1);
+      const callArgs = taskExecutor.resume.mock.calls[0][0];
+      expect(callArgs.runId).toBe('r1');
+      expect(callArgs.projectDir).toBe(REPO_ROOT);
+      expect(typeof callArgs.executionRoot).toBe('string');
+      expect(typeof callArgs.taskRef).toBe('string');
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('replan routes to replan() with executionRoot/runId/projectDir/taskRef/feature/taskMapping', async () => {
+      taskExecutor.replan.mockResolvedValue({
+        protocolVersion: 1, originalRunId: 'r1', successorPlanDigest: 'd', taskMapping: [],
+      });
+      await handleExecutorCommand([
+        'replan',
+        '--project', REPO_ROOT,
+        '--run-id', 'r1',
+        '--feature', 'internal_docs/features/FTR-998/feature.md',
+        '--task-mapping-json', JSON.stringify([{ oldTaskId: 'A', newTaskId: 'B' }]),
+      ]);
+      expect(taskExecutor.replan).toHaveBeenCalledTimes(1);
+      const callArgs = taskExecutor.replan.mock.calls[0][0];
+      expect(callArgs.runId).toBe('r1');
+      expect(callArgs.projectDir).toBe(REPO_ROOT);
+      expect(callArgs.feature).toBe('internal_docs/features/FTR-998/feature.md');
+      expect(callArgs.taskMapping).toEqual([{ oldTaskId: 'A', newTaskId: 'B' }]);
+      expect(typeof callArgs.executionRoot).toBe('string');
+      expect(typeof callArgs.taskRef).toBe('string');
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('replan defaults taskMapping to an empty array when --task-mapping-json is omitted', async () => {
+      taskExecutor.replan.mockResolvedValue({
+        protocolVersion: 1, originalRunId: 'r1', successorPlanDigest: 'd', taskMapping: [],
+      });
+      await handleExecutorCommand(['replan', '--project', REPO_ROOT, '--run-id', 'r1', '--feature', 'x/feature.md']);
+      expect(taskExecutor.replan.mock.calls[0][0].taskMapping).toEqual([]);
+    });
+
+    test('replan exits 2 for invalid --task-mapping-json and never calls replan()', async () => {
+      await handleExecutorCommand([
+        'replan', '--project', REPO_ROOT, '--run-id', 'r1', '--feature', 'x/feature.md',
+        '--task-mapping-json', '{not json',
+      ]);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.replan).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── exit code 8: paused-awaiting-human-decision success outcome ─────────
+  // Tech-Spec section 10 exit code 8. Only execute() (the `start` subcommand)
+  // and resume() can legitimately return `runStatus: 'paused'` — reconcile()/
+  // stop()/replan() results never carry a runStatus field at all, and
+  // status()/diagnose() never reach the success path (still NOT_IMPLEMENTED,
+  // covered above). See bin/cli.js's emitSuccess helper.
+  describe('exit code 8 (paused awaiting human decision)', () => {
+    test('start with runStatus "paused" exits 8, not 0', async () => {
+      taskExecutor.execute.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'paused', tasks: [],
+      });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(8);
+      expect(stdoutJSON()).toEqual({ protocolVersion: 1, runId: 'r1', runStatus: 'paused', tasks: [] });
+    });
+
+    test('start with runStatus "completed" still exits 0 (regression)', async () => {
+      taskExecutor.execute.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [],
+      });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('start with runStatus "blocked" still exits 0 (regression)', async () => {
+      taskExecutor.execute.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'blocked', tasks: [],
+      });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('resume with runStatus "paused" exits 8, not 0', async () => {
+      taskExecutor.resume.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'paused', tasks: [], repairsApplied: [],
+      });
+      await handleExecutorCommand(['resume', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(8);
+    });
+
+    test('resume with runStatus "blocked" still exits 0 (regression)', async () => {
+      taskExecutor.resume.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', runStatus: 'blocked', tasks: [], repairsApplied: [],
+      });
+      await handleExecutorCommand(['resume', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('reconcile result never carries runStatus, so it is unaffected and exits 0', async () => {
+      taskExecutor.reconcile.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', repairsApplied: [], classifications: [],
+      });
+      await handleExecutorCommand(['reconcile', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('stop result never carries runStatus, so it is unaffected and exits 0', async () => {
+      taskExecutor.stop.mockResolvedValue({
+        protocolVersion: 1, runId: 'r1', requestAccepted: true, mode: 'graceful',
+      });
+      await handleExecutorCommand(['stop', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(0);
+    });
+
+    test('replan result never carries runStatus, so it is unaffected and exits 0', async () => {
+      taskExecutor.replan.mockResolvedValue({
+        protocolVersion: 1, originalRunId: 'r1', successorPlanDigest: 'd', taskMapping: [],
+      });
+      await handleExecutorCommand(['replan', '--project', REPO_ROOT, '--run-id', 'r1', '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(0);
+    });
+  });
+
+  // ── honest NOT_IMPLEMENTED surfacing for status/diagnose ─────────────────
+  describe('status/diagnose NOT_IMPLEMENTED gap surfaces honestly (not hidden)', () => {
+    test('status rejecting with NOT_IMPLEMENTED exits 1 with the real code/message on stderr', async () => {
+      taskExecutor.status.mockRejectedValue(makeErr('NOT_IMPLEMENTED', 'status is NOT_IMPLEMENTED — see US-06-TASK-BE-01'));
+      await handleExecutorCommand(['status', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(1);
+      const errJson = stderrJSON();
+      expect(errJson.code).toBe('NOT_IMPLEMENTED');
+      expect(errJson.message).toMatch(/NOT_IMPLEMENTED/);
+    });
+
+    test('diagnose rejecting with NOT_IMPLEMENTED exits 1 with the real code/message on stderr', async () => {
+      taskExecutor.diagnose.mockRejectedValue(makeErr('NOT_IMPLEMENTED', 'diagnose is NOT_IMPLEMENTED — see US-06-TASK-BE-02'));
+      await handleExecutorCommand(['diagnose', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(1);
+      expect(stderrJSON().code).toBe('NOT_IMPLEMENTED');
+    });
+  });
+
+  // ── exit-code mapping: at least one representative code per bucket ───────
+  describe('exit-code mapping (representative sample per bucket)', () => {
+    const cases = [
+      { code: 'LEASE_HELD', expectedExit: 3 },
+      { code: 'NO_LOCK_HELD', expectedExit: 3 },
+      { code: 'COMPETING_COORDINATOR_LIVE', expectedExit: 3 },
+      { code: 'PLAN_NOT_FOUND', expectedExit: 4 },
+      { code: 'SUCCESSOR_NOT_APPROVED', expectedExit: 4 },
+      { code: 'STATE_NOT_FOUND', expectedExit: 4 },
+      { code: 'CLAUDE_SPAWN_FAILED', expectedExit: 5 },
+      { code: 'AGENT_NOT_VERIFIED', expectedExit: 5 },
+      { code: 'INTEGRATION_CONFLICT', expectedExit: 6 },
+      { code: 'PLATFORM_NOT_QUALIFIED', expectedExit: 7 },
+      { code: 'DISPATCH_VALIDATION_ERROR', expectedExit: 2 },
+      { code: 'EXECUTE_VALIDATION_ERROR', expectedExit: 2 }, // suffix-matched, not table-listed
+      { code: 'UNSUPPORTED_CONCURRENCY', expectedExit: 2 },
+      { code: 'NOT_IMPLEMENTED', expectedExit: 1 },
+      { code: 'STATE_CORRUPTED', expectedExit: 1 },
+      { code: 'GIT_SPAWN_FAILED', expectedExit: 1 },
+      { code: 'SOME_TOTALLY_UNKNOWN_CODE', expectedExit: 1 }, // unmapped default
+      { code: undefined, expectedExit: 1 }, // missing .code entirely
+    ];
+
+    test.each(cases)('code $code maps to exit $expectedExit', ({ code, expectedExit }) => {
+      expect(mapExecutorErrorToExitCode(code)).toBe(expectedExit);
+    });
+
+    test('a rejected start() call surfaces its mapped exit code end-to-end (PLATFORM_NOT_QUALIFIED -> 7)', async () => {
+      taskExecutor.execute.mockRejectedValue(makeErr('PLATFORM_NOT_QUALIFIED', 'not windows'));
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(7);
+      expect(stderrJSON().code).toBe('PLATFORM_NOT_QUALIFIED');
+    });
+
+    test('a rejected stop() call surfaces its mapped exit code end-to-end (LEASE_HELD -> 3)', async () => {
+      taskExecutor.stop.mockRejectedValue(makeErr('LEASE_HELD', 'lease held by another run'));
+      await handleExecutorCommand(['stop', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(3);
+      expect(stderrJSON().code).toBe('LEASE_HELD');
+    });
+
+    test('a rejected replan() call surfaces its mapped exit code end-to-end (INTEGRATION_CONFLICT -> 6)', async () => {
+      taskExecutor.replan.mockRejectedValue(makeErr('INTEGRATION_CONFLICT', 'cherry-pick conflict'));
+      await handleExecutorCommand(['replan', '--project', REPO_ROOT, '--run-id', 'r1', '--feature', 'x/feature.md']);
+      expect(process.exitCode).toBe(6);
+      expect(stderrJSON().code).toBe('INTEGRATION_CONFLICT');
+    });
+  });
+
+  // ── usage errors (missing required flags) exit 2, never call index.js ────
+  describe('usage errors never reach lib/task-executor', () => {
+    test('start without --feature exits 2 and never calls execute()', async () => {
+      await handleExecutorCommand(['start', '--project', REPO_ROOT]);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.execute).not.toHaveBeenCalled();
+    });
+
+    test('status without --run-id exits 2 and never calls status()', async () => {
+      await handleExecutorCommand(['status', '--project', REPO_ROOT]);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.status).not.toHaveBeenCalled();
+    });
+
+    test('replan without --feature exits 2 and never calls replan()', async () => {
+      await handleExecutorCommand(['replan', '--project', REPO_ROOT, '--run-id', 'r1']);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.replan).not.toHaveBeenCalled();
+    });
+
+    test('unknown subcommand exits 2', async () => {
+      await handleExecutorCommand(['bogus', '--project', REPO_ROOT]);
+      expect(process.exitCode).toBe(2);
+    });
+  });
+});

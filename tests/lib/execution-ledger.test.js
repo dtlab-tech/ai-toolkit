@@ -1122,3 +1122,235 @@ describe('execution-ledger — malformed/corrupt ledger', () => {
     expect(fs.readFileSync(ledgerFile, 'utf8')).toBe(corruptContent);
   });
 });
+
+// ---------------------------------------------------------------------------
+// finalizeActivity (INFRA-TASK-BE-02)
+// ---------------------------------------------------------------------------
+
+describe('execution-ledger — finalizeActivity', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-finalize-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('finalizes a running entry to done and records tokens', () => {
+    // Arrange
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+
+    // Act
+    const result = ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, {
+      status: 'done',
+      tokens: 777,
+    });
+
+    // Assert
+    expect(result.status).toBe('ok');
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('done');
+    expect(entries[0].phase_delta_tokens).toBe(777);
+    expect(entries[0].completed_at).toBeTruthy();
+  });
+
+  it('records known tokens even when status is failed', () => {
+    // Arrange
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+
+    // Act: a failed activity can still carry known token usage
+    ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, {
+      status: 'failed',
+      tokens: 42,
+    });
+
+    // Assert
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].status).toBe('failed');
+    expect(entries[0].phase_delta_tokens).toBe(42);
+  });
+
+  it('records null tokens plus an optional usage_reason when usage is unknown', () => {
+    // Arrange
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+
+    // Act
+    ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, {
+      status: 'skipped',
+      tokens: null,
+      reason: 'control-only',
+    });
+
+    // Assert
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].status).toBe('skipped');
+    expect(entries[0].phase_delta_tokens).toBeNull();
+    expect(entries[0].usage_reason).toBe('control-only');
+  });
+
+  it('never adds usage_reason to the open() metadata whitelist', () => {
+    // Assert: usage_reason is an additive ledger field, not an open() metadata key
+    expect(ledger.METADATA_WHITELIST.has('usage_reason')).toBe(false);
+  });
+
+  it('a null supplied token never clobbers an existing positive phase_delta_tokens', () => {
+    // Arrange: open, then seed a positive phase_delta_tokens directly
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+    const seeded = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    seeded[0].phase_delta_tokens = 999;
+    ledger._writeLedger(ledgerFile, seeded);
+
+    // Act: finalize without supplying tokens
+    ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, { status: 'done' });
+
+    // Assert: the previously stored positive value survives
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].phase_delta_tokens).toBe(999);
+    expect(entries[0].status).toBe('done');
+  });
+
+  it('throws ACTIVITY_NOT_FOUND for a never-opened operation_id, with no name-only agent fallback', () => {
+    // Arrange: open ONE entry for 'fallback-agent' at attempt 1 only
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'fallback-agent', 'phase1', 'haiku', 1);
+
+    // Act & Assert: finalizeActivity at attempt 2 computes a DIFFERENT operation_id;
+    // unlike close()/fail()/skip(), it must NOT fall back to the single agent-name
+    // match — it must throw ACTIVITY_NOT_FOUND instead.
+    let caughtErr;
+    try {
+      ledger.finalizeActivity(tmpDir, prefix, 'fallback-agent', 2, { status: 'done', tokens: 1 });
+    } catch (e) {
+      caughtErr = e;
+    }
+    expect(caughtErr).toBeDefined();
+    expect(caughtErr.code).toBe('ACTIVITY_NOT_FOUND');
+
+    // Assert: the attempt-1 entry was not touched by the failed attempt-2 call
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe('running');
+  });
+
+  it('throws INVALID_STATUS for a status outside done/failed/skipped', () => {
+    // Arrange
+    const prefix = 'FTR-999';
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+
+    // Act & Assert
+    expect(() => {
+      ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, { status: 'running' });
+    }).toThrow();
+  });
+
+  it('replaying an identical finalization returns the existing entry unchanged (no write)', () => {
+    // Arrange: finalize once
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+    const completedAt = '2026-01-01T00:00:00.000Z';
+    ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, {
+      status: 'done',
+      tokens: 500,
+      reason: 'ok',
+      completedAt: completedAt,
+    });
+    const afterFirst = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+
+    // Act: replay with byte-identical data
+    const replayResult = ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, {
+      status: 'done',
+      tokens: 500,
+      reason: 'ok',
+      completedAt: completedAt,
+    });
+
+    // Assert: no throw, entry unchanged
+    expect(replayResult.status).toBe('ok');
+    const afterSecond = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(afterSecond).toEqual(afterFirst);
+  });
+
+  it('conflicting terminal data fails without writing', () => {
+    // Arrange: finalize once as done/500 tokens
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+    ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, {
+      status: 'done',
+      tokens: 500,
+    });
+    const before = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+
+    // Act & Assert: replay with a conflicting status must throw and not write
+    let caughtErr;
+    try {
+      ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, {
+        status: 'failed',
+        tokens: 500,
+      });
+    } catch (e) {
+      caughtErr = e;
+    }
+    expect(caughtErr).toBeDefined();
+    expect(caughtErr.code).toBe('TERMINAL_CONFLICT');
+
+    // Assert: ledger entry is byte-identical to before the conflicting call
+    const after = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(after).toEqual(before);
+  });
+
+  it('preserves unknown legacy fields and open() metadata on finalize', () => {
+    // Arrange: open with whitelisted metadata, then manually add a legacy field
+    const prefix     = 'FTR-999';
+    const ledgerFile = path.join(tmpDir, prefix + '-token-ledger.json');
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1, { agentId: 'agent-123' });
+    const seeded = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    seeded[0].legacyFoo = 'bar';
+    ledger._writeLedger(ledgerFile, seeded);
+
+    // Act
+    ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, { status: 'done', tokens: 10 });
+
+    // Assert: metadata and legacy field survive verbatim
+    const entries = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+    expect(entries[0].agentId).toBe('agent-123');
+    expect(entries[0].legacyFoo).toBe('bar');
+    expect(entries[0].status).toBe('done');
+  });
+
+  it('does not create a second ledger file for the same prefix/dir', () => {
+    // Arrange
+    const prefix = 'FTR-999';
+    ledger.open(tmpDir, prefix, 'finalize-agent', 'phase1', 'haiku', 1);
+
+    // Act
+    ledger.finalizeActivity(tmpDir, prefix, 'finalize-agent', 1, { status: 'done', tokens: 1 });
+
+    // Assert: exactly one ledger JSON file exists in tmpDir (plus no stray lock file)
+    const files = fs.readdirSync(tmpDir).filter(function (f) { return f.endsWith('.json'); });
+    expect(files).toEqual([prefix + '-token-ledger.json']);
+  });
+
+  it('does not mutate existing open/close/fail/skip exports', () => {
+    // Assert: all pre-existing public functions are still present and unchanged in shape
+    expect(typeof ledger.open).toBe('function');
+    expect(typeof ledger.close).toBe('function');
+    expect(typeof ledger.fail).toBe('function');
+    expect(typeof ledger.skip).toBe('function');
+    expect(typeof ledger.computeOperationId).toBe('function');
+    expect(typeof ledger.finalizeActivity).toBe('function');
+  });
+});

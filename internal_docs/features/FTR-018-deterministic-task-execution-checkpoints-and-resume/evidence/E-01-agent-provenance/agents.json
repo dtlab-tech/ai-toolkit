@@ -1,0 +1,4 @@
+{
+  "proof-alpha": {"description":"selection proof A","prompt":"Respond with exactly the single token OQ01A-ALPHA-17899413113467 and nothing else. Do not add punctuation or explanation.","tools":[],"model":"haiku"},
+  "proof-beta":  {"description":"selection proof B","prompt":"Respond with exactly the single token OQ01A-BETA-17899413113467 and nothing else. Do not add punctuation or explanation.","tools":[],"model":"haiku"}
+}

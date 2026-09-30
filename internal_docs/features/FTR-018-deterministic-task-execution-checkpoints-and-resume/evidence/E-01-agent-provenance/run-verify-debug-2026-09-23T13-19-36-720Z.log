@@ -1,0 +1,54 @@
+2026-09-23T13:19:38.803Z [DEBUG] MDM settings load completed in 4ms
+2026-09-23T13:19:38.892Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: C:\Program Files\ClaudeCode\managed-settings.json
+2026-09-23T13:19:38.894Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: C:\Users\TOMADA~1\AppData\Local\Temp\e01-wt-IbOBM3\.claude\settings.json
+2026-09-23T13:19:38.896Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: C:\Users\TOMADA~1\AppData\Local\Temp\e01-wt-IbOBM3\.claude\settings.local.json
+2026-09-23T13:19:38.896Z [DEBUG] CA certs: Config fallback - globalEnv keys: , settingsEnv keys: CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
+2026-09-23T13:19:38.907Z [DEBUG] [init] configureGlobalMTLS starting
+2026-09-23T13:19:38.907Z [DEBUG] [init] configureGlobalMTLS complete
+2026-09-23T13:19:38.907Z [DEBUG] [init] configureGlobalAgents starting
+2026-09-23T13:19:38.908Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-09-23T13:19:38.908Z [DEBUG] CA certs: Loaded 121 bundled root certificates
+2026-09-23T13:19:38.952Z [DEBUG] CA certs: Dropped 32 expired certificate(s) from system store
+2026-09-23T13:19:38.952Z [DEBUG] CA certs: Loaded 164 system CA certificates
+2026-09-23T13:19:38.952Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-09-23T13:19:38.952Z [DEBUG] [init] configureGlobalAgents complete
+2026-09-23T13:19:38.952Z [DEBUG] Using bash path: "C:\Program Files\Git\bin\bash.exe"
+2026-09-23T13:19:38.956Z [DEBUG] Git remote URL: null
+2026-09-23T13:19:38.956Z [DEBUG] No git remote URL found
+2026-09-23T13:19:38.957Z [DEBUG] Error log sink initialized
+2026-09-23T13:19:38.968Z [DEBUG] [Claude in Chrome] Disabled: OAuth token has no scope accepted by /api/oauth/validate (needs user:profile, user:office, or user:ccr_inference; env-var and setup-token sessions default to user:inference only)
+2026-09-23T13:19:38.968Z [DEBUG] [Claude in Chrome] Disabled: OAuth token has no scope accepted by /api/oauth/validate (needs user:profile, user:office, or user:ccr_inference; env-var and setup-token sessions default to user:inference only)
+2026-09-23T13:19:39.340Z [DEBUG] Applying permission update: Adding 33 allow rule(s) to destination 'userSettings': ["Read(//c/ws/**)","Edit(//c/ws/Fincantieri.CommonLibraries.AIToolkit/**)","Write(//c/ws/Fincantieri.CommonLibraries.AIToolkit/**)","Bash(git add *)","Bash(git commit *)","Bash(node --check *)","Bash(node -e *)","Bash(npm test *)","Bash(npm run build *)","Bash(npm run lint *)","Bash(npm test *)","Bash(npx jest *)","Bash(dotnet build *)","Bash(dotnet test *)","Bash(dotnet restore *)","Bash(xargs -I{} node *)","Bash(echo *)","Bash(node --experimental-vm-modules *)","Bash(node --input-type=module)","Bash(node node_modules/jest/bin/jest.js --no-coverage)","Skill(pm-phase1)","Skill(pm-phase1:*)","Skill(pm-phase2)","Skill(pm-phase2:*)","Skill(pm-phase3)","Skill(pm-phase3:*)","Bash(git checkout *)","Bash(git pull *)","Bash(dotnet clean *)","Bash(git apply *)","Bash(git show *)","Bash(dotnet tool *)","Read(//c/Users/Tomada D/.dotnet/tools/**)"]
+2026-09-23T13:19:39.344Z [DEBUG] [ToolSearch:optimistic] mode=tst, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-09-23T13:19:39.348Z [WARN] [permissions] Permission allow rule (C:\Users\Tomada D\.claude\settings.json): Write(//c/ws/Fincantieri.CommonLibraries.AIToolkit/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(//c/ws/Fincantieri.CommonLibraries.AIToolkit/**) instead (Edit rules cover all file-editing tools).
+2026-09-23T13:19:39.349Z [DEBUG] [claudeai-mcp] Disabled on third-party provider
+2026-09-23T13:19:39.349Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-09-23T13:19:39.394Z [DEBUG] installed_plugins.json doesn't exist, returning empty V2 object
+2026-09-23T13:19:39.396Z [DEBUG] [STARTUP] Running setup()...
+2026-09-23T13:19:39.408Z [DEBUG] Loading skills from: managed=C:\Program Files\ClaudeCode\.claude\skills, user=C:\Users\Tomada D\.claude\skills, project=[]
+2026-09-23T13:19:39.411Z [DEBUG] Failed to stat directory C:\Program Files\ClaudeCode\.claude\agents: ENOENT: no such file or directory, stat 'C:\Program Files\ClaudeCode\.claude\agents'
+2026-09-23T13:19:39.438Z [DEBUG] Failed to stat directory C:\Program Files\ClaudeCode\.claude\commands: ENOENT: no such file or directory, stat 'C:\Program Files\ClaudeCode\.claude\commands'
+2026-09-23T13:19:39.440Z [DEBUG] [win32-proc-times] bun:ffi loaded, using procStartFt
+2026-09-23T13:19:39.474Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-09-23T13:19:39.475Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-09-23T13:19:39.475Z [DEBUG] Total plugin workflows loaded: 0
+2026-09-23T13:19:39.476Z [DEBUG] Total plugin commands loaded: 0
+2026-09-23T13:19:39.476Z [DEBUG] Total plugin agents loaded: 0
+2026-09-23T13:19:39.477Z [DEBUG] Loaded 12 unique skills (12 unconditional, 0 conditional, managed: 0, user: 5, project: 0, additional: 0, legacy commands: 7)
+2026-09-23T13:19:39.478Z [INFO] [uds-messaging] Listening: \\.\pipe\LOCAL\cc-msg-11b4f557e5e316d6939afcaa53a22151
+2026-09-23T13:19:39.478Z [INFO] [uds-messaging] Inject messages (auth line REQUIRED here; a pipe is not reachable via socat/AF_UNIX): node -e "const c=require('net').connect(process.argv[1],()=>{c.write(JSON.stringify({type:'auth',token:[REDACTED]})+'\n'+JSON.stringify({type:'user',message:{role:'user',content:'hello'}})+'\n');c.end()})" "\\.\pipe\LOCAL\cc-msg-11b4f557e5e316d6939afcaa53a22151"
+2026-09-23T13:19:39.478Z [INFO] [uds-messaging] Connect when the data is ready (run the command first, then connect and write its output as ONE line, as in the node recipe above): a connection that sends no complete line within 30000 ms is closed
+2026-09-23T13:19:39.480Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: C:\Program Files\ClaudeCode\managed-settings.json
+2026-09-23T13:19:39.490Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: C:\Users\TOMADA~1\AppData\Local\Temp\e01-wt-IbOBM3\.claude\settings.json
+2026-09-23T13:19:39.491Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: C:\Users\TOMADA~1\AppData\Local\Temp\e01-wt-IbOBM3\.claude\settings.local.json
+2026-09-23T13:19:39.492Z [DEBUG] Error log sink initialized
+2026-09-23T13:19:39.495Z [DEBUG] hooks modules not loaded: rollout flag (tengu_plugin_hooks_modules) is off, from the default (GrowthBook is off for this session: a third-party provider, or telemetry opted out)
+2026-09-23T13:19:39.496Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-09-23T13:19:39.497Z [DEBUG] [STARTUP] setup() completed in 101ms
+2026-09-23T13:19:39.498Z [DEBUG] Cleared mTLS configuration cache
+2026-09-23T13:19:39.498Z [DEBUG] Cleared proxy agent cache
+2026-09-23T13:19:39.498Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-09-23T13:19:39.501Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-09-23T13:19:39.613Z [DEBUG] Total plugin skills loaded: 0 (0 duplicate/user-owned entries skipped)
+2026-09-23T13:19:39.613Z [DEBUG] getSkills returning: 12 skill dir commands, 0 plugin skills, 41 bundled skills, 0 builtin plugin skills
+2026-09-23T13:19:39.769Z [DEBUG] Warning: agent "definitely-not-real-000" not found. Available agents: claude, claude-code-guide, Explore, gaia-concurrency-safety-assessment, gaia-define-feature, gaia-dependency-injection-refactoring, gaia-dependency-supply-chain-security, gaia-developer-backend, gaia-developer-frontend, gaia-developer-testing, gaia-domain-model-refactoring, gaia-generate-requirements, gaia-generate-tech-spec, gaia-generate-work-breakdown, gaia-generic-software-assessment, gaia-god-class-decomposition, gaia-init-agents-md, gaia-intervention-documentation-standard, gaia-layered-architecture-assessment, gaia-review-solution, gaia-security-hardening, gaia-validate-feature-docs, gaia-validate-work-breakdown-semantic, general-purpose, Plan, statusline-setup. Using default behavior.

@@ -1,0 +1,35 @@
+{
+  "taskId": "E2E-TASK-01",
+  "dependencies": [],
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "id": "E2E-TASK-01#1",
+      "baseSha": null,
+      "worktreeRef": null,
+      "processIdentity": "ai-toolkit-task:1a4377dc-8198-4d75-b4a7-b7818d5bf9b5:E2E-TASK-01:1",
+      "verificationRefs": [],
+      "reviewRefs": [],
+      "intentIds": [],
+      "originalSha": null,
+      "integratedSha": null,
+      "terminalReason": null,
+      "stage": "dispatching"
+    },
+    {
+      "number": 2,
+      "id": "E2E-TASK-01#2",
+      "baseSha": null,
+      "worktreeRef": null,
+      "processIdentity": "ai-toolkit-task:1a4377dc-8198-4d75-b4a7-b7818d5bf9b5:E2E-TASK-01:2",
+      "verificationRefs": [],
+      "reviewRefs": [],
+      "intentIds": [],
+      "originalSha": null,
+      "integratedSha": null,
+      "terminalReason": null,
+      "stage": "dispatching"
+    }
+  ]
+}

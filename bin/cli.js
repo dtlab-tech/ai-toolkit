@@ -2111,6 +2111,8 @@ async function main() {
     await handleAgentsCommand(argv.slice(1));
   } else if (argv[0] === 'ledger') {
     handleLedgerCommand(argv.slice(1));
+  } else if (argv[0] === 'executor') {
+    await handleExecutorCommand(argv.slice(1));
   } else if (fs.existsSync(argv[0]) && fs.statSync(argv[0]).isDirectory()) {
     await installLocal(argv[0], force, dryRun);
   } else {
@@ -2554,6 +2556,365 @@ async function handleAgentsCommand(argv) {
   }
 }
 
+// ── executor CLI git-context helpers ─────────────────────────────────────────
+// US-09-TASK-INFRA-01 (FTR-018): lib/task-executor/index.js's execute()/stop()
+// take only `project` and derive commonDir/executionRoot themselves via their
+// own internal _resolveCommonGitDir/_currentBranchRef helpers — but
+// reconcile()/resume()/replan() take `executionRoot`/`projectDir`/`taskRef` as
+// SEPARATE, already-derived arguments instead. Neither internal helper is
+// exported from that module (module.exports there is deliberately narrow —
+// see its own export list), and this task's brief is explicit: do not modify
+// lib/task-executor/index.js. These two helpers duplicate that exact same
+// git-command technique (same argv, same error codes: GIT_SPAWN_FAILED,
+// GIT_REF_RESOLUTION_FAILED, EXECUTE_VALIDATION_ERROR for a detached HEAD) so
+// the CLI can compute the values reconcile/resume/replan need from the single
+// --project flag the Tech-Spec's CLI contract actually exposes for them.
+function _executorResolveCommonGitDir(projectDir) {
+  const { spawnSync } = require('child_process');
+  const res = spawnSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: projectDir, shell: false, encoding: 'utf8', windowsHide: true,
+  });
+  if (res.error || res.status !== 0) {
+    const err = new Error(
+      'executor: failed to resolve the common Git directory for "' + projectDir + '": ' +
+        (res.error ? res.error.message : (res.stderr || '').trim())
+    );
+    err.code = 'GIT_SPAWN_FAILED';
+    throw err;
+  }
+  return path.resolve(projectDir, res.stdout.trim());
+}
+
+function _executorExecutionRoot(projectDir) {
+  return path.join(_executorResolveCommonGitDir(projectDir), 'ai-toolkit', 'execution');
+}
+
+function _executorCurrentBranchRef(projectDir) {
+  const { spawnSync } = require('child_process');
+  const res = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: projectDir, shell: false, encoding: 'utf8', windowsHide: true,
+  });
+  if (res.error || res.status !== 0) {
+    const err = new Error(
+      'executor: failed to resolve the current branch for "' + projectDir + '": ' +
+        (res.error ? res.error.message : (res.stderr || '').trim())
+    );
+    err.code = 'GIT_REF_RESOLUTION_FAILED';
+    throw err;
+  }
+  const name = res.stdout.trim();
+  if (name === 'HEAD') {
+    const err = new Error(
+      'executor: "' + projectDir + '" has a detached HEAD — a task ref cannot be derived automatically'
+    );
+    err.code = 'EXECUTE_VALIDATION_ERROR';
+    throw err;
+  }
+  return name;
+}
+
+// ── executor exit-code mapping ───────────────────────────────────────────────
+// FTR-018-Tech-Spec.md section 10 defines a FIXED 9-value exit-code enum for
+// the executor CLI (0 success; 1 unexpected I/O; 2 invalid config/input;
+// 3 ownership/live worker conflict; 4 evidence/plan/approval mismatch;
+// 5 worker/verification/review failure; 6 integration conflict; 7 runtime not
+// qualified; 8 paused awaiting human decision) — but the lib/task-executor/*.js
+// + lib/execution-ledger.js + lib/agent-registry.js modules underneath it
+// collectively throw several dozen distinct `err.code` values. This table is
+// the single explicit, documented judgment call synthesizing all of them into
+// the fixed enum; it does not re-derive or duplicate the underlying modules'
+// own validation, it only classifies their already-thrown codes for exit
+// status purposes. Grouping rules, in the order applied:
+//
+//   3 (ownership/live worker conflict) — every lease/ownership-lock code, and
+//     every code meaning "a competing coordinator or live worker exists":
+//     LEASE_HELD, LEASE_NOT_OWNER, LEASE_STILL_LIVE, LEASE_LIVENESS_UNKNOWN,
+//     LEASE_NOT_FOUND, GUARD_HELD, NO_LOCK_HELD, COMPETING_COORDINATOR_LIVE,
+//     COMPETING_COORDINATOR_LIVENESS_UNKNOWN, LIVE_WORKER_BLOCKS_REPLAN.
+//
+//   4 (evidence/plan/approval mismatch) — everything meaning "the plan,
+//     approval, or recorded evidence does not match what was expected",
+//     including "expected evidence/record could not be found" (same bucket as
+//     PLAN_NOT_FOUND, per this task's own brief) and immutable-record replay
+//     conflicts (a conflicting second decision is itself an evidence
+//     mismatch, not an I/O failure): SUCCESSOR_NOT_APPROVED,
+//     SUCCESSOR_PLAN_NOT_FOUND, PLAN_NOT_FOUND, PLAN_PARSE_ERROR,
+//     REPLAN_UNKNOWN_TASK_MAPPING, ATTEMPT_NUMBER_MISMATCH,
+//     STATE_READBACK_MISMATCH, STATE_NOT_FOUND, STATE_TASK_NOT_FOUND,
+//     STATE_ATTEMPT_NOT_FOUND, STATE_TASK_EXISTS, TREE_MISMATCH,
+//     PARENT_MISMATCH, COMMIT_REINSPECTION_MISMATCH,
+//     INTEGRATION_PARENT_MISMATCH, INTEGRATION_REINSPECTION_MISMATCH,
+//     INTEGRATION_WORKTREE_STATE_MISMATCH, INTEGRATION_WORKTREE_NOT_CLEAN,
+//     INTEGRATION_SOURCE_NOT_FOUND, INTEGRATION_SOURCE_NOT_ON_BRANCH,
+//     UNEXPECTED_INDEX_CHANGE, STAGING_MISMATCH, DEFINITION_HASH_MISMATCH,
+//     SHA_REGISTRATION_CONFLICT, SHA_REGISTRATION_STAGE_ERROR,
+//     INTEGRATION_SHA_CONFLICT, INTEGRATION_SHA_STAGE_ERROR,
+//     CHECKPOINT_INTENT_STAGE_ERROR, RECEIPT_CONFLICT, RECEIPT_NOT_FOUND,
+//     INTENT_CONFLICT, INTENT_NOT_FOUND, METADATA_CONFLICT,
+//     ACTIVITY_NOT_FOUND, TERMINAL_CONFLICT.
+//
+//   5 (worker/verification/review failure) — the dispatched agent/worker
+//     process itself failed, could not be verified, or could not be spawned:
+//     CLAUDE_SPAWN_FAILED, AGENT_NOT_VERIFIED, RESOLUTION_FAILED.
+//
+//   6 (integration conflict) — INTEGRATION_CONFLICT.
+//
+//   7 (runtime not qualified) — PLATFORM_NOT_QUALIFIED.
+//
+//   2 (invalid config/input) — every *_VALIDATION_ERROR code (there are many;
+//     matched by suffix in mapExecutorErrorToExitCode below rather than
+//     enumerated one-by-one), plus UNSUPPORTED_CONCURRENCY (Tech-Spec:
+//     "reject, never downgrade"), CLAUDE_EXECUTABLE_NOT_FOUND ("unsupported
+//     executable ... fail before mutation"), UNKNOWN_AGENT_TYPE,
+//     METADATA_RESERVED_FIELD, METADATA_UNKNOWN_KEY, INVALID_STATUS.
+//
+//   1 (unexpected I/O) — the DEFAULT for everything else, including every
+//     *_CORRUPTED/CORRUPT_* code, every GIT_*_FAILED/*_FAILED git-command-
+//     spawn code, STATE_UNRECOVERABLE, and — explicitly, per this task's own
+//     brief — NOT_IMPLEMENTED. `status`/`diagnose` are still NOT_IMPLEMENTED
+//     stubs in lib/task-executor/index.js (attributed to US-06-TASK-BE-01/02,
+//     neither of which has actually built their real body yet); this CLI
+//     wires them through exactly like the other five commands and lets that
+//     error surface through this same mapping table honestly — it is not
+//     hidden or special-cased, it simply falls into the default bucket.
+//
+// 8 (paused awaiting human decision) has no throw site and is deliberately
+// absent from this table: execute()'s/resume()'s 'paused' run status is a
+// SUCCESS-path result field (returned, not thrown), so no error code maps to
+// exit 8 here. It is instead selected on the success path, in
+// handleExecutorCommand's own emitSuccess helper below, by inspecting
+// result.runStatus.
+const EXECUTOR_EXIT_CODE_BY_ERROR_CODE = {
+  // 3 — ownership / live worker conflict
+  LEASE_HELD: 3, LEASE_NOT_OWNER: 3, LEASE_STILL_LIVE: 3, LEASE_LIVENESS_UNKNOWN: 3,
+  LEASE_NOT_FOUND: 3, GUARD_HELD: 3, NO_LOCK_HELD: 3, COMPETING_COORDINATOR_LIVE: 3,
+  COMPETING_COORDINATOR_LIVENESS_UNKNOWN: 3, LIVE_WORKER_BLOCKS_REPLAN: 3,
+
+  // 4 — evidence / plan / approval mismatch
+  SUCCESSOR_NOT_APPROVED: 4, SUCCESSOR_PLAN_NOT_FOUND: 4, PLAN_NOT_FOUND: 4,
+  PLAN_PARSE_ERROR: 4, REPLAN_UNKNOWN_TASK_MAPPING: 4, ATTEMPT_NUMBER_MISMATCH: 4,
+  STATE_READBACK_MISMATCH: 4, STATE_NOT_FOUND: 4, STATE_TASK_NOT_FOUND: 4,
+  STATE_ATTEMPT_NOT_FOUND: 4, STATE_TASK_EXISTS: 4, TREE_MISMATCH: 4,
+  PARENT_MISMATCH: 4, COMMIT_REINSPECTION_MISMATCH: 4, INTEGRATION_PARENT_MISMATCH: 4,
+  INTEGRATION_REINSPECTION_MISMATCH: 4, INTEGRATION_WORKTREE_STATE_MISMATCH: 4,
+  INTEGRATION_WORKTREE_NOT_CLEAN: 4, INTEGRATION_SOURCE_NOT_FOUND: 4,
+  INTEGRATION_SOURCE_NOT_ON_BRANCH: 4, UNEXPECTED_INDEX_CHANGE: 4, STAGING_MISMATCH: 4,
+  DEFINITION_HASH_MISMATCH: 4, SHA_REGISTRATION_CONFLICT: 4, SHA_REGISTRATION_STAGE_ERROR: 4,
+  INTEGRATION_SHA_CONFLICT: 4, INTEGRATION_SHA_STAGE_ERROR: 4, CHECKPOINT_INTENT_STAGE_ERROR: 4,
+  RECEIPT_CONFLICT: 4, RECEIPT_NOT_FOUND: 4, INTENT_CONFLICT: 4, INTENT_NOT_FOUND: 4,
+  METADATA_CONFLICT: 4, ACTIVITY_NOT_FOUND: 4, TERMINAL_CONFLICT: 4,
+
+  // 5 — worker / verification / review failure
+  CLAUDE_SPAWN_FAILED: 5, AGENT_NOT_VERIFIED: 5, RESOLUTION_FAILED: 5,
+
+  // 6 — integration conflict
+  INTEGRATION_CONFLICT: 6,
+
+  // 7 — runtime not qualified
+  PLATFORM_NOT_QUALIFIED: 7,
+
+  // 2 — invalid config/input (non-*_VALIDATION_ERROR entries; every
+  // *_VALIDATION_ERROR code is matched by suffix in mapExecutorErrorToExitCode
+  // below rather than listed here)
+  UNSUPPORTED_CONCURRENCY: 2, CLAUDE_EXECUTABLE_NOT_FOUND: 2, UNKNOWN_AGENT_TYPE: 2,
+  METADATA_RESERVED_FIELD: 2, METADATA_UNKNOWN_KEY: 2, INVALID_STATUS: 2,
+
+  // 1 — unexpected I/O (explicit entries kept for documentation clarity even
+  // though 1 is also the default fallback below)
+  STATE_CORRUPTED: 1, RECEIPT_CORRUPTED: 1, INTENT_CORRUPTED: 1, LEASE_CORRUPTED: 1,
+  CORRUPT_LEDGER: 1, STATE_UNRECOVERABLE: 1, NOT_IMPLEMENTED: 1,
+  GIT_SPAWN_FAILED: 1, GIT_STATUS_FAILED: 1, GIT_ADD_FAILED: 1, GIT_WRITE_TREE_FAILED: 1,
+  GIT_DIFF_FAILED: 1, GIT_COMMIT_TREE_FAILED: 1, REF_UPDATE_FAILED: 1, GIT_CAT_FILE_FAILED: 1,
+  GIT_MERGE_BASE_FAILED: 1, GIT_REV_PARSE_FAILED: 1, GIT_CHERRY_PICK_FAILED: 1,
+  GIT_REF_RESOLUTION_FAILED: 1, INTEGRATION_CLEANUP_FAILED: 1,
+};
+
+function mapExecutorErrorToExitCode(code) {
+  if (typeof code === 'string' && Object.prototype.hasOwnProperty.call(EXECUTOR_EXIT_CODE_BY_ERROR_CODE, code)) {
+    return EXECUTOR_EXIT_CODE_BY_ERROR_CODE[code];
+  }
+  // Suffix-based catch-all for the many *_VALIDATION_ERROR codes
+  // (DISPATCH_VALIDATION_ERROR, LEASE_VALIDATION_ERROR,
+  // CLAUDE_PROCESS_VALIDATION_ERROR, STATE_VALIDATION_ERROR,
+  // STAGING_VALIDATION_ERROR, DETECT_CHANGED_PATHS_VALIDATION_ERROR,
+  // COMMIT_VALIDATION_ERROR, INTEGRATION_VALIDATION_ERROR,
+  // WORKTREE_VALIDATION_ERROR, SLOT_POOL_VALIDATION_ERROR,
+  // SHA_REGISTRATION_VALIDATION_ERROR, INTEGRATION_SHA_VALIDATION_ERROR,
+  // CHECKPOINT_INTENT_VALIDATION_ERROR, EXECUTE_VALIDATION_ERROR,
+  // STOP_VALIDATION_ERROR, and any future addition following the same naming
+  // convention) — every one of them means "malformed caller input", i.e.
+  // exit 2, without needing its own table row.
+  if (typeof code === 'string' && code.endsWith('_VALIDATION_ERROR')) {
+    return 2;
+  }
+  // Unknown/unmapped code, including a missing .code entirely: safe default.
+  return 1;
+}
+
+// ── executor dispatcher ───────────────────────────────────────────────────────
+// US-09-TASK-INFRA-01 (FTR-018): Routes `ai-toolkit executor <subcommand>
+// [flags]` to lib/task-executor/index.js's execute/status/diagnose/stop/
+// reconcile/resume/replan (the seven commands of the CLI contract in
+// FTR-018-Tech-Spec.md section 10). All executor domain logic lives in
+// lib/task-executor/*.js; this function only parses CLI flags, derives the
+// couple of git-context values reconcile()/resume()/replan() require but do
+// not derive themselves (see _executorExecutionRoot/_executorCurrentBranchRef
+// above), and maps thrown error codes to the Tech-Spec's fixed exit-code enum
+// (see mapExecutorErrorToExitCode above) — it is NOT a second copy of any
+// executor logic.
+//
+// Flag-rejection mechanism for "no --force*, lock/state path overrides,
+// implicit --abandon or runtime concurrency adjustment" (Tech-Spec section
+// 10): this parser simply never recognizes such flags for any subcommand
+// below. An unrecognized flag is silently ignored rather than explicitly
+// rejected — there is nothing to reject because nothing here ever reads an
+// arbitrary flag by name and forwards it to a filesystem path or lock
+// primitive; only the whitelisted flags per subcommand are ever read via
+// getFlag()/hasFlag().
+async function handleExecutorCommand(argv) {
+  const subcommand = argv[0];
+  const remaining = argv.slice(1);
+
+  function getFlag(name) {
+    const idx = remaining.indexOf(name);
+    return idx !== -1 && remaining[idx + 1] !== undefined ? remaining[idx + 1] : undefined;
+  }
+
+  function emitSuccess(result) {
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    // Tech-Spec section 10 exit code 8 ("paused awaiting human decision") is a
+    // SUCCESS-path outcome, not an error — only execute()'s and resume()'s
+    // result objects can legitimately carry `runStatus: 'paused'` (see the
+    // exit-code mapping comment above EXECUTOR_EXIT_CODE_BY_ERROR_CODE for why
+    // no *_ERROR code maps to 8). reconcile/stop/replan results never carry a
+    // `runStatus` field at all, and status/diagnose never reach this success
+    // path (still NOT_IMPLEMENTED) — so this check is a no-op for every other
+    // subcommand's result shape and never needs to be scoped by subcommand.
+    process.exitCode = result && result.runStatus === 'paused' ? 8 : 0;
+  }
+
+  function emitError(err) {
+    const code = err && err.code ? err.code : undefined;
+    const exitCode = mapExecutorErrorToExitCode(code);
+    process.stderr.write(JSON.stringify({
+      status: 'error',
+      code: code || 'UNKNOWN',
+      message: err && err.message ? err.message : String(err),
+    }, null, 2) + '\n');
+    process.exitCode = exitCode;
+  }
+
+  function usageError(message) {
+    process.stderr.write('Error: ' + message + '\n');
+    process.exitCode = 2;
+  }
+
+  const projectDir = path.resolve(getFlag('--project') || process.cwd());
+
+  try {
+    const taskExecutor = require('../lib/task-executor');
+
+    if (subcommand === 'start') {
+      const feature = getFlag('--feature');
+      if (!feature) { usageError('executor start requires --feature'); return; }
+      const maxConcurrencyRaw = getFlag('--max-concurrency');
+      const taskTimeoutMsRaw  = getFlag('--task-timeout-ms');
+      const agentBudgetUsdRaw = getFlag('--agent-budget-usd');
+      const result = await taskExecutor.execute({
+        project: projectDir,
+        feature: feature,
+        maxConcurrency: maxConcurrencyRaw === undefined ? undefined : Number(maxConcurrencyRaw),
+        claudePath: getFlag('--claude-path'),
+        taskTimeoutMs: taskTimeoutMsRaw === undefined ? undefined : Number(taskTimeoutMsRaw),
+        agentBudgetUsd: agentBudgetUsdRaw === undefined ? undefined : Number(agentBudgetUsdRaw),
+      });
+      emitSuccess(result);
+
+    } else if (subcommand === 'status') {
+      const runId = getFlag('--run-id');
+      if (!runId) { usageError('executor status requires --run-id'); return; }
+      const result = await taskExecutor.status({ project: projectDir, runId: runId });
+      emitSuccess(result);
+
+    } else if (subcommand === 'diagnose') {
+      const runId = getFlag('--run-id');
+      if (!runId) { usageError('executor diagnose requires --run-id'); return; }
+      const result = await taskExecutor.diagnose({ project: projectDir, runId: runId });
+      emitSuccess(result);
+
+    } else if (subcommand === 'stop') {
+      const runId = getFlag('--run-id');
+      if (!runId) { usageError('executor stop requires --run-id'); return; }
+      const result = await taskExecutor.stop({
+        project: projectDir,
+        runId: runId,
+        mode: getFlag('--mode') || 'graceful',
+      });
+      emitSuccess(result);
+
+    } else if (subcommand === 'reconcile' || subcommand === 'resume') {
+      const runId = getFlag('--run-id');
+      if (!runId) { usageError('executor ' + subcommand + ' requires --run-id'); return; }
+      const executionRoot = _executorExecutionRoot(projectDir);
+      const taskRef        = _executorCurrentBranchRef(projectDir);
+      const fn = subcommand === 'reconcile' ? taskExecutor.reconcile : taskExecutor.resume;
+      const result = await fn({
+        executionRoot: executionRoot,
+        runId: runId,
+        projectDir: projectDir,
+        taskRef: taskRef,
+      });
+      emitSuccess(result);
+
+    } else if (subcommand === 'replan') {
+      const runId    = getFlag('--run-id');
+      const feature  = getFlag('--feature');
+      if (!runId)   { usageError('executor replan requires --run-id'); return; }
+      if (!feature) { usageError('executor replan requires --feature (the approved successor plan)'); return; }
+
+      // --task-mapping-json is NOT one of the Tech-Spec table's listed
+      // arguments for replan (only --run-id/--feature are) — but
+      // lib/task-executor/index.js's replan() requires args.taskMapping to be
+      // an array (DISPATCH_VALIDATION_ERROR otherwise) and never invents one
+      // itself (see its own doc comment: "taskMapping is an explicit,
+      // caller-supplied old->new task ID mapping"). Following this session's
+      // established pattern of flagging gaps rather than papering over them:
+      // this flag is documented here as a necessary CLI-layer extension
+      // beyond the literal table, using the same `--*-json` structured-input
+      // convention the ledger subcommand already established
+      // (--metadata-json). Omitting it defaults to an empty mapping (a valid
+      // array — "no task carries forward" — never rejected by replan()).
+      let taskMapping = [];
+      const taskMappingJson = getFlag('--task-mapping-json');
+      if (taskMappingJson !== undefined) {
+        try {
+          taskMapping = JSON.parse(taskMappingJson);
+        } catch (parseErr) {
+          usageError('--task-mapping-json is not valid JSON: ' + parseErr.message);
+          return;
+        }
+      }
+
+      const executionRoot = _executorExecutionRoot(projectDir);
+      const taskRef        = _executorCurrentBranchRef(projectDir);
+      const result = await taskExecutor.replan({
+        executionRoot: executionRoot,
+        runId: runId,
+        projectDir: projectDir,
+        taskRef: taskRef,
+        feature: feature,
+        taskMapping: taskMapping,
+      });
+      emitSuccess(result);
+
+    } else {
+      usageError('unknown executor subcommand: ' + (subcommand || '(none)'));
+    }
+  } catch (err) {
+    emitError(err);
+  }
+}
+
 // ── entry point guard ─────────────────────────────────────────────────────────
 // Run the CLI only when invoked directly (node bin/cli.js).
 // When required as a module (e.g., by Jest), skip main() and export pure
@@ -2600,5 +2961,11 @@ if (require.main === module) {
     resolveFeaturesRoot,
     computeFileSha256,
     handleAgentsCommand,
+    handleExecutorCommand,
+    mapExecutorErrorToExitCode,
+    EXECUTOR_EXIT_CODE_BY_ERROR_CODE,
+    _executorResolveCommonGitDir,
+    _executorExecutionRoot,
+    _executorCurrentBranchRef,
   };
 }

@@ -1,0 +1,47 @@
+{
+  "checks": [
+    {
+      "name": "source-hash == EXPECT_HASH",
+      "ok": true,
+      "detail": "C:\\Users\\Tomada D\\.claude\\agents\\gaia-developer-backend.md sha256=7457e83ac6defc0a78018bd61561f79fb80968190a51b5821115b7af5f671f11"
+    },
+    {
+      "name": "probe cost == 0 (fail-fast, no model call)",
+      "ok": true,
+      "detail": "exit=1, cost=0"
+    },
+    {
+      "name": "managed agents dir ENOENT (no policy override)",
+      "ok": true,
+      "detail": "C:\\Program Files\\ClaudeCode\\.claude\\agents not present"
+    },
+    {
+      "name": "plugin agents loaded == 0",
+      "ok": true,
+      "detail": "Total plugin agents loaded: 0"
+    },
+    {
+      "name": "gaia-developer-backend reachable",
+      "ok": true,
+      "detail": "available count=26"
+    },
+    {
+      "name": "no competing project-scope copy in cwd",
+      "ok": true,
+      "detail": "C:\\Users\\TOMADA~1\\AppData\\Local\\Temp\\e01-wt-IbOBM3\\.claude\\agents\\gaia-developer-backend.md"
+    },
+    {
+      "name": "debug names userSettings as load source (or single-source by elimination)",
+      "ok": true,
+      "detail": "by elimination: managed absent, plugins 0, no project copy"
+    },
+    {
+      "name": "no foreign-source override/shadow of the agent",
+      "ok": true,
+      "detail": "none"
+    }
+  ],
+  "pass": true,
+  "srcHash": "7457e83ac6defc0a78018bd61561f79fb80968190a51b5821115b7af5f671f11",
+  "srcInode": "2814749767511858"
+}

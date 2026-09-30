@@ -1,0 +1,1415 @@
+{
+  "schemaVersion": 2,
+  "feature": "FTR-018",
+  "phases": [
+    {
+      "id": "INFRA",
+      "type": "infrastructure",
+      "title": "Shared infrastructure: state protocol, ledger extension, executor skeleton",
+      "commit": {
+        "type": "feat",
+        "subject": "setup executor infrastructure: state protocol, ledger extension, module skeleton"
+      },
+      "tasks": [
+        {
+          "id": "INFRA-TASK-BE-01",
+          "title": "Define and implement executor state protocol schema",
+          "outcome": "lib/task-executor/store.js exports versioned State class with schema validation, atomic write, readback, and recovery methods for runs, tasks, attempts, receipts, and intents",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=store.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 18,
+            "tokens": 42000
+          },
+          "outputCount": 1,
+          "groupingRationale": "State schema is foundational for all executor operations; its versioning, atomicity model, and recovery protocol must be defined as a single cohesive unit before dependent modules are implemented",
+          "commit": {
+            "type": "feat",
+            "subject": "add executor state protocol (store.js) with versioned schema and atomic writes"
+          }
+        },
+        {
+          "id": "INFRA-TASK-BE-02",
+          "title": "Implement backward-compatible ledger extension",
+          "outcome": "lib/execution-ledger.js exports finalizeActivity function with status/tokens/reason/completedAt; preserves all existing open/close/fail/skip behavior; adds no duplicate counter",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=execution-ledger.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 14,
+            "tokens": 32000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Ledger extension maintains backward-compatible interface while adding executor-specific fields; single interface change requires unified testing and verification",
+          "commit": {
+            "type": "feat",
+            "subject": "add ledger finalizeActivity for executor task completion"
+          }
+        },
+        {
+          "id": "INFRA-TASK-BE-03",
+          "title": "Create task-executor module skeleton with public interface",
+          "outcome": "lib/task-executor/index.js exports execute, status, diagnose, stop, reconcile, resume, replan functions with documented signatures; module loads store, ownership, plan, claude-process, git, ledger modules",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-01",
+            "INFRA-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [],
+          "verification": {
+            "commands": [
+              "node -e \"const e = require('./lib/task-executor'); console.log(typeof e.execute, typeof e.resume)\""
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Module skeleton establishes the single public API boundary; defining all seven command signatures and module dependencies is an atomic structural decision required before any US implementation begins",
+          "commit": {
+            "type": "feat",
+            "subject": "add task-executor module skeleton (index.js)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "title": "As a coordinator, I want to parse and validate the approved Work Breakdown, so that I can schedule tasks deterministically",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-01 approved-plan parsing and validation"
+      },
+      "tasks": [
+        {
+          "id": "US-01-TASK-BE-01",
+          "title": "Implement MD task detail parser",
+          "outcome": "lib/task-executor/plan.js exports parseMarkdown function that extracts all 14 task fields from rendered Work Breakdown Markdown with lossless command fence preservation",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [],
+          "acceptanceCriteria": [
+            "AC-02"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=plan.*.markdown"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 31000
+          },
+          "outputCount": 1,
+          "groupingRationale": "MD parsing is a single-concern parser module; it extracts lossless task details from a specific document format without validation logic, making it an atomic independently-testable unit",
+          "commit": {
+            "type": "feat",
+            "subject": "add Work Breakdown Markdown parser (plan.js)"
+          }
+        },
+        {
+          "id": "US-01-TASK-BE-02",
+          "title": "Implement CSV parser and phase-task mapping",
+          "outcome": "lib/task-executor/plan.js exports parseCSV and mapPhases functions; validates eight-column pipe-separated format, aggregates phase dependencies, reconciles task IDs with MD",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-01-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-02"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=plan.*.csv"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 11,
+            "tokens": 26000
+          },
+          "outputCount": 1,
+          "groupingRationale": "CSV parsing and phase-task mapping are closely coupled (CSV is the phase-level projection, MD is task detail); together they form a single cross-reference verification step that cannot be meaningfully split",
+          "commit": {
+            "type": "feat",
+            "subject": "add Work Breakdown CSV parser and phase mapping"
+          }
+        },
+        {
+          "id": "US-01-TASK-BE-03",
+          "title": "Implement DAG validation and cycle detection",
+          "outcome": "lib/task-executor/plan.js exports validateDAG function; rejects non-DAG graphs, duplicate task IDs, missing fields, and MD/CSV parity mismatches before any state mutation",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-01-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-02"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=plan.*.validation"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "DAG validation and cycle detection are a single pre-dispatch check; both use the full graph state and must run atomically before execution can proceed",
+          "commit": {
+            "type": "feat",
+            "subject": "add DAG validation and cycle detection"
+          }
+        },
+        {
+          "id": "US-01-TASK-BE-04",
+          "title": "Implement content digest and immutable plan snapshot",
+          "outcome": "lib/task-executor/plan.js exports createPlanSnapshot; computes SHA256 over MD/CSV bytes and format version; binds digest to normalized task objects; snapshot is read-only for run lifetime",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-01-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-02"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=plan.*.digest"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 11,
+            "tokens": 25000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Content digest and plan snapshot are atomic: the digest must bind to the normalized snapshot in a single operation to prevent detect-then-act races where plan changes between validation and binding",
+          "commit": {
+            "type": "feat",
+            "subject": "add plan snapshot with content digest"
+          }
+        },
+        {
+          "id": "US-01-TASK-BE-05",
+          "title": "Implement stable topological scheduler (Kahn's algorithm)",
+          "outcome": "lib/task-executor/plan.js exports computeReadyQueue; returns stable, deterministic task ordering by phase then source index then ID; two identical inputs produce identical schedules",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-01-TASK-BE-04"
+          ],
+          "acceptanceCriteria": [
+            "AC-02"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=plan.*.scheduler"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 14,
+            "tokens": 32000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Stable topological scheduler is a single deterministic algorithm with specific tie-breaking rules (phase order, source index, ID); changing any rule requires changing the entire scheduler, making it an atomic implementation unit",
+          "commit": {
+            "type": "feat",
+            "subject": "add stable topological scheduler for task ordering"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "title": "As a coordinator, I want to acquire an exclusive lock and prevent duplicate coordinators, so that I own the execution",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-02 exclusive lock and ownership protocol"
+      },
+      "tasks": [
+        {
+          "id": "US-02-TASK-BE-01",
+          "title": "Implement repo-wide execution lease protocol",
+          "outcome": "lib/task-executor/ownership.js exports acquireLease, releaseLease, readLease; enforces one repo-wide coordinator; persists lease with nonce, host, PID, runId, generation",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-08"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=ownership.*.lease"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 15,
+            "tokens": 35000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Execution lease protocol is a cohesive ownership model with acquire/release/read operations; all three must share the same state schema and nonce/identity structures, making it an atomic unit",
+          "commit": {
+            "type": "feat",
+            "subject": "add exclusive lease protocol"
+          }
+        },
+        {
+          "id": "US-02-TASK-BE-02",
+          "title": "Implement stale lock detection with process liveness checks",
+          "outcome": "lib/task-executor/ownership.js exports checkOwnerLiveness; checks OS process identity and start time; permits recovery only with confirmed dead evidence; never by age alone",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-02-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-08"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=ownership.*.liveness"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Stale lock detection requires process identity and start-time verification as an atomic check; both signals are necessary and must be evaluated together before recovery is permitted",
+          "commit": {
+            "type": "feat",
+            "subject": "add stale lock detection with process liveness"
+          }
+        },
+        {
+          "id": "US-02-TASK-BE-03",
+          "title": "Implement ownership guard for atomic lease transitions",
+          "outcome": "lib/task-executor/ownership.js exports createOwnershipGuard; atomic compare-and-swap for lease acquisition/release/reclaim; exclusive mkdir guard prevents concurrent transitions",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-02-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-08"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=ownership.*.guard"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Ownership guard implements a single atomic synchronization primitive (compare-and-swap with exclusive mkdir); the guard mechanism itself cannot be split without introducing race windows",
+          "commit": {
+            "type": "feat",
+            "subject": "add ownership guard for atomic lease transitions"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "title": "As a coordinator, I want to dispatch one implementation agent per task per attempt, so that I can track execution precisely",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-03 single-task agent dispatch"
+      },
+      "tasks": [
+        {
+          "id": "US-03-TASK-BE-01",
+          "title": "Implement Claude subprocess adapter",
+          "outcome": "lib/task-executor/claude-process.js exports spawnClaudeAgent; async spawn with shell:false, validated executable, stdin prompt feed, stdout/stderr buffering with result validation before verification",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-01",
+            "AC-03"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=claude-process.*.spawn"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 14,
+            "tokens": 33000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Claude subprocess adapter is a single executable-spawning interface; all the details (shell:false, buffering, validation) are part of a coherent, independently-verifiable child-process abstraction",
+          "commit": {
+            "type": "feat",
+            "subject": "add Claude subprocess adapter with result validation"
+          }
+        },
+        {
+          "id": "US-03-TASK-BE-02",
+          "title": "Implement agent provenance verification (FTR-017 contract)",
+          "outcome": "lib/task-executor/claude-process.js exports verifyAgentIdentity; calls agents resolve --require-verified, caches nativeName/sha256/path, compares loaded definition with registry result",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-03-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-03"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=claude-process.*.identity"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 11,
+            "tokens": 26000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Agent provenance verification is a single FTR-017 contract check; the resolve call, caching, and comparison form an atomic pre-dispatch guard that cannot be split without losing verification integrity",
+          "commit": {
+            "type": "feat",
+            "subject": "add agent provenance verification via agents resolve"
+          }
+        },
+        {
+          "id": "US-03-TASK-BE-03",
+          "title": "Implement task dispatch orchestration with ownership coordination",
+          "outcome": "lib/task-executor/index.js dispatches single task per attempt; persists run/task/attempt identity and ledger activity before invocation; blocks dispatch on missing lock, failed pre-dispatch checks, or identity verification failure",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-03-TASK-BE-02",
+            "US-02-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-01",
+            "AC-03"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=executor.*.dispatch"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Task dispatch orchestration coordinates lock validation, pre-dispatch checks, persistence, and subprocess invocation; these are all prerequisites for a single observable outcome (one task dispatched exactly once) and must be atomic",
+          "commit": {
+            "type": "feat",
+            "subject": "add task dispatch orchestration"
+          }
+        },
+        {
+          "id": "US-03-TASK-BE-04",
+          "title": "Implement result capture and immediate telemetry persistence",
+          "outcome": "lib/task-executor/store.js persists implementation result receipt before verification; records tokens (or null with reason), elapsed/active time, exit code, outcome; does not overwrite existing attempts",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-03-TASK-BE-03",
+            "INFRA-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-01"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=store.*.receipt"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Result receipt persistence is a single durable record; all fields (tokens, time, exit code, outcome) must be written atomically before verification runs, enforcing the BR-06 precondition",
+          "commit": {
+            "type": "feat",
+            "subject": "add result receipt persistence"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "title": "As a coordinator, I want to run verifications and review, so that I can validate task outcomes before commit",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-04 verifications and review"
+      },
+      "tasks": [
+        {
+          "id": "US-04-TASK-BE-01",
+          "title": "Implement verification command executor",
+          "outcome": "lib/task-executor/index.js runVerifications executes approved fenced command blocks from Work Breakdown; requires each command exit 0; persists each result before proceeding to review",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-04"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=verification.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Verification command executor is a single execution engine for approved fenced blocks; command extraction, execution, exit-code validation, and result persistence form a cohesive pre-review pipeline",
+          "commit": {
+            "type": "feat",
+            "subject": "add verification command executor"
+          }
+        },
+        {
+          "id": "US-04-TASK-BE-02",
+          "title": "Implement review agent dispatch with diff context",
+          "outcome": "lib/task-executor/index.js runReview dispatches review-solution agent with task context, exact diff, and review criteria; reads review result and validation rules",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-04-TASK-BE-01",
+            "US-03-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-04"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=review.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Review agent dispatch is a single orchestration step that packages task context, diff, and criteria for the review-solution agent; context assembly and dispatch are inseparable",
+          "commit": {
+            "type": "feat",
+            "subject": "add review agent dispatch"
+          }
+        },
+        {
+          "id": "US-04-TASK-BE-03",
+          "title": "Implement verification and review outcome persistence",
+          "outcome": "lib/task-executor/store.js persists verification exit codes and review receipt with passed/failed status and blocking findings before proceeding to checkpoint",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-04-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-04"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=store.*.verification"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 11,
+            "tokens": 25000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Verification and review outcome persistence is a single durable record that enforces BR-09 (verification before review before checkpoint); all outcomes must be persisted atomically",
+          "commit": {
+            "type": "feat",
+            "subject": "add verification and review outcome persistence"
+          }
+        },
+        {
+          "id": "US-04-TASK-TEST-01",
+          "title": "Write verification and review integration tests",
+          "outcome": "tests/task-executor/verification-review.test.js covers full verification+review+outcome cycle with multiple command blocks, review pass/fail scenarios, and outcome persistence validation",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [
+            "US-04-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-04"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=task-executor.*verification-review"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 15,
+            "tokens": 35000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Integration test for the full verification+review cycle requires testing with fake agents, command blocks, and persistence together; the cycle is indivisible and requires a single test suite to verify end-to-end behavior",
+          "commit": {
+            "type": "feat",
+            "subject": "add verification and review integration tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-05",
+      "type": "user-story",
+      "title": "As a coordinator, I want to checkpoint, stage, commit, and register SHA, so that I can persist verified work to the repository",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-05 checkpoint and commit protocol"
+      },
+      "tasks": [
+        {
+          "id": "US-05-TASK-BE-01",
+          "title": "Implement checkpoint intent persistence",
+          "outcome": "lib/task-executor/git.js exports persistCheckpointIntent; records feature/run/task/attempt/baseline SHA/expected tree/review/diff inventory/commit message before any commit attempt",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=git.*.checkpoint-intent"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Checkpoint intent is a single pre-commit record capturing all required metadata (baseline SHA, expected tree, inventory); this must be persisted atomically before any staging occurs to enable safe recovery",
+          "commit": {
+            "type": "feat",
+            "subject": "add checkpoint intent persistence"
+          }
+        },
+        {
+          "id": "US-05-TASK-BE-02",
+          "title": "Implement controlled staging with path enumeration",
+          "outcome": "lib/task-executor/git.js exports stageTaskFiles; stages only task-attributable paths via argv, validates resulting tree equals intent, detects hook mutations or external changes",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-05-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=git.*.staging"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Controlled staging with path enumeration, validation, and mutation detection is a single atomic step; all three checks (path match, tree validation, hook detection) must run together before commit is attempted",
+          "commit": {
+            "type": "feat",
+            "subject": "add controlled staging with path enumeration"
+          }
+        },
+        {
+          "id": "US-05-TASK-BE-03",
+          "title": "Implement commit creation with task trailers",
+          "outcome": "lib/task-executor/git.js exports createTaskCommit; commits with AI-Toolkit-Run/Task/Attempt/Plan trailers; validates parent/tree/ancestry on correct branch; detects hook failures",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-05-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=git.*.commit"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Commit creation with trailers is a single atomic operation; all validations (parent, tree, ancestry, branch, hooks) must complete before the commit is recorded, enforcing BR-15 (no external modifications)",
+          "commit": {
+            "type": "feat",
+            "subject": "add commit creation with task trailers"
+          }
+        },
+        {
+          "id": "US-05-TASK-BE-04",
+          "title": "Implement SHA registration outside worktree",
+          "outcome": "lib/task-executor/store.js exports registerCommitSHA; persists SHA in executor state after commit confirmation; does not embed SHA in commit itself (no recursive commits)",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-05-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=store.*.sha-registration"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 11,
+            "tokens": 25000
+          },
+          "outputCount": 1,
+          "groupingRationale": "SHA registration is a single state update that occurs after commit confirmation; separating the commit from SHA recording prevents recursive commits while maintaining atomicity of the registration step",
+          "commit": {
+            "type": "feat",
+            "subject": "add SHA registration outside worktree"
+          }
+        },
+        {
+          "id": "US-05-TASK-BE-05",
+          "title": "Implement commit/ledger reconciliation and task completion",
+          "outcome": "lib/task-executor/index.js finalizes ledger entry only after SHA registered and verified on feature branch; marks task checkpointed; closes task activity in ledger",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-05-TASK-BE-04",
+            "INFRA-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-05"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=reconciliation.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Commit/ledger reconciliation is the final task completion step; SHA verification, ledger finalization, and task marking must occur atomically to enforce BR-10 (completion requires all three)",
+          "commit": {
+            "type": "feat",
+            "subject": "add commit/ledger reconciliation and task completion"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-06",
+      "type": "user-story",
+      "title": "As a coordinator, I want to resume from persisted evidence and reconcile without re-execution, so that I can recover from interruptions safely",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-06 resume and replan"
+      },
+      "tasks": [
+        {
+          "id": "US-06-TASK-BE-01",
+          "title": "Implement resume and reconcile command logic",
+          "outcome": "lib/task-executor/index.js exports resume and reconcile commands; loads persisted state and evidence; classifies task status per edge-cases table; returns next safe action",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-03",
+            "US-05-TASK-BE-05"
+          ],
+          "acceptanceCriteria": [
+            "AC-09"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=resume-reconcile.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 14,
+            "tokens": 32000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Resume and reconcile command logic is a single decision point that loads state, classifies task status, and returns the next safe action; all three steps are interdependent and must be atomic",
+          "commit": {
+            "type": "feat",
+            "subject": "add resume and reconcile command logic"
+          }
+        },
+        {
+          "id": "US-06-TASK-BE-02",
+          "title": "Implement evidence evaluation per edge-cases table",
+          "outcome": "lib/task-executor/index.js evaluates persisted evidence (checkpoint, commit, review, diff, worker liveness) and determines: no-reimplementation, reconcile-SHA, recheck-verification, preserve-diff, or block",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-06-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-09",
+            "AC-11",
+            "AC-12"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=evidence-table.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Evidence evaluation implements the deterministic edge-cases table; all evidence signals (checkpoint, commit, review, diff, liveness) must be evaluated together to classify task status and detect corrupted/modified state (AC-12)",
+          "commit": {
+            "type": "feat",
+            "subject": "add evidence evaluation per edge-cases table"
+          }
+        },
+        {
+          "id": "US-06-TASK-BE-03",
+          "title": "Implement replan command with approval validation",
+          "outcome": "lib/task-executor/index.js exports replan command; validates successor plan Gate 2 approval; records old->new plan digest mapping; preserves original run and attempts; does not auto-start successor",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-06-TASK-BE-02",
+            "US-01-TASK-BE-05"
+          ],
+          "acceptanceCriteria": [
+            "AC-09"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=replan.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Replan command is a single orchestration step that validates approval, maps plan digests, and preserves history; all steps are prerequisites for a valid replan transition and cannot be meaningfully split",
+          "commit": {
+            "type": "feat",
+            "subject": "add replan command with approval validation"
+          }
+        },
+        {
+          "id": "US-06-TASK-TEST-01",
+          "title": "Write resume and replan integration tests",
+          "outcome": "tests/task-executor/resume-replan.test.js covers resume dedup (no re-dispatch while worker live), evidence classification, replan approval flow, repeated resume idempotency",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [
+            "US-06-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-09",
+            "AC-11"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=task-executor.*resume-replan"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 15,
+            "tokens": 35000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Integration test for resume and replan requires testing dedup, evidence classification, approval flow, and idempotency together; these behaviors are interdependent and require a single comprehensive test suite",
+          "commit": {
+            "type": "feat",
+            "subject": "add resume and replan integration tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-07",
+      "type": "user-story",
+      "title": "As a coordinator, I want to run sequential execution with one active task, so that I can execute safely in a single worktree",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-07 sequential execution"
+      },
+      "tasks": [
+        {
+          "id": "US-07-TASK-BE-01",
+          "title": "Implement sequential executor main loop with ready-queue dispatch",
+          "outcome": "lib/task-executor/index.js execute with maxConcurrency=1 reserves one task slot; dispatches from ready queue; reserves slot through dispatch/verify/review/checkpoint/commit; releases after integration or safe stop",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-03-TASK-BE-03",
+            "US-01-TASK-BE-05"
+          ],
+          "acceptanceCriteria": [
+            "AC-06"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=executor.*.sequential"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 15,
+            "tokens": 35000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Sequential executor main loop enforces the one-active-task invariant (AC-06) through a single slot-reservation mechanism; the loop, dispatcher, and slot lifecycle must be implemented atomically to prevent interleaving",
+          "commit": {
+            "type": "feat",
+            "subject": "add sequential executor main loop"
+          }
+        },
+        {
+          "id": "US-07-TASK-BE-02",
+          "title": "Implement cooperative and immediate stop modes",
+          "outcome": "lib/task-executor/index.js stop command with mode graceful (complete running verification, block new dispatch) or immediate (request termination, await confirmed stop); persists stop request; status confirms stop",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-07-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-06"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=stop.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Stop modes (graceful and immediate) are dual-path implementations of a single coordinated shutdown mechanism; both require stop-request persistence and status confirmation, making them an atomic implementation unit",
+          "commit": {
+            "type": "feat",
+            "subject": "add cooperative and immediate stop modes"
+          }
+        },
+        {
+          "id": "US-07-TASK-TEST-01",
+          "title": "Write sequential execution end-to-end tests",
+          "outcome": "tests/task-executor/sequential.test.js covers task ordering, one-at-a-time capacity invariant, stop modes, partial results before stop, recovery on resume",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [
+            "US-07-TASK-BE-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-06"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=task-executor.*sequential"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 14,
+            "tokens": 32000
+          },
+          "outputCount": 1,
+          "groupingRationale": "End-to-end tests for sequential execution must verify task ordering, capacity invariant, stop modes, and recovery together; these behaviors are interdependent and require a single test suite",
+          "commit": {
+            "type": "feat",
+            "subject": "add sequential execution E2E tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-08",
+      "type": "user-story",
+      "title": "As a coordinator, I want to run parallel execution with N isolated worktrees, so that I can execute independent tasks concurrently",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-08 parallel execution with isolated worktrees"
+      },
+      "tasks": [
+        {
+          "id": "US-08-TASK-BE-01",
+          "title": "Implement isolated worktree creation and management",
+          "outcome": "lib/task-executor/index.js creates worktree under run-owned root; unique path per attempt/task; returns worktree path and cleanup callback; validates worktree independence",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-07-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-07"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=worktree.*.creation"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Isolated worktree creation and management is a single lifecycle module; path uniqueness, independence validation, and cleanup callback must all be coordinated atomically to prevent worktree collisions",
+          "commit": {
+            "type": "feat",
+            "subject": "add isolated worktree creation and management"
+          }
+        },
+        {
+          "id": "US-08-TASK-BE-02",
+          "title": "Implement N-limit concurrency control and slot reservation",
+          "outcome": "lib/task-executor/index.js with maxConcurrency=N reserves N task slots; increments active slot counter at dispatch; decrements only after integration verified; enforces N limit",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-08-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-07"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=concurrency.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 13,
+            "tokens": 30000
+          },
+          "outputCount": 1,
+          "groupingRationale": "N-limit concurrency control is a single slot-management mechanism; the increment/decrement lifecycle and enforcement of the N limit must be implemented atomically to prevent over-subscription",
+          "commit": {
+            "type": "feat",
+            "subject": "add N-limit concurrency control"
+          }
+        },
+        {
+          "id": "US-08-TASK-BE-03",
+          "title": "Implement serial integration with dispatch-order sequencing",
+          "outcome": "lib/task-executor/git.js exports integrateAttempt; cherry-picks from attempt branch to integration worktree; advances feature ref via compare-and-swap at expected HEAD; integrations serial by dispatch sequence",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-08-TASK-BE-02",
+            "US-05-TASK-BE-05"
+          ],
+          "acceptanceCriteria": [
+            "AC-07"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=git.*.integration"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 15,
+            "tokens": 35000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Serial integration with dispatch-order sequencing is a single atomic operation; cherry-pick, ref advancement via compare-and-swap, and sequence enforcement must be coordinated together to prevent integration conflicts",
+          "commit": {
+            "type": "feat",
+            "subject": "add serial integration with dispatch-order sequencing"
+          }
+        },
+        {
+          "id": "US-08-TASK-BE-04",
+          "title": "Implement original and integrated SHA tracking",
+          "outcome": "lib/task-executor/store.js tracks originalSha (from attempt technical branch) and integratedSha (on feature branch after cherry-pick) separately; updates integration attempt record",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-08-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-07"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=store.*.sha-tracking"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 11,
+            "tokens": 25000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Original and integrated SHA tracking is a single state-update operation; both SHAs must be recorded together in the integration record to preserve the complete audit trail of the cherry-pick",
+          "commit": {
+            "type": "feat",
+            "subject": "add original and integrated SHA tracking"
+          }
+        },
+        {
+          "id": "US-08-TASK-INFRA-01",
+          "title": "Configure and verify npm distribution payload",
+          "outcome": "package.json \"files\" includes lib/task-executor/ and the bin CLI entry; tests/task-executor/ and fixtures are excluded; npm pack --dry-run confirms the executor module and CLI are present in the tarball and that test/fixture paths are absent",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-14"
+          ],
+          "verification": {
+            "commands": [
+              "npm pack --dry-run 2>&1 | grep -E \"lib/task-executor/\"",
+              "npm pack --dry-run 2>&1 | grep -E \"npm notice.*bin/cli.js\"",
+              "test -z \"$(npm pack --dry-run 2>&1 | grep -E \"tests/task-executor/\")\""
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Distribution payload composition — including the executor module and bin CLI in the npm package and excluding tests/fixtures, verified by npm pack — is a single packaging concern owned by US-08 (AC-14). It is kept separate from US-09 asset-catalog registration to remove the prior duplication and avoid a US-08→US-09 dependency inversion; it depends only on the module skeleton (INFRA-TASK-BE-03).",
+          "commit": {
+            "type": "feat",
+            "subject": "configure and verify npm distribution payload"
+          }
+        },
+        {
+          "id": "US-08-TASK-BE-05",
+          "title": "Implement platform qualification guard (refuse non-Windows execution)",
+          "outcome": "lib/task-executor/index.js execute() aborts with a non-zero platform-unsupported error when process.platform is not win32 — before any agent dispatch or worktree creation — enforcing the E-02 process-supervision qualification which is proven for Windows only",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-07-TASK-BE-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-07"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=platform-guard.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 10,
+            "tokens": 23000
+          },
+          "outputCount": 1,
+          "groupingRationale": "The platform qualification guard is a single fail-closed precondition enforcing the E-02 Windows-only qualification. It must abort execute() before dispatch or worktree creation on unqualified platforms and is implemented as one cohesive check.",
+          "commit": {
+            "type": "feat",
+            "subject": "add platform qualification guard (Windows-only)"
+          }
+        },
+        {
+          "id": "US-08-TASK-TEST-01",
+          "title": "Write parallel execution end-to-end tests",
+          "outcome": "tests/task-executor/parallel.test.js covers N slot reservation, concurrent dispatch, serial integration, dedup prevention, integration conflict handling, N=2/3 scenarios",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [
+            "US-08-TASK-BE-04"
+          ],
+          "acceptanceCriteria": [
+            "AC-07",
+            "AC-08"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=task-executor.*parallel"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 15,
+            "tokens": 35000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Comprehensive parallel scenarios (N slot control, concurrent dispatch, serial integration, dedup, conflicts) with N=2/3 variations require integration testing at this granularity; the scenarios are interdependent and require a single test suite to verify concurrent behaviour.",
+          "commit": {
+            "type": "feat",
+            "subject": "add parallel execution E2E tests"
+          }
+        },
+        {
+          "id": "US-08-TASK-TEST-02",
+          "title": "Test platform qualification guard prevents non-Windows execution",
+          "outcome": "tests/task-executor/platform-guard.test.js asserts that with process.platform simulated as non-win32, execute() aborts with the platform-unsupported error and dispatches no agent and creates no worktree; and asserts win32 passes the guard",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [
+            "US-08-TASK-BE-05"
+          ],
+          "acceptanceCriteria": [
+            "AC-07"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=task-executor.*platform-guard"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 10,
+            "tokens": 23000
+          },
+          "outputCount": 1,
+          "groupingRationale": "This is a behavioural test that the platform guard actually prevents execution on unqualified platforms — not merely a documentation grep. It asserts abort, no dispatch, and no worktree on non-win32 and pass on win32 as one cohesive guard-behaviour suite.",
+          "commit": {
+            "type": "feat",
+            "subject": "add platform qualification guard tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "US-09",
+      "type": "user-story",
+      "title": "As a project manager, I want to integrate the executor into implement-feature and test it with real features, so that the toolkit is production-ready",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-09 executor integration and end-to-end testing"
+      },
+      "tasks": [
+        {
+          "id": "US-09-TASK-BE-01",
+          "title": "Integrate new executor into implement-feature skill",
+          "outcome": "src/claude/skills/implement-feature/SKILL.md dispatches executor start command after Gate 2; removes old pm-phase3 grouping path; presents run command to user",
+          "domain": "BE",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-16"
+          ],
+          "verification": {
+            "commands": [
+              "grep -q 'task-executor' src/claude/skills/implement-feature/SKILL.md",
+              "! grep -q 'Invoke pm-phase3 (Implementation Phase)' src/claude/skills/implement-feature/SKILL.md"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 11,
+            "tokens": 25000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Integration of the executor into implement-feature is a single skill modification; dispatcher routing, old-path removal, and user-facing command presentation form a cohesive feature-delivery integration point",
+          "commit": {
+            "type": "feat",
+            "subject": "integrate executor into implement-feature skill"
+          }
+        },
+        {
+          "id": "US-09-TASK-INFRA-01",
+          "title": "Add executor CLI commands to bin/cli.js",
+          "outcome": "bin/cli.js exports executor command dispatcher; routes start/status/diagnose/stop/reconcile/resume/replan to lib/task-executor/index.js; implements CLI contract with exit codes and JSON output",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "INFRA-TASK-BE-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-16"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=cli.*.executor"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 12,
+            "tokens": 28000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Executor CLI dispatcher is a single command-routing layer; all seven commands (start/status/diagnose/stop/reconcile/resume/replan) route through a unified exit-code and JSON-output contract that must be implemented atomically",
+          "commit": {
+            "type": "feat",
+            "subject": "add executor CLI commands to bin/cli.js"
+          }
+        },
+        {
+          "id": "US-09-TASK-INFRA-02",
+          "title": "Register executor module and CLI in asset catalog",
+          "outcome": "lib/asset-catalog.js registers the task-executor module and its CLI commands so the toolkit resolver and preflight recognise them",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-09-TASK-INFRA-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-16"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=catalog.test"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 8,
+            "tokens": 18000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Asset-catalog registration of the executor module and CLI is a single resolver-facing concern. Distribution payload configuration (package.json files / npm pack) is owned separately by US-08-TASK-INFRA-01 to avoid duplication.",
+          "commit": {
+            "type": "feat",
+            "subject": "register executor module and CLI in asset catalog"
+          }
+        },
+        {
+          "id": "US-09-TASK-TEST-01",
+          "title": "Write fault injection and recovery tests",
+          "outcome": "tests/task-executor/fault-injection.test.js covers crash windows: before/after dispatch, verification, checkpoint-prepared, commit, state-write, ledger-finalization; verifies no false completions and artifact preservation",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [
+            "US-08-TASK-TEST-01"
+          ],
+          "acceptanceCriteria": [
+            "AC-10",
+            "AC-13"
+          ],
+          "verification": {
+            "commands": [
+              "npm test -- --testPathPattern=task-executor.*fault"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 20,
+            "tokens": 45000
+          },
+          "outputCount": 1,
+          "groupingRationale": "Fault injection and recovery tests cover the mandatory negative test (AC-10) — no task completion on model self-report alone — plus 10+ checkpoint boundaries with different failure modes; this requires comprehensive coverage at a single test granularity to verify artifact preservation and prevent false completions",
+          "commit": {
+            "type": "feat",
+            "subject": "add fault injection and recovery tests"
+          }
+        },
+        {
+          "id": "US-09-TASK-INFRA-03",
+          "title": "Document executor CLI contract",
+          "outcome": "docs/task-executor-cli.md documents the seven commands, their flags, exit codes, and the JSON result schema",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-09-TASK-INFRA-02"
+          ],
+          "acceptanceCriteria": [
+            "AC-16"
+          ],
+          "verification": {
+            "commands": [
+              "test -f docs/task-executor-cli.md",
+              "grep -q 'exit code' docs/task-executor-cli.md"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 8,
+            "tokens": 18000
+          },
+          "outputCount": 1,
+          "groupingRationale": "CLI reference documentation is a single self-contained knowledge artifact covering the command contract (commands, flags, exit codes, JSON schema). It is separated from the bootstrap/runtime-constraints guide so each document has its own result, verification, estimate, and commit.",
+          "commit": {
+            "type": "feat",
+            "subject": "add executor CLI reference documentation"
+          }
+        },
+        {
+          "id": "US-09-TASK-INFRA-04",
+          "title": "Document bootstrap procedure and runtime constraints",
+          "outcome": "docs/task-executor-bootstrap.md documents the supervised task-by-task delivery procedure after Gates 1/2 and declares the Windows-only E-02 qualification and the persistence caveats",
+          "domain": "INFRA",
+          "agentType": "developer-backend",
+          "dependsOn": [
+            "US-09-TASK-INFRA-03"
+          ],
+          "acceptanceCriteria": [
+            "AC-15",
+            "AC-16"
+          ],
+          "verification": {
+            "commands": [
+              "test -f docs/task-executor-bootstrap.md",
+              "grep -q 'Windows-only' docs/task-executor-bootstrap.md"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 8,
+            "tokens": 18000
+          },
+          "outputCount": 1,
+          "groupingRationale": "The bootstrap and runtime-constraints guide is a single knowledge artifact declaring the supervised delivery procedure and the Windows-only E-02 qualification with persistence caveats. It is separated from the CLI reference so each document has its own result, verification, estimate, and commit.",
+          "commit": {
+            "type": "feat",
+            "subject": "add executor bootstrap and runtime-constraints guide"
+          }
+        },
+        {
+          "id": "US-09-TASK-TEST-02",
+          "title": "Execute authorized end-to-end test with real feature and Claude runtime",
+          "outcome": "tests/task-executor/real-feature.test.js runs executor against approved real feature with actual Claude implementation agents; documents observed token usage, cancellation behavior, runtime bridge constraints; stores evidence under evidence/FTR-018-e2e/",
+          "domain": "TEST",
+          "agentType": "developer-testing",
+          "dependsOn": [
+            "US-09-TASK-INFRA-04"
+          ],
+          "acceptanceCriteria": [
+            "AC-15"
+          ],
+          "verification": {
+            "commands": [
+              "test -f evidence/FTR-018-e2e/run-manifest.json",
+              "grep -q '\"feature\"' evidence/FTR-018-e2e/run-manifest.json"
+            ]
+          },
+          "estimate": {
+            "agentMinutes": 18,
+            "tokens": 0
+          },
+          "outputCount": 1,
+          "groupingRationale": "Real-feature end-to-end execution with authorized paid model invocation and full runtime observation (AC-15) cannot be compressed; estimate excludes token cost (depends on feature size and model invocations); this is the mandatory qualification proof that mocks cannot provide",
+          "commit": {
+            "type": "feat",
+            "subject": "add real-feature E2E test with runtime observation"
+          }
+        }
+      ]
+    }
+  ]
+}
