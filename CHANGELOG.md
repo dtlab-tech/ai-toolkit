@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.14.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.0...v0.14.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **workflows:** make gaia-validate-feature-docs a single-pass, host-owned validator ([2721088](https://github.com/dtlab-tech/ai-toolkit/commit/27210884375c7302cfcf84433d3da3412c857cc1))
+* **workflows:** single-pass, host-owned document validator ([2b606fb](https://github.com/dtlab-tech/ai-toolkit/commit/2b606fb2d0df54e244abe473ea81b613eda30537))
+
 ## [0.14.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.13.0...v0.14.0) (2026-09-30)
 
 
