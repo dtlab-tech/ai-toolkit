@@ -147,6 +147,23 @@ test('the last ```json fence wins when the report text itself contains an earlie
   expect(payload).toEqual({ valid: false, findings: ['gap'] });
 });
 
+test('a ```json fence survives a nested, untagged ``` example embedded in a string field', async () => {
+  // Reproduces the real gaia-validate-feature-docs failure: the "report" field is itself a
+  // markdown document that demonstrates a traceability table inside its own ``` fence (no
+  // "json" tag). The non-greedy ```json regex used to stop at that inner fence, truncating
+  // the capture into invalid JSON and surfacing "no structured output".
+  const fencedText = 'Phase 7 — Structured Completion\n\n```json\n{\n  "valid": false,\n  "findings": ["gap"],\n'
+    + '  "report": "# Report\\n\\nExample:\\n```\\n| UC | Task |\\n|----|------|\\n| UC-01 | T1 |\\n```\\nEnd.\\n"\n}\n```';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: fencedText }) });
+  const payload = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
+    schema: { type: 'object', required: ['valid', 'findings', 'report'] },
+  }));
+  expect(payload.valid).toBe(false);
+  expect(payload.findings).toEqual(['gap']);
+  expect(payload.report).toContain('| UC-01 | T1 |');
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+});
+
 test('a <structured_output> tag that fails schema validation still fails closed', async () => {
   const taggedText = '<structured_output>{"wrongField":true}</structured_output>';
   const c = createControl({ ...f.options, dispatch: async () => response({ result: taggedText }) });
