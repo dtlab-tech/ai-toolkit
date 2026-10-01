@@ -80,12 +80,12 @@ test('a JSON output wrapped in conversational prose and a code fence is recovere
   expect(JSON.parse(fs.readFileSync(dest, 'utf8'))).toEqual({ schemaVersion: 2, feature: 'FTR-099', phases: [] });
 });
 
-test('a JSON output with no recoverable JSON document fails closed instead of writing garbage', async () => {
+test('a JSON output with no recoverable JSON document is written through unchanged for the downstream validator to reject', async () => {
   const dest = path.join(f.dir, 'FTR-099-Work-Breakdown.json');
   const c = createControl({ ...f.options, dispatch: async () => response({ result: 'I need more information before I can proceed.' }) });
-  await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', { outputs: [{ path: dest }] })))
-    .rejects.toThrow(/could not be recovered/i);
-  expect(fs.existsSync(dest)).toBe(false);
+  await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', { outputs: [{ path: dest }] }));
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+  expect(fs.readFileSync(dest, 'utf8')).toBe('I need more information before I can proceed.');
 });
 
 test('a declared output cannot authorize a file outside the project', async () => {
