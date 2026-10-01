@@ -1,4 +1,18 @@
 ## 0.1.4 (2026-07-21)
+## [0.15.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.3...v0.15.0) (2026-10-01)
+
+
+### Features
+
+* Add isolated parallel task execution and task checkpoints documentation ([e17121f](https://github.com/dtlab-tech/ai-toolkit/commit/e17121fbf118673831634f981294d58e1a665d49))
+
+
+### Bug Fixes
+
+* **workflows:** never fail-closed inside extractJsonDocument itself ([dd5f0ce](https://github.com/dtlab-tech/ai-toolkit/commit/dd5f0ce07b7145ef73e29479e4282105000cfd42))
+* **workflows:** recover JSON worker output wrapped in prose or a code fence ([b7a0d08](https://github.com/dtlab-tech/ai-toolkit/commit/b7a0d0817cf6056893906aacff87b40578c6625b))
+* **workflows:** recover JSON worker output wrapped in prose or a code fence ([0dbaece](https://github.com/dtlab-tech/ai-toolkit/commit/0dbaeceb193521c2aca59a15de3762def4881935))
+
 ## [0.14.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.2...v0.14.3) (2026-10-01)
 
 
