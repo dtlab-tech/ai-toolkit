@@ -1,7 +1,7 @@
 ---
 name: gaia-concurrency-safety-assessment
 description: "Concurrency Safety Assessment — identifies race conditions, shared mutable state corruption, and non-deterministic behaviour in concurrent or event-driven systems. Language-agnostic; produces structured findings with severity, evidence, and mitigation patterns. Output: {ASSESS_PREFIX}-Concurrency-Assessment.md"
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash
 model: haiku
 ---
 
@@ -120,7 +120,7 @@ Blocking: Yes / No
 
 ## Output
 
-Write to `{ASSESS_PREFIX}-Concurrency-Assessment.md`:
+Return the assessment as your final response — you do not have a Write tool; the host persists your response verbatim to `{ASSESS_PREFIX}-Concurrency-Assessment.md`. Your entire final response must be this document's content, and nothing else (no preamble, no Markdown code fence wrapping the whole thing):
 
 ```markdown
 # Concurrency Safety Assessment — {ASSESS_PREFIX}

@@ -1,7 +1,7 @@
 ---
 name: gaia-generic-software-assessment
 description: "Generic Software Assessment — performs a broad quality analysis across architecture, code quality, security, testability, observability, and DevOps. Reads AGENTS.md for project conventions. Output: {ASSESS_PREFIX}-Generic-Assessment.md"
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash
 model: haiku
 ---
 
@@ -112,7 +112,7 @@ Report a score (1–5) for each KPI, where 5 = excellent, 1 = critical issues:
 
 ## Output
 
-Write the assessment to `{ASSESS_PREFIX}-Generic-Assessment.md` in the assessment directory.
+Return the assessment as your final response — you do not have a Write tool; the host persists your response verbatim to `{ASSESS_PREFIX}-Generic-Assessment.md` in the assessment directory. Your entire final response must be this document's content, and nothing else (no preamble, no "here is the assessment", no Markdown code fence wrapping the whole thing):
 
 ```markdown
 # Generic Software Assessment — {ASSESS_PREFIX}

@@ -2,7 +2,7 @@
 name: gaia-intervention-documentation-standard
 description: "Intervention Documentation Standard — generates structured, self-contained intervention documents from assessment findings. Each document is independently actionable by an architect or developer agent. Input: assessment findings; Output: {ASSESS_PREFIX}-INT-NNN-{slug}.md per finding + Interventions-Index.md"
 model: sonnet
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash
 ---
 
 # Intervention Documentation Standard
@@ -117,7 +117,7 @@ References to assessment findings (`{ASSESS_PREFIX}-G-NNN`), related ADRs, relat
 
 ## Interventions Index
 
-After writing all intervention documents, produce `{ASSESS_PREFIX}-Interventions-Index.md`:
+Alongside the intervention documents, compose one more file, `{ASSESS_PREFIX}-Interventions-Index.md`:
 
 ```markdown
 # Interventions Index — {ASSESS_PREFIX}
@@ -130,3 +130,26 @@ After writing all intervention documents, produce `{ASSESS_PREFIX}-Interventions
 ```
 
 Order by criticality (CRITICAL first), then by dependency (prerequisites before dependents).
+
+---
+
+## Output Contract (MANDATORY — your final response)
+
+You do not have a Write tool. You produce a **variable number of files** (one per intervention, plus the index) whose names you yourself decide (the `{area-slug}` in each filename), so the host cannot know their paths in advance the way it does for a single fixed deliverable — you must declare each file's path and content yourself, and the host validates and persists every one of them.
+
+Return a single JSON object with exactly this shape, without Markdown fences or explanatory prose:
+
+```json
+{
+  "files": [
+    { "path": "{ASSESS_PREFIX}-INT-001-sql-injection-hardening.md", "content": "# ...full document content..." },
+    { "path": "{ASSESS_PREFIX}-INT-002-god-class-decomposition.md", "content": "# ...full document content..." },
+    { "path": "{ASSESS_PREFIX}-Interventions-Index.md", "content": "# Interventions Index — {ASSESS_PREFIX}\n\n| ID | ... |\n..." }
+  ]
+}
+```
+
+- `files` is a non-empty array. Every intervention document you decided to write, plus the index, must appear here — there is no separate Write step and nothing you do not include in this array reaches disk.
+- Each `path` is a bare filename (no directory components) — the host resolves it against the assessment output directory itself; never include `docs/`, `..`, or an absolute path.
+- Each `content` is that file's complete, final content, verbatim — exactly as the host will write it byte-for-byte.
+- The caller supplies `--json-schema`; use the runtime's structured-output mechanism to return this object in `structured_output`. Plain-text JSON alone does not satisfy that contract.

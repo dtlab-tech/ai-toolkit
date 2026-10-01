@@ -14,8 +14,10 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const approvals = c.read(file('Approvals.md'))
   const gate = approvals.match(/^## Gate 1\b[^\n]*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)
   if (!gate || !/✅\s*Approved/.test(gate[1])) throw new Error('Gate 1 approval evidence missing')
-  await c.worker('gaia.agent.planner.work-breakdown', featurePath)
   const jsonPath = file('Work-Breakdown.json')
+  await c.worker('gaia.agent.planner.work-breakdown', featurePath, {
+    outputs: [{ path: jsonPath, inputs: [featurePath, file('Requirements.md'), file('Tech-Spec.md')] }],
+  })
   const report = await c.activity('wb-validate', async () => {
     const res = c.command(['run-asset', 'scripts/wb-validate.js', '--project', c.root,
       '--', jsonPath, file('Requirements.md')], [0, 1])

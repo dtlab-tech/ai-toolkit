@@ -5,7 +5,12 @@ const path = require('path');
 const crypto = require('crypto');
 const { CATALOG } = require('../../lib/agent-registry');
 function fixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow control '));
+  // realpath.native: os.tmpdir() is often an 8.3 short-form path (e.g. a Windows
+  // username with a space aliases to C:\Users\SHORTN~1\...); createControl()
+  // normalizes its own root the same way, so the fixture must match or every
+  // evidence/cwd assertion below would compare a short-form path against a
+  // long-form one.
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'workflow control ')));
   const home = path.join(root, 'empty-home');
   fs.mkdirSync(home);
   const files = [], fileHashes = {};
@@ -27,7 +32,7 @@ function fixture() {
   fs.writeFileSync(path.join(root, '.claude/.ai-toolkit-manifest.json'), JSON.stringify({ version: require('../../package.json').version, installedAt: new Date().toISOString(), installationMode: 'local', files, fileHashes }));
   const dir = path.join(root, 'FTR-099-space & quotes'); fs.mkdirSync(dir);
   const feature = path.join(dir, 'feature.md'); fs.writeFileSync(feature, '# Test feature\n');
-  return { root, home, dir, feature, options: { projectDir: root, home },
+  return { root, home, dir, feature, options: { projectDir: root, home, diagnosticsDir: path.join(root, 'worker-evidence') },
     entries: () => JSON.parse(fs.readFileSync(path.join(dir, 'FTR-099-token-ledger.json'), 'utf8')),
     clean: () => fs.rmSync(root, { recursive: true, force: true }) };
 }

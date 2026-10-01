@@ -2,7 +2,7 @@
 name: gaia-generate-tech-spec
 description: "Generates a technical specification document from a feature description and requirements. Input: path to feature.md"
 model: haiku
-tools: Read, Glob, Grep, Write
+tools: Read, Glob, Grep
 ---
 
 # Generate Technical Specification
@@ -37,21 +37,19 @@ The tech spec MUST use the project's actual stack and patterns. Do not assume an
 3. **Read** `docs/features/REGISTRY.md` if it exists — identify features that touch the same entities, endpoints, or services as this feature. Note architectural dependencies and integration points in Section 5 (External Integrations) or Section 12 (Risks & Mitigations) of the output document. If a prior feature introduced shared infrastructure this feature reuses (e.g. auth middleware, base service, shared DTO), reference it explicitly.
 4. **Explore** the existing codebase areas affected (models, controllers/handlers, pages, services)
 4. **Design** the technical solution aligned with existing patterns from AGENTS.md
-5. **Write** the output to a tech-spec file in the same directory as the input feature file
+5. **Return** the complete document as your final response — you do not have a Write tool; the host persists your response to `{PREFIX}-Tech-Spec.md` verbatim. Do not attempt to write any file yourself.
 
-## Output Filename
+## Output Filename (for your reference only — you do not write this file)
 
 Extract the **feature prefix** from the folder name containing `feature.md`:
 - Folder: `FTR-001-user-management` → prefix: `FTR-001`
 - Folder: `FTR-042-Search-Engine` → prefix: `FTR-042`
 
-The prefix is everything up to and including the second hyphen-separated segment (pattern: `[A-Z]+-[0-9]+`).
-
-Output file: `{PREFIX}-Tech-Spec.md` in the same directory as `feature.md`.
+The prefix is everything up to and including the second hyphen-separated segment (pattern: `[A-Z]+-[0-9]+`). Use it in the document's own "Document Info" section; the host, not you, decides the actual output filename.
 
 ## Output Structure
 
-Generate the document in **English** following this template. Adapt section content to the project's actual tech stack (from AGENTS.md):
+Generate the document in **English** following this template. Adapt section content to the project's actual tech stack (from AGENTS.md). Your entire final response must be this document's content, and nothing else (no preamble, no "here is the spec", no Markdown code fence wrapping the whole thing) — the host writes your response verbatim to disk:
 
 ```markdown
 # Technical Specification — [Feature Title]

@@ -1,7 +1,7 @@
 ---
 name: gaia-layered-architecture-assessment
 description: "Layered Architecture Assessment — audits a codebase for layer boundary violations, missing separation of concerns, and namespace/package misalignment. Produces a violation inventory and a recommended layer model. Language-agnostic; reads AGENTS.md for project conventions. Output: {ASSESS_PREFIX}-Layer-Assessment.md"
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash
 model: haiku
 ---
 
@@ -135,7 +135,7 @@ Report the current state and recommend the appropriate option based on team size
 
 ## Output
 
-Write to `{ASSESS_PREFIX}-Layer-Assessment.md`:
+Return the assessment as your final response — you do not have a Write tool; the host persists your response verbatim to `{ASSESS_PREFIX}-Layer-Assessment.md`. Your entire final response must be this document's content, and nothing else (no preamble, no Markdown code fence wrapping the whole thing):
 
 ```markdown
 # Layered Architecture Assessment — {ASSESS_PREFIX}
