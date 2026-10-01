@@ -91,11 +91,23 @@ negative semantic verdict, unknown scopes, paths with spaces and explicit approv
 The live paid Claude model/permission flow has not been exercised by these tests.
 Document validation requires both a written Validation Report and a structured
 verdict (`valid: boolean`, `findings: string[]`). The validator performs one pass;
-the host owns revisions. A report or JSON in the plain-text result cannot replace
-`structured_output` from `--json-schema`. Missing structured output stops the
-workflow with an error naming the worker and required fields. Regression tests
-cover missing/malformed verdicts, a clean verdict without a report, and a negative
-verdict followed by host revision and a clean result; model responses are mocked.
+the host owns revisions. Bare plain-text JSON, with no delimiter, never substitutes
+for `structured_output` from `--json-schema`. However, the CLI's own structured-output
+extraction is turn-bound: it only populates `structured_output` when the model's final
+turn ends in a tool call carrying the schema payload, and a long multi-phase agent
+response (full report text, then a closing JSON object) ends that same turn in plain
+text instead — so `structured_output` can come back empty even though the model
+emitted a schema-valid payload in a `<structured_output>...</structured_output>`
+block, exactly as its own agent definition instructs. The host falls back to
+extracting and schema-validating that one delimited block from the plain-text result
+when `structured_output` is absent; this is a deterministic, strictly-delimited parse
+(never "guess the JSON somewhere in the text"), so it does not reintroduce LLM-driven
+I/O. A missing field, a missing/malformed delimited block, or a block that fails
+schema validation all still stop the workflow with the original error naming the
+worker and required fields. Regression tests cover missing/malformed verdicts, a
+clean verdict without a report, the delimited-text fallback (both the accepted and
+the schema-rejected case), and a negative verdict followed by host revision and a
+clean result; model responses are mocked.
 The subprocess adapter reuses FTR-018's existing qualification; no new cross-platform
 process-supervision guarantee is claimed. On Windows, the full executor test suite
 requires Git Bash ahead of the WSL launcher in PATH. User-level installations are
