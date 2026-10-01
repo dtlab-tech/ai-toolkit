@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.15.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.15.0...v0.15.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **workflows:** recover ```json structured output wrapped around a ne… ([a96add9](https://github.com/dtlab-tech/ai-toolkit/commit/a96add902195ea0a125e0fbbc9be06126dfbd602))
+* **workflows:** recover ```json structured output wrapped around a nested untagged fence ([6e92dd2](https://github.com/dtlab-tech/ai-toolkit/commit/6e92dd28bf96f6e96947b45bcc7c8e54d7cb9c38))
+
 ## [0.15.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.3...v0.15.0) (2026-10-01)
 
 
