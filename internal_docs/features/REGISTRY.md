@@ -129,10 +129,34 @@ Each entry summarises a feature for cross-reference by future features.
 
 **Keywords:** execution-ledger, lib/execution-ledger.js, ai-toolkit-ledger, cli-facade, operation_id, atomic-write, temp-rename, fsync, cross-process-lock, stale-lock, fail-closed, null-tokens, resume-safety, features-root-resolution, define-feature, pm-phase1, pm-phase2, pm-phase3, catalog-driven-install
 
-**Status:** defined
+**Status:** completed
 
-**Summary:** Replaces the four-plus divergent, LLM-delegated ledger writers (dead `bin/cli.js` helpers + inline haiku JSON prompts in `pm-phase1/2/3.js` + `define-feature` prose) with a single canonical deterministic module `lib/execution-ledger.js`, exposed via a small CLI facade `ai-toolkit ledger open|close|fail|skip` invoked directly (never `run-asset`) and verified by structured JSON + exit code. Guarantees crash-atomic (temp+fsync+rename), concurrency-safe (cross-process lock with timeout/retry/stale-lock recovery), and fail-closed persistence; unknown token consumption recorded solely as `null` (readers tolerate legacy `0` / `"not_available"` as "unavailable", never a real zero); stable per-execution identity `operation_id` derived from prefix+agent+attempt with an unambiguous `agent` fallback for legacy entries; malformed ledgers backed up and hard-stopped (no silent `[]`); features-root resolved by deterministic precedence (explicit → project convention → `internal_docs/features` → `docs/features` → hard-stop on ambiguity). Migrates only currently-tracked writes plus minimal reader `null`-compatibility in `pm-phase3.js` and `implement-feature/SKILL.md`. Documented v1 residual: command dispatch stays agent-mediated (workflow runtime lacks direct fs/exec). Explicitly defers reader consolidation, untracked-activity coverage, per-task/per-finding granularity, and resume orchestration to future features (*Execution Ledger Coverage Completeness*, *Task Checkpoints and Resume*).
+**Summary:** Replaces the four-plus divergent, LLM-delegated ledger writers (dead `bin/cli.js` helpers + inline haiku JSON prompts in `pm-phase1/2/3.js` + `define-feature` prose) with a single canonical deterministic module `lib/execution-ledger.js`, exposed via a small CLI facade `ai-toolkit ledger open|close|fail|skip` invoked directly (never `run-asset`) and verified by structured JSON + exit code. Guarantees crash-atomic (temp+fsync+rename), concurrency-safe (cross-process lock with timeout/retry/stale-lock recovery), and fail-closed persistence; unknown token consumption recorded solely as `null` (readers tolerate legacy `0` / `"not_available"` as "unavailable", never a real zero); stable per-execution identity `operation_id` derived from prefix+agent+attempt with an unambiguous `agent` fallback for legacy entries; malformed ledgers backed up and hard-stopped (no silent `[]`); features-root resolved by deterministic precedence (explicit → project convention → `internal_docs/features` → `docs/features` → hard-stop on ambiguity). Migrates only currently-tracked writes plus minimal reader `null`-compatibility in `pm-phase3.js` and `implement-feature/SKILL.md`. Documented v1 residual: command dispatch stays agent-mediated (workflow runtime lacks direct fs/exec). Explicitly defers reader consolidation, untracked-activity coverage, per-task/per-finding granularity, and resume orchestration to future features (*Deterministic Agent Resolution and Orchestrator Guard*, *Deterministic Task Execution, Checkpoints and Resume*). Merged to develop PR #68 (commit df54a91).
 
 → [Detail](FTR-016-deterministic-execution-ledger-foundation/feature.md)
+
+---
+
+## FTR-017 — Deterministic Agent Resolution and Orchestrator Guard
+
+**Keywords:** agent-registry, lib/agent-registry.js, resolveAgent, validateAgentSet, listRegisteredAgents, provenance-guard, fileHashes, manifest, require-verified, agents-resolve, agents-preflight, agents-cleanup, doctor-agents, gaia-namespace, three-tier-guard, phase-a, phase-b, execution-ledger-metadata
+
+**Status:** completed
+
+**Summary:** Introduces a deterministic, LLM-free boundary between the toolkit's orchestration layer and the underlying platform, closing the gap where a homonymous agent from another scope (global config, a previous project, a plugin) could be silently invoked instead of the toolkit's own. Adds a canonical agent registry (`lib/agent-registry.js`: `resolveAgent`/`validateAgentSet`/`listRegisteredAgents`), a provenance guard that verifies agent identity against a new `fileHashes` field in the installer manifest (parallel to the unchanged `files: string[]`), and CLI diagnostics (`agents list/resolve/preflight/cleanup`, `doctor agents`). The `agents resolve --require-verified` flag hard-stops on any status other than `"verified"`; a three-tier guard enforces this before every dispatch (Tier 1 `/implement-feature` skill, Tier 2 each workflow script, Tier 3 workflow self-registration), each tier recording whitelisted identity metadata in the FTR-016 Execution Ledger. All toolkit agents were renamed to a `gaia-*` namespace in an atomic, per-agent Phase B (one commit per rename: source file, frontmatter, all consumers, registry mapping, installer catalog entry). `agents cleanup` is dry-run-only in this feature; mutating flags are rejected. Merged to develop PR #71 (package.json 0.13.0).
+
+→ [Detail](FTR-017-deterministic-agent-resolution-and-orchestrator-guard/feature.md)
+
+---
+
+## FTR-018 — Deterministic Task Execution, Checkpoints and Resume
+
+**Keywords:** task-executor, lib/task-executor/, checkpoint, resume, reconcile, replan, maxConcurrency, isolated-worktree, per-task-commit, ledger-reconciliation, intent-first, ownership-recovery, runtime-bridge, pm-phase3-replacement
+
+**Status:** completed
+
+**Summary:** Replaces `pm-phase3`'s agent-type wave grouping with a single deterministic Node.js module (`lib/task-executor/`) that makes the **task** the indivisible unit of scheduling, dispatch, verification, checkpoint, and recovery — eliminating the LLM-delegated, non-per-task-attributable execution model where a mid-run shutdown left work and telemetry unreconciled. Delivers sequential execution (`maxConcurrency: 1`) and isolated parallel execution (`maxConcurrency: N > 1`) via per-task worktrees, both with atomic per-task commits (SHA registration outside the commit, task trailers), checkpoint intent persistence, and resume/reconcile/replan commands that never dispatch against a task of unknown liveness. The Node↔Claude runtime bridge ("Percorso C": `spawn`/`spawnSync` of `claude.exe --print --output-format json --agent <nativeName>`, no LLM intermediary) was proven by a mandatory pre-implementation spike (E-01 agent-provenance binding, E-02 process-supervision, Windows-qualified) before Gate 1 approval. Integrated into the `/implement-feature` skill and `bin/cli.js`. All 46 Work Breakdown tasks completed, including fault-injection/recovery and real-Claude-runtime E2E tests. Merged to develop PR #74 (commit eb8f2fb), with a follow-up CI fix (commit 7054af9) for Linux/ubuntu-latest.
+
+→ [Detail](FTR-018-deterministic-task-execution-checkpoints-and-resume/feature.md)
 
 ---
