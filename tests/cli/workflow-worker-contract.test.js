@@ -107,6 +107,28 @@ test('a schema-valid <structured_output> tag in plain text is accepted when the 
   expect(evidence().usedTextFallback).toBe(true);
 });
 
+test('a schema-valid ```json fence in plain text is accepted when the CLI field is empty (same agent, different model-chosen delimiter)', async () => {
+  const fencedText = '## Phase 6 — report\n...\n## Phase 7 — Structured Completion\n\n'
+    + '```json\n{\n  "valid": true,\n  "findings": [],\n  "report": "# Validation Report"\n}\n```';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: fencedText }) });
+  const payload = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
+    schema: { type: 'object', required: ['valid', 'findings', 'report'] },
+  }));
+  expect(payload).toEqual({ valid: true, findings: [], report: '# Validation Report' });
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+  expect(evidence().usedTextFallback).toBe(true);
+});
+
+test('the last ```json fence wins when the report text itself contains an earlier json example block', async () => {
+  const fencedText = 'Example of the target shape:\n```json\n{"not": "the real payload"}\n```\n'
+    + 'Phase 7 — Structured Completion\n```json\n{"valid": false, "findings": ["gap"]}\n```';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: fencedText }) });
+  const payload = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
+    schema: { type: 'object', required: ['valid', 'findings'] },
+  }));
+  expect(payload).toEqual({ valid: false, findings: ['gap'] });
+});
+
 test('a <structured_output> tag that fails schema validation still fails closed', async () => {
   const taggedText = '<structured_output>{"wrongField":true}</structured_output>';
   const c = createControl({ ...f.options, dispatch: async () => response({ result: taggedText }) });
