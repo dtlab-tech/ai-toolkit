@@ -2,7 +2,7 @@
 name: gaia-generate-requirements
 description: "Generates a functional requirements document from a feature description. Input: path to feature.md"
 model: haiku
-tools: Read, Glob, Grep, Write
+tools: Read, Glob, Grep
 ---
 
 # Generate Functional Requirements Document
@@ -20,21 +20,19 @@ The user provides the path to a `feature.md` file. Read it in full before procee
 3. **Identify** all functional areas described
 3. **Extract** actors, use cases, business rules, acceptance criteria
 4. **Organize** into a structured requirements document
-5. **Write** the output to a requirements file in the same directory as the input feature file
+5. **Return** the complete document as your final response — you do not have a Write tool; the host persists your response to `{PREFIX}-Requirements.md` verbatim. Do not attempt to write any file yourself.
 
-## Output Filename
+## Output Filename (for your reference only — you do not write this file)
 
 Extract the **feature prefix** from the folder name containing `feature.md`:
 - Folder: `FTR-001-user-management` → prefix: `FTR-001`
 - Folder: `FTR-042-Search-Engine` → prefix: `FTR-042`
 
-The prefix is everything up to and including the second hyphen-separated segment (pattern: `[A-Z]+-[0-9]+`).
-
-Output file: `{PREFIX}-Requirements.md` in the same directory as `feature.md`.
+The prefix is everything up to and including the second hyphen-separated segment (pattern: `[A-Z]+-[0-9]+`). Use it in the document's own "Document Info" section; the host, not you, decides the actual output filename.
 
 ## Output Structure
 
-Generate the document in **English** following this template:
+Generate the document in **English** following this template. Your entire final response must be this document's content, and nothing else (no preamble, no "here is the document", no Markdown code fence wrapping the whole thing) — the host writes your response verbatim to disk:
 
 ```markdown
 # Functional Requirements — [Feature Title]

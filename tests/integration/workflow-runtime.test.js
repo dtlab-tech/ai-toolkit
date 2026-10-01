@@ -7,13 +7,14 @@ let f;
 beforeEach(() => { f = fixture(); });
 afterEach(() => { f.clean(); });
 const success = value => ({ exitCode: 0, result: { is_error: false, result: value, usage: { input_tokens: 10, output_tokens: 5 } } });
+// The agent has no Write tool — it returns the document content directly (plain
+// result text, or the schema's `report` field), and the host persists it.
 function phase1Dispatch({ args }) {
   const name = args[args.indexOf('--agent') + 1];
   const suffix = { 'gaia-generate-requirements': 'Requirements', 'gaia-generate-tech-spec': 'Tech-Spec', 'gaia-validate-feature-docs': 'Validation-Report' }[name];
   if (!suffix) throw new Error('Unexpected worker: ' + name);
-  fs.writeFileSync(path.join(f.dir, `FTR-099-${suffix}.md`), '# Result\n');
-  const response = success('ZERO GAPS FOUND');
-  if (name === 'gaia-validate-feature-docs') response.result.structured_output = { valid: true, findings: [] };
+  const response = success('# Result\n');
+  if (name === 'gaia-validate-feature-docs') response.result.structured_output = { valid: true, findings: [], report: '# Result\n' };
   return Promise.resolve(response);
 }
 test('real installed pm-phase1 executes only semantic workers and persists done after outputs', async () => {
@@ -40,8 +41,8 @@ test.each([undefined, null, ''])('a written validation report without structured
     return response;
   };
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
-    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings');
-  expect(fs.existsSync(path.join(f.dir, 'FTR-099-Validation-Report.md'))).toBe(true);
+    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, report');
+  expect(fs.existsSync(path.join(f.dir, 'FTR-099-Validation-Report.md'))).toBe(false);
   expect(f.entries()[0].status).toBe('failed');
   expect(f.entries().find(e => e.agentId === 'gaia.agent.planner.validate-feature-docs').status).toBe('failed');
   expect(fs.existsSync(path.join(f.dir, 'FTR-099-process-log.txt'))).toBe(false);
@@ -53,8 +54,8 @@ test('document findings trigger host revision followed by a clean structured ver
     const response = await phase1Dispatch(options);
     if (options.args.includes('gaia-validate-feature-docs')) {
       const schema = JSON.parse(options.args[options.args.indexOf('--json-schema') + 1]);
-      expect(schema.required).toEqual(['valid', 'findings']);
-      if (++validations === 1) response.result.structured_output = { valid: false, findings: ['Requirements: missing acceptance criterion'] };
+      expect(schema.required).toEqual(['valid', 'findings', 'report']);
+      if (++validations === 1) response.result.structured_output = { valid: false, findings: ['Requirements: missing acceptance criterion'], report: '# Result\n' };
     }
     return response;
   });
@@ -76,19 +77,20 @@ test.each([{ valid: true }, { valid: 'true', findings: [] }, { valid: false, fin
   expect(f.entries()[0].status).toBe('failed');
 });
 
-test('a clean structured verdict without its report cannot complete pm-phase1', async () => {
+test('a clean structured verdict without its report field cannot complete pm-phase1', async () => {
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async options => {
     if (options.args.includes('gaia-validate-feature-docs')) {
       return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] } } };
     }
     return phase1Dispatch(options);
-  } })).rejects.toThrow('Validation agent did not produce its report');
+  } })).rejects.toThrow('Missing structured field: report');
   expect(f.entries()[0].status).toBe('failed');
   expect(fs.existsSync(path.join(f.dir, 'FTR-099-process-log.txt'))).toBe(false);
 });
 
 test('successful worker without required report fails the workflow', async () => {
-  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async () => success('ok') })).rejects.toThrow('output missing');
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async () => success('ok') }))
+    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, report');
   expect(f.entries()[0].status).toBe('failed');
 });
 test('fresh outputs skip workers; force requests them again', async () => {
@@ -116,14 +118,17 @@ test('unsupported assessment scopes fail closed rather than silently run zero as
 });
 test('security/domain/dependencies/devops use one generic assessor, never remediation workers', async () => {
   const calls = [];
+  // Neither assessor has a Write tool: each returns its content directly (plain text, or
+  // a `files` array under --json-schema) and the host persists it.
   const dispatch = async options => {
     calls.push(options);
-    if (options.args.includes('gaia-generic-software-assessment')) fs.writeFileSync(path.join(f.root, 'docs/assessments/ASSESS-001/ASSESS-001-Generic-Assessment.md'), '# Assessment');
     if (options.args.includes('gaia-intervention-documentation-standard')) {
-      const output = path.join(f.root, 'docs/assessments/ASSESS-001');
-      fs.writeFileSync(path.join(output, 'ASSESS-001-Interventions-Index.md'), '| ID | Title | Criticality |\n|---|---|---|\n| INT-001 | Risk | HIGH |\n');
+      return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
+        structured_output: { files: [
+          { path: 'ASSESS-001-Interventions-Index.md', content: '| ID | Title | Criticality |\n|---|---|---|\n| INT-001 | Risk | HIGH |\n' },
+        ] } } };
     }
-    return success('Assessment report');
+    return success('# Assessment\n');
   };
   const result = await runWorkflow('am-phase1', ['.', '--prefix', 'ASSESS-001', '--scope=security,domain-model,dependencies,devops'], { ...f.options, dispatch });
   expect(calls.map(o => o.args[o.args.indexOf('--agent') + 1])).toEqual(['gaia-generic-software-assessment', 'gaia-intervention-documentation-standard']);
@@ -137,6 +142,7 @@ test('security/domain/dependencies/devops use one generic assessor, never remedi
 function phase2Setup() {
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'), '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n');
+  fs.writeFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), '## 9. File Inventory\n\nNew files: none\n');
   const wb = JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures/wb-valid.json'), 'utf8'));
   wb.phases.forEach(p => p.tasks.forEach(t => { t.acceptanceCriteria = []; }));
   return wb;
@@ -145,8 +151,7 @@ test.each([true, false])('pm-phase2 runs real validator/renderer and blocks a ne
   const wb = phase2Setup();
   const dispatch = jest.fn(async options => {
     if (options.args.includes('gaia-generate-work-breakdown')) {
-      fs.writeFileSync(path.join(f.dir, 'FTR-099-Work-Breakdown.json'), JSON.stringify(wb));
-      return success('Generated');
+      return success(JSON.stringify(wb)); // no Write tool — the host persists the returned JSON
     }
     return { exitCode: 0, result: { is_error: false, structured_output: { valid, findings: [] } } };
   });
@@ -165,10 +170,7 @@ test.each([true, false])('pm-phase2 runs real validator/renderer and blocks a ne
 });
 test('malformed WB fails deterministic validation before semantic dispatch', async () => {
   phase2Setup();
-  const dispatch = jest.fn(async () => {
-    fs.writeFileSync(path.join(f.dir, 'FTR-099-Work-Breakdown.json'), '{invalid');
-    return success('Generated');
-  });
+  const dispatch = jest.fn(async () => success('{invalid'));
   await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).rejects.toThrow();
   expect(dispatch).toHaveBeenCalledTimes(1);
   expect(f.entries()[0].status).toBe('failed');
@@ -199,7 +201,7 @@ test('a missing Claude executable fails the real subprocess adapter and the owne
 test('repeated negative document validation never reports Gate 1 ready', async () => {
   const dispatch = async options => {
     const response = await phase1Dispatch(options);
-    if (options.args.includes('gaia-validate-feature-docs')) response.result.structured_output = { valid: false, findings: ['Requirements incomplete'] };
+    if (options.args.includes('gaia-validate-feature-docs')) response.result.structured_output = { valid: false, findings: ['Requirements incomplete'], report: '# Result\n' };
     return response;
   };
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch })).rejects.toThrow('gaps remain');

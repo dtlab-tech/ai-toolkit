@@ -2,7 +2,7 @@
 name: gaia-generate-work-breakdown
 description: "Generates a structured work breakdown (User Stories + Tasks) from validated and approved Requirements and Tech-Spec. Input: path to feature.md"
 model: haiku
-tools: Read, Glob, Grep, Write
+tools: Read, Glob, Grep
 ---
 
 # Generate Work Breakdown
@@ -186,9 +186,9 @@ Duration guidance:
 
 - `estimate.tokens`: integer; rough estimate of token consumption (input + output) for the agent invocation; use project norms if available, otherwise estimate based on task complexity (small: 10 000–25 000, medium: 25 000–60 000)
 
-### Step 7 — Write the JSON Output
+### Step 7 — Return the JSON Output
 
-Write `{PREFIX}-Work-Breakdown.json` in the same directory as `feature.md`. The file must be:
+Return `{PREFIX}-Work-Breakdown.json`'s content as your final response, and nothing else (no preamble, no explanatory prose, no Markdown code fence wrapping it) — you do not have a Write tool; the host persists your response verbatim to disk. The content must be:
 - Valid JSON
 - UTF-8 encoded
 - 2-space indentation
