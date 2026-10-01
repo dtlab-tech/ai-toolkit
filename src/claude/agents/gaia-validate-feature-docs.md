@@ -1,8 +1,8 @@
 ---
 name: gaia-validate-feature-docs
-description: "Validates Requirements and Tech-Spec documents against feature.md. Writes a validation report and returns a structured verdict; the host owns revisions. Input: path to feature.md"
+description: "Validates Requirements and Tech-Spec documents against feature.md. Returns the validation report content and a structured verdict; the host persists the report and owns revisions. Input: path to feature.md"
 model: haiku
-tools: Read, Glob, Grep, Write
+tools: Read, Glob, Grep
 ---
 
 # Validate Feature Docs
@@ -111,13 +111,13 @@ Use the same remaining gaps in the report and the structured verdict. Record a g
 
 ---
 
-## Phase 6 — Write Validation Report (MANDATORY — before returning the verdict)
+## Phase 6 — Compose the Validation Report Content (MANDATORY — before returning the verdict)
 
-**This is not optional and not the same as the Phase 4 gap report.** The coverage report you produced in Phase 4 is on-screen text; it is NOT the deliverable. Your job is not complete until the file `{PREFIX}-Validation-Report.md` exists **on disk**. You MUST call the `Write` tool to create it — even when validation is clean and zero gaps were found. Returning a summary without having called `Write` is a failure.
+**This is not optional and not the same as the Phase 4 gap report.** The coverage report you produced in Phase 4 is on-screen text; it is NOT the deliverable. You do not have a Write tool — the deliverable is the `report` field of your Phase 7 structured output, which the host persists to `{PREFIX}-Validation-Report.md` verbatim. Returning a verdict without a complete `report` field is a failure.
 
-Execute this phase regardless of the validation outcome, then complete Phase 7. Downstream agents read this file as a hard precondition; if it is missing, the entire pipeline aborts.
+Execute this phase regardless of the validation outcome, then complete Phase 7. Downstream agents read the persisted file as a hard precondition; if the `report` field is missing or empty, the entire pipeline aborts.
 
-Write `{PREFIX}-Validation-Report.md` in the same directory:
+Compose `{PREFIX}-Validation-Report.md`'s full content following this template:
 
 ```markdown
 # Validation Report — {PREFIX}
@@ -146,22 +146,23 @@ Write `{PREFIX}-Validation-Report.md` in the same directory:
 
 ## Phase 7 — Structured Completion (MANDATORY — your final response)
 
-After writing the report, return a single JSON object with exactly these fields, without Markdown fences or explanatory prose:
+Return a single JSON object with exactly these fields, without Markdown fences or explanatory prose:
 
 ```json
-{"valid": true, "findings": []}
+{"valid": true, "findings": [], "report": "# Validation Report — FTR-001\n\n## Summary\n..."}
 ```
 
 For remaining gaps:
 
 ```json
-{"valid": false, "findings": ["Requirements: UC-01 lacks an acceptance criterion", "Tech-Spec: POST /api/users lacks a response definition"]}
+{"valid": false, "findings": ["Requirements: UC-01 lacks an acceptance criterion", "Tech-Spec: POST /api/users lacks a response definition"], "report": "# Validation Report — FTR-001\n\n## Summary\n..."}
 ```
 
 - `valid` is a boolean: `true` only when all required inputs were read, coverage is complete, and no unresolved gaps remain.
 - `findings` is an array of strings, empty only for a clean validation. Missing inputs and ambiguous claims are unresolved findings.
-- When the caller supplies `--json-schema`, use the runtime's structured-output mechanism to return this object in `structured_output`. Plain-text JSON alone does not satisfy that contract.
-- Both deliverables are required: the report on disk **and** the structured verdict. Writing the report does not finish the task.
+- `report` is a non-empty string: the complete Phase 6 document content, verbatim, as the host will write it byte-for-byte to `{PREFIX}-Validation-Report.md`.
+- The caller supplies `--json-schema`; use the runtime's structured-output mechanism to return this object in `structured_output`. Plain-text JSON alone does not satisfy that contract.
+- There is only one deliverable now: the structured verdict, with `report` inside it. There is no separate Write step.
 
 ## Clarification Protocol
 
@@ -171,7 +172,7 @@ If a claim is contradictory or its correct resolution is ambiguous, do not guess
 
 ## Guidelines
 
-- **Always call `Write` for the Validation Report before returning the structured verdict** (Phases 6 and 7), clean or not.
+- **Always include the complete report content in the `report` field of your structured verdict** (Phases 6 and 7), clean or not — there is no Write tool to fall back on.
 - **Validate only** — the host owns document revisions and agent dispatch
 - **Be specific about gaps** — point to the exact section, claim, and what is missing
 - **Perform one validation pass per invocation** — return remaining gaps to the host

@@ -14,21 +14,24 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const reqId = 'gaia.agent.planner.requirements'
   const specId = 'gaia.agent.planner.tech-spec'
   const valId = 'gaia.agent.planner.validate-feature-docs'
+  const output = (suffix, inputs = [featurePath]) => ({ path: file(suffix), inputs })
+  const requirements = () => c.worker(reqId, featurePath, { outputs: [output('Requirements')] })
+  const techSpec = () => c.worker(specId, featurePath, { outputs: [output('Tech-Spec', [featurePath, file('Requirements')])] })
   let changed = false
   if (force || !fresh(file('Requirements'))) {
-    await c.worker(reqId, featurePath)
+    await requirements()
     if (!c.exists(file('Requirements'))) throw new Error('Requirements output missing')
     changed = true
   }
   if (force || changed || !fresh(file('Tech-Spec'), [featurePath, file('Requirements')])) {
-    await c.worker(specId, featurePath)
+    await techSpec()
     if (!c.exists(file('Tech-Spec'))) throw new Error('Tech-Spec output missing')
     changed = true
   }
   let validationSummary = 'skipped (fresh)'
   if (force || changed || !fresh(file('Validation-Report'), [featurePath, file('Requirements'), file('Tech-Spec')])) {
     for (let cycle = 1; cycle <= 3; cycle++) {
-      const result = await c.worker(valId, featurePath + '\nValidate only; the host owns the revision loop. Write the validation report and return valid plus a findings array (one string per remaining gap). Do not dispatch other agents.', { label: `validation:${cycle}`, schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } } }, required: ['valid', 'findings'] } })
+      const result = await c.worker(valId, featurePath + '\nValidate only; the host owns the revision loop. Return valid, a findings array (one string per remaining gap), and the full validation report content. Do not dispatch other agents.', { label: `validation:${cycle}`, outputs: [output('Validation-Report', [featurePath, file('Requirements'), file('Tech-Spec')])], schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } }, report: { type: 'string' } }, required: ['valid', 'findings', 'report'] } })
       const text = result.findings.join('\n')
       if (result.valid && result.findings.length === 0) {
         if (!fresh(file('Validation-Report'), [featurePath, file('Requirements'), file('Tech-Spec')])) throw new Error('Validation agent did not produce its report')
@@ -36,8 +39,8 @@ return c.run(meta.name, featureDir, prefix, async () => {
         break
       }
       if (cycle === 3) throw new Error('Validation gaps remain after 3 cycles')
-      if (!text.includes('Tech-Spec') || text.includes('Requirements')) await c.worker(reqId, featurePath)
-      if (!text.includes('Requirements') || text.includes('Tech-Spec')) await c.worker(specId, featurePath)
+      if (!text.includes('Tech-Spec') || text.includes('Requirements')) await requirements()
+      if (!text.includes('Requirements') || text.includes('Tech-Spec')) await techSpec()
     }
   }
   c.append(`${featureDir}/${prefix}-process-log.txt`, `[${new Date().toISOString()}] pm-phase1: ${validationSummary}; Gate 1 approval requested\n`)
