@@ -94,3 +94,24 @@ test('structured-output failure retains token usage and raw-response diagnostics
   expect(f.entries().find(e => e.agentId).phase_delta_tokens).toBe(42);
   expect(evidence().response.result.result).toBe('Done');
 });
+
+test('a schema-valid <structured_output> tag in plain text is accepted when the CLI field is empty', async () => {
+  const taggedText = 'Phase 1...\nPhase 2...\n'
+    + '<structured_output>{"valid":true,"findings":[]}</structured_output>';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: taggedText }) });
+  const payload = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
+    schema: { type: 'object', required: ['valid', 'findings'] },
+  }));
+  expect(payload).toEqual({ valid: true, findings: [] });
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+  expect(evidence().usedTextFallback).toBe(true);
+});
+
+test('a <structured_output> tag that fails schema validation still fails closed', async () => {
+  const taggedText = '<structured_output>{"wrongField":true}</structured_output>';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: taggedText }) });
+  await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
+    schema: { type: 'object', required: ['valid', 'findings'] },
+  }))).rejects.toThrow('no structured output');
+  expect(f.entries().find(e => e.agentId).status).toBe('failed');
+});
