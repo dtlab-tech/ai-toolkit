@@ -1,5 +1,10 @@
 # Isolated Parallel Task Execution
 
+> Documento storico confluito in
+> [FTR-018 — Deterministic Task Execution, Checkpoints and Resume](deterministic-task-execution-checkpoints-and-resume.md).
+> Non avviare una feature separata sulla base dei contratti JSONL/WB JSON descritti qui:
+> la proposta FTR-018 li riallinea alla soluzione reale e include il supporto isolato a N > 1.
+
 ## Sequenza
 
 Questa è la sesta idea della catena dedicata all'esecuzione resiliente:
