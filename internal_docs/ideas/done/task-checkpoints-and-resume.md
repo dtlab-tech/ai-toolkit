@@ -1,5 +1,11 @@
 # Task Checkpoints and Resume
 
+> Documento storico. Per FTR-018 la proposta autorevole è
+> [Deterministic Task Execution, Checkpoints and Resume](deterministic-task-execution-checkpoints-and-resume.md).
+> I riferimenti sottostanti a JSONL, stati/eventi e WB JSON non descrivono i contratti
+> attualmente implementati e non vanno copiati nella feature. La proposta FTR-018 include
+> anche la concorrenza isolata come incremento successivo alla baseline sequenziale.
+
 ## Sequenza
 
 Questa è la quinta di sei idee dipendenti:

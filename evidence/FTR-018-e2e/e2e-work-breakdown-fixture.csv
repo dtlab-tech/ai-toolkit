@@ -1,2 +1,0 @@
-phase_id|phase_title|commit_message|depends_on|task_id|task_title|domain|agent_type
-PHASE-1|E2E phase|feat: e2e smoke test||E2E-TASK-01|Create greeting module|BE|developer-backend
