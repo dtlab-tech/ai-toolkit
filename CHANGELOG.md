@@ -1,4 +1,14 @@
 ## 0.1.4 (2026-07-21)
+## [0.14.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.2...v0.14.3) (2026-10-01)
+
+
+### Bug Fixes
+
+* **workflows:** accept a schema-valid &lt;structured_output&gt; text block when the CLI field is empty ([6814d96](https://github.com/dtlab-tech/ai-toolkit/commit/6814d96dd10dc5807b8c20417c5a2767cce05216))
+* **workflows:** handle multiple model-chosen delimiters for the structured-output text fallback ([7d97758](https://github.com/dtlab-tech/ai-toolkit/commit/7d977589e10480e6bce66a4ca68a5dbc89b372b1))
+* **workflows:** schema-validated text fallback for empty structured_output ([f2bd76f](https://github.com/dtlab-tech/ai-toolkit/commit/f2bd76fcba554c1b30a2c84629bfd2224a721d13))
+* **workflows:** schema-validated text fallback for empty structured_output ([daa1411](https://github.com/dtlab-tech/ai-toolkit/commit/daa1411d15c919254ce948a785b31d56e6e4468c))
+
 ## [0.14.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.1...v0.14.2) (2026-10-01)
 
 
