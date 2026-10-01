@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.14.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.1...v0.14.2) (2026-10-01)
+
+
+### Bug Fixes
+
+* **workflows:** host persists worker-declared outputs, no Write tool on the agent ([1109fc0](https://github.com/dtlab-tech/ai-toolkit/commit/1109fc0943ad21eedbbf859a185e3a49c654c06d))
+* **workflows:** host persists worker-declared outputs, no Write tool on the agent ([56f062c](https://github.com/dtlab-tech/ai-toolkit/commit/56f062c232110d2399d88ee011fa165b43336d12))
+* **workflows:** host persists worker-declared outputs, no Write tool on the agent ([7c1b8dc](https://github.com/dtlab-tech/ai-toolkit/commit/7c1b8dca4ba9715809b6417f5081bcca0edb09e3))
+
 ## [0.14.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.14.0...v0.14.1) (2026-09-30)
 
 
