@@ -164,6 +164,19 @@ test('a ```json fence survives a nested, untagged ``` example embedded in a stri
   expect(f.entries().find(e => e.agentId).status).toBe('done');
 });
 
+test('an arbitrary <json> tag (a third, previously unseen delimiter) is accepted', async () => {
+  // Same agent, same schema as the other delimiter tests — the model chose a different,
+  // never-prompted-for tag this run. The extractor must be delimiter-agnostic rather than
+  // special-cased to the two conventions seen so far.
+  const taggedText = 'Phase 7 — Structured Completion\n\n<json>\n{"valid": true, "findings": [], "report": "clean"}\n</json>';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: taggedText }) });
+  const payload = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
+    schema: { type: 'object', required: ['valid', 'findings', 'report'] },
+  }));
+  expect(payload).toEqual({ valid: true, findings: [], report: 'clean' });
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+});
+
 test('a <structured_output> tag that fails schema validation still fails closed', async () => {
   const taggedText = '<structured_output>{"wrongField":true}</structured_output>';
   const c = createControl({ ...f.options, dispatch: async () => response({ result: taggedText }) });
