@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.4](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.3...v0.16.4) (2026-10-02)
+
+
+### Bug Fixes
+
+* **gaia-generate-work-breakdown:** raise model tier from haiku to sonnet ([8b5a206](https://github.com/dtlab-tech/ai-toolkit/commit/8b5a206cfcb4a4dbaeaca88b90d1f58b11c96745))
+* **gaia-generate-work-breakdown:** raise model tier from haiku to sonnet ([a0c6f39](https://github.com/dtlab-tech/ai-toolkit/commit/a0c6f3986315a2319ea2f788fff5e8d30fb18c45))
+
 ## [0.16.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.2...v0.16.3) (2026-10-02)
 
 
