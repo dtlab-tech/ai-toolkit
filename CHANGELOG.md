@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.2...v0.16.3) (2026-10-02)
+
+
+### Bug Fixes
+
+* **gaia-generate-work-breakdown:** forbid duplicate tasks and spannin… ([575a9d7](https://github.com/dtlab-tech/ai-toolkit/commit/575a9d702785b31f6d607e90e271fd179c20f58a))
+* **gaia-generate-work-breakdown:** forbid duplicate tasks and spanning test phases ([05a2510](https://github.com/dtlab-tech/ai-toolkit/commit/05a25103fb935e260df7740c6e4436e64f471ea4))
+
 ## [0.16.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.1...v0.16.2) (2026-10-02)
 
 
