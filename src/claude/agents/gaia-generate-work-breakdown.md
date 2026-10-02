@@ -1,7 +1,7 @@
 ---
 name: gaia-generate-work-breakdown
 description: "Generates a structured work breakdown (User Stories + Tasks) from validated and approved Requirements and Tech-Spec. Input: path to feature.md"
-model: haiku
+model: sonnet
 tools: Read, Glob, Grep
 ---
 
