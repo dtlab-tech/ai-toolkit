@@ -128,7 +128,7 @@ Decomposition strategy by domain:
 | `domain` | string | One of: `BE`, `FE`, `DB`, `DevOps`, `INFRA`, `TEST` |
 | `agentType` | string | One of: `developer-backend`, `developer-frontend`, `developer-testing`, `review-solution` (deprecated: `developer-database` — maps to `developer-backend`) |
 | `dependsOn` | array of strings | Task IDs this task depends on; may be empty `[]`; all IDs must be defined within this same JSON |
-| `acceptanceCriteria` | array of strings | AC IDs from Requirements that this task covers; may be empty `[]` |
+| `acceptanceCriteria` | array of strings | AC IDs from Requirements scoped to this task's own phase that this task covers; may be empty `[]`. Never an AC owned by a different phase (see Guidelines) |
 | `verification` | object | `{ "commands": ["..."] }` — one or more shell commands that verify the task output; array must be non-empty |
 | `estimate` | object | `{ "agentMinutes": N, "tokens": N }` — target ≤ 15 minutes; positive integers |
 | `outputCount` | integer | Number of distinct outputs; must be ≥ 1 |
@@ -339,7 +339,7 @@ Do NOT guess or invent task decompositions when the source is unclear. Ask first
 - **Cross-phase dependencies are expected** — US tasks may depend on INFRA tasks; cross-US task dependencies are also valid
 - **INFRA phase first** (if present), then US phases in priority order (Must before Should before Could)
 - **Within a phase, order tasks by layer dependency** (DB → BE → FE → TEST); independent tasks within the same layer may be listed in any order
-- **acceptanceCriteria** must list AC IDs from the Requirements that this task covers; leave empty `[]` if the task covers no AC directly (e.g., pure infrastructure setup)
+- **acceptanceCriteria** must list only AC IDs whose Requirements AC-table scope ("Related UC") matches this task's own phase, or that are marked cross-cutting ("All UCs"/multiple UCs including this phase's). **Never cite an AC owned by a different phase on this task, even when this task is prerequisite or contributing work for it** — an INFRA task that lays groundwork for an AC verified in a later US does not "cover" that AC; leave `acceptanceCriteria` empty `[]` on that task instead (e.g., pure infrastructure setup, or groundwork for an AC owned elsewhere). If an AC is genuinely cross-cutting, reflect that in the AC's own "Related UC" column, not by citing it from an unrelated task.
 - **schemaVersion must be exactly 2** — do not omit it, do not use any other value
 - **No pipes, CR, or LF** in `phase.title`, `task.title`, or `commit.subject` — these characters break CSV generation
-- **Traceability**: every UC must map to a US phase; every Must-priority AC must be covered by at least one task's `acceptanceCriteria`
+- **Traceability**: every UC must map to a US phase; every Must-priority AC must be covered by at least one task's `acceptanceCriteria` **within that AC's own owning US phase** (per its "Related UC" scope) — not by a task in an earlier or later phase, even one that contributes toward satisfying it eventually
