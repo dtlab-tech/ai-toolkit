@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.1...v0.16.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* **gaia-generate-work-breakdown:** forbid citing an AC outside its owning phase ([525e2ce](https://github.com/dtlab-tech/ai-toolkit/commit/525e2cef928dafb8b80470b572d214b85aecb1dc))
+* **gaia-generate-work-breakdown:** forbid citing an AC outside its owning phase ([5376d67](https://github.com/dtlab-tech/ai-toolkit/commit/5376d67a67140d5b46e507f2092e389d362ce723))
+
 ## [0.16.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.0...v0.16.1) (2026-10-02)
 
 
