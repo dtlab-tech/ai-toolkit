@@ -176,17 +176,37 @@ describe('wb-validate.js — checks 1–7', () => {
       expect(report.errors.filter(e => e.category === 'missing_field')).toHaveLength(0);
     });
 
-    // W3 regression guard — groupingRationale must be enforced by check 4
-    // Before fix: groupingRationale was in REQUIRED_TASK_FIELDS but absent from
-    // topLevelFields, so a task without the field passed check 4 with exit 0.
+    // W3 regression guard — groupingRationale is required only when outputCount > 1.
+    // The generator agent's own contract emits `null` for an outputCount:1 task (nothing to
+    // justify grouping); a validator that flags that documented null as "missing" rejects
+    // the agent's own canonical example output.
 
-    test('W3: exits 1 and missing_field with field "groupingRationale" is reported when groupingRationale is absent from a task', () => {
+    test('W3: exits 0 and no missing_field for groupingRationale when absent from an outputCount:1 task', () => {
       const { groupingRationale: _drop, ...taskWithoutRationale } = MINIMAL_VALID_WB.phases[0].tasks[0];
       const wb = {
         ...MINIMAL_VALID_WB,
         phases: [{ ...MINIMAL_VALID_WB.phases[0], tasks: [taskWithoutRationale] }],
       };
       const tmpPath = path.join(os.tmpdir(), `wb-w3-${Date.now()}.json`);
+      writeTmp(tmpPath, wb);
+      try {
+        const { exitCode, report } = runValidator(tmpPath);
+        expect(exitCode).toBe(0);
+        expect(report.valid).toBe(true);
+        const err = report.errors.find(e => e.category === 'missing_field' && e.field === 'groupingRationale');
+        expect(err).toBeUndefined();
+      } finally {
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+      }
+    });
+
+    test('W3: exits 1 and missing_field with field "groupingRationale" is reported when absent from an outputCount>1 task', () => {
+      const taskWithMultipleOutputs = { ...MINIMAL_VALID_WB.phases[0].tasks[0], outputCount: 2, groupingRationale: undefined };
+      const wb = {
+        ...MINIMAL_VALID_WB,
+        phases: [{ ...MINIMAL_VALID_WB.phases[0], tasks: [taskWithMultipleOutputs] }],
+      };
+      const tmpPath = path.join(os.tmpdir(), `wb-w3b-${Date.now()}.json`);
       writeTmp(tmpPath, wb);
       try {
         const { exitCode, report } = runValidator(tmpPath);
