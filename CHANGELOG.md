@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.0...v0.16.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* **wb-validate:** require groupingRationale only when outputCount &gt; 1 ([e3cb71a](https://github.com/dtlab-tech/ai-toolkit/commit/e3cb71a7f38fbd974c70f3dbdd99223a6aa05048))
+* **wb-validate:** require groupingRationale only when outputCount &gt; 1 ([7406fbe](https://github.com/dtlab-tech/ai-toolkit/commit/7406fbe336304c2ebcd012fc6a6b1b4980121a64))
+
 ## [0.16.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.15.1...v0.16.0) (2026-10-02)
 
 
