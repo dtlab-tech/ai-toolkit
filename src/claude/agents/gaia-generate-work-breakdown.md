@@ -71,6 +71,8 @@ Every task must be the **smallest independently implementable, verifiable, and c
 - Titles or outcomes containing "N types", "all adapters", "complete CRUD", "implement and test" — these indicate hidden multiplicity.
 - Bundling two independently verifiable activities (e.g., "add endpoint and write tests") — split into separate tasks.
 - Scope misalignment: a task in US-02 that implements a behavior belonging to US-03.
+- **Duplicate implementation**: a later phase re-describing, as a new `BE`/`FE`/`DB` task, an outcome or file already fully produced by an earlier task (e.g., a controller task that already built audience-claim validation inline, followed by a later phase's task claiming to "implement" that same validation again). Check every earlier task's `outcome` before writing a new one for the same file or behavior. If the behavior already exists, the later phase's task must be `domain: TEST` (`developer-testing`), verifying it with `dependsOn` pointing at the task(s) that built it — never a second implementation task.
+- **Domain mismatch on verification-only tasks**: a task whose outcome is a confirmation of already-built behavior (title starting with "Verify", "Confirm", or similar) and whose verification commands are read-only (`grep`, `test -f`, build-only, no new file created) must be `domain: TEST` / `agentType: developer-testing` — never `BE`/`FE`/`DB` with an implementation agent type.
 
 ---
 
@@ -96,6 +98,8 @@ For each US, derive:
 - **Phase type** — `"user-story"`
 - **Phase commit** — a phase-level commit object: `{ "type": "feat", "subject": "implement US-NN title" }` — the subject must not contain `|`, CR, or LF characters; `wb-render.js` prepends the conventional prefix automatically
 - **Acceptance Criteria** — the AC-XX IDs from the Requirements document that apply to this US
+
+**Do not create an additional phase for end-to-end, integration, or overall verification.** Every phase traces to exactly one UC (plus the single `INFRA` phase for shared setup) — never a synthesized "Testing and verification", "Integration tests", or similarly feature-spanning phase. An integration/E2E test still belongs to the US phase of the UC it most directly verifies, as a `domain: TEST` task citing only that phase's own AC(s) — not a phase of its own, and not a grab-bag of ACs borrowed from across the feature.
 
 ### Step 3 — Decompose into Tasks
 
