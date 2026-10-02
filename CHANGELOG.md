@@ -1,4 +1,17 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.15.1...v0.16.0) (2026-10-02)
+
+
+### Features
+
+* Add FTR-017 and FTR-018 to the Feature Registry with detailed summaries and keywords ([9be5d95](https://github.com/dtlab-tech/ai-toolkit/commit/9be5d95abf934cca91ebde11ade60bda837ea719))
+
+
+### Bug Fixes
+
+* **workflows:** make structured-output extraction delimiter-agnostic ([0ad511b](https://github.com/dtlab-tech/ai-toolkit/commit/0ad511bfa3892a3c02ff91c9c8256cec5fbdd841))
+* **workflows:** make structured-output extraction delimiter-agnostic ([3498c00](https://github.com/dtlab-tech/ai-toolkit/commit/3498c001725d1b5c52039506f79cacda31b1bc4e))
+
 ## [0.15.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.15.0...v0.15.1) (2026-10-01)
 
 
