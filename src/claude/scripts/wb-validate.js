@@ -359,7 +359,7 @@ for (const phase of phases) {
 
     const topLevelFields = [
       'id', 'title', 'outcome', 'domain', 'agentType', 'dependsOn',
-      'acceptanceCriteria', 'outputCount', 'groupingRationale', 'commit',
+      'acceptanceCriteria', 'outputCount', 'commit',
     ]
     for (const field of topLevelFields) {
       if (task[field] == null) {
@@ -372,6 +372,20 @@ for (const phase of phases) {
           details: { taskId, field },
         })
       }
+    }
+
+    // groupingRationale is required only when outputCount > 1 (the generator agent's own
+    // contract: a single-output task has nothing to justify grouping, so it emits null) —
+    // null is the documented, correct value there, not a missing field.
+    if (task.outputCount > 1 && task.groupingRationale == null) {
+      report.errors.push({
+        category: ERRORS.MISSING_FIELD,
+        severity: 'error',
+        taskId,
+        field: 'groupingRationale',
+        message: `Task "${taskId}" has outputCount > 1 but is missing required field "groupingRationale"`,
+        details: { taskId, field: 'groupingRationale' },
+      })
     }
 
     // Nested: verification.commands — existence and array type only; emptiness checked later
