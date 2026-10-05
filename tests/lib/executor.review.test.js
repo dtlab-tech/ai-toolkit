@@ -319,6 +319,36 @@ describe('runReview', () => {
       expect(result.criticalFindings.some((f) => f.includes('Hardcoded credential'))).toBe(true);
     });
 
+    test('explains a FAIL driven by a build/test failure even with zero CRITICAL findings', async () => {
+      // The agent's own contract ("## Output": "FAIL = 1+ CRITICAL findings OR
+      // build/test failure") allows exactly this combination — reproduces the
+      // real anomaly found against a live run: reviewPassed:false,
+      // criticalFindings:[] with no explanation anywhere.
+      const diff =
+        'Verdict: FAIL\n\n' +
+        'Build:  ❌ FAIL — compilation error in foo.ts\n' +
+        'Tests:  ✅ 10/10 passed\n\n' +
+        'CRITICAL (blocks merge):\n  none\n\n' +
+        'WARNING (should fix):\n  none\n';
+      const result = await runReview(baseArgs({ diff }));
+
+      expect(result.reviewPassed).toBe(false);
+      expect(result.criticalFindings.some((f) => f.includes('Build') && f.includes('compilation error'))).toBe(true);
+    });
+
+    test('does not report passing Build/Tests lines as findings', async () => {
+      const diff =
+        'Verdict: PASS\n\n' +
+        'Build:  ✅ PASS\n' +
+        'Tests:  ✅ 10/10 passed\n\n' +
+        'CRITICAL (blocks merge):\n  none\n\n' +
+        'WARNING (should fix):\n  none\n';
+      const result = await runReview(baseArgs({ diff }));
+
+      expect(result.reviewPassed).toBe(true);
+      expect(result.criticalFindings).toEqual([]);
+    });
+
     test('reports null passed when no recognizable verdict template is present', async () => {
       const result = await runReview(baseArgs({ diff: 'no template here' }));
       expect(result.reviewPassed).toBeNull();
