@@ -255,6 +255,26 @@ describe('runReview', () => {
       expect(result.verified).toBeUndefined();
     });
 
+    test('defaults to the permission-bypass flags when spawnArgs is not overridden (no args can be approved non-interactively otherwise)', async () => {
+      const spawnSpy = jest.spyOn(claudeProcess, 'spawnClaudeAgent').mockResolvedValue({
+        exitCode: 0, signal: null, stdout: '', stderr: '',
+        result: { is_error: false, result: 'Verdict: PASS' },
+        parseError: null, startedAt: new Date().toISOString(), endedAt: new Date().toISOString(),
+        durationMs: 1, timedOut: false, terminationConfirmed: null,
+      });
+
+      await runReview(baseArgs({ spawnArgs: undefined }));
+
+      expect(spawnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        args: [
+          '--print', '--output-format', 'json', '--agent', VERIFIED_IDENTITY.nativeName,
+          '--permission-mode', 'auto', '--permission-prompts', 'none',
+        ],
+      }));
+
+      spawnSpy.mockRestore();
+    });
+
     test('propagates a spawn failure (bad claudePath)', async () => {
       const missingClaudePath = path.join(tmpDir, 'does-not-exist.exe');
       await expect(
