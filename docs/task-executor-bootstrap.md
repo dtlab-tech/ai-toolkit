@@ -57,12 +57,12 @@ conversation at all — the operator uses the read-only `status` subcommand docu
 ai-toolkit executor status --project <path> --run-id <uuid>
 ```
 
-Note, per the CLI reference, that `status` (like `diagnose`) is currently a stub that always
-throws `NOT_IMPLEMENTED` (exit 1) — the command surface and its intended read-only summary shape
-(task status counts, run status, total cost from the ledger) are defined, but the real body has
-not been built yet (attributed there to `US-06-TASK-BE-01`). Until it lands, checking on a
-running or finished executor run means reading the ledger and per-run state directly, or using
-`reconcile`/`resume`, both of which are fully implemented and report each task's classification.
+`status` returns task status counts, run status, and (when measurable) total tokens/cost from
+the run's own ledger — see `docs/task-executor-cli.md` for the exact result shape and the
+null-compatibility rules around `totalTokens`/`totalCostUsd`. `diagnose` is still a stub that
+always throws `NOT_IMPLEMENTED` (exit 1, attributed to `US-06-TASK-BE-02`); until it lands,
+deeper per-attempt evidence inspection means using `reconcile`/`resume`, both fully implemented
+and reporting each task's classification.
 
 For the full flag reference, exit-code table, and JSON result schemas of every subcommand
 (`start`, `status`, `diagnose`, `stop`, `reconcile`, `resume`, `replan`), see

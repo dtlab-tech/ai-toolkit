@@ -2671,14 +2671,18 @@ function _executorCurrentBranchRef(projectDir) {
 //     METADATA_RESERVED_FIELD, METADATA_UNKNOWN_KEY, INVALID_STATUS.
 //
 //   1 (unexpected I/O) — the DEFAULT for everything else, including every
-//     *_CORRUPTED/CORRUPT_* code, every GIT_*_FAILED/*_FAILED git-command-
-//     spawn code, STATE_UNRECOVERABLE, and — explicitly, per this task's own
-//     brief — NOT_IMPLEMENTED. `status`/`diagnose` are still NOT_IMPLEMENTED
-//     stubs in lib/task-executor/index.js (attributed to US-06-TASK-BE-01/02,
-//     neither of which has actually built their real body yet); this CLI
-//     wires them through exactly like the other five commands and lets that
-//     error surface through this same mapping table honestly — it is not
-//     hidden or special-cased, it simply falls into the default bucket.
+//     *_CORRUPTED/CORRUPT_* code (LEDGER_CORRUPTED/PRICING_CORRUPTED among
+//     them — status()'s own ledger/pricing-file reads), every
+//     LEDGER_READ_FAILED/PRICING_READ_FAILED/GIT_*_FAILED/*_FAILED
+//     git-command-spawn code, STATE_UNRECOVERABLE, and — explicitly, per this
+//     task's own brief — NOT_IMPLEMENTED. `diagnose` is still a
+//     NOT_IMPLEMENTED stub in lib/task-executor/index.js (attributed to
+//     US-06-TASK-BE-02, which has not actually built its real body yet);
+//     `status` now has a real implementation (it never was actually assigned
+//     a Work Breakdown task of its own — its stub's US-06-TASK-BE-01
+//     attribution was stale, that task is resume/reconcile) and is wired
+//     through exactly like the other commands, its errors surfacing through
+//     this same mapping table honestly.
 //
 // 8 (paused awaiting human decision) has no throw site and is deliberately
 // absent from this table: execute()'s/resume()'s 'paused' run status is a
@@ -2725,6 +2729,7 @@ const EXECUTOR_EXIT_CODE_BY_ERROR_CODE = {
   // though 1 is also the default fallback below)
   STATE_CORRUPTED: 1, RECEIPT_CORRUPTED: 1, INTENT_CORRUPTED: 1, LEASE_CORRUPTED: 1,
   CORRUPT_LEDGER: 1, STATE_UNRECOVERABLE: 1, NOT_IMPLEMENTED: 1,
+  LEDGER_READ_FAILED: 1, LEDGER_CORRUPTED: 1, PRICING_READ_FAILED: 1, PRICING_CORRUPTED: 1,
   GIT_SPAWN_FAILED: 1, GIT_STATUS_FAILED: 1, GIT_ADD_FAILED: 1, GIT_WRITE_TREE_FAILED: 1,
   GIT_DIFF_FAILED: 1, GIT_COMMIT_TREE_FAILED: 1, REF_UPDATE_FAILED: 1, GIT_CAT_FILE_FAILED: 1,
   GIT_MERGE_BASE_FAILED: 1, GIT_REV_PARSE_FAILED: 1, GIT_CHERRY_PICK_FAILED: 1,
@@ -2785,13 +2790,17 @@ async function handleExecutorCommand(argv) {
   function emitSuccess(result) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     // Tech-Spec section 10 exit code 8 ("paused awaiting human decision") is a
-    // SUCCESS-path outcome, not an error — only execute()'s and resume()'s
-    // result objects can legitimately carry `runStatus: 'paused'` (see the
-    // exit-code mapping comment above EXECUTOR_EXIT_CODE_BY_ERROR_CODE for why
-    // no *_ERROR code maps to 8). reconcile/stop/replan results never carry a
-    // `runStatus` field at all, and status/diagnose never reach this success
-    // path (still NOT_IMPLEMENTED) — so this check is a no-op for every other
-    // subcommand's result shape and never needs to be scoped by subcommand.
+    // SUCCESS-path outcome, not an error — execute()'s, resume()'s and now
+    // status()'s result objects can legitimately carry `runStatus: 'paused'`
+    // (see the exit-code mapping comment above EXECUTOR_EXIT_CODE_BY_ERROR_CODE
+    // for why no *_ERROR code maps to 8). A `status` call truthfully reporting
+    // a paused run surfaces the same exit 8 signal a direct execute()/resume()
+    // call would — deliberate, not a special case: the exit code reflects the
+    // run's actual state, not which subcommand observed it. reconcile/stop/
+    // replan results never carry a `runStatus` field at all, and diagnose
+    // never reaches this success path (still NOT_IMPLEMENTED) — so this check
+    // stays a no-op for those subcommands' result shapes without needing to be
+    // scoped by subcommand.
     process.exitCode = result && result.runStatus === 'paused' ? 8 : 0;
   }
 

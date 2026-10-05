@@ -255,6 +255,26 @@ describe('runReview', () => {
       expect(result.verified).toBeUndefined();
     });
 
+    test('defaults to the permission-bypass flags when spawnArgs is not overridden (no args can be approved non-interactively otherwise)', async () => {
+      const spawnSpy = jest.spyOn(claudeProcess, 'spawnClaudeAgent').mockResolvedValue({
+        exitCode: 0, signal: null, stdout: '', stderr: '',
+        result: { is_error: false, result: 'Verdict: PASS' },
+        parseError: null, startedAt: new Date().toISOString(), endedAt: new Date().toISOString(),
+        durationMs: 1, timedOut: false, terminationConfirmed: null,
+      });
+
+      await runReview(baseArgs({ spawnArgs: undefined }));
+
+      expect(spawnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        args: [
+          '--print', '--output-format', 'json', '--agent', VERIFIED_IDENTITY.nativeName,
+          '--permission-mode', 'auto', '--permission-prompts', 'none',
+        ],
+      }));
+
+      spawnSpy.mockRestore();
+    });
+
     test('propagates a spawn failure (bad claudePath)', async () => {
       const missingClaudePath = path.join(tmpDir, 'does-not-exist.exe');
       await expect(
@@ -297,6 +317,36 @@ describe('runReview', () => {
       expect(result.reviewPassed).toBe(false);
       expect(result.criticalFindings.length).toBeGreaterThan(0);
       expect(result.criticalFindings.some((f) => f.includes('Hardcoded credential'))).toBe(true);
+    });
+
+    test('explains a FAIL driven by a build/test failure even with zero CRITICAL findings', async () => {
+      // The agent's own contract ("## Output": "FAIL = 1+ CRITICAL findings OR
+      // build/test failure") allows exactly this combination — reproduces the
+      // real anomaly found against a live run: reviewPassed:false,
+      // criticalFindings:[] with no explanation anywhere.
+      const diff =
+        'Verdict: FAIL\n\n' +
+        'Build:  ❌ FAIL — compilation error in foo.ts\n' +
+        'Tests:  ✅ 10/10 passed\n\n' +
+        'CRITICAL (blocks merge):\n  none\n\n' +
+        'WARNING (should fix):\n  none\n';
+      const result = await runReview(baseArgs({ diff }));
+
+      expect(result.reviewPassed).toBe(false);
+      expect(result.criticalFindings.some((f) => f.includes('Build') && f.includes('compilation error'))).toBe(true);
+    });
+
+    test('does not report passing Build/Tests lines as findings', async () => {
+      const diff =
+        'Verdict: PASS\n\n' +
+        'Build:  ✅ PASS\n' +
+        'Tests:  ✅ 10/10 passed\n\n' +
+        'CRITICAL (blocks merge):\n  none\n\n' +
+        'WARNING (should fix):\n  none\n';
+      const result = await runReview(baseArgs({ diff }));
+
+      expect(result.reviewPassed).toBe(true);
+      expect(result.criticalFindings).toEqual([]);
     });
 
     test('reports null passed when no recognizable verdict template is present', async () => {

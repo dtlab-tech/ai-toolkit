@@ -22,7 +22,7 @@ const path = require('path');
 const ownership = require('../../lib/task-executor/ownership');
 const store = require('../../lib/task-executor/store');
 const claudeProcess = require('../../lib/task-executor/claude-process');
-const { dispatchTaskAttempt } = require('../../lib/task-executor/index');
+const { dispatchTaskAttempt, _buildProcessTag } = require('../../lib/task-executor/index');
 
 const FIXTURE = path.join(__dirname, '..', 'fixtures', 'fake-claude-cli.js');
 const NODE = process.execPath;
@@ -266,6 +266,28 @@ describe('dispatchTaskAttempt', () => {
       expect(result.verified).toBeUndefined();
       expect(result.reviewed).toBeUndefined();
       expect(result.checkpoint).toBeUndefined();
+    });
+
+    test('defaults to the permission-bypass flags when spawnArgs is not overridden (no args can be approved non-interactively otherwise)', async () => {
+      const spawnSpy = jest.spyOn(claudeProcess, 'spawnClaudeAgent').mockResolvedValue({
+        exitCode: 0, signal: null, stdout: '', stderr: '',
+        result: { is_error: false, result: 'ok' },
+        parseError: null, startedAt: new Date().toISOString(), endedAt: new Date().toISOString(),
+        durationMs: 1, timedOut: false, terminationConfirmed: null,
+      });
+
+      await dispatchTaskAttempt(baseArgs({ spawnArgs: undefined }));
+
+      const tag = _buildProcessTag(RUN_ID, TASK_ID, 1);
+      expect(spawnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        args: [
+          '--print', '--output-format', 'json', '--agent', VERIFIED_IDENTITY.nativeName,
+          '--permission-mode', 'auto', '--permission-prompts', 'none',
+          tag,
+        ],
+      }));
+
+      spawnSpy.mockRestore();
     });
 
     test('propagates a spawn failure (bad claudePath) without persisting a spawn result', async () => {
