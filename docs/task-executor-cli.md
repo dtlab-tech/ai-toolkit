@@ -58,16 +58,21 @@ on any platform other than `win32` (see "Platform qualification" below), before 
 other validation.
 
 **Permission bypass.** Every real implementation/review worker this loop dispatches is spawned
-with `--permission-mode auto --permission-prompts none` appended to its CLI args
-(`EXECUTOR_PERMISSION_BYPASS_ARGS` in `lib/task-executor/index.js`). A non-interactive `--print`
-invocation has no TTY to answer a permission prompt, so without this every Write/Edit/mkdir tool
-call is denied by default, regardless of task content — confirmed against a real run where every
-BE/FE task failed verification because its expected files/directories were never created. This
-restores exactly the invocation Tech-Spec OQ-01's pre-Gate-1 spike validated ("Percorso C") and
-Gate 1 was approved against; it had gone missing from the actual `dispatchTaskAttempt`/`runReview`
-implementation. The mode is deliberately unscoped within the task's own `--project` directory —
-the executor's job is letting a developer agent write anywhere under that project, so (unlike
-pm-phase1/2's read-only-text workers) a narrower allowlist is not an option here.
+with `--permission-mode auto` appended to its CLI args (`EXECUTOR_PERMISSION_BYPASS_ARGS` in
+`lib/task-executor/index.js`). A non-interactive `--print` invocation has no TTY to answer a
+permission prompt, so without this every Write/Edit/mkdir tool call is denied by default,
+regardless of task content — confirmed against a real run where every BE/FE task failed
+verification because its expected files/directories were never created. `auto` alone was then
+independently confirmed sufficient (a live dispatch created all of its task's expected
+directories and files). An earlier version of this fix also appended `--permission-prompts
+none`, citing Tech-Spec OQ-01's pre-Gate-1 spike note as having validated that exact pair —
+reproduced directly against the real, installed CLI (v2.1.220): `--permission-prompts` is not a
+recognized flag at all (`claude --help` lists no such option; passing it exits 1 with `error:
+unknown option '--permission-prompts'` before any model/API call), so that spike note is stale or
+was never run against the real executable as claimed. The mode is deliberately unscoped within
+the task's own `--project` directory — the executor's job is letting a developer agent write
+anywhere under that project, so (unlike pm-phase1/2's read-only-text workers) a narrower
+allowlist is not an option here.
 
 ### `status`
 
