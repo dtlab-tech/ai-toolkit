@@ -1,4 +1,14 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.5](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.4...v0.16.5) (2026-10-05)
+
+
+### Bug Fixes
+
+* **task-executor:** implement the real executor status command ([58710aa](https://github.com/dtlab-tech/ai-toolkit/commit/58710aa5824108355076df697291a39dc8cd22f1))
+* **task-executor:** permissions, ledger finalize, review verdicts ([91fedef](https://github.com/dtlab-tech/ai-toolkit/commit/91fedef1e3adb0b8ca64114f786d324e43991d64))
+* **task-executor:** restore permission bypass and close ledger activities ([40aa1d5](https://github.com/dtlab-tech/ai-toolkit/commit/40aa1d5ba115a2438b6af66ff26a50956b9dcd3e))
+* **task-executor:** surface build/test-driven review FAIL reasons ([09c0052](https://github.com/dtlab-tech/ai-toolkit/commit/09c0052109195d2b2b2f336a7b0fa1a892512787))
+
 ## [0.16.4](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.3...v0.16.4) (2026-10-02)
 
 
