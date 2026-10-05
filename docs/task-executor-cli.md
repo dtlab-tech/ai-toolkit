@@ -66,11 +66,35 @@ ai-toolkit executor status --project <path> --run-id <uuid>
 `--run-id` is required (usage error, exit 2, if omitted). Read-only summary of a run: task
 status counts, current run status, and total cost from the ledger.
 
-**Not implemented.** `status()` in `lib/task-executor/index.js` is currently a stub that always
-throws `NOT_IMPLEMENTED` (attributed to US-06-TASK-BE-01, which has not built its real body
-yet). Calling `ai-toolkit executor status` today always fails with exit code 1 and an error
-JSON body — it does not return the summary shape documented in its own JSDoc until that task is
-implemented.
+Backs `lib/task-executor/index.js`'s `status()`. Returns:
+
+```json
+{
+  "protocolVersion": 1,
+  "runId": "...",
+  "runStatus": "running",
+  "taskCounts": { "pending": 0, "active": 0, "checkpointed": 0, "integrated": 0, "skipped": 0, "blocked": 0 },
+  "totalTokens": null,
+  "totalCostUsd": null
+}
+```
+
+`taskCounts` is derived straight from the persisted `state.json` (`store.readState`) — never
+mutates it. `totalTokens` sums every numeric `phase_delta_tokens` entry in the run's own
+`<runId>-token-ledger.json`; `totalCostUsd` additionally requires the target project's own
+`docs/token-pricing.json` (same file and 80/20 input/output split `lib/workflow-artifacts.js`
+uses for feature Token-Estimate documents) and a non-null `model` on each ledger entry to attach
+a rate to. Every executor-dispatched ledger entry is currently opened with `model: null` (see
+`_runTaskToResolution`'s `ledger.open` calls), so `totalCostUsd` is `null` until that changes —
+this is a known gap, not a bug: **null means "unavailable", never a fabricated zero** (same
+null-compatibility convention as the Token-Estimate document). If `runStatus` happens to be
+`'paused'`, the CLI exits 8, same as `execute`/`resume` reporting that status directly — the
+exit code reflects the run's actual state, not which subcommand observed it.
+
+If the run is missing or its `state.json` is corrupted, `STATE_NOT_FOUND`/`STATE_CORRUPTED`
+propagate unmodified (exit 4 / exit 1 respectively). An unreadable or unparseable ledger or
+pricing file throws `LEDGER_READ_FAILED`/`LEDGER_CORRUPTED`/`PRICING_READ_FAILED`/
+`PRICING_CORRUPTED` (exit 1) rather than silently reporting a partial or zeroed-out total.
 
 ### `diagnose`
 
