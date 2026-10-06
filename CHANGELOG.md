@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.6](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.5...v0.16.6) (2026-10-06)
+
+
+### Bug Fixes
+
+* **task-executor:** drop --permission-prompts, it doesn't exist ([903dea5](https://github.com/dtlab-tech/ai-toolkit/commit/903dea58fba475e3bf5caa83a41723977f6d742e))
+* **task-executor:** drop --permission-prompts, it doesn't exist ([9c49c78](https://github.com/dtlab-tech/ai-toolkit/commit/9c49c789f385e88763d606d70bdfd9653e37a948))
+
 ## [0.16.5](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.4...v0.16.5) (2026-10-05)
 
 
