@@ -318,6 +318,19 @@ For each task, supply one or more shell commands in `verification.commands` that
 - File existence: `test -f <path>`
 - Lint: `npx eslint <file>`
 
+**Directory-only tasks must never verify with `test -d` alone.** Git does not track empty
+directories — `test -d <path>` only confirms the directory exists in the *current* working tree,
+which is exactly what the agent that just created it will have. It tells you nothing about
+whether anything was actually committed: a fresh clone, or any downstream agent/review step that
+re-checks out the branch, will find the directory simply missing, even though this task's own
+verification reported success. If a task's sole outcome is creating one or more directories (no
+files):
+- Give it a `.gitkeep` (or equivalent) placeholder file in every leaf directory it creates, so
+  there is something for git to actually track.
+- Verify with a command that checks the directory is *tracked*, not just present on disk — e.g.
+  `git ls-files <path> | grep -q .` or `test -f <path>/.gitkeep` — instead of (or in addition to)
+  `test -d <path>`.
+
 ---
 
 ## Clarification Protocol
