@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.8](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.7...v0.16.8) (2026-10-07)
+
+
+### Bug Fixes
+
+* **task-executor:** treat a zero-diff checkpoint as a valid no-op ([a587ee0](https://github.com/dtlab-tech/ai-toolkit/commit/a587ee0a88f24934235f64e9fbc9c395a76001fb))
+* **task-executor:** treat a zero-diff checkpoint as a valid no-op ([568e590](https://github.com/dtlab-tech/ai-toolkit/commit/568e590f8359c405561ef7e23ca626ddcecb9b12))
+
 ## [0.16.7](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.6...v0.16.7) (2026-10-07)
 
 
