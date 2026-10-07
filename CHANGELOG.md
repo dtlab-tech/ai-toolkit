@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.7](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.6...v0.16.7) (2026-10-07)
+
+
+### Bug Fixes
+
+* **gaia-generate-work-breakdown:** require tracked placeholder for directory-only tasks ([63d2467](https://github.com/dtlab-tech/ai-toolkit/commit/63d246708508d199a25c9443a93c51c25bbfdf1b))
+* **gaia-generate-work-breakdown:** require tracked placeholder for directory-only tasks ([cd60691](https://github.com/dtlab-tech/ai-toolkit/commit/cd60691130a2c54fb40e6cee25da42a48cea68f0))
+
 ## [0.16.6](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.5...v0.16.6) (2026-10-06)
 
 
