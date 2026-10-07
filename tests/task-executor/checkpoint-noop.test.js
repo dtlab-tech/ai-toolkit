@@ -90,7 +90,7 @@ function renderTaskDetail(task) {
   L.push('- **Outcome:** ' + task.outcome);
   L.push('- **Domain:** ' + task.domain);
   L.push('- **Agent type:** ' + task.agentType);
-  L.push('- **Dependencies:** —');
+  L.push('- **Dependencies:** ' + (task.dependsOn && task.dependsOn.length > 0 ? task.dependsOn.join(', ') : '—'));
   L.push('- **Acceptance criteria:** —');
   L.push('- **Estimate — agent minutes:** —');
   L.push('- **Estimate — tokens:** —');
@@ -211,5 +211,48 @@ describe('checkpoint: no-op completion when changedPaths is empty', () => {
     const state = store.readState(executionRoot, result.runId);
     expect(state.tasks[TASK_ID].attempts[0].originalSha).toBeNull();
     expect(state.tasks[TASK_ID].attempts[0].integratedSha).toBeNull();
+  });
+
+  // Bug 5 (found on the same real run, right after Bug 4's fix shipped):
+  // 'skipped' is already treated as terminal success by the nonTerminalIds
+  // filter and the allTerminalSuccess check in this same loop, but the
+  // readyTaskId dependency-satisfaction predicate only accepted
+  // 'checkpointed'/'integrated' — so a task depending on a 'skipped' one
+  // stayed 'pending' forever, and the run ended 'blocked' instead of
+  // 'completed' even though every task had genuinely succeeded.
+  test('a task depending on a "skipped" task is still scheduled, not left pending forever', async () => {
+    const TASK_1 = 'US-99-TASK-NOOP-02';
+    const TASK_2 = 'US-99-TASK-NOOP-03';
+    const tasks = [
+      {
+        id: TASK_1, title: 'Already-satisfied upstream task', outcome: 'Deliverable already present',
+        domain: 'BE', agentType: 'developer-backend', dependsOn: [],
+        verificationCommands: ['test -f already-done.txt'],
+      },
+      {
+        id: TASK_2, title: 'Downstream task depending on the skipped one', outcome: 'Runs after TASK_1',
+        domain: 'BE', agentType: 'developer-backend', dependsOn: [TASK_1],
+        // Also already satisfied (same fixture file) — both tasks make zero
+        // real changes via echo-json below, so both reach 'skipped'; the
+        // point of this test is TASK_2 getting scheduled AT ALL once TASK_1
+        // is 'skipped', not what it does once dispatched.
+        verificationCommands: ['test -f already-done.txt'],
+      },
+    ];
+    writeWorkBreakdownFixture(featureDir, 'FTR-780', tasks);
+
+    const result = await execute({
+      project: repoDir,
+      feature: path.join(featureDir, 'feature.md'),
+      claudePath: NODE,
+      taskTimeoutMs: 15000,
+      agentBudgetUsd: 5,
+      implementationSpawnArgs: [FIXTURE, '--mode=echo-json'],
+      reviewSpawnArgs: [FIXTURE, '--mode=review-verdict-pass'],
+    });
+
+    expect(result.runStatus).toBe('completed');
+    expect(result.tasks).toContainEqual({ taskId: TASK_1, status: 'skipped' });
+    expect(result.tasks).toContainEqual({ taskId: TASK_2, status: 'skipped' });
   });
 });
