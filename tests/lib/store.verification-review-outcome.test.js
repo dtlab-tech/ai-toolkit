@@ -224,6 +224,29 @@ describe('persistVerificationReviewOutcome', () => {
       expect(reviewReceipt.authoritative).toBe(true);
     });
 
+    test('persists the reviewer\'s verbatim responseText on the review receipt, not duplicated on the outcome', () => {
+      const review = { reviewPassed: false, criticalFindings: [], responseText: 'Verdict: FAIL\n\n(unrecognized template)' };
+      const result = persistVerificationReviewOutcome(executionRoot, RUN_ID, TASK_ID, 1, passingVerification(), review);
+
+      const reviewPath = path.join(executionRoot, 'runs', RUN_ID, 'receipts', TASK_ID + '-attempt1-review.json');
+      const reviewReceipt = JSON.parse(fs.readFileSync(reviewPath, 'utf8'));
+      expect(reviewReceipt.responseText).toBe('Verdict: FAIL\n\n(unrecognized template)');
+
+      // Not duplicated on the outcome receipt — that one only cross-references
+      // the review receipt by id, same as verification's own per-command detail.
+      const outcomePath = path.join(executionRoot, 'runs', RUN_ID, 'receipts', result.outcomeReceiptId + '.json');
+      const outcome = JSON.parse(fs.readFileSync(outcomePath, 'utf8'));
+      expect(outcome.review.responseText).toBeUndefined();
+      expect(outcome.review.receiptId).toBe(TASK_ID + '-attempt1-review');
+    });
+
+    test('persists responseText as null (never undefined/empty string) when the reviewer object omits it', () => {
+      persistVerificationReviewOutcome(executionRoot, RUN_ID, TASK_ID, 1, passingVerification(), failingReview());
+      const reviewPath = path.join(executionRoot, 'runs', RUN_ID, 'receipts', TASK_ID + '-attempt1-review.json');
+      const reviewReceipt = JSON.parse(fs.readFileSync(reviewPath, 'utf8'));
+      expect(reviewReceipt.responseText).toBeNull();
+    });
+
     test('recording the same outcome twice with identical inputs is idempotent (no RECEIPT_CONFLICT)', () => {
       persistVerificationReviewOutcome(executionRoot, RUN_ID, TASK_ID, 1, passingVerification(), passingReview());
       expect(() =>
