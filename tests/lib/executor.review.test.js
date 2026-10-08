@@ -353,6 +353,23 @@ describe('runReview', () => {
       const result = await runReview(baseArgs({ diff: 'no template here' }));
       expect(result.reviewPassed).toBeNull();
       expect(result.criticalFindings).toEqual([]);
+      // The reply WAS readable (echo-json always returns a string envelope) —
+      // only the template match failed, so responseText is still the exact
+      // reply text, never null just because nothing recognizable was found in it.
+      expect(result.responseText).toContain('no template here');
+    });
+
+    test('returns the reviewer\'s exact verbatim reply as responseText, byte for byte', async () => {
+      const diff = 'Verdict: PASS\n\nCRITICAL (blocks merge):\n  none\n';
+      const result = await runReview(baseArgs({ diff }));
+      expect(result.responseText).toBe(result.spawnResult.result.result);
+      expect(result.responseText).toContain(diff);
+    });
+
+    test('reports responseText as null when the reply has no readable envelope at all', async () => {
+      const result = await runReview(baseArgs({ spawnArgs: [FIXTURE, '--mode=malformed'] }));
+      expect(result.reviewPassed).toBeNull();
+      expect(result.responseText).toBeNull();
     });
   });
 
