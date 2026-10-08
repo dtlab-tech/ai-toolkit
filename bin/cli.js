@@ -2642,6 +2642,7 @@ function _executorCurrentBranchRef(projectDir) {
 //     mismatch, not an I/O failure): SUCCESSOR_NOT_APPROVED,
 //     SUCCESSOR_PLAN_NOT_FOUND, PLAN_NOT_FOUND, PLAN_PARSE_ERROR,
 //     REPLAN_UNKNOWN_TASK_MAPPING, ATTEMPT_NUMBER_MISMATCH,
+//     REPLAN_SOURCE_NOT_SUPERSEDED, REPLAN_PLAN_DIGEST_MISMATCH,
 //     STATE_READBACK_MISMATCH, STATE_NOT_FOUND, STATE_TASK_NOT_FOUND,
 //     STATE_ATTEMPT_NOT_FOUND, STATE_TASK_EXISTS, TREE_MISMATCH,
 //     PARENT_MISMATCH, COMMIT_REINSPECTION_MISMATCH,
@@ -2699,6 +2700,7 @@ const EXECUTOR_EXIT_CODE_BY_ERROR_CODE = {
   // 4 — evidence / plan / approval mismatch
   SUCCESSOR_NOT_APPROVED: 4, SUCCESSOR_PLAN_NOT_FOUND: 4, PLAN_NOT_FOUND: 4,
   PLAN_PARSE_ERROR: 4, REPLAN_UNKNOWN_TASK_MAPPING: 4, ATTEMPT_NUMBER_MISMATCH: 4,
+  REPLAN_SOURCE_NOT_SUPERSEDED: 4, REPLAN_PLAN_DIGEST_MISMATCH: 4,
   STATE_READBACK_MISMATCH: 4, STATE_NOT_FOUND: 4, STATE_TASK_NOT_FOUND: 4,
   STATE_ATTEMPT_NOT_FOUND: 4, STATE_TASK_EXISTS: 4, TREE_MISMATCH: 4,
   PARENT_MISMATCH: 4, COMMIT_REINSPECTION_MISMATCH: 4, INTEGRATION_PARENT_MISMATCH: 4,
@@ -2838,6 +2840,7 @@ async function handleExecutorCommand(argv) {
         claudePath: getFlag('--claude-path'),
         taskTimeoutMs: taskTimeoutMsRaw === undefined ? undefined : Number(taskTimeoutMsRaw),
         agentBudgetUsd: agentBudgetUsdRaw === undefined ? undefined : Number(agentBudgetUsdRaw),
+        fromReplanRunId: getFlag('--from-replan-run-id'),
       });
       emitSuccess(result);
 
