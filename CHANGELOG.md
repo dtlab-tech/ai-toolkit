@@ -1,4 +1,17 @@
 ## 0.1.4 (2026-07-21)
+## [0.17.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.9...v0.17.0) (2026-10-08)
+
+
+### Features
+
+* **task-executor:** consume replan's carry-over record on start ([f4bdbc1](https://github.com/dtlab-tech/ai-toolkit/commit/f4bdbc1da55a89e82196377a09ed66f274136185))
+* **task-executor:** consume replan's carry-over record on start ([ee669fc](https://github.com/dtlab-tech/ai-toolkit/commit/ee669fc83a6eaf248358f4c3bf9087804074192e))
+
+
+### Bug Fixes
+
+* **tests:** gate replan carry-over test on Windows only ([bd46109](https://github.com/dtlab-tech/ai-toolkit/commit/bd4610949537106734f6a47f40b2925d9a53c621))
+
 ## [0.16.9](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.8...v0.16.9) (2026-10-07)
 
 
