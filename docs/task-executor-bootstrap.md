@@ -70,7 +70,69 @@ For the full flag reference, exit-code table, and JSON result schemas of every s
 
 ---
 
-## 2. Windows-only E-02 qualification
+## 2. Resolving the Claude CLI executable path
+
+`--claude-path` has no documented discovery procedure anywhere in this toolkit —
+`implement-feature`'s SKILL.md only says "ask the user if unknown," and this document, until now,
+only showed `<resolved-claude-cli-path>` as an unexplained placeholder. Found twice independently
+(once resolving it for a real run, once from a fresh install on a different machine reporting no
+standalone `claude` executable anywhere on `PATH`): **try automated discovery first, then
+validate, and only ask the user when discovery is inconclusive** — never silently guess, and
+never trust a path (found or user-supplied) without confirming it actually runs.
+
+**Case A — a standalone CLI install.** A bare `claude`/`claude.exe` reachable on `PATH`
+(`where claude` on Windows, `which claude` on macOS/Linux). This is the common case for a
+terminal-only install (e.g. `npm install -g @anthropic-ai/claude-code`).
+
+**Case B — Claude Code running as a VS Code (or VS Code-family) extension, no standalone CLI on
+`PATH`.** The extension caches its own Claude Agent SDK binary under the editor's own per-OS
+user-data directory, at:
+
+```
+<editor-userdata-root>/agent-host/sdk-cache/claude/<sdk-version>/<platform>/node_modules/@anthropic-ai/claude-agent-sdk-<platform>/claude[.exe]
+```
+
+`<editor-userdata-root>` is Electron's standard per-OS application-data directory (not an
+extension-specific `globalStorage` subfolder — `agent-host` sits directly under it, a sibling of
+`User`/`Cache`/`logs`):
+- Windows: `%APPDATA%\Code` — confirmed directly on a real machine:
+  `C:\Users\<user>\AppData\Roaming\Code\agent-host\sdk-cache\claude\0.3.220\win32-x64\node_modules\@anthropic-ai\claude-agent-sdk-win32-x64\claude.exe`
+- macOS: `~/Library/Application Support/Code` (same relative layout, by VS Code's own standard
+  per-OS data-directory convention — not independently verified in this session)
+- Linux: `~/.config/Code` (same caveat)
+- For VS Code Insiders or another fork, substitute `Code` with that variant's own folder name
+  (e.g. `Code - Insiders`)
+
+Discovery commands (search, do not assume a fixed version — the cached SDK version drifts with
+editor/extension updates):
+
+```powershell
+# Windows
+Get-ChildItem -Path "$env:APPDATA\Code\agent-host\sdk-cache\claude" -Recurse -Filter "claude.exe" -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty FullName
+```
+
+```bash
+# macOS/Linux
+find "$HOME/Library/Application Support/Code/agent-host/sdk-cache/claude" \
+     "$HOME/.config/Code/agent-host/sdk-cache/claude" \
+     -iname "claude" -type f 2>/dev/null
+```
+
+**Validate before trusting any path, found or user-supplied** — this is exactly the kind of
+unattended, potentially costly action (`executor start` spawns real, budget-consuming agent
+processes) this toolkit's own Gate Protocol treats with caution elsewhere:
+- Confirm it is a real, executable file, then run `<path> --version` to confirm it actually
+  responds as a Claude CLI — a matching filename is not evidence it works.
+- If discovery finds **zero or more than one** candidate (e.g. several cached SDK versions from
+  past extension updates), do not guess which one — present every candidate found to the user and
+  have them confirm or choose, per SKILL.md's own "ask the user if unknown" rule. A single,
+  unambiguous candidate that passes the `--version` check may be used directly; anything less
+  certain goes back to the user before `executor start` ever runs.
+
+---
+
+## 3. Windows-only E-02 qualification
 
 The executor's process-supervision guarantees — tree-kill of in-flight attempts, tag-based
 worker-liveness scanning, and immediate-stop confirmation — are proven for **Windows only**. This
@@ -93,7 +155,7 @@ all rather than degrading silently.
 
 ---
 
-## 3. Persistence caveats
+## 4. Persistence caveats
 
 These are the real, already-confirmed caveats and limitations discovered during this feature's
 own delivery. Each one is cited to its source rather than paraphrased from memory.

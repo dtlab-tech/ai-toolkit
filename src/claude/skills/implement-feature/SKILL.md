@@ -248,7 +248,11 @@ ai-toolkit executor start \
 
 Placeholders:
 - `<path-to-feature.md>` — the feature.md path passed to this skill
-- `<resolved-claude-cli-path>` — the Claude CLI executable path on this host; ask the user if unknown
+- `<resolved-claude-cli-path>` — the Claude CLI executable path on this host; try automated
+  discovery first (`docs/task-executor-bootstrap.md` section 2 — covers both a standalone CLI on
+  `PATH` and the VS Code-extension-cached SDK binary case), validate any candidate with
+  `--version` before trusting it, and ask the user only when discovery is inconclusive or finds
+  more than one candidate
 - `<task-timeout-ms>` and `<agent-budget-usd>` — must be supplied explicitly; there is no hidden default timeout or spend
 
 **If the host's ordinary terminal capability can launch a durable external command**, launch
