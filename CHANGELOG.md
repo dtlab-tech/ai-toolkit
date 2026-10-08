@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.16.9](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.8...v0.16.9) (2026-10-07)
+
+
+### Bug Fixes
+
+* **task-executor:** let "skipped" satisfy a downstream dependency ([f00d3c6](https://github.com/dtlab-tech/ai-toolkit/commit/f00d3c68324c0ca7f1d8f965b15288027830fd01))
+* **task-executor:** let "skipped" satisfy a downstream dependency ([6b48a61](https://github.com/dtlab-tech/ai-toolkit/commit/6b48a619e64f497b9b93e4a1a0254105eda1b718))
+
 ## [0.16.8](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.7...v0.16.8) (2026-10-07)
 
 
