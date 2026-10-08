@@ -31,6 +31,19 @@ const { execute, replan } = require('../../lib/task-executor/index');
 const FIXTURE = path.join(__dirname, '..', 'fixtures', 'fake-claude-cli.js');
 const NODE = process.execPath;
 
+// Real process-liveness confirmation (replan()'s own "no live workers" gate,
+// via _findLiveTaggedProcess) is only qualified on Windows (E-02 evidence
+// spike) — mirrors tests/lib/replan.test.js's and stop.test.js's own
+// itWindowsOnly gating exactly. The beforeEach process.platform override
+// below only fools execute()'s own top-level PLATFORM_NOT_QUALIFIED guard —
+// evaluated here at MODULE LOAD TIME, before that runtime override ever
+// applies — it does nothing for the real OS-level liveness query replan()
+// performs on a genuinely non-Windows CI runner, which returns 'unknown'
+// (never 'confirmed-not-found') there regardless, and replan() correctly
+// refuses to supersede on an unconfirmed liveness result.
+const IS_WINDOWS = process.platform === 'win32';
+const itWindowsOnly = IS_WINDOWS ? test : test.skip;
+
 jest.setTimeout(30000);
 
 const VERIFIED_IDENTITY = {
@@ -176,7 +189,7 @@ describe('execute() args.fromReplanRunId (carry-over from a prior replan())', ()
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  test('a carried-over task is seeded "checkpointed" without a new dispatch or commit', async () => {
+  itWindowsOnly('a carried-over task is seeded "checkpointed" without a new dispatch or commit', async () => {
     // 1. Real original run: one task, really implemented, verified, reviewed
     // and checkpointed — a real commit lands on featureRef.
     writeWorkBreakdownFixture(originalFeatureDir, 'FTR-782', [{
