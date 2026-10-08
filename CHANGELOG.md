@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.17.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.0...v0.17.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **task-executor:** persist the reviewer's raw response on its receipt ([487b267](https://github.com/dtlab-tech/ai-toolkit/commit/487b2676467b72d4f6649c784b9fc6311d7819ac))
+* **task-executor:** persist the reviewer's raw response on its receipt ([1ca8491](https://github.com/dtlab-tech/ai-toolkit/commit/1ca8491e81ea35cc27a5f5b9f2b970fe85b1aeef))
+
 ## [0.17.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.16.9...v0.17.0) (2026-10-08)
 
 
