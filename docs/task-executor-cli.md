@@ -35,7 +35,7 @@ text-mode output in the current implementation.
 ### `start`
 
 ```bash
-ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N] [--claude-path <path>] [--task-timeout-ms <ms>] [--agent-budget-usd <amount>]
+ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N] [--claude-path <path>] [--task-timeout-ms <ms>] [--agent-budget-usd <amount>] [--from-replan-run-id <uuid>]
 ```
 
 | Flag | Required | Default | Notes |
@@ -46,6 +46,7 @@ ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N
 | `--claude-path` | no | — | Absolute path to the qualified Claude CLI executable |
 | `--task-timeout-ms` | no | — | Forwarded as a Number |
 | `--agent-budget-usd` | no | — | Forwarded as a Number; persisted into run config, not itself enforced |
+| `--from-replan-run-id` | no | — | UUID of a prior run `replan` has already superseded; seeds its carry-over-eligible tasks straight to `checkpointed` instead of `pending` (see "Carrying forward a replan" below) |
 
 Backs `lib/task-executor/index.js`'s `execute()`. Validates gates/config, acquires the
 repo-wide execution lease for a brand-new run, builds an immutable plan snapshot from the
@@ -73,6 +74,22 @@ was never run against the real executable as claimed. The mode is deliberately u
 the task's own `--project` directory — the executor's job is letting a developer agent write
 anywhere under that project, so (unlike pm-phase1/2's read-only-text workers) a narrower
 allowlist is not an option here.
+
+**Carrying forward a replan.** `replan` (below) computes which of an original run's completed
+tasks are eligible to carry forward into a corrected successor plan (`carriesCompletion`,
+commit-reachability based) and durably records that decision — but, on its own, never acts on
+it: a plain `start` on the successor plan dispatches every task fresh from `pending`, discarding
+the eligibility `replan` just computed. `--from-replan-run-id <uuid>` is the explicit way to
+actually consume that record: given the UUID of a run `replan` has already superseded, `execute()`
+validates that run really is `superseded`, reads its `replan` intent, and confirms that intent's
+`successorPlanDigest` matches the plan this `start` call just parsed (`REPLAN_PLAN_DIGEST_MISMATCH`
+otherwise, exit 4) — a prior run that was never actually `replan`-ed throws
+`REPLAN_SOURCE_NOT_SUPERSEDED` (exit 4). Only then are the mapped `newTaskId`s whose
+`carriesCompletion` is `true` seeded straight to `checkpointed`, with a synthetic attempt carrying
+the original task's already-reachable `originalSha` (never re-verified, never re-dispatched in the
+successor run — `terminalReason` records the exact old run/task/attempt provenance for later
+`diagnose`/audit). Never inferred/auto-detected: omitting the flag (the default) carries nothing
+forward, exactly like today.
 
 ### `status`
 
@@ -218,7 +235,10 @@ way. Validates the caller-supplied old→new task mapping against both the origi
 tasks and the successor's plan snapshot, computes carry-completion eligibility per pair
 (read-only), refuses if any original-run attempt's worker liveness is not confirmed dead
 (`LIVE_WORKER_BLOCKS_REPLAN`), then records the mapping as a durable intent and marks the
-original run `superseded`. Never deletes or rewrites any task/attempt evidence.
+original run `superseded`. Never deletes or rewrites any task/attempt evidence. The record this
+writes is not write-only forever: `start`'s own `--from-replan-run-id` (above) is the explicit
+consumer — pass this run's own `runId` there on the successor's `start` call to actually carry the
+eligible tasks forward, instead of the eligibility decision going unused.
 
 ---
 
