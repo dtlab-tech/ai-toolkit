@@ -268,6 +268,7 @@ describe('runReview', () => {
       expect(spawnSpy).toHaveBeenCalledWith(expect.objectContaining({
         args: [
           '--print', '--output-format', 'json', '--agent', VERIFIED_IDENTITY.nativeName,
+          '--no-session-persistence',
           '--permission-mode', 'auto',
         ],
       }));
