@@ -1,4 +1,16 @@
 ## 0.1.4 (2026-07-21)
+## [0.17.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.1...v0.17.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* **am-phase1:** resume already-landed assessor output after a crash ([057916e](https://github.com/dtlab-tech/ai-toolkit/commit/057916e975cca4e98f838000309546bf2ceb8787))
+* **cli:** harden installer/CLI crash paths and fix several silent-failure bugs ([f93d18a](https://github.com/dtlab-tech/ai-toolkit/commit/f93d18a04cbea5a8d393102e3125170b170b6ae2))
+* **execution-ledger:** retry rename on transient EPERM instead of unlinking destination ([fc07a4c](https://github.com/dtlab-tech/ai-toolkit/commit/fc07a4c1fdad0f953dd38f7027bec96b0b8807c2))
+* **gaia-install-toolkit:** resolve self-contradiction on editing settings.local.json ([b385325](https://github.com/dtlab-tech/ai-toolkit/commit/b38532586f4661ef788b1178013991b81ecc0ea5))
+* harden workflow gates, CLI installer, and ledger durability ([a9e8b65](https://github.com/dtlab-tech/ai-toolkit/commit/a9e8b6509dea2ead6d63277835254eda8ba3e5e0))
+* **pm-phase:** bind Gate 1 approval to doc content, not just its text ([8f5b2f1](https://github.com/dtlab-tech/ai-toolkit/commit/8f5b2f1cbaa9262d1f11c559302b798dedcf4b4f))
+
 ## [0.17.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.0...v0.17.1) (2026-10-08)
 
 
