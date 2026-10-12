@@ -180,6 +180,30 @@ test('security/domain/dependencies/devops use one generic assessor, never remedi
   expect(fs.readFileSync(path.join(f.root, approved.approvals_path), 'utf8')).toContain('| INT-001 | Yes |');
 });
 
+test('am-phase1 resumes: an assessor whose output already exists on disk is never re-dispatched', async () => {
+  // Simulates a crash after one assessor's output already landed on disk but
+  // before the run ever reached ledger completion — a fresh attempt (new runId,
+  // same prefix/outputDir) must not pay for that assessor again.
+  const outputDir = path.join(f.root, 'docs/assessments/ASSESS-002');
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(path.join(outputDir, 'ASSESS-002-Layer-Assessment.md'), '# Already-done layered-architecture report\n');
+  const calls = [];
+  const dispatch = async options => {
+    calls.push(options);
+    const agent = options.args[options.args.indexOf('--agent') + 1];
+    if (agent === 'gaia-layered-architecture-assessment') throw new Error('must not re-dispatch an assessor whose output already exists');
+    if (options.args.includes('gaia-intervention-documentation-standard')) {
+      return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
+        structured_output: { files: [{ path: 'ASSESS-002-Interventions-Index.md', content: '| ID | Title | Criticality |\n|---|---|---|\n' }] } } };
+    }
+    return success('# Assessment\n');
+  };
+  const result = await runWorkflow('am-phase1', ['.', '--prefix', 'ASSESS-002', '--scope=architecture,concurrency'], { ...f.options, dispatch });
+  expect(calls.map(o => o.args[o.args.indexOf('--agent') + 1])).toEqual(['gaia-concurrency-safety-assessment', 'gaia-intervention-documentation-standard']);
+  const layerSummary = result.assessment_summaries.find(s => s.agent === 'gaia.agent.assessment.layered-architecture');
+  expect(fs.readFileSync(path.join(f.root, layerSummary.output_file), 'utf8')).toContain('Already-done layered-architecture report');
+});
+
 function phase2Setup() {
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'), '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n');

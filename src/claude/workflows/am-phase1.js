@@ -32,9 +32,21 @@ return c.run(meta.name, outputDir, prefix, async () => {
   // Neither assessor below has a Write tool: each returns its report as plain response
   // text, which the host persists to its declared `outputs` path (see worker()'s own
   // comment in lib/workflow-control.js for why — "Never ask an LLM to do I/O").
+  // Resume: unlike pm-phase1's own fresh() check, a crash between two assessors
+  // finishing and a third one still running used to force ALL of them to be
+  // re-dispatched from scratch on retry — c.parallel()'s own Promise.allSettled
+  // already lets the OTHER assessors' outputs land on disk even when one fails
+  // (confirmed in lib/workflow-control.js), but nothing here checked for that
+  // already-landed output before paying for a fresh dispatch. An assessor's own
+  // output is never partially written (worker() persists it only after a
+  // successful, fully-parsed response), so a non-empty existing file is safe to
+  // treat as already-done and skip.
   const assessmentResults = await c.parallel([...groups].map(([id, areas]) => async () => {
     const suffix = { 'gaia.agent.assessment.generic': 'Generic', 'gaia.agent.assessment.layered-architecture': 'Layer', 'gaia.agent.assessment.concurrency': 'Concurrency' }[id]
     const output_file = `${outputDir}/${prefix}-${suffix}-Assessment.md`
+    if (c.exists(output_file) && c.read(output_file).trim().length > 0) {
+      return { agent: id, scopes: areas, result: c.read(output_file), output_file }
+    }
     const result = await c.worker(id,
       `${targetPath} --prefix ${prefix} --output-dir ${outputDir}\n` +
       `Read-only assessment. Explicit scope: ${areas.join(', ')}. Inspect risks, evidence, severity and recommendations for EACH listed scope. ` +
