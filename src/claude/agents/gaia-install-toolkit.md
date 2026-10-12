@@ -243,6 +243,6 @@ If any modified files were kept by the user (not overwritten), list them so they
 
 - **Never overwrite `docs/procedures/` files** regardless of `--force` — project overrides take priority
 - **Never copy `install-toolkit.md`** — it's a toolkit-internal utility
-- **Never copy or edit `settings.json` / `settings.local.json`** — user-owned config; only verify and advise (Step 4b)
+- **The installer (Step 2) never copies `settings.json` / `settings.local.json`**, and Step 4's spawn-depth check is read-only (verify and advise, never write). The ONE exception is Step 6's Bash allowlist, which edits `settings.local.json` — but only via the dedicated `merge-allowlist` CLI, and only after the user explicitly opts in; never edit either file directly or outside that step
 - **Create directories as needed** — destination may not have `.claude/` yet
 - **Abort cleanly** if destination path is invalid — do not create partial installs

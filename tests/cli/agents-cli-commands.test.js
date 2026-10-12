@@ -1115,6 +1115,29 @@ describe('agents cleanup — no manifest returns dry-run with empty lists (AC-15
   });
 });
 
+describe('agents cleanup — ambiguous local+global manifests reported as conflict', () => {
+  test('both a project and a global manifest present yields status conflict, not a silent project-only cleanup', () => {
+    const projDir  = mktmp('cleanup-conflict');
+    const fakeHome = mktmp('cleanup-conflict-home');
+
+    writeManifestJSON(projDir, {
+      version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'local', files: [], fileHashes: {},
+    });
+    writeManifestJSON(fakeHome, {
+      version: '0.13.0', installedAt: '2026-01-01T00:00:00.000Z',
+      installationMode: 'global', files: [], fileHashes: {},
+    });
+
+    const result = runCLI(['agents', 'cleanup', '--project', projDir, '--home', fakeHome]);
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.status).toBe('conflict');
+    expect(out.candidates).toEqual([]);
+    expect(out.missing).toEqual([]);
+  });
+});
+
 describe('agents cleanup — genuine candidates listed correctly (AC-15, AC-16)', () => {
   const STALE_PATH  = '.claude/agents/old-removed-agent.md';
   const ACTIVE_PATH = '.claude/agents/gaia-developer-backend.md';

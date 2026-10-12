@@ -68,6 +68,8 @@ Extract from the result:
 - `requirements.summary` — requirements file summary
 - `tech_spec.summary` — tech-spec file summary
 - `validation.summary` — validation result (gaps or clean)
+- `docs_digest` — content digest binding this approval to the exact Requirements/Tech-Spec
+  bytes just produced; embed verbatim into `{PREFIX}-Approvals.md` in Step 2 below
 - `token_ledger` — array of per-agent token data from phase 1
 - `errors` — any agent failures during phase 1
 
@@ -116,6 +118,8 @@ The pipeline CANNOT continue until you reply directly.
 | {PREFIX}-Requirements.md | ✅ Approved | {today} | {notes or —} |
 | {PREFIX}-Tech-Spec.md | ✅ Approved | {today} | {notes or —} |
 | {PREFIX}-Validation-Report.md | ✅ Approved | {today} | {notes or —} |
+
+**Docs Digest:** `{docs_digest}`
 
 ## Approval History
 

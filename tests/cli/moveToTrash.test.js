@@ -3,7 +3,7 @@
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
-const { moveToTrash } = require('../../bin/cli');
+const { moveToTrash, runInstall } = require('../../bin/cli');
 
 // Helper: recursively list all files under a directory.
 function walkDirSync(dir) {
@@ -99,5 +99,56 @@ describe('moveToTrash()', () => {
     expect(trashFile).not.toBeNull();
     expect(fs.readFileSync(trashFile, 'utf8')).toBe('agent content');
     expect(fs.existsSync(sourcePath)).toBe(false);
+  });
+});
+
+describe('runInstall() — a failed orphan trash move must not abort the install (regression)', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'toolkit-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('a locked orphan file is warned about and left in place, but the manifest is still written', async () => {
+    const orphanRel  = '.claude/agents/stale-agent.md';
+    const orphanPath = path.join(tmpDir, orphanRel);
+    fs.mkdirSync(path.dirname(orphanPath), { recursive: true });
+    fs.writeFileSync(orphanPath, 'stale content');
+
+    // Old manifest references the orphan; the new payload (mappings=[]) does not,
+    // so computeOrphans flags it for removal under --force.
+    fs.writeFileSync(path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json'), JSON.stringify({
+      version: '0.0.0', installedAt: new Date().toISOString(),
+      installationMode: 'local', files: [orphanRel],
+    }));
+
+    const origRename = fs.renameSync;
+    fs.renameSync = (src, dest) => {
+      if (String(src) === orphanPath) {
+        const err = new Error('EPERM: operation not permitted, rename');
+        err.code = 'EPERM';
+        throw err;
+      }
+      return origRename(src, dest);
+    };
+
+    try {
+      await expect(runInstall('test', [], /* force */ true, tmpDir, false, 'local')).resolves.not.toThrow();
+    } finally {
+      fs.renameSync = origRename;
+    }
+
+    // The orphan was never removed (trash move failed) — it must still be at its
+    // original location, not duplicated, not silently lost.
+    expect(fs.existsSync(orphanPath)).toBe(true);
+    // The install still completed: the manifest write at the end of runInstall
+    // was reached and executed despite the earlier orphan-removal failure.
+    const manifestPath = path.join(tmpDir, '.claude', '.ai-toolkit-manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    expect(manifest.files).toEqual([]);
   });
 });

@@ -110,4 +110,21 @@ describe('writeManifest()', () => {
     const result = readWrittenManifest();
     expect(result.files).toEqual([]);
   });
+
+  test('returns true when the manifest was written successfully', () => {
+    expect(writeManifest(tmpDir, [], 'local')).toBe(true);
+  });
+
+  test('returns false (and never throws) when the manifest cannot be written, so callers can report a degraded install instead of a false "complete"', () => {
+    // destRoot itself is a plain file, not a directory: ensureDir cannot create
+    // <destRoot>/.claude underneath it.
+    const blockerFile = fs.mkdtempSync(path.join(os.tmpdir(), 'toolkit-test-')) + '-blocker-file';
+    fs.writeFileSync(blockerFile, 'not a directory');
+    try {
+      expect(() => writeManifest(blockerFile, [], 'local')).not.toThrow();
+      expect(writeManifest(blockerFile, [], 'local')).toBe(false);
+    } finally {
+      fs.unlinkSync(blockerFile);
+    }
+  });
 });

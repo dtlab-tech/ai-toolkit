@@ -14,7 +14,7 @@ function phase1Dispatch({ args }) {
   const suffix = { 'gaia-generate-requirements': 'Requirements', 'gaia-generate-tech-spec': 'Tech-Spec', 'gaia-validate-feature-docs': 'Validation-Report' }[name];
   if (!suffix) throw new Error('Unexpected worker: ' + name);
   const response = success('# Result\n');
-  if (name === 'gaia-validate-feature-docs') response.result.structured_output = { valid: true, findings: [], report: '# Result\n' };
+  if (name === 'gaia-validate-feature-docs') response.result.structured_output = { valid: true, findings: [], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n' };
   return Promise.resolve(response);
 }
 test('real installed pm-phase1 executes only semantic workers and persists done after outputs', async () => {
@@ -41,7 +41,7 @@ test.each([undefined, null, ''])('a written validation report without structured
     return response;
   };
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
-    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, report');
+    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, needsRequirementsFix, needsTechSpecFix, report');
   expect(fs.existsSync(path.join(f.dir, 'FTR-099-Validation-Report.md'))).toBe(false);
   expect(f.entries()[0].status).toBe('failed');
   expect(f.entries().find(e => e.agentId === 'gaia.agent.planner.validate-feature-docs').status).toBe('failed');
@@ -54,8 +54,8 @@ test('document findings trigger host revision followed by a clean structured ver
     const response = await phase1Dispatch(options);
     if (options.args.includes('gaia-validate-feature-docs')) {
       const schema = JSON.parse(options.args[options.args.indexOf('--json-schema') + 1]);
-      expect(schema.required).toEqual(['valid', 'findings', 'report']);
-      if (++validations === 1) response.result.structured_output = { valid: false, findings: ['Requirements: missing acceptance criterion'], report: '# Result\n' };
+      expect(schema.required).toEqual(['valid', 'findings', 'needsRequirementsFix', 'needsTechSpecFix', 'report']);
+      if (++validations === 1) response.result.structured_output = { valid: false, findings: ['Requirements: missing acceptance criterion'], needsRequirementsFix: true, needsTechSpecFix: false, report: '# Result\n' };
     }
     return response;
   });
@@ -66,9 +66,50 @@ test('document findings trigger host revision followed by a clean structured ver
     'gaia-generate-requirements', 'gaia-validate-feature-docs',
   ]);
   expect(f.entries().every(e => e.status === 'done')).toBe(true);
+  expect(result.docs_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 });
 
-test.each([{ valid: true }, { valid: 'true', findings: [] }, { valid: false, findings: [42] }])('malformed validation verdict blocks Gate 1: %j', async payload => {
+test('docs_digest is deterministic over the same Requirements/Tech-Spec content and changes when they do', async () => {
+  const first = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
+  const again = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
+  expect(again.docs_digest).toBe(first.docs_digest); // second run is a fresh-skip no-op — same content, same digest
+  const changed = await runWorkflow('pm-phase1', [f.feature, '--force'], { ...f.options, dispatch: async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-generate-requirements')) response.result.result = '# Result (revised)\n';
+    return response;
+  } });
+  expect(changed.docs_digest).not.toBe(first.docs_digest);
+});
+
+test('a validator returning valid:true with non-empty findings is a contradiction, not a pass', async () => {
+  const dispatch = async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-validate-feature-docs')) {
+      response.result.structured_output = { valid: true, findings: ['stray finding'], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n' };
+    }
+    return response;
+  };
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch })).rejects.toThrow('contradictory result');
+  expect(f.entries()[0].status).toBe('failed');
+});
+
+test('a validator reporting gaps but flagging neither document for revision fails closed', async () => {
+  const dispatch = async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-validate-feature-docs')) {
+      response.result.structured_output = { valid: false, findings: ['unattributed gap'], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n' };
+    }
+    return response;
+  };
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch })).rejects.toThrow('flagged neither document for revision');
+  expect(f.entries()[0].status).toBe('failed');
+});
+
+test.each([
+  { valid: true },
+  { valid: 'true', findings: [], needsRequirementsFix: false, needsTechSpecFix: false },
+  { valid: false, findings: [42], needsRequirementsFix: true, needsTechSpecFix: false },
+])('malformed validation verdict blocks Gate 1: %j', async payload => {
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async options => {
     const response = await phase1Dispatch(options);
     if (options.args.includes('gaia-validate-feature-docs')) response.result.structured_output = payload;
@@ -80,7 +121,7 @@ test.each([{ valid: true }, { valid: 'true', findings: [] }, { valid: false, fin
 test('a clean structured verdict without its report field cannot complete pm-phase1', async () => {
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async options => {
     if (options.args.includes('gaia-validate-feature-docs')) {
-      return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] } } };
+      return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [], needsRequirementsFix: false, needsTechSpecFix: false } } };
     }
     return phase1Dispatch(options);
   } })).rejects.toThrow('Missing structured field: report');
@@ -90,7 +131,7 @@ test('a clean structured verdict without its report field cannot complete pm-pha
 
 test('successful worker without required report fails the workflow', async () => {
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async () => success('ok') }))
-    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, report');
+    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, needsRequirementsFix, needsTechSpecFix, report');
   expect(f.entries()[0].status).toBe('failed');
 });
 test('fresh outputs skip workers; force requests them again', async () => {
@@ -139,6 +180,30 @@ test('security/domain/dependencies/devops use one generic assessor, never remedi
   expect(fs.readFileSync(path.join(f.root, approved.approvals_path), 'utf8')).toContain('| INT-001 | Yes |');
 });
 
+test('am-phase1 resumes: an assessor whose output already exists on disk is never re-dispatched', async () => {
+  // Simulates a crash after one assessor's output already landed on disk but
+  // before the run ever reached ledger completion — a fresh attempt (new runId,
+  // same prefix/outputDir) must not pay for that assessor again.
+  const outputDir = path.join(f.root, 'docs/assessments/ASSESS-002');
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(path.join(outputDir, 'ASSESS-002-Layer-Assessment.md'), '# Already-done layered-architecture report\n');
+  const calls = [];
+  const dispatch = async options => {
+    calls.push(options);
+    const agent = options.args[options.args.indexOf('--agent') + 1];
+    if (agent === 'gaia-layered-architecture-assessment') throw new Error('must not re-dispatch an assessor whose output already exists');
+    if (options.args.includes('gaia-intervention-documentation-standard')) {
+      return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
+        structured_output: { files: [{ path: 'ASSESS-002-Interventions-Index.md', content: '| ID | Title | Criticality |\n|---|---|---|\n' }] } } };
+    }
+    return success('# Assessment\n');
+  };
+  const result = await runWorkflow('am-phase1', ['.', '--prefix', 'ASSESS-002', '--scope=architecture,concurrency'], { ...f.options, dispatch });
+  expect(calls.map(o => o.args[o.args.indexOf('--agent') + 1])).toEqual(['gaia-concurrency-safety-assessment', 'gaia-intervention-documentation-standard']);
+  const layerSummary = result.assessment_summaries.find(s => s.agent === 'gaia.agent.assessment.layered-architecture');
+  expect(fs.readFileSync(path.join(f.root, layerSummary.output_file), 'utf8')).toContain('Already-done layered-architecture report');
+});
+
 function phase2Setup() {
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'), '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n');
@@ -167,6 +232,38 @@ test.each([true, false])('pm-phase2 runs real validator/renderer and blocks a ne
     expect(f.entries()[0].status).toBe('failed');
     expect(fs.existsSync(path.join(f.dir, 'FTR-099-Work-Breakdown.csv'))).toBe(false);
   }
+});
+function docsDigestFor(requirementsText, techSpecText) {
+  return 'sha256:' + require('crypto').createHash('sha256').update(requirementsText + '\u0000' + techSpecText, 'utf8').digest('hex');
+}
+test('pm-phase2 proceeds when Approvals.md has no Docs Digest line (pre-existing approval, not enforced)', async () => {
+  const wb = phase2Setup(); // phase2Setup's own Approvals.md fixture has no Docs Digest line
+  const dispatch = jest.fn(async options => options.args.includes('gaia-generate-work-breakdown')
+    ? success(JSON.stringify(wb))
+    : { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] } } });
+  const result = await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+  expect(result.gate2_payload.gate2_blocked).toBe(false);
+});
+test('pm-phase2 proceeds when the recorded Docs Digest matches current Requirements/Tech-Spec content', async () => {
+  const wb = phase2Setup();
+  const requirementsText = fs.readFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), 'utf8');
+  const techSpecText = fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8');
+  fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'),
+    `## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n\n**Docs Digest:** \`${docsDigestFor(requirementsText, techSpecText)}\`\n`);
+  const dispatch = jest.fn(async options => options.args.includes('gaia-generate-work-breakdown')
+    ? success(JSON.stringify(wb))
+    : { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] } } });
+  const result = await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+  expect(result.gate2_payload.gate2_blocked).toBe(false);
+});
+test('pm-phase2 fails closed when the recorded Docs Digest no longer matches Requirements/Tech-Spec (stale approval)', async () => {
+  phase2Setup();
+  fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'),
+    '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n\n**Docs Digest:** `sha256:' + '0'.repeat(64) + '`\n');
+  const dispatch = jest.fn();
+  await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).rejects.toThrow('Gate 1 approval is stale');
+  expect(dispatch).not.toHaveBeenCalled();
+  expect(f.entries()[0].status).toBe('failed');
 });
 test('malformed WB fails deterministic validation before semantic dispatch', async () => {
   phase2Setup();
@@ -201,7 +298,7 @@ test('a missing Claude executable fails the real subprocess adapter and the owne
 test('repeated negative document validation never reports Gate 1 ready', async () => {
   const dispatch = async options => {
     const response = await phase1Dispatch(options);
-    if (options.args.includes('gaia-validate-feature-docs')) response.result.structured_output = { valid: false, findings: ['Requirements incomplete'], report: '# Result\n' };
+    if (options.args.includes('gaia-validate-feature-docs')) response.result.structured_output = { valid: false, findings: ['Requirements incomplete'], needsRequirementsFix: true, needsTechSpecFix: false, report: '# Result\n' };
     return response;
   };
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch })).rejects.toThrow('gaps remain');

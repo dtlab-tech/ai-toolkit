@@ -64,6 +64,32 @@ always throws `NOT_IMPLEMENTED` (exit 1, attributed to `US-06-TASK-BE-02`); unti
 deeper per-attempt evidence inspection means using `reconcile`/`resume`, both fully implemented
 and reporting each task's classification.
 
+**If the run ends up `blocked`: do not default to restarting from scratch.** `execute()` always
+mints a brand-new `runId` and resets every task to `pending` — a plain `start` on the same feature
+re-dispatches real, budget-consuming agents against tasks that already succeeded, re-proving work
+that is already correct and already committed. Found costing real budget on a real run across
+multiple restarts before anyone thought to check for an alternative: the alternative already
+exists, it is just never suggested at the one moment it matters.
+
+Before restarting, check whether `replan` + `start --from-replan-run-id` applies instead (full
+contract in `docs/task-executor-cli.md`'s `replan`/`start` sections):
+
+1. Confirm no worker from the blocked run is still live (`replan` itself refuses otherwise via
+   `LIVE_WORKER_BLOCKS_REPLAN` — this is enforced, not just advised).
+2. Call `replan` against the blocked run with a `--task-mapping-json` that maps every already-
+   `checkpointed`/`integrated` task to itself (or to its corrected ID, if the Work Breakdown
+   genuinely changed) — the successor plan does **not** need to differ from the original; "same
+   plan, just let me continue" is a valid, intended use, not only "the plan changed".
+3. Start the successor run with `--from-replan-run-id <the-blocked-run's-id>`. Every task
+   `replan` marked `carriesCompletion: true` is seeded straight to `checkpointed` — no
+   re-dispatch, no new commit, no re-spent budget — and only the tasks that genuinely still need
+   work are actually dispatched.
+
+This does **not** help a task that was completed by hand outside the executor entirely (direct
+subagent dispatch, no executor run ever recorded it) — `replan` can only carry forward evidence
+the executor itself already checkpointed. For that gap, see section 4c below
+("`resume()`/`reconcile()` only inspect and report").
+
 For the full flag reference, exit-code table, and JSON result schemas of every subcommand
 (`start`, `status`, `diagnose`, `stop`, `reconcile`, `resume`, `replan`), see
 `docs/task-executor-cli.md` — this document intentionally does not restate that contract.
@@ -204,6 +230,13 @@ durably completed and getting an evidence-based classification per task — it d
 the interrupted run will automatically finish its remaining tasks. `execute()` always starts a
 brand-new run (a fresh `runId`, all tasks reset to pending); there is no run loop wired into
 `resume()`.
+
+**Update:** this gap now has a real, explicit (never automatic) partial workaround for the
+executor's own already-checkpointed work — see section 1's "If the run ends up `blocked`"
+guidance above (`replan` + `start --from-replan-run-id`). It still does not cover work completed
+entirely outside the executor (direct subagent dispatch that never recorded an attempt) — there
+is still no way to adopt that into the evidence trail short of a human/agent confirming it and
+deciding what to do by hand.
 
 ### d. Dormant concurrency gap in `dispatchTaskAttempt` (must be resolved before N>1 wiring)
 

@@ -322,8 +322,10 @@ function writeManifest(destRoot, fileList, installationMode, fileHashes) {
   try {
     ensureDir(manifestPath);
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    return true;
   } catch (err) {
     console.log(dim(`Warning: could not write manifest — ${err.message}`));
+    return false;
   }
 }
 
@@ -372,11 +374,19 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
   let keptCount    = 0;
 
   if (!dryRun) {
+    // A failed orphan removal (e.g. a locked file) must not abort the whole
+    // install — new/modified files still need copying and the manifest still
+    // needs writing. Warn and keep going; the orphan is left in place for a
+    // future run to retry.
     if (force) {
       for (const orphan of existingOrphans) {
-        moveToTrash(destRoot, orphan);
-        removedCount++;
-        console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
+        try {
+          moveToTrash(destRoot, orphan);
+          removedCount++;
+          console.log(`     ${clr('red', '∅')} ${dim(orphan)}`);
+        } catch (err) {
+          console.log(`     ${clr('yellow', '⚠')} Could not remove ${dim(orphan)} — ${err.message}`);
+        }
       }
     } else {
       for (const orphan of existingOrphans) {
@@ -384,9 +394,13 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
         if (!fs.existsSync(fullPath)) continue;
         const ok = await askConfirm(`  Move to trash  ${clr('red', orphan)}?`);
         if (ok) {
-          moveToTrash(destRoot, orphan);
-          console.log(`     ${clr('green', '✔')} Moved to trash\n`);
-          removedCount++;
+          try {
+            moveToTrash(destRoot, orphan);
+            console.log(`     ${clr('green', '✔')} Moved to trash\n`);
+            removedCount++;
+          } catch (err) {
+            console.log(`     ${clr('yellow', '⚠')} Could not move to trash — ${err.message}\n`);
+          }
         } else {
           console.log(`     ${clr('gray', '✖')} Kept as-is\n`);
           keptCount++;
@@ -432,8 +446,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
 
   if (modified.length === 0) {
     console.log(`  ${clr('green', '✔')}  All new files copied. No conflicts.\n`);
-    writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
-    return;
+    return writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
   }
 
   if (force) {
@@ -443,8 +456,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
       fs.copyFileSync(e.src, e.dest);
       console.log(`     ${clr('yellow', '↺')} ${dim(path.relative(process.cwd(), e.dest))}`);
     }
-    writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
-    return;
+    return writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
   }
 
   console.log(`  ${clr('yellow', 'These files differ from the toolkit version — decide for each:')}\n`);
@@ -472,7 +484,7 @@ async function runInstall(label, mappings, force, destRoot, dryRun = false, inst
     `  ${clr('gray',  `✖ Kept as-is: ${skipped}`)}\n`
   );
 
-  writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
+  return writeManifest(destRoot, newFileSet, installationMode, _buildFileHashes(destRoot, newFileSet));
 }
 
 // Compute SHA-256 for every relative path in relPaths under destRoot.
@@ -1804,10 +1816,15 @@ async function installLocal(targetDir, force, dryRun = false) {
     { src: path.join(packageRoot, 'docs'),      dest: path.join(targetDir, 'docs') },
     { src: path.join(packageRoot, 'CLAUDE.md'), dest: path.join(targetDir, 'CLAUDE.md') },
   ];
-  await runInstall(`local project`, mappings, force, targetDir, dryRun, 'local');
+  const manifestWritten = await runInstall(`local project`, mappings, force, targetDir, dryRun, 'local');
   if (dryRun) return;
   writeInstalledVersion(targetDir);
-  console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
+  if (manifestWritten === false) {
+    console.log(`  ${clr('yellow', '⚠')}  ${bold('Install complete, but the manifest could not be written.')}\n` +
+      `     Reinstall/orphan-cleanup detection will not see these files until it is.\n`);
+  } else {
+    console.log(`  ${clr('green', '✔')}  ${bold('Install complete.')}\n`);
+  }
   checkSpawnDepth(targetDir);
   console.log(divider());
   console.log(`\n  ${bold('Next steps:')}`);
@@ -1839,10 +1856,15 @@ async function installGlobal(force, dryRun = false, homeOverride = undefined) {
       { src: path.join(packageRoot, 'docs'),             dest: path.join(target, 'docs') },
       { src: path.join(packageRoot, 'CLAUDE.global.md'), dest: path.join(target, 'CLAUDE.md') },
     ];
-    await runInstall('global Claude folder', mappings, force, homedir, dryRun, 'global');
+    const manifestWritten = await runInstall('global Claude folder', mappings, force, homedir, dryRun, 'global');
     if (dryRun) return;
     writeInstalledVersion(homedir);
-    console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
+    if (manifestWritten === false) {
+      console.log(`  ${clr('yellow', '⚠')}  ${bold('Global install complete, but the manifest could not be written.')}\n` +
+        `     Reinstall/orphan-cleanup detection will not see these files until it is.\n`);
+    } else {
+      console.log(`  ${clr('green', '✔')}  ${bold('Global install complete.')}\n`);
+    }
     checkSpawnDepth(homedir);
     console.log(divider());
     console.log(`\n  ${bold('Next steps:')}`);
@@ -1891,7 +1913,9 @@ async function main() {
     if (sub === '--project') {
       await installLocal(argv[2] || '.', force, dryRun);
     } else if (sub === '--global') {
-      await installGlobal(force, dryRun);
+      const homeIdx = argv.indexOf('--home');
+      const homeOverride = homeIdx !== -1 ? argv[homeIdx + 1] : undefined;
+      await installGlobal(force, dryRun, homeOverride);
     } else {
       // No sub-flag: install into current directory (same as bare invocation)
       await installLocal(sub && !sub.startsWith('-') ? sub : '.', force, dryRun);
@@ -1955,6 +1979,10 @@ async function main() {
     const home       = homeIdx    !== -1 ? remaining[homeIdx    + 1] : undefined;
     runDoctorAgents({ projectDir, home });
     process.exit(0);
+  } else if (argv[0] === 'doctor') {
+    process.stderr.write(`Unknown doctor subcommand: ${argv[1] || '(none)'}\n` +
+      'Available: doctor resolution, doctor agents\n');
+    process.exit(1);
   } else if (argv[0] === 'validate-purity') {
     runValidatePurity(argv[1]);
   } else if (argv[0] === 'resolve-asset') {
@@ -2102,7 +2130,10 @@ async function main() {
     process.exit(0);
   } else if (argv[0] === 'resolve-features-root') {
     try {
-      const resolved = resolveFeaturesRoot(process.cwd());
+      const remaining = argv.slice(1);
+      const overrideIdx = remaining.indexOf('--features-root');
+      const featuresRoot = overrideIdx !== -1 ? remaining[overrideIdx + 1] : undefined;
+      const resolved = resolveFeaturesRoot(process.cwd(), { featuresRoot });
       process.stdout.write(resolved + '\n');
       process.exit(0);
     } catch (err) {
@@ -2495,17 +2526,31 @@ async function handleAgentsCommand(argv) {
     const effectiveHome    = home !== undefined ? path.resolve(home) : os.homedir();
     const effectiveProject = path.resolve(projectDir);
 
-    // Locate the active manifest (project-scoped takes precedence over global).
+    // Locate the active manifest. Both scopes present is ambiguous — matches
+    // agentRegistry.resolveAgent/listRegisteredAgents' own 'conflict' handling
+    // for the same dual-manifest case, rather than silently preferring project.
     const projectManifestPath = path.join(effectiveProject, '.claude', MANIFEST_FILE);
     const globalManifestPath  = path.join(effectiveHome,    '.claude', MANIFEST_FILE);
+    const hasProjectManifest  = fs.existsSync(projectManifestPath);
+    const hasGlobalManifest   = fs.existsSync(globalManifestPath);
+
+    if (hasProjectManifest && hasGlobalManifest) {
+      process.stdout.write(
+        JSON.stringify({ status: 'conflict', candidates: [], missing: [],
+          error: 'Both local and global toolkit installations found; installation is ambiguous. ' +
+                 'Remove one installation or reinstall to a single scope.' }, null, 2) + '\n'
+      );
+      process.exitCode = 0;
+      return;
+    }
 
     let installRoot    = null;
     let manifestData   = null;
 
-    if (fs.existsSync(projectManifestPath)) {
+    if (hasProjectManifest) {
       installRoot  = effectiveProject;
       manifestData = readJsonSafe(projectManifestPath);
-    } else if (fs.existsSync(globalManifestPath)) {
+    } else if (hasGlobalManifest) {
       installRoot  = effectiveHome;
       manifestData = readJsonSafe(globalManifestPath);
     }
@@ -2934,7 +2979,10 @@ async function handleExecutorCommand(argv) {
 // When required as a module (e.g., by Jest), skip main() and export pure
 // functions so they can be unit-tested without side effects.
 if (require.main === module) {
-  main();
+  main().catch(err => {
+    console.error(`\n  ${clr('red', '✖')}  ${err && err.message ? err.message : err}\n`);
+    process.exitCode = 1;
+  });
 } else {
   module.exports = {
     fileHash,
@@ -2947,6 +2995,7 @@ if (require.main === module) {
     moveToTrash,
     trashTimestamp,
     writeManifest,
+    runInstall,
     CANONICAL_ALLOW,
     CANONICAL_ASK,
     commandToPermission,
