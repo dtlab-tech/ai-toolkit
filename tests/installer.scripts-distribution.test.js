@@ -148,6 +148,37 @@ describe('installer.scripts-distribution — Group 4: install-toolkit.md delegat
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Group 11: install-toolkit.md does not self-contradict on settings.local.json
+//
+// The Guidelines section used to state an unqualified "Never copy or edit
+// settings.json / settings.local.json", while Step 6 explicitly instructs the
+// agent to invoke merge-allowlist to write into settings.local.json — directly
+// contradictory instructions for whichever agent reads this file. The fix
+// states the Step 6 exception inline rather than as a bare "never".
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('installer.scripts-distribution — Group 11: no settings.local.json self-contradiction', () => {
+  test('Step 6 still documents writing the allowlist into settings.local.json via merge-allowlist', () => {
+    expect(INSTALL_TOOLKIT_SRC).toMatch(/merge-allowlist/);
+    expect(INSTALL_TOOLKIT_SRC).toMatch(/Bash Permission Allowlist opt-in/);
+  });
+
+  test('the Guidelines section does not state an unqualified "never edit settings.local.json"', () => {
+    // A bare, unqualified version of this sentence (no mention of Step 6 as an
+    // exception) is the exact contradiction that used to exist.
+    expect(INSTALL_TOOLKIT_SRC).not.toMatch(
+      /Never copy or edit `settings\.json` \/ `settings\.local\.json`[^\n]*only verify and advise/
+    );
+  });
+
+  test('the settings.local.json guideline references Step 6 as the documented exception', () => {
+    const guidelinesSection = INSTALL_TOOLKIT_SRC.slice(INSTALL_TOOLKIT_SRC.indexOf('## Guidelines'));
+    expect(guidelinesSection).toMatch(/settings\.local\.json/);
+    expect(guidelinesSection).toMatch(/Step 6/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Group 5: no exclusion filters — catalog positive-list only (static)
 //
 // After FTR-015 US-05-TASK-BE-02, isDistributable(), NEVER_DIST_SEGMENTS, and
