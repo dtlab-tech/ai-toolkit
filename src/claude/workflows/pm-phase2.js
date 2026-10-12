@@ -14,6 +14,22 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const approvals = c.read(file('Approvals.md'))
   const gate = approvals.match(/^## Gate 1\b[^\n]*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)
   if (!gate || !/✅\s*Approved/.test(gate[1])) throw new Error('Gate 1 approval evidence missing')
+  // Binds this approval to the EXACT Requirements/Tech-Spec content pm-phase1
+  // produced when it was approved (docs_digest, written into Approvals.md by
+  // SKILL.md's Step 2) — never just "a Gate 1 row says Approved". A missing
+  // digest (an approval recorded before this check existed) is not enforced,
+  // same null-compatible "unavailable, never fabricated" convention used
+  // throughout this toolkit; a PRESENT digest that no longer matches the
+  // current files fails closed — the approved documents changed since
+  // approval (e.g. a later --force re-run of pm-phase1) and must be
+  // re-approved, not silently carried forward on stale consent.
+  const digestMatch = gate[1].match(/\*\*Docs Digest:\*\*\s*`([^`]+)`/)
+  if (digestMatch) {
+    const currentDigest = c.hash(c.read(file('Requirements.md')) + '\u0000' + c.read(file('Tech-Spec.md')))
+    if (digestMatch[1] !== currentDigest) {
+      throw new Error('Gate 1 approval is stale: Requirements/Tech-Spec content no longer matches what was approved (docs digest mismatch) — re-approve Gate 1 before proceeding')
+    }
+  }
   const jsonPath = file('Work-Breakdown.json')
   await c.worker('gaia.agent.planner.work-breakdown', featurePath, {
     outputs: [{ path: jsonPath, inputs: [featurePath, file('Requirements.md'), file('Tech-Spec.md')] }],
