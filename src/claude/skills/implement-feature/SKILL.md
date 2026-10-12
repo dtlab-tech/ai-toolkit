@@ -7,7 +7,7 @@ argument-hint: <path-to-feature.md> [--force]
 
 Runs documentation and work breakdown through the deterministic Node workflow host, then implementation through the FTR-018 task executor. Approval gates remain in the main loop.
 
-Workflows are JavaScript assets, never agent types. Do not pass pm-phase1/2/3 or am-phase1/2 to agentType, subagent_type, or --agent. Use the workflow CLI below. Resolve the absolute Claude executable path as described in docs/task-executor-bootstrap.md.
+Workflows are JavaScript assets, never agent types. Do not pass pm-phase1/2/3 or am-phase1/2 to agentType, subagent_type, or --agent. Use the workflow CLI below. Resolve the absolute Claude executable path as described in `docs/task-executor-bootstrap.md` — never relative to this skill's own package directory (which holds only this `SKILL.md`, no `docs/` subfolder). That path is relative to wherever this toolkit's `docs/` landed for the install actually in use: the project root for a local install, or `~/.claude/` for a global install (`bin/cli.js`'s `installLocal`/`installGlobal` — a global install nests `docs/` under `~/.claude/docs/` alongside `skills/`/`agents/`; a local install places it at `<project-root>/docs/`, a sibling of `.claude/`, not inside it).
 
 ---
 
