@@ -55,6 +55,8 @@ The prefix is everything up to and including the second hyphen-separated segment
 
 **Do NOT write `{PREFIX}-Work-Breakdown.md` or `{PREFIX}-Work-Breakdown.csv`.** Those are generated deterministically from the JSON by `wb-render.js` in a later pipeline step.
 
+"Authoritative" above means authoritative **for this agent's own generation and for `wb-validate.js`'s structural checks** — it does not mean every downstream reader consumes the JSON. The rendered `.md` (plus the dispatch `.csv`) is the tested, complete deliverable for everything that reads a Work Breakdown afterward: `lib/task-executor/plan.js` (the real task executor parses `.md`+`.csv`, never the JSON) and the `gaia-developer-*` agents both read the `.md`, and `tests/wb-render.*.test.js` specifically guards that every field they need (dependencies, verification commands, acceptance criteria, etc.) survives the JSON→Markdown rendering byte-for-byte. Only `gaia-validate-work-breakdown-semantic` reads the JSON directly, for its own programmatic comparison against Requirements ACs.
+
 ---
 
 ## Atomicity Contract
