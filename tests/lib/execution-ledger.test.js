@@ -1354,3 +1354,98 @@ describe('execution-ledger — finalizeActivity', () => {
     expect(typeof ledger.finalizeActivity).toBe('function');
   });
 });
+
+// ---------------------------------------------------------------------------
+// _writeLedger rename safety
+// ---------------------------------------------------------------------------
+// A real EEXIST/EPERM-triggered unlink-then-rename "fallback" used to live
+// here: if the rename failed AFTER the unlink already removed the real ledger
+// file, the file was simply gone, and _readLedger's ENOENT handling silently
+// returns { entries: [] } — real data loss with no error raised anywhere.
+// These tests prove the ledger file is never deleted as a side effect of a
+// failed write, regardless of why the rename failed.
+
+describe('execution-ledger — _writeLedger rename safety', () => {
+  let tmpDir;
+  let ledgerPath;
+  let renameSpy;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-rename-'));
+    ledgerPath = path.join(tmpDir, 'FTR-999-token-ledger.json');
+  });
+
+  afterEach(() => {
+    if (renameSpy) renameSpy.mockRestore();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('a failed rename never deletes the existing ledger file, even when the destination already exists', () => {
+    // Arrange: a real, already-written ledger with one entry.
+    ledger._writeLedger(ledgerPath, [{ operation_id: 'a', agent: 'x', status: 'done' }]);
+    expect(fs.existsSync(ledgerPath)).toBe(true);
+
+    // Simulate the exact failure the old fallback tried to "recover" from —
+    // renameSync throwing EPERM because the destination already exists.
+    renameSpy = jest.spyOn(fs, 'renameSync').mockImplementation(() => {
+      const err = new Error('EPERM: operation not permitted, rename');
+      err.code = 'EPERM';
+      throw err;
+    });
+
+    expect(() => ledger._writeLedger(ledgerPath, [{ operation_id: 'a', agent: 'x', status: 'done' },
+      { operation_id: 'b', agent: 'y', status: 'running' }])).toThrow(/EPERM/);
+
+    renameSpy.mockRestore();
+    renameSpy = null;
+
+    // The ORIGINAL file must still exist with its ORIGINAL content — never
+    // deleted as a side effect of the failed write attempt.
+    expect(fs.existsSync(ledgerPath)).toBe(true);
+    const entries = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+    expect(entries).toEqual([{ operation_id: 'a', agent: 'x', status: 'done' }]);
+  });
+
+  it('cleans up the temp file after a failed rename, leaving no stray .tmp-* artifact', () => {
+    ledger._writeLedger(ledgerPath, []);
+    renameSpy = jest.spyOn(fs, 'renameSync').mockImplementation(() => {
+      const err = new Error('EPERM'); err.code = 'EPERM'; throw err;
+    });
+    expect(() => ledger._writeLedger(ledgerPath, [{ operation_id: 'a' }])).toThrow();
+    renameSpy.mockRestore();
+    renameSpy = null;
+    const stray = fs.readdirSync(tmpDir).filter(f => f.includes('.tmp-'));
+    expect(stray).toEqual([]);
+  });
+
+  it('retries a transient EPERM and succeeds once the lock clears, without ever deleting the destination', () => {
+    // Arrange: a real, already-written ledger with one entry.
+    ledger._writeLedger(ledgerPath, [{ operation_id: 'a', agent: 'x', status: 'done' }]);
+
+    // Simulate a transient lock (antivirus/indexer) that clears after a couple
+    // of attempts — the real-world case the old unlink-first fallback was
+    // (unsafely) trying to tolerate.
+    const realRename = fs.renameSync.bind(fs);
+    let calls = 0;
+    renameSpy = jest.spyOn(fs, 'renameSync').mockImplementation((...renameArgs) => {
+      calls += 1;
+      if (calls < 3) {
+        const err = new Error('EPERM: operation not permitted, rename');
+        err.code = 'EPERM';
+        throw err;
+      }
+      return realRename(...renameArgs);
+    });
+
+    expect(() => ledger._writeLedger(ledgerPath,
+      [{ operation_id: 'a', agent: 'x', status: 'done' },
+       { operation_id: 'b', agent: 'y', status: 'running' }])).not.toThrow();
+
+    expect(calls).toBeGreaterThanOrEqual(3);
+    // The destination was never missing at any point an outside observer
+    // could have checked, and now holds the NEW content.
+    const entries = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+    expect(entries).toEqual([{ operation_id: 'a', agent: 'x', status: 'done' },
+      { operation_id: 'b', agent: 'y', status: 'running' }]);
+  });
+});
