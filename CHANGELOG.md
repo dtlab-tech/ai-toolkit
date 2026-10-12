@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.17.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.2...v0.17.3) (2026-10-12)
+
+
+### Bug Fixes
+
+* **execution-ledger:** close PID-reuse gap in lock-staleness liveness check ([4a9a365](https://github.com/dtlab-tech/ai-toolkit/commit/4a9a3652bf8e7844accff46851b2e1286e24c0d7))
+* **task-executor:** session-list clutter and PID-reuse lock-liveness gap ([e000a6f](https://github.com/dtlab-tech/ai-toolkit/commit/e000a6faa2e75eac5bb65069eb9b37b102a14cf8))
+* **task-executor:** stop every dispatch from cluttering the Claude Code session list ([8676d66](https://github.com/dtlab-tech/ai-toolkit/commit/8676d66157bceeafb7fa225cabeb8a666dbac955))
+
 ## [0.17.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.1...v0.17.2) (2026-10-12)
 
 
