@@ -130,6 +130,12 @@ describe('resolveAgent()', () => {
     expect(rec.status).toBe('manifest-missing');
     expect(rec.agentId).toBe('gaia.agent.developer.backend');
     expect(rec.nativeName).toBe('gaia-developer-backend');
+    // Regression: the error text used to overclaim "No toolkit installation
+    // found" — but this function only checked for a manifest; payload files
+    // or a version stamp could still be on disk (isToolkitInstalled in
+    // bin/cli.js checks those too), which would make that claim false.
+    expect(rec.error).not.toMatch(/No toolkit installation found/);
+    expect(rec.error).toMatch(/manifest/i);
   });
 
   test('returns status "not-installed" when agent absent from manifest files list', async () => {
