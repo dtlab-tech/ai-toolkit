@@ -12,6 +12,7 @@ const path = require('path');
 // placeholders so that `npx jest` exits 0 and reports todos rather than
 // complaining "Your test suite must contain at least one test".
 const ledger = require('../../lib/execution-ledger');
+const ownership = require('../../lib/task-executor/ownership');
 
 // ---------------------------------------------------------------------------
 // open
@@ -1447,5 +1448,195 @@ describe('execution-ledger — _writeLedger rename safety', () => {
     const entries = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
     expect(entries).toEqual([{ operation_id: 'a', agent: 'x', status: 'done' },
       { operation_id: 'b', agent: 'y', status: 'running' }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// _confirmSameOwnerProcess / lock liveness — PID-reuse protection
+// ---------------------------------------------------------------------------
+// process.kill(pid, 0) alone cannot tell a still-alive original lock owner
+// apart from an unrelated process that reused the recycled pid after the
+// real owner crashed. These tests prove the host:pid:startTime cross-check
+// (shared with ownership.js's own lease liveness model) correctly overrides
+// a false "alive" signal, while never regressing the inconclusive case
+// (non-Windows / older tokens) back to always-trust-kill().
+
+describe('execution-ledger — _confirmSameOwnerProcess (PID-reuse protection)', () => {
+  let probeSpy;
+
+  beforeEach(() => {
+    ledger._resetOwnerProcessCaches();
+  });
+
+  afterEach(() => {
+    if (probeSpy) probeSpy.mockRestore();
+    probeSpy = null;
+    ledger._resetOwnerProcessCaches();
+  });
+
+  it('returns null (inconclusive) when the token has no processStartTime field', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync');
+    const result = ledger._confirmSameOwnerProcess({ pid: 123, nonce: 'n1' });
+    expect(result).toBeNull();
+    expect(probeSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null (inconclusive) when the OS probe itself is inconclusive', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue(null);
+    const result = ledger._confirmSameOwnerProcess({ pid: 123, nonce: 'n2', processStartTime: '1000' });
+    expect(result).toBeNull();
+  });
+
+  it('returns null (inconclusive) when the OS confirms no such pid despite kill() reporting alive', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue({ found: false });
+    const result = ledger._confirmSameOwnerProcess({ pid: 123, nonce: 'n3', processStartTime: '1000' });
+    expect(result).toBeNull();
+  });
+
+  it('returns true when the probed start time matches the token\'s recorded start time', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue({ found: true, startTime: '1000' });
+    const result = ledger._confirmSameOwnerProcess({ pid: 123, nonce: 'n4', processStartTime: '1000' });
+    expect(result).toBe(true);
+  });
+
+  it('returns false when the probed start time differs — a different process now holds this pid', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue({ found: true, startTime: '9999' });
+    const result = ledger._confirmSameOwnerProcess({ pid: 123, nonce: 'n5', processStartTime: '1000' });
+    expect(result).toBe(false);
+  });
+
+  it('caches the verdict by nonce — a second call for the same nonce never re-invokes the OS probe', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue({ found: true, startTime: '1000' });
+    const token = { pid: 123, nonce: 'n6', processStartTime: '1000' };
+    expect(ledger._confirmSameOwnerProcess(token)).toBe(true);
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+
+    // Even if the mock would now answer differently, the cached verdict for
+    // this exact nonce must still be returned without a second probe call.
+    probeSpy.mockReturnValue({ found: true, startTime: '2222' });
+    expect(ledger._confirmSameOwnerProcess(token)).toBe(true);
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache an inconclusive result — a later call can still reach a conclusive verdict', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue(null);
+    const token = { pid: 123, nonce: 'n7', processStartTime: '1000' };
+    expect(ledger._confirmSameOwnerProcess(token)).toBeNull();
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+
+    probeSpy.mockReturnValue({ found: true, startTime: '1000' });
+    expect(ledger._confirmSameOwnerProcess(token)).toBe(true);
+    expect(probeSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('execution-ledger — _isLockStale overrides a false "alive" signal on confirmed PID reuse', () => {
+  let probeSpy;
+  let tmpDir;
+
+  beforeEach(() => {
+    ledger._resetOwnerProcessCaches();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-pidreuse-'));
+  });
+
+  afterEach(() => {
+    if (probeSpy) probeSpy.mockRestore();
+    probeSpy = null;
+    ledger._resetOwnerProcessCaches();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('a confirmed PID-reuse mismatch is treated as not-alive and falls through to age-based classification', () => {
+    // token.pid is this very test process's own pid, so process.kill(pid, 0)
+    // genuinely reports "alive" — the false-positive scenario this guards
+    // against. The OS probe is mocked to return a DIFFERENT start time than
+    // the one recorded in the token, simulating a recycled pid.
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue({ found: true, startTime: 'DIFFERENT-OWNER' });
+
+    const youngToken = {
+      pid: process.pid,
+      startedAt: new Date().toISOString(), // just now: too young to reclaim
+      nonce: 'pidreuse-young',
+      processStartTime: 'ORIGINAL-OWNER',
+    };
+    const stat = { mtimeMs: Date.now() };
+    expect(ledger._isLockStale(JSON.stringify(youngToken), stat)).toBe('wait');
+
+    const oldToken = {
+      pid: process.pid,
+      startedAt: new Date(Date.now() - 60000).toISOString(), // 60s old: past the 30s threshold
+      nonce: 'pidreuse-old',
+      processStartTime: 'ORIGINAL-OWNER',
+    };
+    expect(ledger._isLockStale(JSON.stringify(oldToken), stat)).toBe('reclaimable');
+  });
+
+  it('a confirmed SAME-owner match still returns "live" regardless of age', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue({ found: true, startTime: 'SAME-OWNER' });
+
+    const oldButGenuinelyAliveToken = {
+      pid: process.pid,
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      nonce: 'samepid-old',
+      processStartTime: 'SAME-OWNER',
+    };
+    const stat = { mtimeMs: Date.now() };
+    expect(ledger._isLockStale(JSON.stringify(oldButGenuinelyAliveToken), stat)).toBe('live');
+  });
+
+  it('an inconclusive probe (e.g. non-Windows) falls back to trusting process.kill() alone, exactly like before this check existed', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue(null);
+
+    const token = {
+      pid: process.pid,
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      nonce: 'inconclusive-1',
+      processStartTime: 'ORIGINAL-OWNER',
+    };
+    const stat = { mtimeMs: Date.now() };
+    expect(ledger._isLockStale(JSON.stringify(token), stat)).toBe('live');
+  });
+
+  it('a legacy token with no processStartTime field falls back to trusting process.kill() alone', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync');
+
+    const legacyToken = {
+      pid: process.pid,
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      nonce: 'legacy-1',
+      // no processStartTime field at all
+    };
+    const stat = { mtimeMs: Date.now() };
+    expect(ledger._isLockStale(JSON.stringify(legacyToken), stat)).toBe('live');
+    expect(probeSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('execution-ledger — _getSelfProcessStartTime caches across calls', () => {
+  let probeSpy;
+
+  beforeEach(() => {
+    ledger._resetOwnerProcessCaches();
+  });
+
+  afterEach(() => {
+    if (probeSpy) probeSpy.mockRestore();
+    probeSpy = null;
+    ledger._resetOwnerProcessCaches();
+  });
+
+  it('probes the OS only once across repeated calls, within this process\'s lifetime', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue({ found: true, startTime: 'SELF-123' });
+    expect(ledger._getSelfProcessStartTime()).toBe('SELF-123');
+    expect(ledger._getSelfProcessStartTime()).toBe('SELF-123');
+    expect(ledger._getSelfProcessStartTime()).toBe('SELF-123');
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('caches null when the probe is inconclusive, rather than retrying on every lock acquisition', () => {
+    probeSpy = jest.spyOn(ownership, '_queryProcessStartTimeSync').mockReturnValue(null);
+    expect(ledger._getSelfProcessStartTime()).toBeNull();
+    expect(ledger._getSelfProcessStartTime()).toBeNull();
+    expect(probeSpy).toHaveBeenCalledTimes(1);
   });
 });
