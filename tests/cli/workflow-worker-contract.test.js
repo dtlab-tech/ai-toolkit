@@ -80,6 +80,18 @@ test('a JSON output wrapped in conversational prose and a code fence is recovere
   expect(JSON.parse(fs.readFileSync(dest, 'utf8'))).toEqual({ schemaVersion: 2, feature: 'FTR-099', phases: [] });
 });
 
+test('a JSON output with a raw (unescaped) newline inside a text field is repaired before being written', async () => {
+  const dest = path.join(f.dir, 'FTR-099-Work-Breakdown.json');
+  const rawDescription = 'First line\nSecond line';
+  const wrapped = '```json\n{\n  "schemaVersion": 2,\n  "feature": "FTR-099",\n'
+    + '  "phases": [{ "id": "US-01", "tasks": [{ "id": "T1", "description": "' + rawDescription + '" }] }]\n}\n```';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: wrapped }) });
+  await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', { outputs: [{ path: dest }] }));
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+  const written = JSON.parse(fs.readFileSync(dest, 'utf8'));
+  expect(written.phases[0].tasks[0].description).toBe(rawDescription);
+});
+
 test('a JSON output with no recoverable JSON document is written through unchanged for the downstream validator to reject', async () => {
   const dest = path.join(f.dir, 'FTR-099-Work-Breakdown.json');
   const c = createControl({ ...f.options, dispatch: async () => response({ result: 'I need more information before I can proceed.' }) });
@@ -162,6 +174,27 @@ test('a ```json fence survives a nested, untagged ``` example embedded in a stri
   expect(payload.findings).toEqual(['gap']);
   expect(payload.report).toContain('| UC-01 | T1 |');
   expect(f.entries().find(e => e.agentId).status).toBe('done');
+});
+
+test('a ```json fence with a raw (unescaped) newline inside the report string is repaired and recovered', async () => {
+  // Reproduces the real downstream FTR-002 failure: the model typed the JSON by hand as part
+  // of a chat reply (since structured_output never got populated) and, when embedding a long
+  // multi-paragraph report as the "report" field's value, used literal line breaks instead of
+  // the required \n escape. The JSON otherwise reads as entirely correct — correct ```json
+  // fence tag, correct structure — but JSON.parse rejects raw control characters inside a
+  // string literal outright, and used to discard the whole candidate rather than repair it.
+  const rawReportBody = 'Full Validation Report\nSummary: FAIL\nSections 1-10 missing';
+  const fencedText = 'Phase 7 — Structured Completion\n\n```json\n{\n  "valid": false,\n  "findings": ["Tech-Spec missing sections 1-10"],\n'
+    + '  "report": "' + rawReportBody + '"\n}\n```';
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: fencedText }) });
+  const payload = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
+    schema: { type: 'object', required: ['valid', 'findings', 'report'] },
+  }));
+  expect(payload.valid).toBe(false);
+  expect(payload.findings).toEqual(['Tech-Spec missing sections 1-10']);
+  expect(payload.report).toBe(rawReportBody);
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+  expect(evidence().usedTextFallback).toBe(true);
 });
 
 test('an arbitrary <json> tag (a third, previously unseen delimiter) is accepted', async () => {
