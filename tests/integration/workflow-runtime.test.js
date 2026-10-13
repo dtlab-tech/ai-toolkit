@@ -7,13 +7,22 @@ let f;
 beforeEach(() => { f = fixture(); });
 afterEach(() => { f.clean(); });
 const success = value => ({ exitCode: 0, result: { is_error: false, result: value, usage: { input_tokens: 10, output_tokens: 5 } } });
+// pm-phase1.js requires Requirements/Tech-Spec to carry their full numbered
+// section skeleton (9 / 12 top-level "## N. " headings) as a truncation
+// guard — a minimal "# Result\n" placeholder no longer satisfies that
+// contract, so fixture content for those two documents must include every
+// required section.
+const sectionedDoc = (count, note = '') => Array.from({ length: count }, (_, i) => `## ${i + 1}. Section ${i + 1}\n`).join('\n') + (note ? `\n${note}\n` : '');
 // The agent has no Write tool — it returns the document content directly (plain
 // result text, or the schema's `report` field), and the host persists it.
 function phase1Dispatch({ args }) {
   const name = args[args.indexOf('--agent') + 1];
   const suffix = { 'gaia-generate-requirements': 'Requirements', 'gaia-generate-tech-spec': 'Tech-Spec', 'gaia-validate-feature-docs': 'Validation-Report' }[name];
   if (!suffix) throw new Error('Unexpected worker: ' + name);
-  const response = success('# Result\n');
+  const content = name === 'gaia-generate-requirements' ? sectionedDoc(9)
+    : name === 'gaia-generate-tech-spec' ? sectionedDoc(12)
+    : '# Result\n';
+  const response = success(content);
   if (name === 'gaia-validate-feature-docs') response.result.structured_output = { valid: true, findings: [], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n' };
   return Promise.resolve(response);
 }
@@ -75,7 +84,7 @@ test('docs_digest is deterministic over the same Requirements/Tech-Spec content 
   expect(again.docs_digest).toBe(first.docs_digest); // second run is a fresh-skip no-op — same content, same digest
   const changed = await runWorkflow('pm-phase1', [f.feature, '--force'], { ...f.options, dispatch: async options => {
     const response = await phase1Dispatch(options);
-    if (options.args.includes('gaia-generate-requirements')) response.result.result = '# Result (revised)\n';
+    if (options.args.includes('gaia-generate-requirements')) response.result.result = sectionedDoc(9, 'revised');
     return response;
   } });
   expect(changed.docs_digest).not.toBe(first.docs_digest);
@@ -130,10 +139,55 @@ test('a clean structured verdict without its report field cannot complete pm-pha
 });
 
 test('successful worker without required report fails the workflow', async () => {
-  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async () => success('ok') }))
-    .rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, needsRequirementsFix, needsTechSpecFix, report');
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: async options => {
+    if (options.args.includes('gaia-validate-feature-docs')) return success('ok');
+    return phase1Dispatch(options);
+  } })).rejects.toThrow('Worker returned no structured output: gaia.agent.planner.validate-feature-docs; expected fields: valid, findings, needsRequirementsFix, needsTechSpecFix, report');
   expect(f.entries()[0].status).toBe('failed');
 });
+test('a Tech-Spec truncated mid-generation is rejected immediately instead of silently reaching Gate 1', async () => {
+  // Reproduces a real downstream failure: the model's cumulative output exceeded
+  // its configured ceiling mid-reply, the CLI reported a clean exit (exitCode 0,
+  // is_error false) with nothing signaling truncation, and the host persisted the
+  // half-written document as if it were complete. Only sections 1-2 of the
+  // required 12 are present here.
+  const dispatch = async options => {
+    if (options.args.includes('gaia-generate-tech-spec')) return success('## 1. Overview\n\n## 2. Architecture\n');
+    return phase1Dispatch(options);
+  };
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
+    .rejects.toThrow(/Tech-Spec output is incomplete: missing section\(s\).*of 12/);
+  expect(f.entries()[0].status).toBe('failed');
+  expect(fs.existsSync(path.join(f.dir, 'FTR-099-process-log.txt'))).toBe(false);
+});
+
+test('a Requirements document truncated mid-generation is rejected immediately', async () => {
+  const dispatch = async options => {
+    if (options.args.includes('gaia-generate-requirements')) return success('## 1. Introduction\n');
+    return phase1Dispatch(options);
+  };
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
+    .rejects.toThrow(/Requirements output is incomplete: missing section\(s\).*of 9/);
+  expect(f.entries()[0].status).toBe('failed');
+});
+
+test('a previously truncated Tech-Spec left on disk from an earlier failed run is regenerated, not mistaken for fresh', async () => {
+  // Simulates resuming after the exact failure above: a half-written Tech-Spec
+  // already exists on disk (newer than feature.md/Requirements.md, so the
+  // mtime-based freshness check alone would accept it), but the next run must
+  // still detect it is structurally incomplete and regenerate it rather than
+  // silently proceeding to validation with known-bad content.
+  const dispatch = jest.fn(phase1Dispatch);
+  await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  fs.writeFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), '## 1. Overview\n\n## 2. Architecture\n');
+  dispatch.mockClear();
+  const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).toContain('gaia-generate-tech-spec');
+  expect(result.validation.summary).toContain('clean');
+  const finalContent = fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8');
+  for (let n = 1; n <= 12; n++) expect(finalContent).toMatch(new RegExp(`^## ${n}\\.\\s`, 'm'));
+});
+
 test('fresh outputs skip workers; force requests them again', async () => {
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
   const dispatch = jest.fn(phase1Dispatch);
