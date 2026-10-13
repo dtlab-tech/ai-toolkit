@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.17.4](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.3...v0.17.4) (2026-10-13)
+
+
+### Bug Fixes
+
+* **workflow-control:** repair unescaped control chars in recovered JSON ([ebeddb5](https://github.com/dtlab-tech/ai-toolkit/commit/ebeddb5465ac988f94bd28d20b7f9dfdd967c2c9))
+* **workflow-control:** repair unescaped control chars in recovered JSON ([0ce2466](https://github.com/dtlab-tech/ai-toolkit/commit/0ce24666b6d4d09b25ca71b1ed3b9f0ba7c06d7a))
+
 ## [0.17.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.2...v0.17.3) (2026-10-12)
 
 
