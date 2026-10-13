@@ -109,6 +109,69 @@ test('a declared output cannot authorize a file outside the project', async () =
   expect(dispatch).not.toHaveBeenCalled();
 });
 
+describe('worker() transient "API Error:" retry', () => {
+  // Scoped fake timers so the 5s/20s backoff doesn't actually stall these tests;
+  // Date stays real since evidence/ledger timestamps rely on it advancing normally.
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['Date'] }));
+  afterEach(() => jest.useRealTimers());
+
+  test('a transient stream failure is retried and succeeds on a later attempt; token usage is summed across attempts', async () => {
+    let calls = 0;
+    const c = createControl({ ...f.options, dispatch: async () => {
+      calls++;
+      if (calls < 2) return response({ is_error: true, result: 'API Error: Stream idle timeout - no chunks received' });
+      return response({ result: 'Done' });
+    } });
+    const resultPromise = c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    await jest.advanceTimersByTimeAsync(30000);
+    const payload = await resultPromise;
+    expect(payload).toBe('Done');
+    expect(calls).toBe(2);
+    expect(f.entries().find(e => e.agentId).status).toBe('done');
+    expect(f.entries().find(e => e.agentId).phase_delta_tokens).toBe(84); // 42 tokens x 2 attempts
+    expect(evidence().attempts).toHaveLength(2);
+    expect(evidence().attempts[0].resultPreview).toMatch(/Stream idle timeout/);
+    expect(evidence().attempts[1].resultPreview).toBe('Done');
+  });
+
+  test('a transient stream failure that never clears exhausts all 3 attempts and fails with the attempt count', async () => {
+    let calls = 0;
+    const c = createControl({ ...f.options, dispatch: async () => {
+      calls++;
+      return response({ is_error: true, result: 'API Error: Stream idle timeout - no chunks received' });
+    } });
+    const resultPromise = c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    resultPromise.catch(() => {}); // avoid an unhandled-rejection window while fake timers advance below
+    await jest.advanceTimersByTimeAsync(30000);
+    await expect(resultPromise).rejects.toThrow(/Worker failed.*after 3 attempts/);
+    expect(calls).toBe(3);
+    expect(f.entries().find(e => e.agentId).status).toBe('failed');
+    expect(f.entries().find(e => e.agentId).phase_delta_tokens).toBe(126); // 42 tokens x 3 attempts
+    expect(evidence().attempts).toHaveLength(3);
+  });
+
+  test('a non-transient failure (no "API Error:" prefix) is never retried', async () => {
+    let calls = 0;
+    const c = createControl({ ...f.options, dispatch: async () => {
+      calls++;
+      return response({ is_error: true, result: 'The model declined this request.' });
+    } });
+    await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'))).rejects.toThrow('Worker failed');
+    expect(calls).toBe(1);
+    expect(evidence().attempts).toHaveLength(1);
+  });
+
+  test('a permission denial is never retried, even though is_error could otherwise look transient', async () => {
+    let calls = 0;
+    const c = createControl({ ...f.options, dispatch: async () => {
+      calls++;
+      return response({ permission_denials: [{ tool_name: 'Write' }] });
+    } });
+    await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'))).rejects.toThrow('Worker permission denied');
+    expect(calls).toBe(1);
+  });
+});
+
 test('spawn and parse failures still have durable diagnostic records', async () => {
   const c = createControl({ ...f.options, dispatch: async () => { throw new Error('spawn unavailable'); } });
   await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'))).rejects.toThrow('spawn unavailable');

@@ -11,6 +11,24 @@ const force = args.includes('--force')
 return c.run(meta.name, featureDir, prefix, async () => {
   const file = suffix => `${featureDir}/${prefix}-${suffix}.md`
   const fresh = (output, inputs = [featurePath]) => c.exists(output) && c.read(output).trim().length > 0 && inputs.every(input => c.exists(input) && c.mtime(output) >= c.mtime(input))
+  // A long single-turn response (a feature complex enough to need many Use
+  // Cases/sections) can exceed the model's configured output-token ceiling
+  // mid-reply — confirmed against a real run where the CLI reported a clean
+  // exit (exitCode 0, is_error false, stop_reason "end_turn") with nothing in
+  // the response envelope signaling that anything was cut off. Only the
+  // document's own expected structure can catch this. Both Requirements (9
+  // top-level sections) and Tech-Spec (12) have a fixed, numbered skeleton
+  // (see their own agent definitions' "Output Structure"), so a missing
+  // "## N. " heading is a reliable, deterministic sign of truncation.
+  // Checked both right after generation (fail fast with an attributable
+  // error, not a silently-accepted half-document) and as part of the
+  // freshness test (so a previously truncated file left on disk from an
+  // earlier failed run is never mistaken for "fresh enough" on a later resume).
+  const missingSections = (content, count) => Array.from({ length: count }, (_, i) => i + 1).filter(n => !new RegExp(`^## ${n}\\.\\s`, 'm').test(content))
+  const assertCompleteSections = (label, content, count) => {
+    const missing = missingSections(content, count)
+    if (missing.length) throw new Error(`${label} output is incomplete: missing section(s) ${missing.join(', ')} of ${count} — likely truncated mid-generation (a model output-length ceiling was probably exceeded)`)
+  }
   const reqId = 'gaia.agent.planner.requirements'
   const specId = 'gaia.agent.planner.tech-spec'
   const valId = 'gaia.agent.planner.validate-feature-docs'
@@ -18,14 +36,16 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const requirements = () => c.worker(reqId, featurePath, { outputs: [output('Requirements')] })
   const techSpec = () => c.worker(specId, featurePath, { outputs: [output('Tech-Spec', [featurePath, file('Requirements')])] })
   let changed = false
-  if (force || !fresh(file('Requirements'))) {
+  if (force || !fresh(file('Requirements')) || missingSections(c.read(file('Requirements')), 9).length) {
     await requirements()
     if (!c.exists(file('Requirements'))) throw new Error('Requirements output missing')
+    assertCompleteSections('Requirements', c.read(file('Requirements')), 9)
     changed = true
   }
-  if (force || changed || !fresh(file('Tech-Spec'), [featurePath, file('Requirements')])) {
+  if (force || changed || !fresh(file('Tech-Spec'), [featurePath, file('Requirements')]) || missingSections(c.read(file('Tech-Spec')), 12).length) {
     await techSpec()
     if (!c.exists(file('Tech-Spec'))) throw new Error('Tech-Spec output missing')
+    assertCompleteSections('Tech-Spec', c.read(file('Tech-Spec')), 12)
     changed = true
   }
   let validationSummary = 'skipped (fresh)'
