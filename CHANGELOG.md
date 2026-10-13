@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.17.5](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.4...v0.17.5) (2026-10-13)
+
+
+### Bug Fixes
+
+* **pm-phase1:** detect truncated Requirements/Tech-Spec instead of silently accepting them ([0783fe1](https://github.com/dtlab-tech/ai-toolkit/commit/0783fe1639258ea9701bffc647b9d0a54a85d3cd))
+* **workflow-control, pm-phase1:** retry transient API errors; catch truncated Gate 1 docs ([47d4f2c](https://github.com/dtlab-tech/ai-toolkit/commit/47d4f2c47f79ac62b5247b44aac13dd2c80a33ad))
+* **workflow-control:** retry worker dispatch on transient CLI/SDK API errors ([d75d02b](https://github.com/dtlab-tech/ai-toolkit/commit/d75d02b866a51ffde51bb276fdf21a60bd38c578))
+
 ## [0.17.4](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.3...v0.17.4) (2026-10-13)
 
 
