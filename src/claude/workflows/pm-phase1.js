@@ -30,14 +30,110 @@ return c.run(meta.name, featureDir, prefix, async () => {
     if (missing.length) throw new Error(`${label} output is incomplete: missing section(s) ${missing.join(', ')} of ${count} — likely truncated mid-generation (a model output-length ceiling was probably exceeded)`)
   }
   const reqId = 'gaia.agent.planner.requirements'
+  const reqUcId = 'gaia.agent.planner.requirements-use-case'
   const specId = 'gaia.agent.planner.tech-spec'
   const valId = 'gaia.agent.planner.validate-feature-docs'
   const output = (suffix, inputs = [featurePath]) => ({ path: file(suffix), inputs })
-  const requirements = () => c.worker(reqId, featurePath, { outputs: [output('Requirements')] })
   const techSpec = () => c.worker(specId, featurePath, { outputs: [output('Tech-Spec', [featurePath, file('Requirements')])] })
+
+  // Deliberately NOT file('req') — same reasoning as FTR-020's wbsDir: this is a directory
+  // nested inside the feature's own already-prefixed folder, so a second prefix would be
+  // redundant.
+  const reqDir = `${featureDir}/req`
+  const reqIndexPath = `${reqDir}/index.md`
+
+  // Duplicated (not imported) from req-assembler.js's own export of the same name —
+  // pm-phase1.js's workflow-runner sandbox has no `require`, so getting this via another
+  // c.command round-trip would be unnecessary overhead for a few-line table parse already
+  // needed in-process to drive the per-UC loop below (FTR-021 Tech-Spec §5).
+  function parseUseCaseIndexTable(indexContent) {
+    const lines = indexContent.split('\n')
+    let start = -1, end = lines.length
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^## (\d+)\.\s/)
+      if (!m) continue
+      const n = Number(m[1])
+      if (n === 2) start = i
+      else if (start !== -1 && n > 2) { end = i; break }
+    }
+    if (start === -1) throw new Error("req/index.md is missing section 2 (Use Cases)")
+    const tableLines = lines.slice(start, end).filter(l => l.trim().startsWith('|'))
+    if (tableLines.length < 2) return []
+    return tableLines.slice(2).map(line => {
+      const cells = line.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1)
+      const [id, title, actor, priority, fileCol] = cells
+      const fileMatch = fileCol && fileCol.match(/\(([^)]+)\)/)
+      if (!fileMatch) throw new Error(`malformed File column for UC "${id}" in req/index.md`)
+      return { id, title, actor, priority, file: fileMatch[1] }
+    })
+  }
+
+  function buildUcPrompt(row, ucTable, featurePathArg) {
+    const compactIndex = ucTable.map(r => `${r.id}: ${r.title} (${r.actor})`).join('\n')
+    return `${featurePathArg}\n\nGenerate the full detail for this use case:\n` +
+      `UC ID: ${row.id}\nTitle: ${row.title}\nActor: ${row.actor}\nPriority: ${row.priority}\n\n` +
+      `Full use-case index (for cross-UC awareness, do not restate):\n${compactIndex}`
+  }
+
+  // forceAll: bypasses resume-by-existence entirely, re-dispatching the skeleton and every
+  // use case unconditionally, overwriting whatever is already on disk. Two call sites, two
+  // different needs: the initial-generation branch wants resume-by-existence (UC-04 — only
+  // pick up where a crashed/interrupted run left off); the needsRequirementsFix branch
+  // (validator found a gap) wants a full blind regeneration, exactly like the pre-FTR-021
+  // single-call behavior — by the time a fix is requested, every use case file already
+  // exists from the prior full run, so resume-by-existence alone would skip every one of
+  // them and silently reproduce the same (flagged-as-incomplete) document.
+  async function generateRequirements(forceAll) {
+    // A req/index.md that exists but is older than feature.md is NOT a resumable partial
+    // run — it was generated against a feature.md that has since changed, so resuming from
+    // it would keep stale skeleton content (UC list, Business Rules, AC table) forever.
+    // Only an index.md that is both present AND still fresh relative to feature.md is
+    // evidence of a genuine mid-run crash (UC-04) rather than staleness.
+    const skeletonStale = c.exists(reqIndexPath) && !fresh(reqIndexPath)
+    const regenSkeleton = forceAll || skeletonStale || !c.exists(reqIndexPath)
+
+    // 1. Skeleton (no declared worker() output — host writes it itself, mirroring FTR-020's
+    // skeleton step)
+    if (regenSkeleton) {
+      const skeleton = await c.worker(reqId, featurePath)
+      c.writeOutput(reqIndexPath, skeleton)
+    }
+
+    // 2. Structural self-consistency pre-check (req-skeleton-check.js, same
+    // req-graph-checks.js functions — run via subprocess since this runtime has no `require`)
+    await c.activity('req-skeleton-check', async () => {
+      const res = c.command(['run-asset', 'scripts/req-skeleton-check.js', '--project', c.root,
+        '--', reqIndexPath], [0, 1])
+      const parsed = JSON.parse(res.stdout)
+      if (typeof parsed.valid !== 'boolean' || !Array.isArray(parsed.errors) ||
+          (res.exitCode === 0) !== parsed.valid) throw new Error('Invalid skeleton-check result')
+      if (!parsed.valid) throw new Error('Requirements skeleton failed structural checks: ' + res.stdout)
+      return parsed
+    })
+
+    // 3. Per-use-case generation, resume-by-existence, sequential
+    const ucTable = parseUseCaseIndexTable(c.read(reqIndexPath))
+    for (const row of ucTable) {
+      const ucPath = `${reqDir}/${row.file}`
+      // If the skeleton itself was just (re)generated, every use case must regenerate too —
+      // an existing use-case file would have been written against the OLD skeleton's row
+      // (title/actor/priority may have changed) and cannot be trusted as-is.
+      if (!regenSkeleton && c.exists(ucPath)) continue // resume: skip, no dispatch
+      const detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath),
+        { label: `requirements-use-case:${row.id}` })
+      c.writeOutput(ucPath, detail)
+    }
+
+    // 4. Assembly (req-assembler.js) — writes the assembled document to the same path every
+    // downstream consumer (Tech-Spec generation, validation, docsDigest) already reads.
+    const assembled = c.command(['run-asset', 'scripts/req-assembler.js', '--project', c.root,
+      '--', reqDir]).stdout
+    c.writeOutput(file('Requirements'), assembled)
+  }
+
   let changed = false
   if (force || !fresh(file('Requirements')) || missingSections(c.read(file('Requirements')), 9).length) {
-    await requirements()
+    await generateRequirements(force)
     if (!c.exists(file('Requirements'))) throw new Error('Requirements output missing')
     assertCompleteSections('Requirements', c.read(file('Requirements')), 9)
     changed = true
@@ -71,7 +167,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
       }
       if (cycle === 3) throw new Error('Validation gaps remain after 3 cycles')
       if (!result.needsRequirementsFix && !result.needsTechSpecFix) throw new Error(`Validation agent reported gaps on cycle ${cycle} but flagged neither document for revision`)
-      if (result.needsRequirementsFix) await requirements()
+      if (result.needsRequirementsFix) await generateRequirements(true)
       if (result.needsTechSpecFix) await techSpec()
     }
   }

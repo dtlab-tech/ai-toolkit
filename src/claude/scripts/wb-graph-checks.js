@@ -1,0 +1,711 @@
+'use strict'
+
+const fs = require('fs')
+const path = require('path')
+
+// Pure, dependency-graph structural checks extracted from wb-validate.js (FTR-020 OQ-02).
+// Each exported check function takes a plain { phases } structure (phases[].tasks[] inline,
+// the same shape wb-validate.js already builds from the parsed Work Breakdown) and returns
+// { errors: [...], ...diagnostics } — no file I/O, no process.exit. Reused by wb-validate.js
+// (checks 3, 5-14, 19-21) and by pm-phase2.js's skeleton structural pre-check (before any
+// per-task token is spent — see Tech-Spec).
+
+const VALID_DOMAINS = ['BE', 'FE', 'DB', 'DevOps', 'INFRA', 'TEST']
+
+const VALID_AGENT_TYPES = [
+  'developer-backend',
+  'developer-frontend',
+  'developer-testing',
+  'developer-database',
+  'review-solution',
+]
+
+const ERRORS = {
+  SCHEMA_VERSION_INVALID:       'schema_version_invalid',        // check 2
+  UNIQUE_ID_VIOLATION:          'unique_id_violation',           // check 3
+  MISSING_FIELD:                'missing_field',                 // check 4
+  INVALID_ID_FORMAT:            'invalid_id_format',             // check 5
+  INVALID_DOMAIN:               'invalid_domain',                // check 6
+  INVALID_AGENT_TYPE:           'invalid_agent_type',            // check 7
+  DEPENDENCY_NOT_FOUND:         'dependency_not_found',          // check 8
+  SELF_DEPENDENCY:              'self_dependency',               // check 9
+  PHASE_ID_MISMATCH:            'phase_id_mismatch',             // check 10
+  TASK_CYCLE_DETECTED:          'task_cycle_detected',           // check 11
+  PHASE_DEPENDENCY_NOT_FOUND:   'phase_dependency_not_found',    // check 12
+  PHASE_CYCLE_DETECTED:         'phase_cycle_detected',          // check 13
+  PHASE_UNSCHEDULABLE:          'phase_unschedulable',           // check 14
+  DURATION_WARNING:             'duration_warning',              // check 15 — non-blocking warning
+  SPLIT_REQUIRED:               'split_required',                // check 15 — blocking error (>30 min)
+  EMPTY_VERIFICATION_COMMANDS:  'empty_verification_commands',   // check 16
+  EMPTY_COMMIT_SUBJECT:         'empty_commit_subject',          // check 17
+  MISSING_GROUPING_RATIONALE:   'missing_grouping_rationale',    // check 18
+  AC_NOT_FOUND:                 'ac_not_found',                  // check 19
+  AC_WRONG_US:                  'ac_wrong_us',                   // check 20
+  AC_INVALID_UC_REF:            'ac_invalid_uc_ref',             // check 20
+  UC_MISSING_PRIORITY:          'uc_missing_priority',           // check 20
+  MUST_AC_UNCOVERED:            'must_ac_uncovered',             // check 21
+  INVALID_TEXT_FIELD_CHARS:     'invalid_text_field_chars',      // check 22
+  EMPTY_PHASE:                  'empty_phase',                   // check 23
+}
+
+function _tasksOf(phase) {
+  return Array.isArray(phase.tasks) ? phase.tasks : []
+}
+
+// ── Markdown table row splitter ─────────────────────────────────────────────
+// Splits a Markdown table row into cells on unescaped pipe separators only.
+// A backslash-escaped pipe (\|) is treated as a literal pipe *inside* the cell
+// rather than a column separator and is unescaped in the returned cell, so a
+// criterion such as `ai-toolkit ledger open\|close\|fail\|skip` stays in a
+// single cell and does not shift the "Related UC" column.
+// Returns the raw split including the leading/trailing empty cells produced by
+// the row's outer pipes, matching the previous `line.split('|')` contract so
+// callers can keep using `.slice(1, -1)`.
+function splitTableRow(line) {
+  const cells = []
+  let current = ''
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '\\' && line[i + 1] === '|') {
+      current += '|' // unescape: keep the literal pipe inside this cell
+      i++            // consume the escaped '|'
+      continue
+    }
+    if (ch === '|') {
+      cells.push(current)
+      current = ''
+      continue
+    }
+    current += ch
+  }
+  cells.push(current)
+  return cells
+}
+
+// ── AC table parser (prerequisite for checks 19–21) ─────────────────────────
+
+function parseAcTable(requirementsPath) {
+  if (!requirementsPath) return null
+
+  let text
+  try {
+    text = fs.readFileSync(path.resolve(requirementsPath), 'utf8')
+  } catch (err) {
+    process.stderr.write(`Error: cannot read requirements file "${requirementsPath}": ${err.message}\n`)
+    process.exit(2)
+  }
+
+  const lines = text.split(/\r?\n/)
+
+  // ── Parse UC priorities ────────────────────────────────────────────────────
+  // Scan for ### UC-NN: headings, then look for | Priority | <value> | in the
+  // following metadata table (stop at the next same-or-higher-level heading).
+  const ucPriorityMap = new Map()
+  const UC_HEADING_RE = /^###\s+(UC-\d+):/
+
+  for (let i = 0; i < lines.length; i++) {
+    const headingMatch = lines[i].match(UC_HEADING_RE)
+    if (!headingMatch) continue
+    const ucId = headingMatch[1]
+    for (let j = i + 1; j < lines.length; j++) {
+      if (/^#{1,3}\s/.test(lines[j])) break
+      const priorityMatch = lines[j].match(/^\|\s*Priority\s*\|\s*(\S+)\s*\|/)
+      if (priorityMatch) {
+        ucPriorityMap.set(ucId, priorityMatch[1])
+        break
+      }
+    }
+  }
+
+  // ── Locate ## 7. Acceptance Criteria section ──────────────────────────────
+  let acSectionIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (/^## 7\. Acceptance Criteria\s*$/.test(lines[i])) {
+      acSectionIdx = i
+      break
+    }
+  }
+  if (acSectionIdx === -1) {
+    process.stderr.write('Error: requirements file is missing the "## 7. Acceptance Criteria" section\n')
+    process.exit(2)
+  }
+
+  // ── Find the first Markdown table (header row containing | ID |) ──────────
+  let tableHeaderIdx = -1
+  for (let i = acSectionIdx + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i])) break
+    if (/\|\s*ID\s*\|/.test(lines[i])) {
+      tableHeaderIdx = i
+      break
+    }
+  }
+  if (tableHeaderIdx === -1) {
+    process.stderr.write('Error: no AC table found after "## 7. Acceptance Criteria" (expected a header row containing "| ID |")\n')
+    process.exit(2)
+  }
+
+  // ── Validate column headers ────────────────────────────────────────────────
+  const headerCells = splitTableRow(lines[tableHeaderIdx]).slice(1, -1).map(c => c.trim())
+  if (headerCells.length < 3) {
+    process.stderr.write('Error: AC table header has fewer than 3 columns\n')
+    process.exit(2)
+  }
+  if (headerCells[0] !== 'ID' || headerCells[1] !== 'Criterion' || headerCells[2] !== 'Related UC') {
+    process.stderr.write(`Error: AC table columns must be "ID", "Criterion", "Related UC" in order; got "${headerCells[0]}", "${headerCells[1]}", "${headerCells[2]}"\n`)
+    process.exit(2)
+  }
+
+  // ── Parse data rows ────────────────────────────────────────────────────────
+  const PRIORITY_ORDER = ['Must', 'Should', 'Could']
+  const UC_REF_RE = /^UC-\d+$/
+  const acMap = new Map()
+
+  for (let i = tableHeaderIdx + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^##\s/.test(line)) break
+    if (!line.trim().startsWith('|')) break
+
+    // Skip separator rows: every cell is only dashes, colons, or spaces
+    const rawCells = splitTableRow(line).slice(1, -1)
+    if (rawCells.every(c => /^[\s\-:]+$/.test(c))) continue
+
+    const cells = rawCells.map(c => c.trim())
+    if (cells.length < 3) continue
+
+    const acId = cells[0]
+    const relatedUcRaw = cells[2]
+
+    if (!acId) continue
+
+    if (acMap.has(acId)) {
+      process.stderr.write(`Error: duplicate AC ID "${acId}" in AC table\n`)
+      process.exit(2)
+    }
+
+    let unscoped = false
+    let allowedUserStories = []
+    let acPriority
+
+    if (relatedUcRaw.trim().toLowerCase() === 'all ucs') {
+      unscoped = true
+      allowedUserStories = []
+      // Derive strongest priority from all known UCs
+      acPriority = [...ucPriorityMap.values()].reduce((best, p) => {
+        const bestIdx = PRIORITY_ORDER.indexOf(best)
+        const pIdx = PRIORITY_ORDER.indexOf(p)
+        return pIdx !== -1 && pIdx < bestIdx ? p : best
+      }, 'Could')
+    } else {
+      const ucTokens = relatedUcRaw.split(',').map(t => t.trim())
+
+      for (const token of ucTokens) {
+        if (!UC_REF_RE.test(token)) {
+          process.stderr.write(`Error: malformed UC reference "${token}" in AC "${acId}" Related UC field\n`)
+          process.exit(2)
+        }
+      }
+
+      for (const ucRef of ucTokens) {
+        if (!ucPriorityMap.has(ucRef)) {
+          process.stderr.write(`Error: AC "${acId}" references UC "${ucRef}" which does not exist in the requirements\n`)
+          process.exit(2)
+        }
+        if (!ucPriorityMap.get(ucRef)) {
+          process.stderr.write(`Error: ${ucRef} has no declared priority\n`)
+          process.exit(2)
+        }
+        allowedUserStories.push(ucRef.replace('UC-', 'US-'))
+      }
+
+      acPriority = ucTokens.reduce((best, ucRef) => {
+        const p = ucPriorityMap.get(ucRef)
+        const bestIdx = PRIORITY_ORDER.indexOf(best)
+        const pIdx = PRIORITY_ORDER.indexOf(p)
+        return pIdx !== -1 && pIdx < bestIdx ? p : best
+      }, 'Could')
+    }
+
+    acMap.set(acId, { id: acId, priority: acPriority, allowedUserStories, unscoped })
+  }
+
+  return acMap
+}
+
+// ── Check 3: Unique task IDs ─────────────────────────────────────────────────
+
+function checkUniqueTaskIds({ phases }) {
+  const errors = []
+  const seenTaskIds = new Map()   // taskId → first-seen phaseId
+  const duplicateTaskIds = new Set()
+
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (task.id != null) {
+        if (seenTaskIds.has(task.id)) {
+          duplicateTaskIds.add(task.id)
+        } else {
+          seenTaskIds.set(task.id, phase.id)
+        }
+      }
+    }
+  }
+
+  for (const taskId of duplicateTaskIds) {
+    errors.push({
+      category: ERRORS.UNIQUE_ID_VIOLATION,
+      severity: 'error',
+      taskId,
+      field: 'id',
+      message: `Duplicate task ID "${taskId}" appears in multiple phases`,
+      details: { taskId },
+    })
+  }
+
+  return { errors, seenTaskIds }
+}
+
+// ── Check 5: Task ID format ──────────────────────────────────────────────────
+
+const INFRA_TASK_ID_RE = /^INFRA-TASK-(BE|FE|DB|DevOps|INFRA|TEST)-\d+$/
+const US_TASK_ID_RE    = /^[A-Z0-9-]+-TASK-(BE|FE|DB|DevOps|INFRA|TEST)-\d+$/
+
+function checkTaskIdFormat({ phases }) {
+  const errors = []
+  for (const phase of phases) {
+    const isInfraPhase = phase.id === 'INFRA' || phase.type === 'infra'
+    const re = isInfraPhase ? INFRA_TASK_ID_RE : US_TASK_ID_RE
+    for (const task of _tasksOf(phase)) {
+      if (task.id == null) continue
+      if (!re.test(task.id)) {
+        errors.push({
+          category: ERRORS.INVALID_ID_FORMAT,
+          severity: 'error',
+          taskId: task.id,
+          phaseId: phase.id,
+          field: 'id',
+          message: `Task "${task.id}" in phase "${phase.id}" has an invalid ID format`,
+          details: { taskId: task.id, phaseId: phase.id, expectedPattern: re.toString() },
+        })
+      }
+    }
+  }
+  return { errors }
+}
+
+// ── Check 6: Domain whitelist ────────────────────────────────────────────────
+
+function checkDomainWhitelist({ phases }) {
+  const errors = []
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (task.domain == null) continue
+      if (!VALID_DOMAINS.includes(task.domain)) {
+        errors.push({
+          category: ERRORS.INVALID_DOMAIN,
+          severity: 'error',
+          taskId: task.id,
+          field: 'domain',
+          message: `Task "${task.id}" has invalid domain "${task.domain}"; must be one of ${VALID_DOMAINS.join(', ')}`,
+          details: { taskId: task.id, domain: task.domain, validDomains: VALID_DOMAINS },
+        })
+      }
+    }
+  }
+  return { errors }
+}
+
+// ── Check 7: AgentType whitelist ─────────────────────────────────────────────
+
+function checkAgentTypeWhitelist({ phases }) {
+  const errors = []
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (task.agentType == null) continue
+      if (!VALID_AGENT_TYPES.includes(task.agentType)) {
+        errors.push({
+          category: ERRORS.INVALID_AGENT_TYPE,
+          severity: 'error',
+          taskId: task.id,
+          field: 'agentType',
+          message: `Task "${task.id}" has invalid agentType "${task.agentType}"; must be one of ${VALID_AGENT_TYPES.join(', ')}`,
+          details: { taskId: task.id, agentType: task.agentType, validAgentTypes: VALID_AGENT_TYPES },
+        })
+      }
+    }
+  }
+  return { errors }
+}
+
+// ── Check 8: Dependency reference existence ──────────────────────────────────
+
+function checkDependencyExistence({ phases }, allTaskIds) {
+  const errors = []
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (!Array.isArray(task.dependsOn)) continue
+      for (const refId of task.dependsOn) {
+        if (!allTaskIds.has(refId)) {
+          errors.push({
+            category: ERRORS.DEPENDENCY_NOT_FOUND,
+            severity: 'error',
+            taskId: task.id,
+            field: 'dependsOn',
+            message: `Task "${task.id}" references non-existent task ID "${refId}" in dependsOn`,
+            details: { taskId: task.id, missingRef: refId },
+          })
+        }
+      }
+    }
+  }
+  return { errors }
+}
+
+// ── Check 9: Self-dependency ─────────────────────────────────────────────────
+
+function checkSelfDependency({ phases }) {
+  const errors = []
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (!Array.isArray(task.dependsOn)) continue
+      if (task.dependsOn.includes(task.id)) {
+        errors.push({
+          category: ERRORS.SELF_DEPENDENCY,
+          severity: 'error',
+          taskId: task.id,
+          field: 'dependsOn',
+          message: `Task "${task.id}" lists itself in dependsOn (self-dependency)`,
+          details: { taskId: task.id },
+        })
+      }
+    }
+  }
+  return { errors }
+}
+
+// ── Check 10: Phase ID consistency ───────────────────────────────────────────
+
+const INFRA_PREFIX = 'INFRA-TASK-'
+const TASK_SEP     = '-TASK-'
+
+function checkPhaseIdConsistency({ phases }) {
+  const errors = []
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (task.id == null) continue
+      if (task.id.startsWith(INFRA_PREFIX)) {
+        if (phase.id !== 'INFRA') {
+          errors.push({
+            category: ERRORS.PHASE_ID_MISMATCH,
+            severity: 'error',
+            taskId: task.id,
+            field: 'id',
+            message: `Task "${task.id}" has INFRA prefix but is in phase "${phase.id}"; INFRA tasks must be in the INFRA phase`,
+            details: { taskId: task.id, phaseId: phase.id, expectedPhase: 'INFRA' },
+          })
+        }
+      } else {
+        const sepIdx = task.id.indexOf(TASK_SEP)
+        if (sepIdx !== -1) {
+          const extractedPrefix = task.id.substring(0, sepIdx)
+          if (extractedPrefix !== phase.id) {
+            errors.push({
+              category: ERRORS.PHASE_ID_MISMATCH,
+              severity: 'error',
+              taskId: task.id,
+              field: 'id',
+              message: `Task "${task.id}" has prefix "${extractedPrefix}" but is in phase "${phase.id}"`,
+              details: { taskId: task.id, phaseId: phase.id, extractedPrefix },
+            })
+          }
+        }
+      }
+    }
+  }
+  return { errors }
+}
+
+// ── Check 11: Task cycle detection (DFS gray/black coloring) ─────────────────
+
+function checkTaskCycle({ phases }, allTaskIds) {
+  const errors = []
+
+  // Build adjacency map; skip tasks with null IDs; skip refs not in graph and self-deps
+  const adjMap = new Map()  // taskId → valid dependsOn[]
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (task.id == null) continue
+      const validDeps = Array.isArray(task.dependsOn)
+        ? task.dependsOn.filter(dep => allTaskIds.has(dep) && dep !== task.id)
+        : []
+      adjMap.set(task.id, validDeps)
+    }
+  }
+
+  // Three-color DFS: WHITE = unvisited, GRAY = in progress (on current path), BLACK = done
+  const WHITE = 0
+  const GRAY  = 1
+  const BLACK = 2
+
+  const colors = new Map()
+  for (const taskId of adjMap.keys()) {
+    colors.set(taskId, WHITE)
+  }
+
+  const detectedCycles = []
+
+  function dfsCycle(nodeId, pathStack) {
+    colors.set(nodeId, GRAY)
+    pathStack.push(nodeId)
+
+    for (const dep of adjMap.get(nodeId)) {
+      const color = colors.get(dep)
+      if (color === GRAY) {
+        // Back edge — collect all members of this cycle from the current path stack
+        const cycleStart = pathStack.indexOf(dep)
+        detectedCycles.push(pathStack.slice(cycleStart))
+      } else if (color === WHITE) {
+        dfsCycle(dep, pathStack)
+      }
+      // BLACK: node fully processed — no cycle through it
+    }
+
+    pathStack.pop()
+    colors.set(nodeId, BLACK)
+  }
+
+  for (const taskId of adjMap.keys()) {
+    if (colors.get(taskId) === WHITE) {
+      dfsCycle(taskId, [])
+    }
+  }
+
+  // Populate task-level graph data
+  const taskGraph = {}
+  for (const [taskId, deps] of adjMap) {
+    taskGraph[taskId] = deps
+  }
+
+  for (const cycleMembers of detectedCycles) {
+    errors.push({
+      category: ERRORS.TASK_CYCLE_DETECTED,
+      severity: 'error',
+      taskId: null,
+      field: null,
+      message: `Dependency cycle detected among tasks: ${cycleMembers.join(' → ')} → ${cycleMembers[0]}`,
+      details: { cycleMembers },
+    })
+  }
+
+  return { errors, taskGraph, taskCycles: detectedCycles }
+}
+
+// ── Check 12 & 13: Phase dependency projection and cycle detection ────────────
+
+function checkPhaseDependencyAndCycle({ phases }, taskToPhase) {
+  const errors = []
+
+  // All known phase IDs for existence checks (Check 12)
+  const phaseIdSet = new Set(phases.map(p => p.id).filter(id => id != null))
+
+  // Step 2: Compute phase-level dependsOn projection (same algorithm as wb-render.js)
+  // For each phase: union all task dependsOn IDs → map to owner phase → remove self → deduplicate
+  const phaseDeps = new Map()  // Map<phaseId, Set<phaseId>>
+
+  for (const phase of phases) {
+    if (phase.id == null) continue
+    const deps = new Set()
+    for (const task of _tasksOf(phase)) {
+      if (!Array.isArray(task.dependsOn)) continue
+      for (const refId of task.dependsOn) {
+        const ownerPhase = taskToPhase.get(refId)
+        if (ownerPhase == null) continue  // unresolved task dep — already reported in check 8
+        if (ownerPhase === phase.id) continue  // remove self-loops (intra-phase)
+        deps.add(ownerPhase)
+      }
+    }
+    phaseDeps.set(phase.id, deps)
+  }
+
+  // Check 12: Phase dependency existence (defensive — should not fire if check 8 passed)
+  for (const [phaseId, deps] of phaseDeps) {
+    for (const depPhaseId of deps) {
+      if (!phaseIdSet.has(depPhaseId)) {
+        errors.push({
+          category: ERRORS.PHASE_DEPENDENCY_NOT_FOUND,
+          severity: 'error',
+          taskId: null,
+          field: 'dependsOn',
+          message: `Phase "${phaseId}" has a projected dependency on phase "${depPhaseId}" which does not exist`,
+          details: { phaseId, missingPhase: depPhaseId },
+        })
+      }
+    }
+  }
+
+  // Check 13: Phase cycle detection (same DFS gray/black algorithm as check 11)
+  const WHITE = 0
+  const GRAY  = 1
+  const BLACK = 2
+
+  const phaseColors = new Map()
+  for (const phaseId of phaseDeps.keys()) {
+    phaseColors.set(phaseId, WHITE)
+  }
+
+  const detectedPhaseCycles = []
+
+  function dfsPhaseCycle(nodeId, pathStack) {
+    phaseColors.set(nodeId, GRAY)
+    pathStack.push(nodeId)
+
+    for (const dep of phaseDeps.get(nodeId)) {
+      const color = phaseColors.get(dep)
+      if (color === GRAY) {
+        const cycleStart = pathStack.indexOf(dep)
+        detectedPhaseCycles.push(pathStack.slice(cycleStart))
+      } else if (color === WHITE) {
+        dfsPhaseCycle(dep, pathStack)
+      }
+    }
+
+    pathStack.pop()
+    phaseColors.set(nodeId, BLACK)
+  }
+
+  for (const phaseId of phaseDeps.keys()) {
+    if (phaseColors.get(phaseId) === WHITE) {
+      dfsPhaseCycle(phaseId, [])
+    }
+  }
+
+  // Store phase graph as plain object for JSON serialization
+  const phaseGraph = {}
+  for (const [phaseId, deps] of phaseDeps) {
+    phaseGraph[phaseId] = [...deps].sort()
+  }
+
+  for (const cycleMembers of detectedPhaseCycles) {
+    errors.push({
+      category: ERRORS.PHASE_CYCLE_DETECTED,
+      severity: 'error',
+      taskId: null,
+      field: null,
+      message: `Phase dependency cycle detected: ${cycleMembers.join(' → ')} → ${cycleMembers[0]}`,
+      details: { cycleMembers },
+    })
+  }
+
+  return { errors, phaseGraph, phaseCycles: detectedPhaseCycles, phaseDepsMap: phaseDeps }
+}
+
+// ── Check 14: Phase schedulability (buildWaves) ──────────────────────────────
+
+function checkPhaseSchedulability({ phases }, phaseDepsMap) {
+  const errors = []
+  const buildWavesDone = new Set()
+  const phaseWaves = []
+  let phaseRemaining = phases.map(p => p.id).filter(id => id != null)
+  while (phaseRemaining.length > 0) {
+    const ready = phaseRemaining.filter(id => [...(phaseDepsMap.get(id) || [])].every(d => buildWavesDone.has(d)))
+    if (ready.length === 0) break  // deadlock — unschedulable phases remain
+    ready.forEach(id => buildWavesDone.add(id))
+    phaseWaves.push(ready)
+    phaseRemaining = phaseRemaining.filter(id => !buildWavesDone.has(id))
+  }
+
+  for (const phaseId of phaseRemaining) {
+    errors.push({
+      category: ERRORS.PHASE_UNSCHEDULABLE,
+      severity: 'error',
+      taskId: null,
+      phaseId,
+      field: null,
+      message: `Phase "${phaseId}" cannot be scheduled: all predecessor phases are unschedulable or form a deadlock`,
+      details: { phaseId },
+    })
+  }
+
+  return { errors, phaseWaves, phaseUnschedulable: phaseRemaining }
+}
+
+// ── Checks 19, 20 & 21: AC existence, scope validation, Must coverage ────────
+
+function checkAcCoverage({ phases }, acMap, seenTaskIds) {
+  const errors = []
+  if (acMap === null) return { errors }
+
+  const coveredAcIds = new Set()
+
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      if (!Array.isArray(task.acceptanceCriteria)) continue
+      for (const acId of task.acceptanceCriteria) {
+        const acEntry = acMap.get(acId)
+
+        // ── Check 19: AC existence ───────────────────────────────────────────
+        if (acEntry === undefined) {
+          errors.push({
+            category: ERRORS.AC_NOT_FOUND,
+            severity: 'error',
+            taskId: task.id,
+            field: 'acceptanceCriteria',
+            message: `Task "${task.id}" references AC "${acId}" which does not exist in the Requirements AC table`,
+            details: { taskId: task.id, acId },
+          })
+          continue
+        }
+
+        coveredAcIds.add(acId)
+
+        // ── Check 20: AC scope validation ────────────────────────────────────
+        if (acEntry.unscoped === true) continue
+        const phaseId = seenTaskIds.get(task.id)
+        if (!acEntry.allowedUserStories.includes(phaseId)) {
+          errors.push({
+            category: ERRORS.AC_WRONG_US,
+            severity: 'error',
+            taskId: task.id,
+            field: 'acceptanceCriteria',
+            message: `Task "${task.id}" (in phase "${phaseId}") references AC "${acId}" which is scoped to ${JSON.stringify(acEntry.allowedUserStories)}, not this phase`,
+            details: { taskId: task.id, phaseId, acId, allowedUserStories: acEntry.allowedUserStories },
+          })
+        }
+      }
+    }
+  }
+
+  // ── Check 21: Must AC coverage ───────────────────────────────────────────────
+  for (const [acId, acEntry] of acMap) {
+    if (acEntry.priority === 'Must' && !coveredAcIds.has(acId)) {
+      errors.push({
+        category: ERRORS.MUST_AC_UNCOVERED,
+        severity: 'error',
+        taskId: null,
+        field: null,
+        message: `AC "${acId}" has Must priority but is not covered by any task's acceptanceCriteria`,
+        details: { acId, priority: 'Must' },
+      })
+    }
+  }
+
+  return { errors }
+}
+
+module.exports = {
+  ERRORS,
+  VALID_DOMAINS,
+  VALID_AGENT_TYPES,
+  splitTableRow,
+  parseAcTable,
+  checkUniqueTaskIds,
+  checkTaskIdFormat,
+  checkDomainWhitelist,
+  checkAgentTypeWhitelist,
+  checkDependencyExistence,
+  checkSelfDependency,
+  checkPhaseIdConsistency,
+  checkTaskCycle,
+  checkPhaseDependencyAndCycle,
+  checkPhaseSchedulability,
+  checkAcCoverage,
+}

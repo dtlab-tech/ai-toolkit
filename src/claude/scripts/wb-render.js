@@ -2,6 +2,7 @@
 
 const fs   = require('fs')
 const path = require('path')
+const { loadWorkBreakdown } = require('./wbs-assembler')
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
 
@@ -17,21 +18,15 @@ const destDir = process.argv[4]
   ? process.argv[4]
   : path.dirname(path.resolve(jsonPath))
 
-// ── Read and parse JSON ───────────────────────────────────────────────────────
-
-let raw
-try {
-  raw = fs.readFileSync(jsonPath, 'utf8')
-} catch (err) {
-  process.stderr.write(`Error: cannot read file "${jsonPath}": ${err.message}\n`)
-  process.exit(1)
-}
+// ── Read and assemble ──────────────────────────────────────────────────────────
+// Accepts either a single legacy JSON file (schema v2) or a {PREFIX}-wbs/ split
+// directory (schema v3), returning the same in-memory shape either way (FTR-020).
 
 let wb
 try {
-  wb = JSON.parse(raw)
+  wb = loadWorkBreakdown(jsonPath)
 } catch (err) {
-  process.stderr.write(`Error: "${jsonPath}" is not valid JSON: ${err.message}\n`)
+  process.stderr.write(`Error: ${err.message}\n`)
   process.exit(1)
 }
 

@@ -1,13 +1,19 @@
 ---
 name: gaia-generate-requirements
-description: "Generates a functional requirements document from a feature description. Input: path to feature.md"
+description: "Generates the Requirements skeleton (everything except per-use-case flow detail) from a feature description. Input: path to feature.md"
 model: haiku
 tools: Read, Glob, Grep
 ---
 
-# Generate Functional Requirements Document
+# Generate Functional Requirements Skeleton
 
-Given a feature description document, produce a structured **functional requirements document** suitable for stakeholder review and development handoff.
+Given a feature description document, produce the **Requirements skeleton**: every section of
+the functional requirements document except each use case's own flow detail (preconditions,
+trigger, main/alternative/error flows, postconditions). Section 2 (Use Cases) is reduced to an
+index table only — one row per use case, no flow body. A separate call (one per use case,
+dispatched by the host after this skeleton is accepted) fills in each use case's full detail from
+the row you write here; your response is never the final document by itself, it is assembled
+together with those per-use-case files afterward (FTR-021).
 
 ## Input
 
@@ -20,7 +26,7 @@ The user provides the path to a `feature.md` file. Read it in full before procee
 3. **Identify** all functional areas described
 3. **Extract** actors, use cases, business rules, acceptance criteria
 4. **Organize** into a structured requirements document
-5. **Return** the complete document as your final response — you do not have a Write tool; the host persists your response to `{PREFIX}-Requirements.md` verbatim. Do not attempt to write any file yourself.
+5. **Return** the skeleton as your final response — every section except each use case's flow detail. You do not have a Write tool; the host persists your response to `req/index.md` verbatim. Do not attempt to write any file yourself, and do not write a use case's flow body inline in Section 2 — list it in the index table only.
 
 ## Output Filename (for your reference only — you do not write this file)
 
@@ -61,30 +67,13 @@ What is in scope and out of scope.
 
 ## 2. Use Cases
 
-For each use case:
+| UC ID | Title | Actor | Priority | File |
+|-------|-------|-------|----------|------|
+| UC-XX | [Title] | [Actor] | Must / Should / Could | use-cases/UC-XX.md |
 
-### UC-XX: [Title]
-
-| Field | Value |
-|-------|-------|
-| Actor | ... |
-| Preconditions | ... |
-| Trigger | ... |
-| Priority | Must / Should / Could |
-
-**Main flow:**
-1. Step 1
-2. Step 2
-3. ...
-
-**Alternative flows:**
-- [condition] → [behavior]
-
-**Error flows:**
-- [error condition] → [system response]
-
-**Postconditions:**
-- [expected state after completion]
+> One row per use case you identify. Do NOT write the use case's flow here — a separate call
+> generates each use case's full detail (preconditions, trigger, main/alternative/error flows,
+> postconditions) from this row.
 
 ## 3. Business Rules
 

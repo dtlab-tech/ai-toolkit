@@ -1,0 +1,2 @@
+This directory is deliberately empty (no index.md) — used by req-assembler.test.js to assert
+the "missing req/index.md" structured-error path. Keep this file so Git tracks the directory.

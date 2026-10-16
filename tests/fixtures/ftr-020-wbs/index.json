@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-020",
+  "phases": [
+    {
+      "id": "INFRA",
+      "type": "infrastructure",
+      "sourceUC": [],
+      "detailFile": "user-stories/INFRA.md",
+      "taskIds": ["INFRA-TASK-BE-01", "INFRA-TASK-TEST-01", "INFRA-TASK-BE-02", "INFRA-TASK-TEST-02"]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": ["UC-05"],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": ["US-02-TASK-BE-01", "US-02-TASK-BE-02", "US-02-TASK-TEST-01"]
+    },
+    {
+      "id": "US-05",
+      "type": "user-story",
+      "sourceUC": ["UC-05"],
+      "detailFile": "user-stories/US-05.md",
+      "taskIds": ["US-05-TASK-BE-01", "US-05-TASK-TEST-01"]
+    },
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": ["UC-01"],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": ["US-01-TASK-INFRA-01"]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": ["UC-03"],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": ["US-03-TASK-INFRA-01"]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": ["UC-01", "UC-02", "UC-03", "UC-04"],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": ["US-04-TASK-BE-01", "US-04-TASK-BE-02", "US-04-TASK-BE-03", "US-04-TASK-BE-04", "US-04-TASK-TEST-01"]
+    }
+  ],
+  "tasks": {
+    "INFRA-TASK-BE-01": {
+      "title": "Extract 11 skeleton-answerable checks into wb-graph-checks.js",
+      "outcome": "src/claude/scripts/wb-graph-checks.js exists exporting one pure function per check (unique task IDs, ID format, domain whitelist, agentType whitelist, dependency existence, self-dependency, phase ID consistency, task cycle, phase dependency projection + cycle, phase schedulability, AC existence/scope/Must-coverage) plus parseAcTable/splitTableRow relocated from wb-validate.js, each taking a plain {phases, tasks} structure and returning error/warning objects in wb-validate.js's existing report shape",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 18, "tokens": 30000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add wb-graph-checks.js with 11 extracted pure check functions" },
+      "detailFile": "tasks/INFRA-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-TEST-01": {
+      "title": "Unit tests for wb-graph-checks.js functions",
+      "outcome": "tests/wb-graph-checks.test.js exists covering all 11 exported functions directly, reusing fixtures from tests/wb-validate.checks-1-7.test.js, tests/wb-validate.checks-8-10.test.js, tests/wb-validate.checks-11.test.js, tests/wb-validate.checks-12-14.test.js, and tests/wb-validate.checks-19-21.test.js",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["INFRA-TASK-BE-01"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 15, "tokens": 25000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add unit tests for wb-graph-checks.js" },
+      "detailFile": "tasks/INFRA-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-02": {
+      "title": "Create wbs-assembler.js with loadWorkBreakdown and detail block parse/render",
+      "outcome": "src/claude/scripts/wbs-assembler.js exists exporting loadWorkBreakdown(inputPath) (dispatches on file vs. directory input, returns the existing {schemaVersion, feature, phases:[{...,tasks:[...]}]} shape), parseTaskDetailBlock(text)/renderTaskDetailBlock(task), and parsePhaseDetailBlock(text)/renderPhaseDetailBlock(phase) for the phase tier, all independently reimplemented (not imported from lib/task-executor/plan.js)",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 20, "tokens": 40000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add wbs-assembler.js with directory/legacy loader and detail block codec" },
+      "detailFile": "tasks/INFRA-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-TEST-02": {
+      "title": "Unit tests for wbs-assembler.js",
+      "outcome": "tests/wbs-assembler.test.js exists covering: directory-format vs. legacy-JSON parity using the internal_docs/features/FTR-020-work-breakdown-split-generation/wbs/ fixture (deep-equal assembled output), missing index.json, missing referenced task file, missing referenced phase file, malformed task detail block, malformed phase detail block (each asserting a structured error naming the exact path), a parseTaskDetailBlock/renderTaskDetailBlock round-trip including verification commands with embedded pipes and backticks, a parsePhaseDetailBlock/renderPhaseDetailBlock round-trip, and a regression test parsing US-03-TASK-INFRA-01.md itself (whose Implementation notes contain an illustrative field-line example) asserting the real field values are returned, not the example's placeholder text",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["INFRA-TASK-BE-02"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 19, "tokens": 36000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add unit tests for wbs-assembler.js" },
+      "detailFile": "tasks/INFRA-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Wire wb-validate.js to use wb-graph-checks.js for checks 3, 5-14, 19-21",
+      "outcome": "wb-validate.js requires wb-graph-checks.js and calls its functions for checks 3, 5-14, 19-21 instead of the previous inline code; checks 4, 15-18, 22, 23 remain inline unchanged",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["INFRA-TASK-BE-01"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 16, "tokens": 28000 },
+      "outputCount": 1,
+      "commit": { "type": "refactor", "subject": "wire wb-validate.js to reuse wb-graph-checks.js for 11 extracted checks" },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-02": {
+      "title": "Wire wb-validate.js to load input via wbs-assembler.loadWorkBreakdown",
+      "outcome": "wb-validate.js's top-of-file fs.readFileSync + JSON.parse pair is replaced with const wb = loadWorkBreakdown(process.argv[2]); the rest of the script (report construction, all checks) is unchanged",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["INFRA-TASK-BE-02", "US-02-TASK-BE-01"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 10, "tokens": 15000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "wire wb-validate.js to accept split-directory or legacy-JSON input via wbs-assembler" },
+      "detailFile": "tasks/US-02-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Regression test: wb-validate.js output byte-identical before/after extraction",
+      "outcome": "tests/wb-validate.extraction-regression.test.js exists running wb-validate.js against the existing checks-1-7/8-10/11/12-14/15-18/19-21/22-23 fixtures and asserting identical JSON report and exit code to the pre-extraction baseline",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-02-TASK-BE-01", "US-02-TASK-BE-02"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 14, "tokens": 22000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add wb-validate.js extraction regression test" },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-05-TASK-BE-01": {
+      "title": "Wire wb-render.js to load input via wbs-assembler.loadWorkBreakdown",
+      "outcome": "wb-render.js's top-of-file fs.readFileSync + JSON.parse pair is replaced with const wb = loadWorkBreakdown(process.argv[2]); renderMarkdown, renderCsv, computePhaseDependsOn, sanitizeField, fencedCommandBlock, and taskAnchor are unchanged",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["INFRA-TASK-BE-02"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 10, "tokens": 15000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "wire wb-render.js to accept split-directory or legacy-JSON input via wbs-assembler" },
+      "detailFile": "tasks/US-05-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-05-TASK-TEST-01": {
+      "title": "Regression test: wb-render.js byte-identical .md/.csv for split-dir vs legacy-JSON input",
+      "outcome": "tests/wb-render.wbs-directory-parity.test.js exists building an equivalent split-directory and legacy-JSON fixture pair and asserting wb-render.js produces byte-identical .md and .csv output from both",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-05-TASK-BE-01"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 14, "tokens": 22000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add wb-render.js split-directory parity regression test" },
+      "detailFile": "tasks/US-05-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-INFRA-01": {
+      "title": "Repurpose gaia-generate-work-breakdown.md to emit the schema-v3 skeleton only",
+      "outcome": "src/claude/agents/gaia-generate-work-breakdown.md's Step 7 describes the schema-v3 skeleton shape (phases + per-task structural fields: id, title, outcome, domain, agentType, dependsOn, acceptanceCriteria, estimate, outputCount, commit) instead of full schema-v2 task objects; Atomicity Contract, task-ID format, and dependency/AC-assignment guidance are retained; verification-command and grouping-rationale guidance is removed (moved to the new per-task agent)",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 18, "tokens": 28000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "repurpose gaia-generate-work-breakdown.md to emit schema-v3 skeleton" },
+      "detailFile": "tasks/US-01-TASK-INFRA-01.md",
+      "status": "generated"
+    },
+    "US-03-TASK-INFRA-01": {
+      "title": "Create gaia-generate-work-breakdown-task.md agent",
+      "outcome": "src/claude/agents/gaia-generate-work-breakdown-task.md exists (sonnet, no Write tool) taking one skeleton task entry + relevant Tech-Spec section + compact full-skeleton task list as input, returning that task's detail block in the existing rendered format (field lines + fenced verification commands), instructed to restate skeleton-owned fields verbatim and supply only verification commands and groupingRationale as new content",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 15, "tokens": 22000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add gaia-generate-work-breakdown-task.md per-task detail agent" },
+      "detailFile": "tasks/US-03-TASK-INFRA-01.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-01": {
+      "title": "Implement skeleton-call step in pm-phase2.js",
+      "outcome": "pm-phase2.js dispatches gaia.agent.planner.work-breakdown with the SKELETON_SCHEMA (no declared worker() output), then materializeIndex() adds detailFile and status:\"pending\" per task, and the coordinator writes wbs/index.json itself via c.writeOutput; resume path (index.json already exists) reuses it via c.json instead of re-dispatching",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-INFRA-01", "INFRA-TASK-BE-02"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 18, "tokens": 30000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add skeleton-call step with resume detection to pm-phase2.js" },
+      "detailFile": "tasks/US-04-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-02": {
+      "title": "Implement structural pre-check step in pm-phase2.js",
+      "outcome": "pm-phase2.js calls a new runGraphChecks(index, requirementsText) helper that invokes the same wb-graph-checks.js functions wb-validate.js now imports, against the skeleton shape; a non-empty result throws before any per-task call is dispatched",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["INFRA-TASK-BE-01", "US-04-TASK-BE-01"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 14, "tokens": 22000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add skeleton structural pre-check step to pm-phase2.js" },
+      "detailFile": "tasks/US-04-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-03": {
+      "title": "Implement per-task generation loop with resume-by-status in pm-phase2.js",
+      "outcome": "pm-phase2.js iterates index.phases/taskIds in order; for each task with status !== \"generated\" or a missing detail file, dispatches gaia.agent.planner.work-breakdown-task via buildTaskPrompt(), writes the response to wbs/tasks/{taskId}.md via c.writeOutput, sets status to \"generated\", and persists index.json after each task; already-generated tasks with an existing file are skipped without dispatch",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-03-TASK-INFRA-01", "US-04-TASK-BE-02"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 20, "tokens": 32000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add per-task generation loop with resume-by-status to pm-phase2.js" },
+      "detailFile": "tasks/US-04-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-04": {
+      "title": "Wire pm-phase2.js's wb-validate.js/wb-render.js calls to pass the wbs directory",
+      "outcome": "pm-phase2.js's existing c.command(['run-asset', 'scripts/wb-validate.js', ...]) and c.command(['run-asset', 'scripts/wb-render.js', ...]) calls receive the wbs directory path instead of the single jsonPath; the rest of the existing report/semantic-validation/render/Gate-2-payload body is unchanged",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-02-TASK-BE-02", "US-05-TASK-BE-01", "US-04-TASK-BE-03"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 10, "tokens": 15000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "wire pm-phase2.js validate/render calls to the wbs directory path" },
+      "detailFile": "tasks/US-04-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Integration test: pm-phase2 resume-by-status dispatches only pending tasks",
+      "outcome": "tests/pm-phase2-wbs-resume.test.js exists: a pre-seeded index.json with some tasks already status:\"generated\" (with existing detail files) and some \"pending\" is run through pm-phase2.js's per-task loop with a stubbed dispatch counting invocations; asserts exactly the pending tasks dispatch a call and generated tasks are skipped",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-04-TASK-BE-04"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 18, "tokens": 28000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add pm-phase2 resume-by-status integration test" },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "generated"
+    }
+  }
+}
