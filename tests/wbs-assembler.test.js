@@ -40,10 +40,16 @@ function freshFixtureDir() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('loadWorkBreakdown() — directory vs. legacy parity', () => {
-  test('directory format and legacy JSON produce deep-equal assembled structures', () => {
+  // sourceUC is schema-v3-only information with no legacy analog (the single-shot, pre-FTR-020
+  // generation path never had a concept of "which UC(s) does this phase realize") — so an
+  // exact deep-equal is no longer the right assertion for phases; strip it before comparing,
+  // and assert its presence/correctness separately below.
+  test('directory format and legacy JSON produce deep-equal assembled structures, aside from the new sourceUC field', () => {
     const fromDir = loadWorkBreakdown(WBS_DIR);
     const fromJson = loadWorkBreakdown(LEGACY_JSON);
-    expect(fromDir).toEqual(fromJson);
+    const stripSourceUC = wb => ({ ...wb, phases: wb.phases.map(({ sourceUC, ...rest }) => rest) });
+    expect(stripSourceUC(fromDir)).toEqual(stripSourceUC(fromJson));
+    expect(fromJson.phases.every(p => !('sourceUC' in p))).toBe(true);
   });
 
   test('assembled structure has schemaVersion 2 regardless of on-disk index.json schemaVersion 3', () => {
@@ -51,6 +57,18 @@ describe('loadWorkBreakdown() — directory vs. legacy parity', () => {
     expect(assembled.schemaVersion).toBe(2);
     expect(assembled.feature).toBe('FTR-020');
     expect(assembled.phases).toHaveLength(6);
+  });
+
+  test("each directory-assembled phase's sourceUC is passed through from index.json, not dropped", () => {
+    const assembled = loadWorkBreakdown(WBS_DIR);
+    const index = JSON.parse(fs.readFileSync(path.join(WBS_DIR, 'index.json'), 'utf8'));
+    for (const phase of assembled.phases) {
+      const skeleton = index.phases.find(p => p.id === phase.id);
+      expect(phase.sourceUC).toEqual(skeleton.sourceUC);
+    }
+    // US-04 is the realistic multi-UC case this field exists for: one phase realizing several
+    // UCs, which a naive UC-NN<->US-NN id-matching rule could never express correctly.
+    expect(assembled.phases.find(p => p.id === 'US-04').sourceUC).toEqual(['UC-01', 'UC-02', 'UC-03', 'UC-04']);
   });
 });
 

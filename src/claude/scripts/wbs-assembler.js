@@ -209,6 +209,12 @@ function loadWorkBreakdown(inputPath) {
         type: phaseSkeleton.type,
         title: phaseDetail.title,
         commit: phaseDetail.commit,
+        // sourceUC was dropped here from FTR-020 through FTR-024 — wb-graph-checks.js's
+        // check 20 (AC scope validation) needs it to correctly scope an AC to the phase(s)
+        // that actually realize its UC, instead of assuming phase ID numbering matches UC
+        // numbering 1:1 (which the worked example behind this initiative already found false
+        // in general: one phase can span several UCs, one UC can span several phases).
+        sourceUC: phaseSkeleton.sourceUC,
         tasks,
       }
     })

@@ -184,11 +184,13 @@ function parseAcTable(requirementsPath) {
 
     let unscoped = false
     let allowedUserStories = []
+    let relatedUCs = []
     let acPriority
 
     if (relatedUcRaw.trim().toLowerCase() === 'all ucs') {
       unscoped = true
       allowedUserStories = []
+      relatedUCs = []
       // Derive strongest priority from all known UCs
       acPriority = [...ucPriorityMap.values()].reduce((best, p) => {
         const bestIdx = PRIORITY_ORDER.indexOf(best)
@@ -215,6 +217,7 @@ function parseAcTable(requirementsPath) {
           process.exit(2)
         }
         allowedUserStories.push(ucRef.replace('UC-', 'US-'))
+        relatedUCs.push(ucRef)
       }
 
       acPriority = ucTokens.reduce((best, ucRef) => {
@@ -225,7 +228,7 @@ function parseAcTable(requirementsPath) {
       }, 'Could')
     }
 
-    acMap.set(acId, { id: acId, criterion: cells[1], priority: acPriority, allowedUserStories, unscoped })
+    acMap.set(acId, { id: acId, criterion: cells[1], priority: acPriority, allowedUserStories, relatedUCs, unscoped })
   }
 
   return acMap
@@ -635,6 +638,7 @@ function checkAcCoverage({ phases }, acMap, seenTaskIds) {
   if (acMap === null) return { errors }
 
   const coveredAcIds = new Set()
+  const phaseById = new Map(phases.map(p => [p.id, p]))
 
   for (const phase of phases) {
     for (const task of _tasksOf(phase)) {
@@ -660,14 +664,29 @@ function checkAcCoverage({ phases }, acMap, seenTaskIds) {
         // ── Check 20: AC scope validation ────────────────────────────────────
         if (acEntry.unscoped === true) continue
         const phaseId = seenTaskIds.get(task.id)
-        if (!acEntry.allowedUserStories.includes(phaseId)) {
+        // sourceUC-aware scope check: a phase legitimately realizes a UC whenever that UC is
+        // in its own declared sourceUC, regardless of whether the phase ID numerically matches
+        // the UC number — one phase can span several UCs, one UC can be realized across several
+        // phases (see internal_docs/ideas/requirements-techspec-split-and-traceability-matrix.md's
+        // worked example, which caught exactly this kind of misassignment). Falls back to the
+        // old UC-NN<->US-NN id-matching rule only when the phase has no sourceUC field at all —
+        // true for schema-v2 (legacy, pre-sourceUC) Work Breakdowns, the one case where no
+        // better information exists.
+        const phase = phaseById.get(phaseId)
+        const sourceUC = phase && Array.isArray(phase.sourceUC) ? phase.sourceUC : null
+        const scopeOk = sourceUC
+          ? acEntry.relatedUCs.some(uc => sourceUC.includes(uc))
+          : acEntry.allowedUserStories.includes(phaseId)
+        if (!scopeOk) {
           errors.push({
             category: ERRORS.AC_WRONG_US,
             severity: 'error',
             taskId: task.id,
             field: 'acceptanceCriteria',
-            message: `Task "${task.id}" (in phase "${phaseId}") references AC "${acId}" which is scoped to ${JSON.stringify(acEntry.allowedUserStories)}, not this phase`,
-            details: { taskId: task.id, phaseId, acId, allowedUserStories: acEntry.allowedUserStories },
+            message: sourceUC
+              ? `Task "${task.id}" (in phase "${phaseId}") references AC "${acId}" which is scoped to ${JSON.stringify(acEntry.relatedUCs)}, but phase "${phaseId}"'s sourceUC is ${JSON.stringify(sourceUC)}`
+              : `Task "${task.id}" (in phase "${phaseId}") references AC "${acId}" which is scoped to ${JSON.stringify(acEntry.allowedUserStories)}, not this phase`,
+            details: { taskId: task.id, phaseId, acId, allowedUserStories: acEntry.allowedUserStories, relatedUCs: acEntry.relatedUCs, sourceUC },
           })
         }
       }

@@ -46,7 +46,7 @@ function computeTechSpecCoverage(entries, acMap) {
 
 function renderMatrix(prefix, acMap, coverage, techSpecCoverage = new Map()) {
   const rows = [...acMap.entries()].map(([acId, ac]) => {
-    const relatedUc = ac.unscoped ? 'All UCs' : ac.allowedUserStories.map(us => us.replace('US-', 'UC-')).join(', ')
+    const relatedUc = ac.unscoped ? 'All UCs' : ac.relatedUCs.join(', ')
     const cov = coverage.get(acId)
     const taskIds = [...cov.taskIds].join(', ') || '—'
     const phaseIds = [...cov.phaseIds].join(', ') || '—'

@@ -40,8 +40,10 @@ function makeTask(id, overrides = {}) {
   };
 }
 
-function makePhase(id, tasks, type = 'user-story') {
-  return { id, type, title: `Phase ${id}`, commit: { subject: `${id} done` }, tasks };
+function makePhase(id, tasks, type = 'user-story', sourceUC) {
+  const phase = { id, type, title: `Phase ${id}`, commit: { subject: `${id} done` }, tasks };
+  if (sourceUC !== undefined) phase.sourceUC = sourceUC; // omitted → legacy (no-sourceUC) shape
+  return phase;
 }
 
 function makeReqMd(ucPriorities, acRows) {
@@ -291,6 +293,34 @@ describe('checkAcCoverage()', () => {
     const seenTaskIds = new Map([['US-02-TASK-BE-01', 'US-02']]);
     const { errors } = checkAcCoverage({ phases }, acMap, seenTaskIds);
     expect(errors.some(e => e.category === ERRORS.AC_WRONG_US)).toBe(true);
+  });
+
+  // sourceUC-aware scope check: a phase whose ID doesn't numerically match the UC it realizes
+  // (one phase spanning several UCs, exactly the case the initiative's worked example found the
+  // naive UC-NN<->US-NN id-matching rule gets wrong) must still pass check 20 when its own
+  // declared sourceUC actually includes the AC's related UC.
+  test('passes when a phase\'s sourceUC includes the AC\'s related UC, even though the phase ID does not numerically match it', () => {
+    const reqPath = writeReq(makeReqMd({ 'UC-02': 'Must', 'UC-03': 'Should' }, [['AC-01', 'UC-03']]));
+    const acMap = parseAcTable(reqPath);
+    // Phase "US-04" legitimately realizes UC-02 and UC-03 (its own sourceUC says so) — the old
+    // id-matching rule would have required a phase literally named "US-03" instead.
+    const phases = [makePhase('US-04', [makeTask('US-04-TASK-BE-01', { acceptanceCriteria: ['AC-01'] })], 'user-story', ['UC-02', 'UC-03'])];
+    const seenTaskIds = new Map([['US-04-TASK-BE-01', 'US-04']]);
+    const { errors } = checkAcCoverage({ phases }, acMap, seenTaskIds);
+    expect(errors.some(e => e.category === ERRORS.AC_WRONG_US)).toBe(false);
+  });
+
+  test('still flags an AC whose related UC is genuinely absent from the citing phase\'s sourceUC', () => {
+    const reqPath = writeReq(makeReqMd({ 'UC-02': 'Must', 'UC-05': 'Should' }, [['AC-01', 'UC-05']]));
+    const acMap = parseAcTable(reqPath);
+    // Phase "US-04" only realizes UC-02 — AC-01 is scoped to UC-05, which is not in its sourceUC.
+    const phases = [makePhase('US-04', [makeTask('US-04-TASK-BE-01', { acceptanceCriteria: ['AC-01'] })], 'user-story', ['UC-02'])];
+    const seenTaskIds = new Map([['US-04-TASK-BE-01', 'US-04']]);
+    const { errors } = checkAcCoverage({ phases }, acMap, seenTaskIds);
+    const err = errors.find(e => e.category === ERRORS.AC_WRONG_US);
+    expect(err).toBeDefined();
+    expect(err.details.sourceUC).toEqual(['UC-02']);
+    expect(err.details.relatedUCs).toEqual(['UC-05']);
   });
 
   test('flags a Must-priority AC that no task covers (check 21)', () => {

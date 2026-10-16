@@ -42,8 +42,8 @@ describe('computeCoverage()', () => {
 describe('renderMatrix()', () => {
   test('rows appear in acMap insertion order', () => {
     const acMap = acMapWith([
-      { id: 'AC-02', criterion: 'second', priority: 'Must', allowedUserStories: ['US-01'], unscoped: false },
-      { id: 'AC-01', criterion: 'first', priority: 'Must', allowedUserStories: ['US-01'], unscoped: false },
+      { id: 'AC-02', criterion: 'second', priority: 'Must', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false },
+      { id: 'AC-01', criterion: 'first', priority: 'Must', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false },
     ])
     const coverage = new Map([['AC-02', { taskIds: new Set(), phaseIds: new Set() }], ['AC-01', { taskIds: new Set(), phaseIds: new Set() }]])
     const md = renderMatrix('FTR-TEST', acMap, coverage)
@@ -51,14 +51,14 @@ describe('renderMatrix()', () => {
   })
 
   test('zero coverage renders em-dash in both cells', () => {
-    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Should', allowedUserStories: ['US-01'], unscoped: false }])
+    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Should', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false }])
     const coverage = new Map([['AC-01', { taskIds: new Set(), phaseIds: new Set() }]])
     const md = renderMatrix('FTR-TEST', acMap, coverage)
     expect(md).toMatch(/\| AC-01 \| x \| Should \| UC-01 \| — \| — \| — \|/)
   })
 
   test('an unscoped AC renders "All UCs" in the Related UC column', () => {
-    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Must', allowedUserStories: [], unscoped: true }])
+    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Must', allowedUserStories: [], relatedUCs: [], unscoped: true }])
     const coverage = new Map([['AC-01', { taskIds: new Set(['T-01']), phaseIds: new Set(['US-01']) }]])
     const md = renderMatrix('FTR-TEST', acMap, coverage)
     expect(md).toContain('| AC-01 | x | Must | All UCs | — | T-01 | US-01 |')
@@ -93,14 +93,14 @@ describe('computeTechSpecCoverage()', () => {
 
 describe('renderMatrix() — Tech-Spec column (FTR-023)', () => {
   test('without a 4th argument, the new column renders em-dash (backward compatible)', () => {
-    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Should', allowedUserStories: ['US-01'], unscoped: false }])
+    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Should', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false }])
     const coverage = new Map([['AC-01', { taskIds: new Set(), phaseIds: new Set() }]])
     const md = renderMatrix('FTR-TEST', acMap, coverage) // no 4th arg
     expect(md).toMatch(/\| AC-01 \| x \| Should \| UC-01 \| — \| — \| — \|/)
   })
 
   test('with techSpecCoverage, the new column lists the addressing file(s)', () => {
-    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Should', allowedUserStories: ['US-01'], unscoped: false }])
+    const acMap = acMapWith([{ id: 'AC-01', criterion: 'x', priority: 'Should', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false }])
     const coverage = new Map([['AC-01', { taskIds: new Set(), phaseIds: new Set() }]])
     const techSpecCoverage = new Map([['AC-01', new Set(['a.js'])]])
     const md = renderMatrix('FTR-TEST', acMap, coverage, techSpecCoverage)

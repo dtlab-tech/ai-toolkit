@@ -130,10 +130,20 @@ validator code. Concrete outputs and findings from that exercise:
 - Should "WB phase(s) implementing an AC" become a stored/derived field, or stay something a
   validator computes on demand from `wbs/index.json` + `spec/`'s `Addresses` fields? (see
   `coverage-matrix/`'s own open questions for the detailed version of this)
-- Task-level (not just phase-level) AC citation for WB tasks hit a real scope-rule tension during
-  the worked example (an AC scoped to one UC can't legally be cited, under today's
-  `wb-validate.js` check 20, by a task whose phase's `sourceUC` includes that UC alongside
-  others) — unresolved, deferred to whichever FTR implements Phase A.
+- **RESOLVED (2026-10-16, post Phase D):** Task-level AC citation's scope-rule tension (an AC
+  scoped to one UC couldn't legally be cited, under `wb-validate.js` check 20, by a task whose
+  phase's `sourceUC` includes that UC alongside others) was still live after Phase A shipped
+  (FTR-022 worked around one instance of it by making a test fixture's AC unscoped, rather than
+  fixing the rule). Root cause, found only by tracing the actual data path: `wbs-assembler.js`
+  silently dropped `sourceUC` when reassembling phases from the split `wbs/` directory — it was
+  captured at generation time (schema v3) but never reached `wb-graph-checks.js`'s check 20,
+  which also still compared AC scope via a naive `UC-NN` → `US-NN` id-substitution instead of
+  consulting `sourceUC` at all. Fixed: `wbs-assembler.js` now passes `sourceUC` through;
+  `parseAcTable` now also records each AC's raw related-UC IDs (`relatedUCs`, alongside the
+  original `allowedUserStories` field, kept for the legacy schema-v2 fallback below); check 20
+  scopes an AC against the citing phase's own `sourceUC` when present, falling back to the old
+  id-substitution rule only for schema-v2 (legacy, pre-`sourceUC`) Work Breakdowns, which never
+  had the field and have no better information available.
 
 ## Links
 
