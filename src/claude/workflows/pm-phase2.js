@@ -196,6 +196,17 @@ return c.run(meta.name, featureDir, prefix, async () => {
     c.read(markdownPath); c.read(csvPath)
     return { ...result, markdownPath, csvPath, markdownExists: true, csvExists: true }
   })
+  // FTR-022: a new deterministic rendering step — no new data, no new validation, purely a
+  // view over AC<->task coverage wb-validate.js's checks 19-21 already enforce. Cannot fail
+  // for a feature that already reached this point in the pipeline (BR-02/NFR-03).
+  const acTaskMatrix = await c.activity('ac-task-matrix', async () => {
+    const result = c.command(['run-asset', 'scripts/ac-task-matrix.js', '--project', c.root,
+      '--', wbsDir, file('Requirements.md'), prefix])
+    const matrixPath = file('AC-Task-Matrix.md')
+    if (!c.exists(matrixPath)) throw new Error('AC-Task matrix output missing')
+    c.read(matrixPath) // never trust an unread write
+    return { ...result, matrixPath }
+  })
   // Assembled structure for c.estimates()'s metrics — via wbs-assembler.js's own CLI mode
   // (subprocess), since this runtime cannot `require` it in-process either.
   const assembled = JSON.parse(c.command(['run-asset', 'scripts/wbs-assembler.js', '--project', c.root, '--', wbsDir]).stdout)
@@ -208,6 +219,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
       js_validator_report: report, js_validator_failed: false,
       semantic_validator_result: semantic, semantic_validator_failed: false,
       renderer_result: rendered, renderer_failed: false, gate2_blocked: false,
+      ac_task_matrix_path: acTaskMatrix.matrixPath,
       duration_bands: report.durationBands, domain_distribution: report.domainDistribution,
       warning_band_tasks: report.warnings.filter(w => w.category === 'duration_warning').map(w => ({ taskId: w.taskId, agentMinutes: w.details?.agentMinutes })),
       split_required_tasks: [], must_ac_uncovered: [], phase_unschedulable: [],

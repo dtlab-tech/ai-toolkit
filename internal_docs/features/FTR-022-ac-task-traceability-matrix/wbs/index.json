@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-022",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": ["UC-01"],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": ["US-01-TASK-BE-01", "US-01-TASK-TEST-01"]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": ["UC-02"],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": ["US-02-TASK-BE-01", "US-02-TASK-TEST-01"]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": ["UC-03"],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": ["US-03-TASK-BE-01", "US-03-TASK-TEST-01"]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Extend parseAcTable to capture the Criterion text column",
+      "outcome": "src/claude/scripts/wb-graph-checks.js's parseAcTable additionally sets criterion: cells[1] on every acMap entry; checkAcCoverage and its three checks (19-21) are untouched and read exactly the fields they already read",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-05"],
+      "estimate": { "agentMinutes": 10, "tokens": 15000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "capture AC criterion text in parseAcTable's acMap entries" },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Regression test: checkAcCoverage unchanged, criterion field present",
+      "outcome": "tests/wb-graph-checks.test.js (or a new file) re-runs the existing checks-19-21 fixtures through the extended parseAcTable and asserts checkAcCoverage's errors output is byte-identical to before the extension, plus a new assertion that acMap.get(id).criterion returns the table's real Criterion text",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-01-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-05", "AC-06"],
+      "estimate": { "agentMinutes": 12, "tokens": 18000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add parseAcTable criterion-extension regression test" },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Create ac-task-matrix.js with computeCoverage, renderMatrix, and CLI entry point",
+      "outcome": "src/claude/scripts/ac-task-matrix.js exists exporting computeCoverage(wb, acMap) (builds acId -> {taskIds, phaseIds} by walking every phase's tasks) and renderMatrix(prefix, acMap, coverage) (renders the 6-column Markdown table + legend, AC rows in acMap insertion order), plus a require.main === module CLI entry point that loads the WB and Requirements, computes coverage, and writes {PREFIX}-AC-Task-Matrix.md",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-01", "AC-02", "AC-03", "AC-04"],
+      "estimate": { "agentMinutes": 20, "tokens": 32000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add ac-task-matrix.js computing and rendering AC-to-task coverage" },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Unit tests for ac-task-matrix.js's computeCoverage and renderMatrix",
+      "outcome": "tests/ac-task-matrix.test.js exists covering: an AC covered by one task, an AC covered by two tasks in two different phases (both phases listed), an unscoped (All UCs) AC, an AC with zero covering tasks (renders em-dash), and row order matching acMap's insertion order",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-06"],
+      "estimate": { "agentMinutes": 16, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add unit tests for ac-task-matrix.js" },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Wire ac-task-matrix.js into pm-phase2.js after wb-render.js",
+      "outcome": "pm-phase2.js runs a new c.activity('ac-task-matrix', ...) block immediately after the existing wb-render.js activity block, invoking ac-task-matrix.js via c.command(['run-asset', 'scripts/ac-task-matrix.js', ...]), reading the produced {PREFIX}-AC-Task-Matrix.md back before trusting it, and adding gate2_payload.ac_task_matrix_path to the returned result; gate2_blocked logic is unchanged",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-05"],
+      "estimate": { "agentMinutes": 10, "tokens": 15000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "wire ac-task-matrix.js into pm-phase2.js's Gate 2 flow" },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Integration test: pm-phase2 produces the AC-Task matrix and surfaces its path",
+      "outcome": "tests/integration/workflow-runtime.test.js (or a new file) extends an existing pm-phase2 fixture to assert {PREFIX}-AC-Task-Matrix.md exists, is readable, and its path appears in result.gate2_payload.ac_task_matrix_path, without changing gate2_blocked semantics",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-03-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-06"],
+      "estimate": { "agentMinutes": 14, "tokens": 20000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add pm-phase2 AC-Task matrix integration test" },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}

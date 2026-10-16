@@ -281,7 +281,13 @@ test('am-phase1 resumes: an assessor whose output already exists on disk is neve
 
 function phase2Setup() {
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'), '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
-  fs.writeFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n');
+  // FTR-022: one real AC row so ac-task-matrix.js has something non-trivial to render. "All
+  // UCs" (unscoped) avoids needing a UC heading whose US-NN-derived phase scope would have to
+  // match the fixture's single INFRA phase (check 20) — the scope-matching machinery isn't
+  // what this fixture exists to exercise.
+  fs.writeFileSync(path.join(f.dir, 'FTR-099-Requirements.md'),
+    '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n' +
+    '| AC-01 | Example criterion | All UCs |\n');
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), '## 9. File Inventory\n\nNew files: none\n');
   // FTR-020: gaia-generate-work-breakdown now returns a schema-v3 SKELETON (validated via
   // --json-schema, not plain text) — wb-valid.json is the pre-FTR-020 schema-v2 full-document
@@ -293,7 +299,7 @@ function phase2Setup() {
       commit: { type: 'feat', subject: 'infra' }, taskIds: ['INFRA-TASK-BE-01'] }],
     tasks: { 'INFRA-TASK-BE-01': {
       title: 'Example task', outcome: 'Example outcome', domain: 'BE', agentType: 'developer-backend',
-      dependsOn: [], acceptanceCriteria: [], estimate: { agentMinutes: 8, tokens: 10000 },
+      dependsOn: [], acceptanceCriteria: ['AC-01'], estimate: { agentMinutes: 8, tokens: 10000 },
       outputCount: 1, commit: { type: 'feat', subject: 'example' },
     } },
   };
@@ -326,6 +332,10 @@ test.each([true, false])('pm-phase2 runs real validator/renderer and blocks a ne
     expect(result.gate2_payload.gate2_blocked).toBe(false);
     expect(result.total_tasks).toBe(Object.keys(wb.tasks).length);
     expect(fs.readFileSync(result.tasks_csv_path, 'utf8')).toContain('phase_id|');
+    expect(result.gate2_payload.ac_task_matrix_path).toBeDefined();
+    const matrixContent = fs.readFileSync(result.gate2_payload.ac_task_matrix_path, 'utf8');
+    expect(matrixContent).toContain('AC ↔ Task Traceability Matrix');
+    expect(matrixContent).toContain('AC-01');
     expect(f.entries()[0].status).toBe('done');
   } else {
     await expect(promise).rejects.toThrow('semantic validation');

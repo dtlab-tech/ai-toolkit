@@ -225,7 +225,7 @@ function parseAcTable(requirementsPath) {
       }, 'Could')
     }
 
-    acMap.set(acId, { id: acId, priority: acPriority, allowedUserStories, unscoped })
+    acMap.set(acId, { id: acId, criterion: cells[1], priority: acPriority, allowedUserStories, unscoped })
   }
 
   return acMap

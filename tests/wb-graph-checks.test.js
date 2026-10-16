@@ -313,3 +313,12 @@ describe('checkAcCoverage()', () => {
     expect(errors).toHaveLength(0);
   });
 });
+
+describe('parseAcTable() — criterion extension (FTR-022)', () => {
+  test('every acMap entry now carries the real Criterion text from the table', () => {
+    const reqPath = writeReq(makeReqMd({ 'UC-01': 'Must' }, [['AC-01', 'UC-01'], ['AC-02', 'UC-01']]));
+    const acMap = parseAcTable(reqPath);
+    expect(acMap.get('AC-01').criterion).toBe('A criterion');
+    expect(acMap.get('AC-02').criterion).toBe('A criterion');
+  });
+});
