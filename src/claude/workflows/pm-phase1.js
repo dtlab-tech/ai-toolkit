@@ -42,30 +42,71 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const reqDir = `${featureDir}/req`
   const reqIndexPath = `${reqDir}/index.md`
 
-  // Duplicated (not imported) from req-assembler.js's own export of the same name —
-  // pm-phase1.js's workflow-runner sandbox has no `require`, so getting this via another
-  // c.command round-trip would be unnecessary overhead for a few-line table parse already
-  // needed in-process to drive the per-UC loop below (FTR-021 Tech-Spec §5).
-  function parseUseCaseIndexTable(indexContent) {
-    const lines = indexContent.split('\n')
+  // Shared by every req/index.md table parser below — same section-finding/table-row algorithm
+  // req-assembler.js's own findSectionRange/parseTableRows use, duplicated (not imported) since
+  // pm-phase1.js's workflow-runner sandbox has no `require`.
+  function findReqSection(lines, n) {
     let start = -1, end = lines.length
     for (let i = 0; i < lines.length; i++) {
       const m = lines[i].match(/^## (\d+)\.\s/)
       if (!m) continue
-      const n = Number(m[1])
-      if (n === 2) start = i
-      else if (start !== -1 && n > 2) { end = i; break }
+      const num = Number(m[1])
+      if (num === n) start = i
+      else if (start !== -1 && num > n) { end = i; break }
     }
-    if (start === -1) throw new Error("req/index.md is missing section 2 (Use Cases)")
+    return { start, end }
+  }
+  function parseReqTableRows(lines, start, end) {
     const tableLines = lines.slice(start, end).filter(l => l.trim().startsWith('|'))
     if (tableLines.length < 2) return []
-    return tableLines.slice(2).map(line => {
-      const cells = line.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1)
+    return tableLines.slice(2).map(line =>
+      line.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1))
+  }
+
+  function parseUseCaseIndexTable(indexContent) {
+    const lines = indexContent.split('\n')
+    const { start, end } = findReqSection(lines, 2)
+    if (start === -1) throw new Error("req/index.md is missing section 2 (Use Cases)")
+    return parseReqTableRows(lines, start, end).map(cells => {
       const [id, title, actor, priority, fileCol] = cells
       const fileMatch = fileCol && fileCol.match(/\(([^)]+)\)/)
       if (!fileMatch) throw new Error(`malformed File column for UC "${id}" in req/index.md`)
       return { id, title, actor, priority, file: fileMatch[1] }
     })
+  }
+
+  // Business Rules' "Applies to" / Acceptance Criteria's "Related UC" columns are the same
+  // cross-cutting-reference shape: a comma-separated UC-ID list, or the literal "All UCs". Both
+  // are 100% mechanically derivable from req/index.md's own tables — no LLM judgment needed,
+  // which is exactly why the per-UC generation agent is never given this data at all (see
+  // gaia-generate-requirements-use-case.md: it must not re-read req/index.md itself, to avoid
+  // re-deciding which UCs exist). The host computes and appends these cross-reference lines
+  // itself, after the agent's own response, mirroring how disambiguateFileSlugs/computeDependsOnPhases
+  // post-process agent/skeleton output elsewhere in this lineage.
+  function parseBusinessRulesTable(indexContent) {
+    const lines = indexContent.split('\n')
+    const { start, end } = findReqSection(lines, 3)
+    if (start === -1) throw new Error('req/index.md is missing section 3 (Business Rules)')
+    return parseReqTableRows(lines, start, end).map(([id, rule, appliesTo]) => ({ id, appliesTo }))
+  }
+  function parseAcTableRelatedUc(indexContent) {
+    const lines = indexContent.split('\n')
+    const { start, end } = findReqSection(lines, 7)
+    if (start === -1) throw new Error('req/index.md is missing section 7 (Acceptance Criteria)')
+    return parseReqTableRows(lines, start, end).map(([id, criterion, relatedUc]) => ({ id, relatedUc }))
+  }
+  function idsApplyingToUc(rows, ucId, column) {
+    return rows.filter(r => {
+      const val = (r[column] || '').trim()
+      return val.toLowerCase() === 'all ucs' || val.split(',').map(s => s.trim()).includes(ucId)
+    }).map(r => r.id)
+  }
+  function ucCrossReferences(indexContent, ucId) {
+    const relatedBRs = idsApplyingToUc(parseBusinessRulesTable(indexContent), ucId, 'appliesTo')
+    const relatedACs = idsApplyingToUc(parseAcTableRelatedUc(indexContent), ucId, 'relatedUc')
+    return '\n\n**Related Business Rules:** ' + (relatedBRs.length ? relatedBRs.join(', ') : '—') +
+      ' (see [index.md](../index.md#3-business-rules))\n\n**Related Acceptance Criteria:** ' +
+      (relatedACs.length ? relatedACs.join(', ') : '—') + ' (see [index.md](../index.md#7-acceptance-criteria))\n'
   }
 
   function buildUcPrompt(row, ucTable, featurePathArg) {
@@ -121,7 +162,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
       if (!regenSkeleton && c.exists(ucPath)) continue // resume: skip, no dispatch
       const detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath),
         { label: `requirements-use-case:${row.id}` })
-      c.writeOutput(ucPath, detail)
+      c.writeOutput(ucPath, detail.trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id))
     }
 
     // 4. Assembly (req-assembler.js) — writes the assembled document to the same path every

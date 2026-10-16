@@ -309,6 +309,44 @@ test('two components with colliding basenames receive distinct, deterministic fi
   expect(finalContent).toContain('body-of-a');
   expect(finalContent).toContain('body-of-b');
 });
+// Closes the gap flagged when the gaia-* templates were moved into the toolkit: the per-UC
+// generation agent is deliberately never given req/index.md's Business Rules/Acceptance
+// Criteria tables (to avoid re-deciding which UCs exist), so it cannot produce the use-case
+// template's "Related Business Rules"/"Related Acceptance Criteria" cross-reference lines
+// itself — the host now computes and appends both, mechanically, after the agent's own response.
+test('pm-phase1 appends host-computed Related Business Rules/Acceptance Criteria cross-references to each use case', async () => {
+  const twoUcTable = '| UC ID | Title | Actor | Priority | File |\n|---|---|---|---|---|\n' +
+    '| UC-01 | First | User | Must | [use-cases/UC-01.md](use-cases/UC-01.md) |\n' +
+    '| UC-02 | Second | User | Should | [use-cases/UC-02.md](use-cases/UC-02.md) |\n';
+  const reqDocWithBRs = Array.from({ length: 9 }, (_, i) => {
+    const n = i + 1;
+    if (n === 2) return `## 2. Use Cases\n\n${twoUcTable}`;
+    if (n === 3) return '## 3. Business Rules\n\n| ID | Rule | Applies to |\n|---|---|---|\n' +
+      '| BR-01 | Only applies to UC-01 | UC-01 |\n| BR-02 | Applies everywhere | All UCs |\n';
+    if (n === 7) return '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n' +
+      '| AC-01 | Scoped to UC-01 only | UC-01 |\n';
+    return `## ${n}. Section ${n}\n`;
+  }).join('\n');
+  const dispatch = async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (name === 'gaia-generate-requirements') return success(reqDocWithBRs);
+    if (name === 'gaia-generate-requirements-use-case') {
+      const ucId = options.prompt.match(/UC ID: (UC-\d+)/)[1];
+      return success(`### ${ucId}: Example\n\n| Field | Value |\n|---|---|\n| Actor | User |\n` +
+        '| Preconditions | - |\n| Trigger | - |\n| Priority | Must |\n\n**Main flow:**\n1. Step\n\n**Postconditions:**\n- Done\n');
+    }
+    return phase1Dispatch(options);
+  };
+  await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  const uc01 = fs.readFileSync(path.join(f.dir, 'req', 'use-cases', 'UC-01.md'), 'utf8');
+  // UC-01: both BR-01 (scoped to it) and BR-02 (All UCs) apply; AC-01 is scoped to it.
+  expect(uc01).toContain('**Related Business Rules:** BR-01, BR-02 (see [index.md](../index.md#3-business-rules))');
+  expect(uc01).toContain('**Related Acceptance Criteria:** AC-01 (see [index.md](../index.md#7-acceptance-criteria))');
+  const uc02 = fs.readFileSync(path.join(f.dir, 'req', 'use-cases', 'UC-02.md'), 'utf8');
+  // UC-02: only BR-02 (All UCs) applies; no AC references it at all.
+  expect(uc02).toContain('**Related Business Rules:** BR-02 (see [index.md](../index.md#3-business-rules))');
+  expect(uc02).toContain('**Related Acceptance Criteria:** — (see [index.md](../index.md#7-acceptance-criteria))');
+});
 test('fresh outputs skip workers; force requests them again', async () => {
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
   const dispatch = jest.fn(phase1Dispatch);

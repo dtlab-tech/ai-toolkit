@@ -29,10 +29,12 @@ already fixed by the skeleton call that produced the row you were given.
 
 Read `.claude/scripts/templates/gaia-use-case-template.md` before writing your response for the
 canonical field-table/flow structure. Note: that template also shows "Related Business Rules"/
-"Related Acceptance Criteria" cross-reference lines — you are NOT asked to produce them (you are
-not given the Business Rules/Acceptance Criteria table data needed to derive them correctly, and
-must not re-read `req/index.md` yourself to get it); the Output section below is your actual,
-complete output contract.
+"Related Acceptance Criteria" cross-reference lines at the end of the file — do NOT produce them
+yourself. The host computes both, mechanically, from `req/index.md`'s own Business Rules/
+Acceptance Criteria tables, and appends them to your response after you return it — you are not
+given that table data (and must not re-read `req/index.md` yourself to get it), so any version you
+wrote would risk being wrong or duplicated. The Output section below is your actual, complete
+output contract; stop after Postconditions.
 
 ## Mandatory instruction
 
