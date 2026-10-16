@@ -48,6 +48,11 @@ if (index.schemaVersion !== 3) {
 const phases = (index.phases || []).map(phaseSkeleton => ({
   id: phaseSkeleton.id,
   type: phaseSkeleton.type,
+  // sourceUC must survive this projection — checkAcCoverage's check 20 (AC scope validation)
+  // scopes an AC against the citing phase's own sourceUC, not its ID (see wbs-assembler.js's
+  // identical fix, commit fab14cb); omitting it here made the skeleton check reject any
+  // genuinely multi-UC phase that wb-validate.js (post-assembly) would already accept.
+  sourceUC: phaseSkeleton.sourceUC,
   tasks: (phaseSkeleton.taskIds || []).map(taskId => ({ id: taskId, ...(index.tasks || {})[taskId] })),
 }))
 

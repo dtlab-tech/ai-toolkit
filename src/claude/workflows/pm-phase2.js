@@ -17,13 +17,18 @@ const SKELETON_SCHEMA = {
     feature: { type: 'string' },
     phases: { type: 'array', items: {
       type: 'object',
-      required: ['id', 'type', 'title', 'commit', 'sourceUC', 'taskIds'],
+      required: ['id', 'type', 'title', 'commit', 'sourceUC', 'context', 'taskIds'],
       properties: {
         id: { type: 'string' }, type: { enum: ['infrastructure', 'user-story'] },
         title: { type: 'string' },
         commit: { type: 'object', required: ['type', 'subject'],
           properties: { type: { type: 'string' }, subject: { type: 'string' } } },
         sourceUC: { type: 'array', items: { type: 'string' } },
+        // 2-4 sentences: why this phase exists, how its tasks relate, any sequencing note other
+        // phases/tasks need before opening this phase's own task files — the one part of the
+        // FTR-020 phase-detail template that genuinely needs narrative judgment, not something
+        // the host can derive mechanically the way it does Source UC/Tasks-in-phase/Depends-on.
+        context: { type: 'string' },
         taskIds: { type: 'array', items: { type: 'string' } },
       },
     } },
@@ -52,8 +57,8 @@ const SKELETON_SCHEMA = {
 }
 
 // Splits the skeleton response into (a) index.json's structural, map-keyed shape and
-// (b) nothing else — phase title/commit are NOT copied into index.json (OQ-04); they are
-// rendered straight to each phase's detail file by the caller, from the same skeleton
+// (b) nothing else — phase title/commit/context are NOT copied into index.json (OQ-04); they
+// are rendered straight to each phase's detail file by the caller, from the same skeleton
 // response, since phase content is fully known the moment this one call returns.
 function materializeIndex(skeleton) {
   const tasks = {}
@@ -71,19 +76,53 @@ function materializeIndex(skeleton) {
 // lib/workflow-runner.js: only `control`/`args` are injected). Kept as a small, simple
 // render-only duplicate; the fragile inverse (parsing, with the contiguous-run algorithm)
 // stays exclusively in wbs-assembler.js, used only by wb-validate.js/wb-render.js.
-function renderPhaseDetailBlock(phase) {
+function renderPhaseDetailBlock(phase, taskTitles, dependsOnPhases) {
   const DASH = '—'
+  const sourceUC = Array.isArray(phase.sourceUC) && phase.sourceUC.length ? phase.sourceUC.join(', ') : DASH
+  const tasksBlock = taskTitles.length
+    ? taskTitles.map(t => `- \`${t.id}\` — ${t.title}`).join('\n')
+    : '_No tasks._'
+  const dependsOn = dependsOnPhases.length ? dependsOnPhases.join(', ') : 'none'
   return [
     `<a id="phase-${phase.id}"></a>`,
     `### ${phase.id}`,
     '',
     `- **Phase ID:** ${phase.id}`,
     `- **Type:** ${phase.type}`,
+    `- **Source UC:** ${sourceUC}`,
     `- **Title:** ${phase.title}`,
     `- **Commit type:** ${phase.commit.type}`,
     `- **Commit scope:** ${phase.commit.scope == null ? DASH : phase.commit.scope}`,
     `- **Commit subject:** ${phase.commit.subject}`,
+    '',
+    '**Context:**',
+    '',
+    phase.context == null ? DASH : phase.context,
+    '',
+    '**Tasks in this phase:**',
+    '',
+    tasksBlock,
+    '',
+    `**Depends on phases:** ${dependsOn}`,
+    '',
   ].join('\n')
+}
+
+// Depends-on-phases is 100% mechanically derivable from the skeleton's own task dependsOn
+// graph (same information checkPhaseDependencyAndCycle computes in wb-graph-checks.js, just
+// recomputed here since that function needs the post-assembly {phases:[{tasks:[...]}]} shape,
+// not the skeleton's map-of-tasks-by-id) — no LLM judgment needed, unlike Context.
+function computeDependsOnPhases(skeleton, phaseId, taskIdToPhase) {
+  const phase = skeleton.phases.find(p => p.id === phaseId)
+  const deps = new Set()
+  for (const taskId of phase.taskIds) {
+    const task = skeleton.tasks[taskId]
+    for (const depId of (task.dependsOn || [])) {
+      const depPhase = taskIdToPhase.get(depId)
+      if (depPhase && depPhase !== phaseId) deps.add(depPhase)
+    }
+  }
+  return [...deps]
 }
 
 // Compact prompt for the per-task detail-generation worker: this task's own skeleton entry,
@@ -137,9 +176,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
   if (!c.exists(indexPath)) {
     const skeleton = await c.worker('gaia.agent.planner.work-breakdown', featurePath, { schema: SKELETON_SCHEMA })
     index = materializeIndex(skeleton)
+    const taskIdToPhase = new Map(skeleton.phases.flatMap(p => p.taskIds.map(taskId => [taskId, p.id])))
     for (const phase of index.phases) {
       const skeletonPhase = skeleton.phases.find(p => p.id === phase.id)
-      c.writeOutput(`${wbsDir}/${phase.detailFile}`, renderPhaseDetailBlock(skeletonPhase))
+      const taskTitles = skeletonPhase.taskIds.map(taskId => ({ id: taskId, title: skeleton.tasks[taskId].title }))
+      const dependsOnPhases = computeDependsOnPhases(skeleton, phase.id, taskIdToPhase)
+      c.writeOutput(`${wbsDir}/${phase.detailFile}`, renderPhaseDetailBlock(skeletonPhase, taskTitles, dependsOnPhases))
     }
     c.writeOutput(indexPath, JSON.stringify(index, null, 2))
   } else {

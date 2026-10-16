@@ -52,7 +52,7 @@ Extract the **feature prefix** from the folder name containing `feature.md`:
 
 The prefix is everything up to and including the second hyphen-separated segment (pattern: `[A-Z]+-[0-9]+`).
 
-You do not have a Write tool. Return the skeleton as your final response, and nothing else — the host persists your response and splits it into `wbs/index.json` plus one `wbs/user-stories/{phaseId}.md` per phase (your `title`/`commit` values are written there; see Step 7).
+You do not have a Write tool. Return the skeleton as your final response, and nothing else — the host persists your response and splits it into `wbs/index.json` plus one `wbs/user-stories/{phaseId}.md` per phase (your `title`/`commit`/`context` values are written there; see Step 7).
 
 ---
 
@@ -223,6 +223,7 @@ Return the skeleton's content as your final response, and nothing else (no pream
   "title": "Shared infrastructure setup",
   "commit": { "type": "feat", "subject": "shared infrastructure" },
   "sourceUC": [],
+  "context": "2-4 sentences: why this phase exists, how its own tasks relate to each other, and any dependency/sequencing reason other phases need to know before opening this phase's task files. Never restate the title.",
   "taskIds": ["INFRA-TASK-BE-01"]
 }
 ```
@@ -236,11 +237,13 @@ For user-story phases:
   "title": "As a... I want... so that...",
   "commit": { "type": "feat", "subject": "implement US-01 user management" },
   "sourceUC": ["UC-01"],
+  "context": "2-4 sentences: why this phase exists, how its own tasks relate to each other, and any dependency/sequencing reason other phases need to know before opening this phase's task files. Never restate the title.",
   "taskIds": ["US-01-TASK-DB-01", "US-01-TASK-BE-01"]
 }
 ```
 
 - `phase.commit.subject` must not contain `|`, CR, or LF — `wb-render.js` constructs the full conventional message from it
+- `phase.context` is persisted verbatim into this phase's own `wbs/user-stories/{id}.md` detail file (the host does not re-derive or summarize it) — it is the one piece of phase-detail content that genuinely needs your judgment; "Tasks in this phase" and "Depends on phases" are both derived mechanically by the host from `taskIds`/each task's own `title`/`dependsOn`, so do not restate those here
 - Each phase must have at least one task
 
 **Task entry (in the `tasks` map, keyed by its own ID):**
@@ -272,6 +275,7 @@ For user-story phases:
       "title": "Shared infrastructure setup",
       "commit": { "type": "feat", "subject": "shared infrastructure" },
       "sourceUC": [],
+      "context": "Shared repository interface every other phase's data-access tasks depend on — opened first so downstream phases never block on it later.",
       "taskIds": ["INFRA-TASK-BE-01"]
     },
     {
@@ -280,6 +284,7 @@ For user-story phases:
       "title": "As an admin, I want to create a user, so that new members can access the system",
       "commit": { "type": "feat", "subject": "implement US-01 user creation" },
       "sourceUC": ["UC-01"],
+      "context": "Covers the full create-user path end to end: the entity/migration task establishes storage, the service task implements validation and persistence on top of it.",
       "taskIds": ["US-01-TASK-DB-01", "US-01-TASK-BE-01"]
     }
   ],

@@ -9,8 +9,10 @@ const SKELETON_CHECK = path.resolve(__dirname, '../src/claude/scripts/wb-skeleto
 const FIXTURES = path.resolve(__dirname, 'fixtures');
 const VALID_INDEX = path.join(FIXTURES, 'ftr-020-wbs', 'index.json');
 
-function run(indexPath) {
-  const result = spawnSync('node', [SKELETON_CHECK, indexPath], { encoding: 'utf8' });
+function run(indexPath, requirementsPath) {
+  const args = [SKELETON_CHECK, indexPath];
+  if (requirementsPath) args.push(requirementsPath);
+  const result = spawnSync('node', args, { encoding: 'utf8' });
   let report = null;
   try { report = JSON.parse(result.stdout); } catch (_) {}
   return { exitCode: result.status, report, stderr: result.stderr };
@@ -19,6 +21,20 @@ function run(indexPath) {
 function writeTmpIndex(index) {
   const tmpFile = path.join(os.tmpdir(), `wb-skeleton-check-${Date.now()}-${Math.random()}.json`);
   fs.writeFileSync(tmpFile, JSON.stringify(index));
+  return tmpFile;
+}
+
+// Minimal Requirements fixture the real parseAcTable() can consume — same convention as
+// tests/wb-graph-checks.test.js's makeReqMd/writeReq.
+function writeTmpRequirements(ucPriorities, acRows) {
+  const ucSections = Object.entries(ucPriorities)
+    .map(([ucId, pri]) => `### ${ucId}: Description\n| Field | Value |\n|-------|-------|\n| Priority | ${pri} |\n`)
+    .join('\n');
+  const acTable = '| ID | Criterion | Related UC |\n|----|-----------|------------|\n' +
+    acRows.map(([id, relUc]) => `| ${id} | A criterion | ${relUc} |`).join('\n');
+  const content = `## 5. Use Cases\n\n${ucSections}\n## 7. Acceptance Criteria\n\n${acTable}\n`;
+  const tmpFile = path.join(os.tmpdir(), `wb-skeleton-check-req-${Date.now()}-${Math.random()}.md`);
+  fs.writeFileSync(tmpFile, content);
   return tmpFile;
 }
 
@@ -96,6 +112,35 @@ describe('wb-skeleton-check.js', () => {
       expect(report.errors.some(e => e.category === 'invalid_domain')).toBe(true);
     } finally {
       fs.unlinkSync(tmpFile);
+    }
+  });
+
+  // FTR-025: wb-skeleton-check.js's own phase projection (built independently from
+  // wbs-assembler.js's, since this script runs pre-assembly against the raw skeleton) was
+  // silently dropping sourceUC — the exact bug wbs-assembler.js had (fixed fab14cb), just never
+  // caught here because no prior test exercised a phase whose sourceUC genuinely diverges from
+  // its own ID, and no prior test here even passed a requirementsPath (so checkAcCoverage's
+  // checks were never reached at all).
+  test('passes when a phase\'s sourceUC includes an AC\'s related UC, even though the phase ID does not numerically match it', () => {
+    const reqPath = writeTmpRequirements({ 'UC-02': 'Must', 'UC-03': 'Should' }, [['AC-01', 'UC-03']]);
+    const index = {
+      schemaVersion: 3,
+      feature: 'X',
+      // Phase "US-04" legitimately realizes UC-02 and UC-03 (its own sourceUC says so) — the
+      // naive id-matching rule would have required a phase literally named "US-03" instead.
+      phases: [{ id: 'US-04', type: 'user-story', sourceUC: ['UC-02', 'UC-03'], detailFile: 'user-stories/US-04.md', taskIds: ['US-04-TASK-BE-01'] }],
+      tasks: {
+        'US-04-TASK-BE-01': { title: 't1', outcome: 'o1', domain: 'BE', agentType: 'developer-backend', dependsOn: [], acceptanceCriteria: ['AC-01'], estimate: { agentMinutes: 5, tokens: 1000 }, outputCount: 1, commit: { type: 'feat', subject: 's1' } },
+      },
+    };
+    const tmpFile = writeTmpIndex(index);
+    try {
+      const { exitCode, report } = run(tmpFile, reqPath);
+      expect(exitCode).toBe(0);
+      expect(report.errors.some(e => e.category === 'ac_wrong_us')).toBe(false);
+    } finally {
+      fs.unlinkSync(tmpFile);
+      fs.unlinkSync(reqPath);
     }
   });
 });

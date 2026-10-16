@@ -395,7 +395,7 @@ function phase2Setup() {
   // phase, one task is the minimal shape satisfying SKELETON_SCHEMA's required fields.
   const wb = {
     schemaVersion: 3, feature: 'FTR-099',
-    phases: [{ id: 'INFRA', type: 'infrastructure', title: 'Infrastructure', sourceUC: [],
+    phases: [{ id: 'INFRA', type: 'infrastructure', title: 'Infrastructure', sourceUC: [], context: 'Shared infra setup.',
       commit: { type: 'feat', subject: 'infra' }, taskIds: ['INFRA-TASK-BE-01'] }],
     tasks: { 'INFRA-TASK-BE-01': {
       title: 'Example task', outcome: 'Example outcome', domain: 'BE', agentType: 'developer-backend',
@@ -443,6 +443,51 @@ test.each([true, false])('pm-phase2 runs real validator/renderer and blocks a ne
     expect(fs.existsSync(path.join(f.dir, 'FTR-099-Work-Breakdown.csv'))).toBe(false);
   }
 });
+// FTR-025: the FTR-020 phase-detail template (Source UC/Context/Tasks-in-phase/Depends-on-phases)
+// was designed but never wired into pm-phase2.js's own real skeleton-to-detail-file write path —
+// renderPhaseDetailBlock's round-trip unit tests (wbs-assembler.test.js) already cover the render
+// function itself; this proves the real pm-phase2.js wiring computes Depends-on-phases correctly
+// from a genuine CROSS-PHASE task dependency, which only the real two-phase skeleton flow exercises.
+test('pm-phase2 writes each phase detail file with Source UC/Context/Tasks-in-phase/Depends-on-phases, including a real cross-phase dependency', async () => {
+  phase2Setup();
+  const wb = {
+    schemaVersion: 3, feature: 'FTR-099',
+    phases: [
+      { id: 'US-01', type: 'user-story', title: 'US-01 title', sourceUC: ['UC-01'], context: 'US-01 context.',
+        commit: { type: 'feat', subject: 'us01' }, taskIds: ['US-01-TASK-BE-01'] },
+      { id: 'US-02', type: 'user-story', title: 'US-02 title', sourceUC: ['UC-02'], context: 'US-02 context.',
+        commit: { type: 'feat', subject: 'us02' }, taskIds: ['US-02-TASK-BE-01'] },
+    ],
+    tasks: {
+      'US-01-TASK-BE-01': { title: 'First task', outcome: 'o1', domain: 'BE', agentType: 'developer-backend',
+        dependsOn: [], acceptanceCriteria: ['AC-01'], estimate: { agentMinutes: 8, tokens: 10000 },
+        outputCount: 1, commit: { type: 'feat', subject: 'first' } },
+      'US-02-TASK-BE-01': { title: 'Second task', outcome: 'o2', domain: 'BE', agentType: 'developer-backend',
+        dependsOn: ['US-01-TASK-BE-01'], acceptanceCriteria: [], estimate: { agentMinutes: 8, tokens: 10000 },
+        outputCount: 1, commit: { type: 'feat', subject: 'second' } },
+    },
+  };
+  const dispatch = async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (name === 'gaia-generate-work-breakdown') {
+      return { exitCode: 0, result: { is_error: false, structured_output: wb, usage: { input_tokens: 10, output_tokens: 5 } } };
+    }
+    if (name === 'gaia-generate-work-breakdown-task') {
+      const taskId = options.prompt.match(/"id":\s*"([^"]+)"/)[1];
+      return success(taskDetailDoc(taskId));
+    }
+    return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] }, usage: { input_tokens: 10, output_tokens: 5 } } };
+  };
+  await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+  const us01 = fs.readFileSync(path.join(f.dir, 'wbs', 'user-stories', 'US-01.md'), 'utf8');
+  expect(us01).toContain('- **Source UC:** UC-01');
+  expect(us01).toContain('**Context:**\n\nUS-01 context.');
+  expect(us01).toContain('- `US-01-TASK-BE-01` — First task');
+  expect(us01).toContain('**Depends on phases:** none');
+  const us02 = fs.readFileSync(path.join(f.dir, 'wbs', 'user-stories', 'US-02.md'), 'utf8');
+  expect(us02).toContain('- `US-02-TASK-BE-01` — Second task');
+  expect(us02).toContain('**Depends on phases:** US-01');
+});
 function docsDigestFor(requirementsText, techSpecText) {
   return 'sha256:' + require('crypto').createHash('sha256').update(requirementsText + '\u0000' + techSpecText, 'utf8').digest('hex');
 }
@@ -482,7 +527,7 @@ test('malformed WB fails deterministic validation before semantic dispatch', asy
   phase2Setup();
   const brokenWb = {
     schemaVersion: 3, feature: 'FTR-099',
-    phases: [{ id: 'INFRA', type: 'infrastructure', title: 'Infrastructure', sourceUC: [],
+    phases: [{ id: 'INFRA', type: 'infrastructure', title: 'Infrastructure', sourceUC: [], context: 'Shared infra setup.',
       commit: { type: 'feat', subject: 'infra' }, taskIds: ['INFRA-TASK-BE-01'] }],
     tasks: { 'INFRA-TASK-BE-01': {
       title: 'Example task', outcome: 'Example outcome', domain: 'BE', agentType: 'developer-backend',

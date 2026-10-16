@@ -173,6 +173,33 @@ describe('parsePhaseDetailBlock() / renderPhaseDetailBlock() — round-trip', ()
     const parsed = parsePhaseDetailBlock(rendered);
     expect(parsed.commit.scope).toBe('infra');
   });
+
+  // FTR-020's own phase-detail template (Source UC/Context/Tasks-in-phase/Depends-on-phases)
+  // was designed but never wired into renderPhaseDetailBlock until FTR-025 — these pin the
+  // real shape down so it can't silently regress back to the bare field block again.
+  test('renders Source UC, Context, Tasks in this phase, and Depends on phases', () => {
+    const phase = { id: 'US-03', type: 'user-story', sourceUC: ['UC-02', 'UC-03'],
+      title: 'As a user, I want X, so that Y', context: 'Why this phase exists.',
+      commit: { type: 'feat', scope: null, subject: 'implement US-03' } };
+    const taskTitles = [{ id: 'US-03-TASK-BE-01', title: 'Do the first thing' }, { id: 'US-03-TASK-BE-02', title: 'Do the second thing' }];
+    const rendered = renderPhaseDetailBlock(phase, taskTitles, ['US-01']);
+    expect(rendered).toContain('- **Source UC:** UC-02, UC-03');
+    expect(rendered).toContain('**Context:**\n\nWhy this phase exists.');
+    expect(rendered).toContain('- `US-03-TASK-BE-01` — Do the first thing');
+    expect(rendered).toContain('- `US-03-TASK-BE-02` — Do the second thing');
+    expect(rendered).toContain('**Depends on phases:** US-01');
+    // The field block itself still parses correctly — the new sections are additive, placed
+    // after it, never disrupting the contiguous-run algorithm parsePhaseDetailBlock relies on.
+    expect(parsePhaseDetailBlock(rendered).title).toBe(phase.title);
+  });
+
+  test('renders "none" for Depends on phases and an empty-sourceUC dash when there are none', () => {
+    const phase = { id: 'INFRA', type: 'infrastructure', sourceUC: [], title: 'Shared setup',
+      context: 'Shared setup every other phase needs.', commit: { type: 'feat', scope: null, subject: 'shared setup' } };
+    const rendered = renderPhaseDetailBlock(phase, [{ id: 'INFRA-TASK-BE-01', title: 'Set it up' }], []);
+    expect(rendered).toContain('- **Source UC:** —');
+    expect(rendered).toContain('**Depends on phases:** none');
+  });
 });
 
 describe('CLI entry point (node wbs-assembler.js <path>)', () => {

@@ -119,17 +119,38 @@ function parsePhaseDetailBlock(text) {
   }
 }
 
-function renderPhaseDetailBlock(phase) {
+// taskTitles/dependsOnPhases default to [] so the minimal round-trip tests (which only exercise
+// title/commit) can keep calling this with just a phase object — the richer Context/Tasks-in-
+// phase/Depends-on-phases sections (FTR-020's own template, wired in by FTR-025 after it went
+// unimplemented since FTR-020 itself) are additive, never required for parsePhaseDetailBlock's
+// own contiguous-field-block parsing to keep working.
+function renderPhaseDetailBlock(phase, taskTitles = [], dependsOnPhases = []) {
+  const sourceUC = Array.isArray(phase.sourceUC) && phase.sourceUC.length ? phase.sourceUC.join(', ') : DASH
+  const tasksBlock = taskTitles.length
+    ? taskTitles.map(t => `- \`${t.id}\` — ${t.title}`).join('\n')
+    : '_No tasks._'
+  const dependsOn = dependsOnPhases.length ? dependsOnPhases.join(', ') : 'none'
   return [
     `<a id="phase-${phase.id}"></a>`,
     `### ${phase.id}`,
     '',
     `- **Phase ID:** ${phase.id}`,
     `- **Type:** ${phase.type}`,
+    `- **Source UC:** ${sourceUC}`,
     `- **Title:** ${phase.title}`,
     `- **Commit type:** ${phase.commit.type}`,
     `- **Commit scope:** ${phase.commit.scope == null ? DASH : phase.commit.scope}`,
     `- **Commit subject:** ${phase.commit.subject}`,
+    '',
+    '**Context:**',
+    '',
+    phase.context == null ? DASH : phase.context,
+    '',
+    '**Tasks in this phase:**',
+    '',
+    tasksBlock,
+    '',
+    `**Depends on phases:** ${dependsOn}`,
   ].join('\n')
 }
 
