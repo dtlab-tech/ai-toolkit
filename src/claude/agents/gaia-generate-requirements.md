@@ -19,6 +19,12 @@ together with those per-use-case files afterward (FTR-021).
 
 The user provides the path to a `feature.md` file. Read it in full before proceeding.
 
+Also read `.claude/scripts/templates/gaia-requirements-index-template.md` before writing your
+response — it is the canonical, authoritative structure for `req/index.md` (section order,
+exact headings, table column contracts, and the parsing contract `req-skeleton-check.js`/
+`req-assembler.js` rely on). The Output Structure section below summarizes it; the template
+itself is the source of truth if the two ever disagree.
+
 ## Process
 
 1. **Read** the feature document completely

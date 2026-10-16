@@ -33,6 +33,88 @@ function _stringOrNull(value) {
   return value === DASH ? null : value
 }
 
+// ── Template engine ───────────────────────────────────────────────────────────
+// Loads a canonical templates/gaia-{name}-template.md file and fills in its placeholders. The
+// template file is the single source of truth for field labels, their order, and section
+// headings — these renderers only ever supply VALUES, never hardcode the shape themselves (the
+// whole point of FTR-025's fix: a field added/reworded/reordered in the template is picked up
+// automatically, instead of the template and the renderer silently drifting apart the way the
+// FTR-020 phase-detail template did for years before anything used it). Fails closed (throws) if
+// the template references a label/section the caller didn't supply a value for, or vice versa —
+// a silently-blank or stale placeholder slipping into real output is exactly the bug class this
+// fix exists to prevent.
+
+function _loadTemplate(name) {
+  return fs.readFileSync(path.join(__dirname, 'templates', `gaia-${name}-template.md`), 'utf8')
+}
+
+function _stripTemplateComments(text) {
+  return text.replace(/<!--[\s\S]*?-->/g, '')
+}
+
+// Fills the contiguous run of `- **Label:** <placeholder>` fields starting immediately after the
+// heading — same contiguous-run rule _parseFieldBlock uses when reading an instance, applied here
+// to a template to both discover its shape and substitute real values in one pass. A field's own
+// placeholder guidance may itself be hard-wrapped across several physical lines (several of the
+// real FTR-020 templates do this for a long explanation) — a continuation line never starts with
+// `- **`, so it is skipped rather than mistaken for the end of the field block; only a blank line
+// (or EOF) ends the run. The whole multi-line span for a given field is collapsed to the single
+// substituted line.
+function _fillFieldBlock(templateText, values) {
+  const lines = templateText.split('\n')
+  let start = 0
+  while (start < lines.length && !FIELD_LINE_RE.test(lines[start])) start++
+  const starts = []
+  let end = start
+  for (let j = start; j < lines.length; j++) {
+    const m = lines[j].match(FIELD_LINE_RE)
+    if (m) starts.push({ label: m[1] })
+    else if (lines[j].trim() === '') { end = j; break }
+    end = j + 1
+  }
+  const seen = new Set()
+  const newFieldLines = starts.map(({ label }) => {
+    if (!(label in values)) throw new Error(`Template field "${label}" has no supplied value`)
+    seen.add(label)
+    return `- **${label}:** ${values[label]}`
+  })
+  for (const label of Object.keys(values)) {
+    if (!seen.has(label)) throw new Error(`Supplied value for "${label}" matches no template field`)
+  }
+  return [...lines.slice(0, start), ...newFieldLines, ...lines.slice(end)].join('\n')
+}
+
+// Replaces the inline value after a `**Label:** <placeholder>` line (a bold field OUTSIDE the
+// dash-prefixed field block, e.g. "Depends on phases:" — the value lives on the same line as the
+// label, not in a separate block below it).
+// Same multi-line-wrapped-placeholder handling as _fillFieldBlock: the value after the label may
+// itself wrap across several physical lines (gaia-user-story-template.md's own "Depends on
+// phases" placeholder does), so this consumes every line from the label's own line up to the next
+// blank line (or EOF), not just the first line — a naive single-line regex would leave the
+// wrapped continuation behind as orphaned text in the real output.
+function _fillInlineBoldField(templateText, label, value) {
+  const lines = templateText.split('\n')
+  const marker = `**${label}:**`
+  const startIdx = lines.findIndex(l => l.includes(marker))
+  if (startIdx === -1) throw new Error(`Template is missing the "${label}" inline field`)
+  let end = startIdx + 1
+  while (end < lines.length && lines[end].trim() !== '') end++
+  return [...lines.slice(0, startIdx), `${marker} ${value}`, ...lines.slice(end)].join('\n')
+}
+
+// Replaces everything between a `**Section Name:**` marker and the next `**...:**` marker (or end
+// of file) with real content — used for block-shaped sections (a paragraph, a bullet list), as
+// opposed to _fillInlineBoldField's single-line value.
+function _fillNamedSection(templateText, sectionName, content) {
+  const marker = `**${sectionName}:**`
+  const idx = templateText.indexOf(marker)
+  if (idx === -1) throw new Error(`Template is missing the "${sectionName}" section`)
+  const afterMarker = idx + marker.length
+  const nextMarkerIdx = templateText.indexOf('\n**', afterMarker)
+  const end = nextMarkerIdx === -1 ? templateText.length : nextMarkerIdx
+  return templateText.slice(0, afterMarker) + '\n\n' + content + '\n' + templateText.slice(end)
+}
+
 function _parseFieldBlock(text) {
   const lines = text.split(/\r?\n/)
   const fields = {}
@@ -70,7 +152,13 @@ function parseTaskDetailBlock(text) {
   }
 }
 
-function renderTaskDetailBlock(task) {
+// Loads templates/gaia-task-template.md and fills it in — the template is the single source of
+// truth for the 14 field labels/order and the two section headings; this function only supplies
+// values. `implementationNotes` is optional: the real per-task agent (gaia-generate-work-
+// breakdown-task.md) writes its own full response directly, so this function's only real caller
+// is the round-trip tests, which never populate it — a neutral, clearly-a-placeholder default
+// keeps the template's own required section non-blank without inventing fake content.
+function renderTaskDetailBlock(task, implementationNotes) {
   const cmds = (task.verification && task.verification.commands) || []
   const cmdBlocks = cmds.length
     ? cmds.map(c => '```\n' + c + '\n```').join('\n\n')
@@ -79,30 +167,27 @@ function renderTaskDetailBlock(task) {
   const acceptanceCriteria = Array.isArray(task.acceptanceCriteria) && task.acceptanceCriteria.length
     ? task.acceptanceCriteria.join(', ')
     : DASH
-  return [
-    `<a id="task-${task.id}"></a>`,
-    `### ${task.id}`,
-    '',
-    `- **Task ID:** ${task.id}`,
-    `- **Title:** ${task.title}`,
-    `- **Outcome:** ${task.outcome}`,
-    `- **Domain:** ${task.domain}`,
-    `- **Agent type:** ${task.agentType}`,
-    `- **Dependencies:** ${dependsOn}`,
-    `- **Acceptance criteria:** ${acceptanceCriteria}`,
-    `- **Estimate — agent minutes:** ${task.estimate.agentMinutes}`,
-    `- **Estimate — tokens:** ${task.estimate.tokens}`,
-    `- **Output count:** ${task.outputCount}`,
-    `- **Grouping rationale:** ${task.groupingRationale == null ? DASH : task.groupingRationale}`,
-    `- **Commit type:** ${task.commit.type}`,
-    `- **Commit scope:** ${task.commit.scope == null ? DASH : task.commit.scope}`,
-    `- **Commit subject:** ${task.commit.subject}`,
-    '',
-    '**Verification commands:**',
-    '',
-    cmdBlocks,
-    '',
-  ].join('\n')
+  let text = _stripTemplateComments(_loadTemplate('task'))
+  text = text.replace(/\{TASK_ID\}/g, task.id)
+  text = _fillFieldBlock(text, {
+    'Task ID': task.id,
+    'Title': task.title,
+    'Outcome': task.outcome,
+    'Domain': task.domain,
+    'Agent type': task.agentType,
+    'Dependencies': dependsOn,
+    'Acceptance criteria': acceptanceCriteria,
+    'Estimate — agent minutes': task.estimate.agentMinutes,
+    'Estimate — tokens': task.estimate.tokens,
+    'Output count': task.outputCount,
+    'Grouping rationale': task.groupingRationale == null ? DASH : task.groupingRationale,
+    'Commit type': task.commit.type,
+    'Commit scope': task.commit.scope == null ? DASH : task.commit.scope,
+    'Commit subject': task.commit.subject,
+  })
+  text = _fillNamedSection(text, 'Implementation notes', implementationNotes == null ? '_No implementation notes supplied._' : implementationNotes)
+  text = _fillNamedSection(text, 'Verification commands', cmdBlocks)
+  return text.trim() + '\n'
 }
 
 // ── Phase detail block codec (OQ-04, third tier — no fenced section) ─────────
@@ -119,39 +204,35 @@ function parsePhaseDetailBlock(text) {
   }
 }
 
-// taskTitles/dependsOnPhases default to [] so the minimal round-trip tests (which only exercise
-// title/commit) can keep calling this with just a phase object — the richer Context/Tasks-in-
-// phase/Depends-on-phases sections (FTR-020's own template, wired in by FTR-025 after it went
-// unimplemented since FTR-020 itself) are additive, never required for parsePhaseDetailBlock's
-// own contiguous-field-block parsing to keep working.
+// Loads templates/gaia-user-story-template.md and fills it in — the template is the single
+// source of truth for the 7 field labels/order and the three section headings (Context/Tasks in
+// this phase/Depends on phases); this function only supplies values, mechanically derived where
+// possible (Source UC from phase.sourceUC, Tasks-in-phase from each task's own title, Depends-on-
+// phases from the task dependsOn graph — see pm-phase2.js's computeDependsOnPhases) or taken
+// as-is from the one field that genuinely needs narrative judgment (Context). taskTitles/
+// dependsOnPhases default to [] so the minimal round-trip tests (which only exercise title/
+// commit) can keep calling this with just a phase object.
 function renderPhaseDetailBlock(phase, taskTitles = [], dependsOnPhases = []) {
   const sourceUC = Array.isArray(phase.sourceUC) && phase.sourceUC.length ? phase.sourceUC.join(', ') : DASH
   const tasksBlock = taskTitles.length
     ? taskTitles.map(t => `- \`${t.id}\` — ${t.title}`).join('\n')
     : '_No tasks._'
   const dependsOn = dependsOnPhases.length ? dependsOnPhases.join(', ') : 'none'
-  return [
-    `<a id="phase-${phase.id}"></a>`,
-    `### ${phase.id}`,
-    '',
-    `- **Phase ID:** ${phase.id}`,
-    `- **Type:** ${phase.type}`,
-    `- **Source UC:** ${sourceUC}`,
-    `- **Title:** ${phase.title}`,
-    `- **Commit type:** ${phase.commit.type}`,
-    `- **Commit scope:** ${phase.commit.scope == null ? DASH : phase.commit.scope}`,
-    `- **Commit subject:** ${phase.commit.subject}`,
-    '',
-    '**Context:**',
-    '',
-    phase.context == null ? DASH : phase.context,
-    '',
-    '**Tasks in this phase:**',
-    '',
-    tasksBlock,
-    '',
-    `**Depends on phases:** ${dependsOn}`,
-  ].join('\n')
+  let text = _stripTemplateComments(_loadTemplate('user-story'))
+  text = text.replace(/\{PHASE_ID\}/g, phase.id)
+  text = _fillFieldBlock(text, {
+    'Phase ID': phase.id,
+    'Type': phase.type,
+    'Source UC': sourceUC,
+    'Title': phase.title,
+    'Commit type': phase.commit.type,
+    'Commit scope': phase.commit.scope == null ? DASH : phase.commit.scope,
+    'Commit subject': phase.commit.subject,
+  })
+  text = _fillNamedSection(text, 'Context', phase.context == null ? DASH : phase.context)
+  text = _fillNamedSection(text, 'Tasks in this phase', tasksBlock)
+  text = _fillInlineBoldField(text, 'Depends on phases', dependsOn)
+  return text.trim() + '\n'
 }
 
 // ── loadWorkBreakdown(inputPath) ──────────────────────────────────────────────

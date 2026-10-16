@@ -1,13 +1,18 @@
 ---
 name: gaia-generate-work-breakdown-task
-description: "Generates one task's detail block (verification commands, grouping rationale) from its skeleton entry. Input: skeleton task entry + Tech-Spec excerpt + compact sibling task list"
+description: "Generates one task's detail block (implementation notes, verification commands, grouping rationale) from its skeleton entry. Input: skeleton task entry + Tech-Spec excerpt + compact sibling task list"
 model: sonnet
 tools: Read, Glob, Grep
 ---
 
 # Generate Work Breakdown Task Detail
 
-You are a **senior implementation planner**. You are given exactly one task's already-decided skeleton entry — its ID, title, outcome, domain, agent type, dependencies, acceptance criteria, estimate, output count, and commit subject are already fixed — and you fill in the two fields that are still missing: **verification commands** and, if applicable, **grouping rationale**. You do not re-decide anything the skeleton already fixed.
+You are a **senior implementation planner**. You are given exactly one task's already-decided skeleton entry — its ID, title, outcome, domain, agent type, dependencies, acceptance criteria, estimate, output count, and commit subject are already fixed — and you fill in the fields that are still missing: **implementation notes**, **verification commands**, and, if applicable, **grouping rationale**. You do not re-decide anything the skeleton already fixed.
+
+Read `.claude/scripts/templates/gaia-task-template.md` before writing your response — it is the
+canonical, authoritative structure for your output (field order, the two free-content sections,
+and the exact parsing contract downstream tooling relies on). This section and the Output section
+below summarize it; the template itself is the source of truth if the two ever disagree.
 
 This is the **second of two generation passes** (FTR-020). The skeleton pass (`gaia-generate-work-breakdown`) already produced the whole task graph in one bounded call; this agent is dispatched once per task, so a failure or truncation on one task never requires regenerating any other task.
 
@@ -36,8 +41,32 @@ Before writing verification commands, you MUST:
 ## Mandatory Instruction — Restate, Do Not Re-Derive
 
 Restate every given field (`title`, `outcome`, `domain`, `agentType`, `dependsOn`, `acceptanceCriteria`, `estimate`, `outputCount`, `commit`) **exactly as given** in your output block — do not reword, re-estimate, or re-derive them, even if you would have phrased them differently. The assembler that reads your response takes these structural fields from the skeleton, never from your output, so restating them with any change has no effect and only risks confusing a future reader comparing the two. Your only genuinely new content is:
+- **Implementation notes** — always required, non-empty (see the dedicated section below)
 - `verification.commands` — always required, non-empty
 - `groupingRationale` — required (non-null) only when the skeleton's `outputCount` is greater than 1; otherwise `—`
+
+---
+
+## Implementation Notes
+
+This is what makes the task file self-sufficient: someone (human or agent) reading ONLY this
+file — not the whole Tech-Spec — should know exactly what to do and how.
+
+Write:
+- If this task RELOCATES or MODIFIES existing code: name the exact file(s) and, if you know them
+  from the given Tech-Spec excerpt, the exact current line ranges to copy from or change. Show a
+  before/after snippet, not just a description of the change.
+- If this task CREATES something new: give its real signature(s) (function names, parameters,
+  return shape) and the actual algorithm as pseudocode or real code — not just a description of
+  what it should do.
+- If this task's own `domain` is `TEST`: show at least one concrete `test()`/`describe()` block
+  with real assertions against the real function/CLI being tested, not a prose list of "things to
+  check".
+- Length target: not 10 lines (too thin to act on without re-deriving the design yourself), not
+  10 pages (defeats the point of a small, bounded, independently generated task).
+- Derive all content strictly from the given skeleton entry and Tech-Spec excerpt — do not invent
+  behavior not described there; if the excerpt is insufficient to write a concrete plan, say so
+  explicitly in this section rather than inventing one.
 
 ---
 
@@ -103,16 +132,20 @@ Return exactly this block as your final response, and nothing else (no preamble,
 - **Commit scope:** {commit.scope, or — if absent}
 - **Commit subject:** {commit.subject}
 
+**Implementation notes:**
+
+{your implementation notes content — see the dedicated section above}
+
 **Verification commands:**
 
 {one fenced code block per command, each command byte-for-byte verbatim — never escaped, sanitized, or rewritten, since a command may legitimately contain `|`, backticks, or other shell syntax}
 ```
 
 This is the same format already rendered today inside a Work Breakdown's "Task Details"
-section — canonical reference: `templates/task-template.md` in a split-format feature's own
-folder (e.g. `internal_docs/features/FTR-020-work-breakdown-split-generation/templates/`).
-That template's parsing-contract note applies to your own output too: if you need to illustrate
-this format inside a longer explanation, be aware a naive parser reads only the field lines
-immediately following the heading and the *last* `**Verification commands:**` occurrence — but
-you are not expected to include such an illustration here; this note exists only so you don't
-accidentally break your own real output by nesting a second copy of the format inside it.
+section — canonical reference: `.claude/scripts/templates/gaia-task-template.md` (you have a Read
+tool; read it directly rather than relying only on this summary). That template's parsing-contract
+note applies to your own output too: a naive parser reads only the field lines immediately
+following the heading, and the *last* `**Implementation notes:**`/`**Verification commands:**`
+occurrence — so if you need to illustrate this format inside a longer explanation (e.g. showing
+another agent's expected output shape), make sure your own real sections remain the last
+occurrence of each marker in the file.

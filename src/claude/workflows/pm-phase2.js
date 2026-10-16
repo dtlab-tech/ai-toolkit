@@ -71,11 +71,58 @@ function materializeIndex(skeleton) {
   return { schemaVersion: 3, feature: skeleton.feature, phases, tasks }
 }
 
-// Duplicated from src/claude/scripts/wbs-assembler.js's renderPhaseDetailBlock — NOT
-// required from it, since this workflow script's runtime has no `require` (see
-// lib/workflow-runner.js: only `control`/`args` are injected). Kept as a small, simple
-// render-only duplicate; the fragile inverse (parsing, with the contiguous-run algorithm)
-// stays exclusively in wbs-assembler.js, used only by wb-validate.js/wb-render.js.
+// Duplicated from src/claude/scripts/wbs-assembler.js's renderPhaseDetailBlock/template-engine
+// primitives — NOT required from it, since this workflow script's runtime has no `require` (see
+// lib/workflow-runner.js: only `control`/`args` are injected); reads the template via `c.read()`
+// (project-root-relative) instead of `fs.readFileSync(__dirname, ...)`, the one difference the
+// sandboxed runtime forces. The fragile inverse (parsing, with the contiguous-run algorithm)
+// stays exclusively in wbs-assembler.js, used only by wb-validate.js/wb-render.js. Keep both
+// copies' FIELD/SECTION handling in sync if gaia-user-story-template.md's shape ever changes.
+const FIELD_LINE_RE = /^- \*\*(.+?):\*\*[ \t]?(.*)$/
+function _stripTemplateComments(text) {
+  return text.replace(/<!--[\s\S]*?-->/g, '')
+}
+function _fillFieldBlock(templateText, values) {
+  const lines = templateText.split('\n')
+  let start = 0
+  while (start < lines.length && !FIELD_LINE_RE.test(lines[start])) start++
+  const starts = []
+  let end = start
+  for (let j = start; j < lines.length; j++) {
+    const m = lines[j].match(FIELD_LINE_RE)
+    if (m) starts.push({ label: m[1] })
+    else if (lines[j].trim() === '') { end = j; break }
+    end = j + 1
+  }
+  const seen = new Set()
+  const newFieldLines = starts.map(({ label }) => {
+    if (!(label in values)) throw new Error(`Template field "${label}" has no supplied value`)
+    seen.add(label)
+    return `- **${label}:** ${values[label]}`
+  })
+  for (const label of Object.keys(values)) {
+    if (!seen.has(label)) throw new Error(`Supplied value for "${label}" matches no template field`)
+  }
+  return [...lines.slice(0, start), ...newFieldLines, ...lines.slice(end)].join('\n')
+}
+function _fillNamedSection(templateText, sectionName, content) {
+  const marker = `**${sectionName}:**`
+  const idx = templateText.indexOf(marker)
+  if (idx === -1) throw new Error(`Template is missing the "${sectionName}" section`)
+  const afterMarker = idx + marker.length
+  const nextMarkerIdx = templateText.indexOf('\n**', afterMarker)
+  const end = nextMarkerIdx === -1 ? templateText.length : nextMarkerIdx
+  return templateText.slice(0, afterMarker) + '\n\n' + content + '\n' + templateText.slice(end)
+}
+function _fillInlineBoldField(templateText, label, value) {
+  const lines = templateText.split('\n')
+  const marker = `**${label}:**`
+  const startIdx = lines.findIndex(l => l.includes(marker))
+  if (startIdx === -1) throw new Error(`Template is missing the "${label}" inline field`)
+  let end = startIdx + 1
+  while (end < lines.length && lines[end].trim() !== '') end++
+  return [...lines.slice(0, startIdx), `${marker} ${value}`, ...lines.slice(end)].join('\n')
+}
 function renderPhaseDetailBlock(phase, taskTitles, dependsOnPhases) {
   const DASH = '—'
   const sourceUC = Array.isArray(phase.sourceUC) && phase.sourceUC.length ? phase.sourceUC.join(', ') : DASH
@@ -83,29 +130,21 @@ function renderPhaseDetailBlock(phase, taskTitles, dependsOnPhases) {
     ? taskTitles.map(t => `- \`${t.id}\` — ${t.title}`).join('\n')
     : '_No tasks._'
   const dependsOn = dependsOnPhases.length ? dependsOnPhases.join(', ') : 'none'
-  return [
-    `<a id="phase-${phase.id}"></a>`,
-    `### ${phase.id}`,
-    '',
-    `- **Phase ID:** ${phase.id}`,
-    `- **Type:** ${phase.type}`,
-    `- **Source UC:** ${sourceUC}`,
-    `- **Title:** ${phase.title}`,
-    `- **Commit type:** ${phase.commit.type}`,
-    `- **Commit scope:** ${phase.commit.scope == null ? DASH : phase.commit.scope}`,
-    `- **Commit subject:** ${phase.commit.subject}`,
-    '',
-    '**Context:**',
-    '',
-    phase.context == null ? DASH : phase.context,
-    '',
-    '**Tasks in this phase:**',
-    '',
-    tasksBlock,
-    '',
-    `**Depends on phases:** ${dependsOn}`,
-    '',
-  ].join('\n')
+  let text = _stripTemplateComments(c.read('.claude/scripts/templates/gaia-user-story-template.md'))
+  text = text.replace(/\{PHASE_ID\}/g, phase.id)
+  text = _fillFieldBlock(text, {
+    'Phase ID': phase.id,
+    'Type': phase.type,
+    'Source UC': sourceUC,
+    'Title': phase.title,
+    'Commit type': phase.commit.type,
+    'Commit scope': phase.commit.scope == null ? DASH : phase.commit.scope,
+    'Commit subject': phase.commit.subject,
+  })
+  text = _fillNamedSection(text, 'Context', phase.context == null ? DASH : phase.context)
+  text = _fillNamedSection(text, 'Tasks in this phase', tasksBlock)
+  text = _fillInlineBoldField(text, 'Depends on phases', dependsOn)
+  return text.trim() + '\n'
 }
 
 // Depends-on-phases is 100% mechanically derivable from the skeleton's own task dependsOn

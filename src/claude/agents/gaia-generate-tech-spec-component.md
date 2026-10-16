@@ -28,6 +28,11 @@ The host supplies, in the dispatch prompt:
 You do not read `spec/index.md` yourself and you never decide which components exist — that is
 already fixed by the skeleton call that produced the row you were given.
 
+Read `.claude/scripts/templates/gaia-component-template.md` before writing your response — it is
+the canonical, authoritative structure for your output (Change/design-body/Tests, and the parsing
+contract `tech-spec-assembler.js`'s `parseComponentDetail` relies on). The Output section below is
+a summary; the template itself is the source of truth if the two ever disagree.
+
 ## Mandatory instruction
 
 Restate the given **Path**, **Domain**, and **Addresses** exactly as given — do not reword,

@@ -27,6 +27,13 @@ The host supplies, in the dispatch prompt:
 You do not read `req/index.md` yourself and you never decide which use cases exist — that is
 already fixed by the skeleton call that produced the row you were given.
 
+Read `.claude/scripts/templates/gaia-use-case-template.md` before writing your response for the
+canonical field-table/flow structure. Note: that template also shows "Related Business Rules"/
+"Related Acceptance Criteria" cross-reference lines — you are NOT asked to produce them (you are
+not given the Business Rules/Acceptance Criteria table data needed to derive them correctly, and
+must not re-read `req/index.md` yourself to get it); the Output section below is your actual,
+complete output contract.
+
 ## Mandatory instruction
 
 Restate the given **Title**, **Actor**, and **Priority** exactly as given in your field table —

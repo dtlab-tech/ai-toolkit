@@ -19,6 +19,12 @@ together with those per-component files afterward (FTR-024).
 
 The user provides the path to a `feature.md` file. Read it in full before proceeding. Also read the relevant existing codebase files to ensure the spec aligns with current architecture.
 
+Also read `.claude/scripts/templates/gaia-tech-spec-index-template.md` before writing your
+response — it is the canonical, authoritative structure for `spec/index.md` (section order, exact
+headings, the Section 9 column-order contract `tech-spec-graph-checks.js` relies on, and the
+parsing contract `tech-spec-assembler.js` relies on). The Output Structure section below
+summarizes it; the template itself is the source of truth if the two ever disagree.
+
 ## Step 0 — Read Project Conventions (MANDATORY)
 
 Before writing the spec, you MUST:
