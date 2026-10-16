@@ -65,15 +65,47 @@ function parseComponentsTable(indexContent) {
 // Algorithm/Schema content, whatever heading it actually used (the component template's own
 // section-naming is a free-text "menu, not a checklist" — this parser does not care what that
 // heading is literally called, only that it comes after Change and before Tests).
+//
+// Fence-aware: a component's own Change/body/Tests content may legitimately quote another
+// file's literal "## Heading" line inside a fenced code example (e.g. a before/after excerpt of
+// a markdown prompt file being modified, exactly the shape FTR-025's own spec/components/
+// gaia-validate-feature-docs.md.md needed) — a naive line scan mistook that quoted line for a
+// real section boundary, corrupting the assembled Section 3/4/5/10 content. Lines inside a
+// fence are never treated as a heading, regardless of whether the fence appears before or after
+// the real heading in the file.
+//
+// Length-aware, not a plain open/close boolean toggle: real CommonMark fences close only on a
+// backtick run at least as long as the one that opened them, which is exactly what lets a
+// longer outer fence (e.g. ````markdown) legitimately contain a shorter inner one (```) as a
+// nested quoted example — a simple boolean toggle miscounts any such nesting (every backtick
+// run flips it, regardless of length), landing in the wrong state for the rest of the file the
+// moment the total run count is odd. Found exactly this way: FTR-025's own spec/components/
+// SKILL.md.md quotes a before/after Markdown example that itself contains a fenced block.
+function _nonFencedHeadingIndexes(lines, predicate) {
+  let fenceLen = 0 // 0 = not in a fence; otherwise the backtick-run length that opened it
+  const indexes = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(`{3,})/)
+    if (m) {
+      const runLen = m[1].length
+      if (fenceLen === 0) fenceLen = runLen // opens a new fence
+      else if (runLen >= fenceLen) fenceLen = 0 // a run at least as long as the opener closes it
+      // a shorter run while already fenced is just literal backtick content inside the fence
+      continue
+    }
+    if (fenceLen !== 0) continue
+    if (predicate(lines[i])) indexes.push(i)
+  }
+  return indexes
+}
 function parseComponentDetail(content) {
   const lines = content.split('\n')
-  const headingIdx = name => lines.findIndex(l => l.trim() === `## ${name}`)
-  const changeIdx = headingIdx('Change')
-  const testsIdx = headingIdx('Tests')
+  const changeIdx = _nonFencedHeadingIndexes(lines, l => l.trim() === '## Change')[0] ?? -1
+  const testsIdx = _nonFencedHeadingIndexes(lines, l => l.trim() === '## Tests')[0] ?? -1
   if (changeIdx === -1) throw new AssemblyError('component file is missing its "## Change" section')
   if (testsIdx === -1) throw new AssemblyError('component file is missing its "## Tests" section')
-  const nextAfterChange = lines.slice(changeIdx + 1).findIndex(l => /^##\s/.test(l))
-  const changeEnd = nextAfterChange === -1 ? lines.length : changeIdx + 1 + nextAfterChange
+  const nextHeadingIdx = _nonFencedHeadingIndexes(lines, l => /^##\s/.test(l)).find(i => i > changeIdx)
+  const changeEnd = nextHeadingIdx === undefined ? lines.length : nextHeadingIdx
   return {
     change: lines.slice(changeIdx + 1, changeEnd).join('\n').trim(),
     body: lines.slice(changeEnd, testsIdx).join('\n').trim(),

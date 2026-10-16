@@ -11,7 +11,7 @@ was actually generated and approved.
 
 ## Component Props
 
-```markdown
+````markdown
 <!-- BEFORE (Step 2 — Present Gate 1) -->
 Present the following to the user:
 
@@ -21,7 +21,6 @@ Documents generated for {PREFIX}:
   {PREFIX}-Requirements.md — {requirements.summary}
   {PREFIX}-Tech-Spec.md    — {tech_spec.summary}
   {PREFIX}-Validation-Report.md — {validation.summary}
-```
 ```
 
 <!-- AFTER -->
@@ -37,7 +36,7 @@ Documents generated for {PREFIX}:
 To view a single combined document instead of the split source files, run:
   /assemble-docs {PREFIX} [req|spec|all]
 ```
-```
+````
 
 ```markdown
 <!-- BEFORE (Approvals.md template, Gate 1 table rows) -->

@@ -17,7 +17,7 @@ mechanism changes.
 
 ```markdown
 <!-- BEFORE -->
-\## Phase 1 — Load Documents
+## Phase 1 — Load Documents
 
 1. Extract the prefix from the folder name (`FTR-001-user-management` → `FTR-001`)
 2. Read all three documents fully:
@@ -29,7 +29,7 @@ mechanism changes.
    not be read.
 
 <!-- AFTER -->
-\## Phase 1 — Load Documents
+## Phase 1 — Load Documents
 
 1. Extract the prefix from the folder name (`FTR-001-user-management` → `FTR-001`)
 2. Read `feature.md` fully — its path is given to you first; use your Read tool.

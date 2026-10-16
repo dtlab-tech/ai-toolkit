@@ -278,7 +278,7 @@ await c.activity('bridge-requirements-tech-spec', async () => {
 
 ```markdown
 <!-- BEFORE -->
-\## Phase 1 — Load Documents
+## Phase 1 — Load Documents
 
 1. Extract the prefix from the folder name (`FTR-001-user-management` → `FTR-001`)
 2. Read all three documents fully:
@@ -290,7 +290,7 @@ await c.activity('bridge-requirements-tech-spec', async () => {
    not be read.
 
 <!-- AFTER -->
-\## Phase 1 — Load Documents
+## Phase 1 — Load Documents
 
 1. Extract the prefix from the folder name (`FTR-001-user-management` → `FTR-001`)
 2. Read `feature.md` fully — its path is given to you first; use your Read tool.
@@ -337,7 +337,7 @@ row labels unchanged (purely a document-naming convention inside the always-real
 
 ## Component Props
 
-```markdown
+````markdown
 <!-- BEFORE (Step 2 — Present Gate 1) -->
 Present the following to the user:
 
@@ -347,7 +347,6 @@ Documents generated for {PREFIX}:
   {PREFIX}-Requirements.md — {requirements.summary}
   {PREFIX}-Tech-Spec.md    — {tech_spec.summary}
   {PREFIX}-Validation-Report.md — {validation.summary}
-```
 ```
 
 <!-- AFTER -->
@@ -363,7 +362,7 @@ Documents generated for {PREFIX}:
 To view a single combined document instead of the split source files, run:
   /assemble-docs {PREFIX} [req|spec|all]
 ```
-```
+````
 
 ```markdown
 <!-- BEFORE (Approvals.md template, Gate 1 table rows) -->
