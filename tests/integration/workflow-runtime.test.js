@@ -20,9 +20,14 @@ const sectionedDoc = (count, note = '') => Array.from({ length: count }, (_, i) 
 // document via req-assembler.js. One UC row keeps these fixtures minimal while still
 // exercising the real skeleton -> per-UC -> assembly path (not a single mocked blob).
 const USE_CASE_TABLE = '| UC ID | Title | Actor | Priority | File |\n|---|---|---|---|---|\n| UC-01 | Example | User | Must | [use-cases/UC-01.md](use-cases/UC-01.md) |\n';
+// FTR-023: Section 7 needs a real AC table (not a bare placeholder) — tech-spec-graph-checks.js's
+// CLI calls wb-graph-checks.js's parseAcTable against this same document, which hard-exits if it
+// can't find a real "## 7. Acceptance Criteria" table. "All UCs" avoids coupling this fixture to
+// phase/UC-scope matching, which is unrelated to what any of these tests exercise.
 const requirementsSkeletonDoc = (note = '', upToSection = 9) => Array.from({ length: upToSection }, (_, i) => {
   const n = i + 1;
   if (n === 2) return `## 2. Use Cases\n\n${USE_CASE_TABLE}`;
+  if (n === 7) return '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n| AC-01 | placeholder | All UCs |\n';
   return `## ${n}. Section ${n}${n === 1 && note ? ' (' + note + ')' : ''}\n`;
 }).join('\n');
 const useCaseDetailDoc = () => '### UC-01: Example\n\n| Field | Value |\n|---|---|\n| Actor | User |\n| Preconditions | - |\n| Trigger | - |\n| Priority | Must |\n\n**Main flow:**\n1. Step\n\n**Postconditions:**\n- Done\n';
@@ -426,4 +431,31 @@ test('repeated negative document validation never reports Gate 1 ready', async (
   };
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch })).rejects.toThrow('gaps remain');
   expect(f.entries()[0].status).toBe('failed');
+});
+
+// FTR-023: Tech-Spec File Inventory "Addresses" column must cite only real Requirements AC IDs.
+const techSpecDocWithFileInventory = addresses => Array.from({ length: 12 }, (_, i) => {
+  const n = i + 1;
+  if (n === 9) return `## 9. File Inventory\n\n### New files\n| Path | Purpose | Addresses |\n|---|---|---|\n| a.js | x | ${addresses} |\n`;
+  return `## ${n}. Section ${n}\n`;
+}).join('\n');
+
+test('pm-phase1 rejects a Tech-Spec with a dangling Addresses reference before semantic validation', async () => {
+  const dispatch = async options => {
+    if (options.args.includes('gaia-generate-tech-spec')) return success(techSpecDocWithFileInventory('AC-99'));
+    if (options.args.includes('gaia-validate-feature-docs')) throw new Error('must not be dispatched — tech-spec-ac-check should reject first');
+    return phase1Dispatch(options);
+  };
+  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
+    .rejects.toThrow(/dangling AC references/);
+  expect(f.entries()[0].status).toBe('failed');
+});
+
+test('pm-phase1 proceeds unchanged for a clean (dash-only) Tech-Spec', async () => {
+  const dispatch = async options => {
+    if (options.args.includes('gaia-generate-tech-spec')) return success(techSpecDocWithFileInventory('—'));
+    return phase1Dispatch(options);
+  };
+  const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(result.validation.summary).toContain('0 gaps');
 });

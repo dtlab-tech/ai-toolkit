@@ -122,5 +122,6 @@ module.exports = {
   parseBusinessRulesTable,
   spliceSection2,
   findSectionRange,
+  parseTableRows,
   AssemblyError,
 }

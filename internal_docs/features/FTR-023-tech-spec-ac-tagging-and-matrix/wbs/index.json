@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-023",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": ["UC-01"],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": ["US-01-TASK-BE-01"]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": ["UC-02"],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": ["US-02-TASK-BE-01", "US-02-TASK-TEST-01", "US-02-TASK-BE-02", "US-02-TASK-TEST-02"]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": ["UC-03"],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": ["US-03-TASK-BE-01", "US-03-TASK-TEST-01"]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Add Addresses column to gaia-generate-tech-spec.md's File Inventory template",
+      "outcome": "src/claude/agents/gaia-generate-tech-spec.md's Section 9 'New files' and 'Modified files' tables each gain a third 'Addresses' column; a new Guidelines bullet instructs the agent to cite real Requirements AC IDs (comma-separated) or em-dash, never inventing an AC ID",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-01", "AC-06"],
+      "estimate": { "agentMinutes": 10, "tokens": 15000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add Addresses column to Tech-Spec File Inventory template" },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Export parseTableRows and create tech-spec-graph-checks.js",
+      "outcome": "req-assembler.js's module.exports gains parseTableRows (already implemented internally, now exported, zero behavior change); src/claude/scripts/tech-spec-graph-checks.js exists exporting parseFileInventoryEntries(techSpecContent), checkAddressesResolve(entries, validAcIds), findSubsectionRange(lines, start, end, heading), plus a require.main CLI mode printing a JSON validity report",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-02", "AC-03", "AC-04", "AC-06"],
+      "estimate": { "agentMinutes": 22, "tokens": 36000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add tech-spec-graph-checks.js and export req-assembler.js's parseTableRows" },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Unit tests for tech-spec-graph-checks.js",
+      "outcome": "tests/tech-spec-graph-checks.test.js exists covering parseFileInventoryEntries (both tables present, one table missing, a dash cell, a multi-AC cell), checkAddressesResolve (clean list, one dangling reference), and findSubsectionRange (subsection followed by another heading, subsection as the last content in the document)",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-02", "AC-03", "AC-04", "AC-07"],
+      "estimate": { "agentMinutes": 16, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add unit tests for tech-spec-graph-checks.js" },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-02": {
+      "title": "Wire tech-spec-graph-checks.js into pm-phase1.js before the validation loop",
+      "outcome": "pm-phase1.js runs a new c.activity('tech-spec-ac-check', ...) block immediately before the existing 3-cycle validation loop, invoking tech-spec-graph-checks.js via c.command(['run-asset', ...]) against file('Tech-Spec') and file('Requirements'); a non-zero exit throws before gaia.agent.planner.validate-feature-docs is ever dispatched",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-02", "AC-03", "AC-06"],
+      "estimate": { "agentMinutes": 12, "tokens": 18000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "wire tech-spec-graph-checks.js into pm-phase1.js's validation flow" },
+      "detailFile": "tasks/US-02-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-02": {
+      "title": "Integration test: pm-phase1 rejects a dangling Tech-Spec AC reference before semantic validation",
+      "outcome": "tests/integration/workflow-runtime.test.js (or a new file) asserts a Tech-Spec mock containing a dangling Addresses reference causes pm-phase1 to fail before gaia-validate-feature-docs is ever dispatched, and that a clean/dash-only Tech-Spec proceeds through the existing validation flow unchanged",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-02-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-02", "AC-03", "AC-07"],
+      "estimate": { "agentMinutes": 16, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add pm-phase1 tech-spec AC-reference integration test" },
+      "detailFile": "tasks/US-02-TASK-TEST-02.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Extend ac-task-matrix.js with Tech-Spec coverage",
+      "outcome": "ac-task-matrix.js gains computeTechSpecCoverage(entries, acMap) (acId -> Set<filePath>); renderMatrix gains an optional 4th techSpecCoverage parameter (default empty Map, backward compatible) and one new column, 'Addressed by Tech-Spec File(s)', between Related UC and Covering Task(s); the CLI entry point accepts a new tech-spec-path argument and wires parseFileInventoryEntries + computeTechSpecCoverage through to renderMatrix",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-05", "AC-06"],
+      "estimate": { "agentMinutes": 16, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "extend ac-task-matrix.js with Tech-Spec file coverage" },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Unit tests for computeTechSpecCoverage and the extended renderMatrix column",
+      "outcome": "tests/ac-task-matrix.test.js (extended) covers: an AC addressed by one file, an AC addressed by two files, an AC addressed by zero files, and renderMatrix called both with and without the 4th techSpecCoverage argument, confirming the backward-compatible default renders em-dash",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-03-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-05", "AC-07"],
+      "estimate": { "agentMinutes": 14, "tokens": 20000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add unit tests for ac-task-matrix.js's Tech-Spec coverage extension" },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}

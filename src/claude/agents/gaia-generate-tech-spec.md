@@ -202,14 +202,14 @@ For each external service:
 Complete list of files to create or modify:
 
 ### New files
-| Path | Purpose |
-|------|---------|
-| ... | ... |
+| Path | Purpose | Addresses |
+|------|---------|-----------|
+| ... | ... | ... |
 
 ### Modified files
-| Path | Change description |
-|------|-------------------|
-| ... | ... |
+| Path | Change description | Addresses |
+|------|-------------------|-----------|
+| ... | ... | ... |
 
 ## 10. Testing Strategy
 
@@ -255,3 +255,4 @@ Do NOT make arbitrary architectural decisions when the source is unclear. Ask fi
 - Consider concurrency, edge cases, and failure modes
 - Do not include implementation code for every method — focus on interfaces, contracts, and key algorithms
 - If architectural decisions need to be made, present options with tradeoffs rather than deciding unilaterally
+- For every file in the File Inventory, cite the Requirements AC ID(s) it implements in the `Addresses` column (comma-separated), or `—` if the file has no direct AC traceability (e.g. a shared helper with no behavior of its own). Do not invent AC IDs — only cite ones that exist in `{PREFIX}-Requirements.md`'s own AC table.

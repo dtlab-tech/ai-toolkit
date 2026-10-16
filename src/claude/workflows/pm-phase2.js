@@ -200,8 +200,10 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // view over AC<->task coverage wb-validate.js's checks 19-21 already enforce. Cannot fail
   // for a feature that already reached this point in the pipeline (BR-02/NFR-03).
   const acTaskMatrix = await c.activity('ac-task-matrix', async () => {
+    // FTR-023: ac-task-matrix.js's CLI gained a 3rd positional argument (Tech-Spec path) to
+    // render the "Addressed by Tech-Spec File(s)" column.
     const result = c.command(['run-asset', 'scripts/ac-task-matrix.js', '--project', c.root,
-      '--', wbsDir, file('Requirements.md'), prefix])
+      '--', wbsDir, file('Requirements.md'), file('Tech-Spec.md'), prefix])
     const matrixPath = file('AC-Task-Matrix.md')
     if (!c.exists(matrixPath)) throw new Error('AC-Task matrix output missing')
     c.read(matrixPath) // never trust an unread write
