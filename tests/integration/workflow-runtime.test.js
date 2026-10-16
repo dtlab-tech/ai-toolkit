@@ -31,15 +31,32 @@ const requirementsSkeletonDoc = (note = '', upToSection = 9) => Array.from({ len
   return `## ${n}. Section ${n}${n === 1 && note ? ' (' + note + ')' : ''}\n`;
 }).join('\n');
 const useCaseDetailDoc = () => '### UC-01: Example\n\n| Field | Value |\n|---|---|\n| Actor | User |\n| Preconditions | - |\n| Trigger | - |\n| Priority | Must |\n\n**Main flow:**\n1. Step\n\n**Postconditions:**\n- Done\n';
+// FTR-024: gaia-generate-tech-spec now produces only the skeleton (every section except each
+// component's own Backend/Frontend/External-Integration/Testing detail); Section 9 gains
+// Domain/Spec columns and is the Components index. A second agent,
+// gaia-generate-tech-spec-component, is dispatched once per table row to produce that
+// component's full detail, which pm-phase1.js reassembles via tech-spec-assembler.js. One
+// component row ("a.js") keeps these fixtures minimal while still exercising the real
+// skeleton -> per-component -> assembly path.
+const COMPONENTS_TABLE = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+  '| a.js | example | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n\n' +
+  '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+const techSpecSkeletonDoc = (upToSection = 12) => Array.from({ length: upToSection }, (_, i) => {
+  const n = i + 1;
+  return n === 9 ? `## 9. File Inventory\n\n${COMPONENTS_TABLE}` : `## ${n}. Section ${n}\n`;
+}).join('\n');
+const techSpecComponentDetailDoc = () =>
+  '# a.js — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\nExample body.\n\n## Tests\n\nExample tests.\n';
 // The agent has no Write tool — it returns the document content directly (plain
 // result text, or the schema's `report` field), and the host persists it.
 function phase1Dispatch({ args }) {
   const name = args[args.indexOf('--agent') + 1];
-  const known = ['gaia-generate-requirements', 'gaia-generate-requirements-use-case', 'gaia-generate-tech-spec', 'gaia-validate-feature-docs'];
+  const known = ['gaia-generate-requirements', 'gaia-generate-requirements-use-case', 'gaia-generate-tech-spec', 'gaia-generate-tech-spec-component', 'gaia-validate-feature-docs'];
   if (!known.includes(name)) throw new Error('Unexpected worker: ' + name);
   const content = name === 'gaia-generate-requirements' ? requirementsSkeletonDoc()
     : name === 'gaia-generate-requirements-use-case' ? useCaseDetailDoc()
-    : name === 'gaia-generate-tech-spec' ? sectionedDoc(12)
+    : name === 'gaia-generate-tech-spec' ? techSpecSkeletonDoc()
+    : name === 'gaia-generate-tech-spec-component' ? techSpecComponentDetailDoc()
     : '# Result\n';
   const response = success(content);
   if (name === 'gaia-validate-feature-docs') response.result.structured_output = { valid: true, findings: [], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n' };
@@ -48,9 +65,9 @@ function phase1Dispatch({ args }) {
 test('real installed pm-phase1 executes only semantic workers and persists done after outputs', async () => {
   const dispatch = jest.fn(phase1Dispatch);
   const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  expect(dispatch).toHaveBeenCalledTimes(4); // requirements skeleton + 1 use case + tech-spec + validate
+  expect(dispatch).toHaveBeenCalledTimes(5); // requirements skeleton + 1 use case + tech-spec skeleton + 1 component + validate
   expect(result.validation.summary).toContain('0 gaps');
-  expect(result.token_ledger).toHaveLength(4);
+  expect(result.token_ledger).toHaveLength(5);
   expect(f.entries().every(e => e.status === 'done')).toBe(true);
   expect(fs.readFileSync(path.join(f.dir, 'FTR-099-process-log.txt'), 'utf8')).toContain('Gate 1');
 });
@@ -90,7 +107,7 @@ test('document findings trigger host revision followed by a clean structured ver
   const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
   expect(result.validation.summary).toContain('clean on cycle 2');
   expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).toEqual([
-    'gaia-generate-requirements', 'gaia-generate-requirements-use-case', 'gaia-generate-tech-spec', 'gaia-validate-feature-docs',
+    'gaia-generate-requirements', 'gaia-generate-requirements-use-case', 'gaia-generate-tech-spec', 'gaia-generate-tech-spec-component', 'gaia-validate-feature-docs',
     'gaia-generate-requirements', 'gaia-generate-requirements-use-case', 'gaia-validate-feature-docs',
   ]);
   expect(f.entries().every(e => e.status === 'done')).toBe(true);
@@ -165,13 +182,17 @@ test('successful worker without required report fails the workflow', async () =>
   expect(f.entries()[0].status).toBe('failed');
 });
 test('a Tech-Spec truncated mid-generation is rejected immediately instead of silently reaching Gate 1', async () => {
-  // Reproduces a real downstream failure: the model's cumulative output exceeded
-  // its configured ceiling mid-reply, the CLI reported a clean exit (exitCode 0,
-  // is_error false) with nothing signaling truncation, and the host persisted the
-  // half-written document as if it were complete. Only sections 1-2 of the
-  // required 12 are present here.
+  // Reproduces a real downstream failure: the model's cumulative output exceeded its configured
+  // ceiling mid-reply, the CLI reported a clean exit with nothing signaling truncation, and the
+  // host persisted the half-written document as if it were complete. Truncated after section 10
+  // (not section 9): the skeleton still has a well-formed Components table, so the structural
+  // pre-check (tech-spec-graph-checks.js) passes and per-component/assembly proceed — the SAME
+  // truncation-detection path (assertCompleteSections, on the final assembled document) this
+  // test is meant to verify still catches the missing sections 11-12. A skeleton truncated
+  // before section 9 is caught earlier instead, by the pre-check itself (a different, equally
+  // fail-closed error) — not what this test exercises.
   const dispatch = async options => {
-    if (options.args.includes('gaia-generate-tech-spec')) return success('## 1. Overview\n\n## 2. Architecture\n');
+    if (options.args.includes('gaia-generate-tech-spec')) return success(techSpecSkeletonDoc(10));
     return phase1Dispatch(options);
   };
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
@@ -198,29 +219,103 @@ test('a Requirements document truncated mid-generation is rejected immediately',
 });
 
 test('a previously truncated Tech-Spec left on disk from an earlier failed run is regenerated, not mistaken for fresh', async () => {
-  // Simulates resuming after the exact failure above: a half-written Tech-Spec
-  // already exists on disk (newer than feature.md/Requirements.md, so the
-  // mtime-based freshness check alone would accept it), but the next run must
-  // still detect it is structurally incomplete and regenerate it rather than
-  // silently proceeding to validation with known-bad content.
+  // FTR-024: resume-by-existence now keys off spec/index.md and the component files, never off
+  // the assembled FTR-099-Tech-Spec.md — step 4 of generateTechSpec rebuilds and overwrites that
+  // file unconditionally on every run. So a half-written final file left on disk from an earlier
+  // crashed run (newer than feature.md/Requirements.md, so a naive mtime check alone would
+  // accept it) can never be "resumed from": the next run never re-dispatches either agent (the
+  // real skeleton/components on disk are still fresh and complete), yet still overwrites the
+  // corrupted leftover with a correct, complete reassembly before validation ever sees it.
   const dispatch = jest.fn(phase1Dispatch);
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
   fs.writeFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), '## 1. Overview\n\n## 2. Architecture\n');
   dispatch.mockClear();
   const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).toContain('gaia-generate-tech-spec');
+  expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).not.toContain('gaia-generate-tech-spec');
   expect(result.validation.summary).toContain('clean');
   const finalContent = fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8');
+  expect(finalContent).not.toContain('## 1. Overview\n\n## 2. Architecture');
   for (let n = 1; n <= 12; n++) expect(finalContent).toMatch(new RegExp(`^## ${n}\\.\\s`, 'm'));
 });
 
+test('pm-phase1 Tech-Spec resume-by-existence dispatches only missing components', async () => {
+  const twoComponentsTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+    '| a.js | example a | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n' +
+    '| b.js | example b | AC-01 | BE | [components/b.js.md](components/b.js.md) |\n\n' +
+    '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+  const twoComponentSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
+    const n = i + 1;
+    return n === 9 ? `## 9. File Inventory\n\n${twoComponentsTable}` : `## ${n}. Section ${n}\n`;
+  }).join('\n');
+  const componentDetail = name => `# ${name} — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\n${name} body.\n\n## Tests\n\nExample tests.\n`;
+  const dispatch = async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (name === 'gaia-generate-tech-spec') return success(twoComponentSkeletonDoc);
+    if (name === 'gaia-generate-tech-spec-component') {
+      const compName = options.prompt.includes('Path: a.js') ? 'a.js' : 'b.js';
+      return success(componentDetail(compName));
+    }
+    return phase1Dispatch(options);
+  };
+  const dispatchFn = jest.fn(dispatch);
+  await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'a.js.md'))).toBe(true);
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'b.js.md'))).toBe(true);
+  // The outer gate that decides whether generateTechSpec runs at all is keyed on the
+  // ASSEMBLED file('Tech-Spec')'s own freshness (pm-phase1.js line ~273) — deleting only the
+  // component would never reach the per-component resume logic below, since the assembled doc
+  // would still look fresh and the whole stage would be skipped. Removing it too simulates a
+  // crash between "component b never got written" and "assembly never got re-run".
+  fs.unlinkSync(path.join(f.dir, 'spec', 'components', 'b.js.md'));
+  fs.unlinkSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'));
+  dispatchFn.mockClear();
+  const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+  const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+  expect(calledAgents).not.toContain('gaia-generate-tech-spec'); // skeleton still fresh, never re-dispatched
+  const componentCalls = dispatchFn.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-tech-spec-component');
+  expect(componentCalls).toHaveLength(1); // only the missing one, not a.js (already on disk)
+  expect(componentCalls[0].prompt).toContain('Path: b.js');
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'b.js.md'))).toBe(true);
+  expect(result.validation.summary).toContain('clean');
+});
+test('two components with colliding basenames receive distinct, deterministic fileSlug values', async () => {
+  const collidingTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+    '| src/a/index.js | example a | AC-01 | BE | [components/index.js.md](components/index.js.md) |\n' +
+    '| src/b/index.js | example b | AC-01 | BE | [components/index.js.md](components/index.js.md) |\n\n' +
+    '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+  const collidingSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
+    const n = i + 1;
+    return n === 9 ? `## 9. File Inventory\n\n${collidingTable}` : `## ${n}. Section ${n}\n`;
+  }).join('\n');
+  const componentDetail = marker => `# component — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\n${marker}\n\n## Tests\n\nExample tests.\n`;
+  const dispatch = async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (name === 'gaia-generate-tech-spec') return success(collidingSkeletonDoc);
+    if (name === 'gaia-generate-tech-spec-component') {
+      const marker = options.prompt.includes('Path: src/a/index.js') ? 'body-of-a' : 'body-of-b';
+      return success(componentDetail(marker));
+    }
+    return phase1Dispatch(options);
+  };
+  await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  // First occurrence keeps the original slug; the colliding second occurrence is disambiguated
+  // by prepending path segments (host-computed, deterministic — see disambiguateFileSlugs).
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'index.js.md'))).toBe(true);
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'b-index.js.md'))).toBe(true);
+  const indexDoc = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
+  expect(indexDoc).toContain('src/a/index.js | example a | AC-01 | BE | [components/index.js.md](components/index.js.md)');
+  expect(indexDoc).toContain('src/b/index.js | example b | AC-01 | BE | [components/b-index.js.md](components/b-index.js.md)');
+  const finalContent = fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8');
+  expect(finalContent).toContain('body-of-a');
+  expect(finalContent).toContain('body-of-b');
+});
 test('fresh outputs skip workers; force requests them again', async () => {
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
   const dispatch = jest.fn(phase1Dispatch);
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
   expect(dispatch).not.toHaveBeenCalled();
   await runWorkflow('pm-phase1', [f.feature, '--force'], { ...f.options, dispatch });
-  expect(dispatch).toHaveBeenCalledTimes(4); // requirements skeleton + 1 use case + tech-spec + validate
+  expect(dispatch).toHaveBeenCalledTimes(5); // requirements skeleton + 1 use case + tech-spec skeleton + 1 component + validate
 });
 test('pm-phase2 stops before dispatch without Gate 1', async () => {
   const dispatch = jest.fn();
@@ -434,15 +529,22 @@ test('repeated negative document validation never reports Gate 1 ready', async (
 });
 
 // FTR-023: Tech-Spec File Inventory "Addresses" column must cite only real Requirements AC IDs.
+// FTR-024: the skeleton's Section 9 now carries Domain/Spec columns too (Addresses stays 3rd,
+// the position tech-spec-graph-checks.js's unmodified parser reads) — a valid Spec link is
+// required here because the clean case below must dispatch the per-component agent to pass.
 const techSpecDocWithFileInventory = addresses => Array.from({ length: 12 }, (_, i) => {
   const n = i + 1;
-  if (n === 9) return `## 9. File Inventory\n\n### New files\n| Path | Purpose | Addresses |\n|---|---|---|\n| a.js | x | ${addresses} |\n`;
+  if (n === 9) return `## 9. File Inventory\n\n### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n| a.js | x | ${addresses} | BE | [components/a.js.md](components/a.js.md) |\n\n### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n`;
   return `## ${n}. Section ${n}\n`;
 }).join('\n');
 
 test('pm-phase1 rejects a Tech-Spec with a dangling Addresses reference before semantic validation', async () => {
+  // FTR-024: tech-spec-ac-check now runs against the skeleton strictly before per-component
+  // generation starts (not just before semantic validation) — a structurally broken skeleton
+  // must reject before a single per-component token is spent, not just before validation.
   const dispatch = async options => {
     if (options.args.includes('gaia-generate-tech-spec')) return success(techSpecDocWithFileInventory('AC-99'));
+    if (options.args.includes('gaia-generate-tech-spec-component')) throw new Error('must not be dispatched — tech-spec-ac-check should reject first');
     if (options.args.includes('gaia-validate-feature-docs')) throw new Error('must not be dispatched — tech-spec-ac-check should reject first');
     return phase1Dispatch(options);
   };
