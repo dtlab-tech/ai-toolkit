@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-025",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": ["UC-01", "UC-02"],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": ["US-01-TASK-BE-01", "US-01-TASK-BE-02", "US-01-TASK-INFRA-01", "US-01-TASK-INFRA-02", "US-01-TASK-TEST-01"]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": ["UC-04"],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": ["US-02-TASK-BE-01", "US-02-TASK-INFRA-01", "US-02-TASK-TEST-01"]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": ["UC-03", "UC-04"],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": ["US-03-TASK-BE-01", "US-03-TASK-BE-02", "US-03-TASK-TEST-01"]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": [],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": ["US-04-TASK-INFRA-01", "US-04-TASK-INFRA-02"]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Stop writing assembled Requirements/Tech-Spec; repoint regen/truncation/AC-check gates",
+      "outcome": "pm-phase1.js's generateRequirements()/generateTechSpec() no longer call c.writeOutput(file('Requirements'/'Tech-Spec'), assembled...); the top-level regen-freshness gates become fresh(reqIndexPath)/fresh(specIndexPath, [featurePath, reqIndexPath]); assertCompleteSections reads reqIndexPath/specIndexPath; tech-spec-ac-check's Requirements argument becomes reqIndexPath",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-01", "AC-02"],
+      "estimate": { "agentMinutes": 20, "tokens": 30000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "repoint pm-phase1.js's regen/truncation/AC-check gates at split index files" },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-BE-02": {
+      "title": "Compute in-memory assembly for the Gate 1 validator prompt and docsDigest",
+      "outcome": "pm-phase1.js gains assembleRequirements()/assembleTechSpec() helpers (same req-assembler.js/tech-spec-assembler.js subprocess calls, never written to disk); the Gate 1 validator's prompt is built as featurePath + inlined 'Requirements:'/'Tech-Spec:' labeled text instead of just featurePath; docsDigest = c.hash(assembledRequirements + NUL + assembledTechSpec); both are recomputed after any needsRequirementsFix/needsTechSpecFix revision cycle",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-03", "AC-04"],
+      "estimate": { "agentMinutes": 22, "tokens": 32000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "compute Requirements/Tech-Spec assembly in-memory for Gate 1 validation and docsDigest" },
+      "detailFile": "tasks/US-01-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-01-TASK-INFRA-01": {
+      "title": "Update gaia-validate-feature-docs for the inlined-prompt contract",
+      "outcome": "gaia-validate-feature-docs.md's Phase 1 is rewritten: the agent is told Requirements/Tech-Spec text is supplied inlined in its prompt under 'Requirements:'/'Tech-Spec:' labels, and explicitly instructed not to attempt to locate or Read {PREFIX}-Requirements.md/{PREFIX}-Tech-Spec.md on disk; the missing-input failure wording changes from 'input document is missing' to 'inlined document's text is empty or missing', same valid:false outcome; Phase 3's subsection headings are softened to 'against the inlined Requirements/Tech-Spec text'",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-03"],
+      "estimate": { "agentMinutes": 12, "tokens": 16000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "update gaia-validate-feature-docs for the inlined Requirements/Tech-Spec prompt contract" },
+      "detailFile": "tasks/US-01-TASK-INFRA-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-INFRA-02": {
+      "title": "Repoint gaia-generate-tech-spec's traceability read at req/index.md",
+      "outcome": "gaia-generate-tech-spec.md's Process step 2 changes from 'Read {PREFIX}-Requirements.md if it exists (for traceability)' to 'Read req/index.md if it exists (for traceability)'; the Guidelines' AC-citation rule is updated the same way, from '{PREFIX}-Requirements.md's own AC table' to 'req/index.md's own AC table'",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-09"],
+      "estimate": { "agentMinutes": 8, "tokens": 10000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "repoint gaia-generate-tech-spec's traceability read at req/index.md" },
+      "detailFile": "tasks/US-01-TASK-INFRA-02.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Integration tests: pm-phase1 split-only generation and inlined-prompt validation",
+      "outcome": "tests/integration/workflow-runtime.test.js: every existing Requirements/Tech-Spec-related pm-phase1 test is updated to never expect an assembled file on disk; new tests assert no {PREFIX}-Requirements.md/{PREFIX}-Tech-Spec.md exists after a clean pm-phase1 run, that the validator's received prompt contains the inlined Requirements/Tech-Spec text, that docs_digest stays sha256-formatted/deterministic/content-sensitive over the split sources, and that a needsRequirementsFix/needsTechSpecFix cycle re-assembles before the next validator dispatch",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-01-TASK-BE-01", "US-01-TASK-BE-02", "US-01-TASK-INFRA-01", "US-01-TASK-INFRA-02"],
+      "acceptanceCriteria": ["AC-11"],
+      "estimate": { "agentMinutes": 24, "tokens": 34000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add pm-phase1 split-only generation and inlined-validation integration tests" },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Create assemble-docs.js",
+      "outcome": "src/claude/scripts/assemble-docs.js exists exporting assembleReq/assembleSpec/assembleWbs(featureDir, prefix), requiring req-assembler.js's loadRequirements and tech-spec-assembler.js's loadTechSpec directly (in-process, no subprocess) and shelling out to wb-render.js for wbs (CLI-only); a require.main CLI entry point takes <feature-dir> <prefix> [req|spec|wbs|all], defaulting to all, exits 1 for a missing/unknown argument and 2 (naming the exact expected path) when a requested split source directory doesn't exist",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-07"],
+      "estimate": { "agentMinutes": 18, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add assemble-docs.js for on-demand single-file Requirements/Tech-Spec/Work-Breakdown views" },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-INFRA-01": {
+      "title": "Create the /assemble-docs command",
+      "outcome": "src/claude/commands/assemble-docs.md exists, mirroring check-docs.md/feature-status.md's shape: locates the feature folder from $ARGUMENTS, extracts the prefix, determines 'which' from the second argument (default all), runs node .claude/scripts/assemble-docs.js <feature-dir> <prefix> <which> via Bash, and reports exactly what was written or surfaces the script's error verbatim",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-07"],
+      "estimate": { "agentMinutes": 8, "tokens": 8000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add /assemble-docs command wrapping assemble-docs.js" },
+      "detailFile": "tasks/US-02-TASK-INFRA-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Unit tests for assemble-docs.js",
+      "outcome": "tests/assemble-docs.test.js exists covering: assembleReq/assembleSpec/assembleWbs against real split fixtures producing output identical to calling the underlying assemblers/wb-render.js directly; CLI 'all' writing all five files; CLI with an unknown 'which' exiting 1; CLI for req/spec/wbs against a feature directory missing the matching split directory exiting 2 and naming the exact expected path; missing required CLI arguments exiting 1",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-07", "AC-11"],
+      "estimate": { "agentMinutes": 18, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add unit tests for assemble-docs.js" },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Add pm-phase2.js's Requirements/Tech-Spec bridge step",
+      "outcome": "pm-phase2.js gains a new c.activity('bridge-requirements-tech-spec', ...) at its own entry, before the existing Gate 1 approval check: if req/ or spec/ exists for this feature, it assembles (same req-assembler.js/tech-spec-assembler.js subprocess calls) and writes {PREFIX}-Requirements.md/{PREFIX}-Tech-Spec.md; if neither split directory exists, it leaves any pre-existing legacy monolithic files untouched and does nothing",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-05", "AC-06"],
+      "estimate": { "agentMinutes": 20, "tokens": 28000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add pm-phase2.js bridge step assembling Requirements/Tech-Spec from split sources" },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-02": {
+      "title": "Remove pm-phase2.js's automatic wb-render.js call",
+      "outcome": "pm-phase2.js's c.activity('wb-render', ...) block is removed entirely; {PREFIX}-Work-Breakdown.md/.csv are no longer produced as a side effect of a pm-phase2 run; gate2_payload drops its renderer_result/renderer_failed keys (confirmed nothing downstream reads them)",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-03-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-08"],
+      "estimate": { "agentMinutes": 10, "tokens": 12000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "remove pm-phase2.js's automatic wb-render.js call" },
+      "detailFile": "tasks/US-03-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Integration tests: pm-phase2 bridge step and wb-render removal",
+      "outcome": "tests/integration/workflow-runtime.test.js: new tests assert pm-phase2 writes fresh Requirements/Tech-Spec from real req/+spec/ fixtures before its own Gate 1 digest check, that a legacy feature (monolithic files only, no req/spec/) leaves the bridge step a no-op, and that pm-phase2 no longer calls wb-render.js nor produces Work-Breakdown.md/.csv as a side effect",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-03-TASK-BE-01", "US-03-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-11"],
+      "estimate": { "agentMinutes": 22, "tokens": 30000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add pm-phase2 bridge-step and wb-render-removal integration tests" },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-INFRA-01": {
+      "title": "Update implement-feature/SKILL.md's Gate 1 presentation",
+      "outcome": "SKILL.md's Step 2 presentation block uses {requirements.path}/{tech_spec.path} (now req/index.md/spec/index.md) instead of the literal monolithic filenames, adds a line pointing at the new /assemble-docs command, and the Approvals.md template's Gate 1 table rows are updated to the same paths; docs_digest and pm-phase2.js's Gate 1 regex check (heading/approval-marker/digest-line only) are unaffected",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-BE-02", "US-03-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-10"],
+      "estimate": { "agentMinutes": 10, "tokens": 10000 },
+      "outputCount": 1,
+      "commit": { "type": "docs", "subject": "update implement-feature SKILL.md for the new split-by-default artifact set" },
+      "detailFile": "tasks/US-04-TASK-INFRA-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-INFRA-02": {
+      "title": "Update feature-status.md's artifact-presence check",
+      "outcome": "feature-status.md's step 2 checks Requirements/Tech-Spec/Work-Breakdown presence as 'either split shape (req/index.md, spec/index.md, wbs/index.json) or the assembled file', noting which shape was found, instead of assuming the monolithic files always exist",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-10"],
+      "estimate": { "agentMinutes": 8, "tokens": 8000 },
+      "outputCount": 1,
+      "commit": { "type": "docs", "subject": "update feature-status.md for the new split-by-default artifact set" },
+      "detailFile": "tasks/US-04-TASK-INFRA-02.md",
+      "status": "pending"
+    }
+  }
+}

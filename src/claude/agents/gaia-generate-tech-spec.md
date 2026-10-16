@@ -45,7 +45,8 @@ The tech spec MUST use the project's actual stack and patterns. Do not assume an
 ## Process
 
 1. **Read** the feature document completely
-2. **Read** `{PREFIX}-Requirements.md` if it exists (for traceability)
+2. **Read** `req/index.md` if it exists (for traceability) — the AC table and Use Case index it
+   needs already live there, untouched by the per-UC split (FTR-021)
 3. **Read** `docs/features/REGISTRY.md` if it exists — identify features that touch the same entities, endpoints, or services as this feature. Note architectural dependencies and integration points in Section 5 (External Integrations) or Section 12 (Risks & Mitigations) of the output document. If a prior feature introduced shared infrastructure this feature reuses (e.g. auth middleware, base service, shared DTO), reference it explicitly.
 4. **Explore** the existing codebase areas affected (models, controllers/handlers, pages, services)
 4. **Design** the technical solution aligned with existing patterns from AGENTS.md
@@ -196,5 +197,5 @@ Do NOT make arbitrary architectural decisions when the source is unclear. Ask fi
   Database, Configuration, Risks) — per-component edge cases belong in that component's own
   design file, not here
 - If architectural decisions need to be made, present options with tradeoffs rather than deciding unilaterally
-- For every file in the File Inventory, cite the Requirements AC ID(s) it implements in the `Addresses` column (comma-separated), or `—` if the file has no direct AC traceability (e.g. a shared helper with no behavior of its own). Do not invent AC IDs — only cite ones that exist in `{PREFIX}-Requirements.md`'s own AC table.
+- For every file in the File Inventory, cite the Requirements AC ID(s) it implements in the `Addresses` column (comma-separated), or `—` if the file has no direct AC traceability (e.g. a shared helper with no behavior of its own). Do not invent AC IDs — only cite ones that exist in `req/index.md`'s own AC table.
 - Do not write any Backend/Frontend/External-Integration/Testing content yourself — those sections' real content is produced by a separate call per component; your job is only to decide the file list (with `Domain`/`Addresses`) and every feature-wide section

@@ -31,7 +31,7 @@ describe('pm-phase1 requirements resume-by-existence: mirror stays in sync with 
   })
 
   test('the needsRequirementsFix branch always forces a full regeneration, never a resume', () => {
-    expect(PM_PHASE1_SOURCE).toContain('if (result.needsRequirementsFix) await generateRequirements(true)')
+    expect(PM_PHASE1_SOURCE).toContain('if (result.needsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }')
   })
 })
 

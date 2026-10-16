@@ -130,7 +130,15 @@ return c.run(meta.name, featureDir, prefix, async () => {
     // it would keep stale skeleton content (UC list, Business Rules, AC table) forever.
     // Only an index.md that is both present AND still fresh relative to feature.md is
     // evidence of a genuine mid-run crash (UC-04) rather than staleness.
-    const skeletonStale = c.exists(reqIndexPath) && !fresh(reqIndexPath)
+    // Staleness is BOTH an mtime check and a structural-completeness check — the same
+    // combination the outer gate below uses to decide whether to call this function at all. A
+    // skeleton can be mtime-fresh (just written this run) yet truncated (a model output-length
+    // ceiling cut it off mid-reply); without the missingSections half here too, the outer gate
+    // would correctly decide "this needs regeneration" while this inner decision disagreed and
+    // silently reused the truncated skeleton anyway — found exactly this way, via a resume test
+    // that corrupts the skeleton (not an assembled file, which no longer exists to corrupt).
+    const skeletonStale = c.exists(reqIndexPath) &&
+      (!fresh(reqIndexPath) || missingSections(c.read(reqIndexPath), 9).length > 0)
     const regenSkeleton = forceAll || skeletonStale || !c.exists(reqIndexPath)
 
     // 1. Skeleton (no declared worker() output — host writes it itself, mirroring FTR-020's
@@ -164,12 +172,9 @@ return c.run(meta.name, featureDir, prefix, async () => {
         { label: `requirements-use-case:${row.id}` })
       c.writeOutput(ucPath, detail.trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id))
     }
-
-    // 4. Assembly (req-assembler.js) — writes the assembled document to the same path every
-    // downstream consumer (Tech-Spec generation, validation, docsDigest) already reads.
-    const assembled = c.command(['run-asset', 'scripts/req-assembler.js', '--project', c.root,
-      '--', reqDir]).stdout
-    c.writeOutput(file('Requirements'), assembled)
+    // No assembly/write step here — generation only ever produces req/index.md + its per-UC
+    // files. Assembly happens in-memory, on demand, at the top level below (never persisted by
+    // this function); a user who wants a single combined file runs assemble-docs.js explicitly.
   }
 
   // Deliberately NOT file('spec') — same reasoning as reqDir/wbsDir: this directory is nested
@@ -266,7 +271,10 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // forceAll: bypasses resume-by-existence entirely, re-dispatching the skeleton and every
   // component unconditionally — same two-call-site reasoning as generateRequirements(forceAll).
   async function generateTechSpec(forceAll) {
-    const skeletonStale = c.exists(specIndexPath) && !fresh(specIndexPath)
+    // See generateRequirements's identical comment — staleness is both an mtime check and a
+    // structural-completeness check, consistent with the outer gate's own criteria.
+    const skeletonStale = c.exists(specIndexPath) &&
+      (!fresh(specIndexPath) || missingSections(c.read(specIndexPath), 12).length > 0)
     const regenSkeleton = forceAll || skeletonStale || !c.exists(specIndexPath)
 
     // 1. Skeleton (no declared worker() output — host writes it itself)
@@ -280,7 +288,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     // is spent)
     await c.activity('tech-spec-ac-check', async () => {
       const res = c.command(['run-asset', 'scripts/tech-spec-graph-checks.js', '--project', c.root,
-        '--', specIndexPath, file('Requirements')], [0, 1])
+        '--', specIndexPath, reqIndexPath], [0, 1])
       const parsed = JSON.parse(res.stdout)
       if (typeof parsed.valid !== 'boolean' || !Array.isArray(parsed.errors) ||
           (res.exitCode === 0) !== parsed.valid) throw new Error('Invalid tech-spec-ac-check result')
@@ -297,36 +305,64 @@ return c.run(meta.name, featureDir, prefix, async () => {
         { label: `tech-spec-component:${comp.fileSlug}` })
       c.writeOutput(compPath, detail)
     }
-
-    // 4. Assembly (tech-spec-assembler.js) — writes the assembled document to the same path
-    // every downstream consumer (validation, docsDigest, gaia-generate-work-breakdown) already reads.
-    const assembledSpec = c.command(['run-asset', 'scripts/tech-spec-assembler.js', '--project', c.root,
-      '--', specDir]).stdout
-    c.writeOutput(file('Tech-Spec'), assembledSpec)
+    // No assembly/write step here — generation only ever produces spec/index.md + its
+    // per-component files. Assembly happens in-memory, on demand, at the top level below (never
+    // persisted by this function); a user who wants a single combined file runs assemble-docs.js
+    // explicitly.
   }
+
+  // In-memory assembly — same req-assembler.js/tech-spec-assembler.js subprocess calls
+  // generation used to write to disk itself (FTR-025); now the host keeps their stdout only in
+  // memory, for the validator's inlined prompt and docsDigest. Cheap and deterministic (no LLM
+  // cost), so safe to (re)compute unconditionally, including on a fully-fresh resume where
+  // neither generate function below is even called.
+  function assembleRequirements() {
+    return c.command(['run-asset', 'scripts/req-assembler.js', '--project', c.root, '--', reqDir]).stdout
+  }
+  function assembleTechSpec() {
+    return c.command(['run-asset', 'scripts/tech-spec-assembler.js', '--project', c.root, '--', specDir]).stdout
+  }
+
+  // The outer gate deciding whether to even call generateRequirements/generateTechSpec must
+  // notice a missing PER-ITEM file too, not just skeleton freshness/completeness — otherwise a
+  // crash that left one use-case/component file missing (while the skeleton itself is perfectly
+  // fine) would never be revisited on a non-force resume, since nothing about the skeleton's own
+  // freshness changed. A real gap found via this exact resume scenario: this used to be covered
+  // for free by gating on the assembled document's own freshness (which could never look
+  // "complete" while a referenced item was missing) — removing that gate (FTR-025) removed this
+  // side effect along with it, so it needs restating explicitly here.
+  const anyUcFileMissing = indexContent => parseUseCaseIndexTable(indexContent).some(row => !c.exists(`${reqDir}/${row.file}`))
+  const anyComponentFileMissing = indexContent => parseComponentsTable(indexContent).some(comp => !c.exists(`${specDir}/components/${comp.fileSlug}`))
 
   let changed = false
-  if (force || !fresh(file('Requirements')) || missingSections(c.read(file('Requirements')), 9).length) {
+  if (force || !fresh(reqIndexPath) || missingSections(c.read(reqIndexPath), 9).length ||
+      (c.exists(reqIndexPath) && anyUcFileMissing(c.read(reqIndexPath)))) {
     await generateRequirements(force)
-    if (!c.exists(file('Requirements'))) throw new Error('Requirements output missing')
-    assertCompleteSections('Requirements', c.read(file('Requirements')), 9)
+    if (!c.exists(reqIndexPath)) throw new Error('Requirements output missing')
+    assertCompleteSections('Requirements', c.read(reqIndexPath), 9)
     changed = true
   }
-  if (force || changed || !fresh(file('Tech-Spec'), [featurePath, file('Requirements')]) || missingSections(c.read(file('Tech-Spec')), 12).length) {
+  if (force || changed || !fresh(specIndexPath, [featurePath, reqIndexPath]) || missingSections(c.read(specIndexPath), 12).length ||
+      (c.exists(specIndexPath) && anyComponentFileMissing(c.read(specIndexPath)))) {
     await generateTechSpec(force)
-    if (!c.exists(file('Tech-Spec'))) throw new Error('Tech-Spec output missing')
-    assertCompleteSections('Tech-Spec', c.read(file('Tech-Spec')), 12)
+    if (!c.exists(specIndexPath)) throw new Error('Tech-Spec output missing')
+    assertCompleteSections('Tech-Spec', c.read(specIndexPath), 12)
     changed = true
   }
+  let assembledRequirements = assembleRequirements()
+  let assembledTechSpec = assembleTechSpec()
   let validationSummary = 'skipped (fresh)'
-  if (force || changed || !fresh(file('Validation-Report'), [featurePath, file('Requirements'), file('Tech-Spec')])) {
+  if (force || changed || !fresh(file('Validation-Report'), [featurePath, reqIndexPath, specIndexPath])) {
     for (let cycle = 1; cycle <= 3; cycle++) {
       // needsRequirementsFix/needsTechSpecFix: explicit structured routing fields,
       // not inferred by substring-matching the free-text `findings` array (which a
       // finding mentioning both document names, or neither, would mis-route or
       // silently skip). The validator agent itself decides which document(s) its
       // own findings implicate.
-      const result = await c.worker(valId, featurePath + '\nValidate only; the host owns the revision loop. Return valid, a findings array (one string per remaining gap), needsRequirementsFix/needsTechSpecFix (true only if at least one finding implicates that document), and the full validation report content. Do not dispatch other agents.', { label: `validation:${cycle}`, outputs: [output('Validation-Report', [featurePath, file('Requirements'), file('Tech-Spec')])], schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } }, needsRequirementsFix: { type: 'boolean' }, needsTechSpecFix: { type: 'boolean' }, report: { type: 'string' } }, required: ['valid', 'findings', 'needsRequirementsFix', 'needsTechSpecFix', 'report'] } })
+      const result = await c.worker(valId,
+        `${featurePath}\n\nRequirements:\n${assembledRequirements}\n\nTech-Spec:\n${assembledTechSpec}\n\n` +
+        'Validate only; the host owns the revision loop. Return valid, a findings array (one string per remaining gap), needsRequirementsFix/needsTechSpecFix (true only if at least one finding implicates that document), and the full validation report content. Do not dispatch other agents.',
+        { label: `validation:${cycle}`, outputs: [output('Validation-Report', [featurePath, reqIndexPath, specIndexPath])], schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } }, needsRequirementsFix: { type: 'boolean' }, needsTechSpecFix: { type: 'boolean' }, report: { type: 'string' } }, required: ['valid', 'findings', 'needsRequirementsFix', 'needsTechSpecFix', 'report'] } })
       // A model returning valid:true alongside non-empty findings (or valid:false
       // with none) contradicts its own schema's intent — never silently treated as
       // "not clean yet" and spent on another cycle without surfacing the
@@ -335,14 +371,14 @@ return c.run(meta.name, featureDir, prefix, async () => {
         throw new Error(`Validation agent returned a contradictory result on cycle ${cycle}: valid=${result.valid} with ${result.findings.length} finding(s)`)
       }
       if (result.valid) {
-        if (!fresh(file('Validation-Report'), [featurePath, file('Requirements'), file('Tech-Spec')])) throw new Error('Validation agent did not produce its report')
+        if (!fresh(file('Validation-Report'), [featurePath, reqIndexPath, specIndexPath])) throw new Error('Validation agent did not produce its report')
         validationSummary = `0 gaps (clean on cycle ${cycle})`
         break
       }
       if (cycle === 3) throw new Error('Validation gaps remain after 3 cycles')
       if (!result.needsRequirementsFix && !result.needsTechSpecFix) throw new Error(`Validation agent reported gaps on cycle ${cycle} but flagged neither document for revision`)
-      if (result.needsRequirementsFix) await generateRequirements(true)
-      if (result.needsTechSpecFix) await generateTechSpec(true)
+      if (result.needsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }
+      if (result.needsTechSpecFix) { await generateTechSpec(true); assembledTechSpec = assembleTechSpec() }
     }
   }
   // Binds Gate 1's eventual approval to the EXACT Requirements/Tech-Spec bytes
@@ -350,12 +386,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // Step 2 embeds this verbatim into Approvals.md, and pm-phase2.js's Gate 1 check
   // fails closed if the current file content no longer matches it (content
   // regenerated after approval, e.g. via a later --force run, must re-approve).
-  const docsDigest = c.hash(c.read(file('Requirements')) + '\u0000' + c.read(file('Tech-Spec')))
+  const docsDigest = c.hash(assembledRequirements + '\u0000' + assembledTechSpec)
   c.append(`${featureDir}/${prefix}-process-log.txt`, `[${new Date().toISOString()}] pm-phase1: ${validationSummary}; Gate 1 approval requested\n`)
   return {
     prefix, feature_dir: featureDir, feature_path: featurePath,
-    requirements: { path: file('Requirements'), summary: 'Requirements ready' },
-    tech_spec: { path: file('Tech-Spec'), summary: 'Tech-Spec ready' },
+    requirements: { path: reqIndexPath, summary: 'Requirements ready (split; req/index.md + req/use-cases/*.md)' },
+    tech_spec: { path: specIndexPath, summary: 'Tech-Spec ready (split; spec/index.md + spec/components/*.md)' },
     validation: { path: file('Validation-Report'), summary: validationSummary },
     docs_digest: docsDigest,
     token_ledger: c.tokenLedger, errors: [],

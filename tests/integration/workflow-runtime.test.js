@@ -218,24 +218,26 @@ test('a Requirements document truncated mid-generation is rejected immediately',
   expect(f.entries()[0].status).toBe('failed');
 });
 
-test('a previously truncated Tech-Spec left on disk from an earlier failed run is regenerated, not mistaken for fresh', async () => {
-  // FTR-024: resume-by-existence now keys off spec/index.md and the component files, never off
-  // the assembled FTR-099-Tech-Spec.md — step 4 of generateTechSpec rebuilds and overwrites that
-  // file unconditionally on every run. So a half-written final file left on disk from an earlier
-  // crashed run (newer than feature.md/Requirements.md, so a naive mtime check alone would
-  // accept it) can never be "resumed from": the next run never re-dispatches either agent (the
-  // real skeleton/components on disk are still fresh and complete), yet still overwrites the
-  // corrupted leftover with a correct, complete reassembly before validation ever sees it.
+test('a previously truncated Tech-Spec skeleton left on disk from an earlier failed run is regenerated, not mistaken for fresh', async () => {
+  // FTR-025: there is no more assembled FTR-099-Tech-Spec.md for a crashed run to leave behind —
+  // generation only ever produces spec/index.md + its per-component files, and the assembled
+  // document (when one is produced at all, e.g. by pm-phase2's bridge step) is always rebuilt
+  // fresh. The equivalent corruption target now is the SKELETON itself: a spec/index.md that got
+  // written (mtime newer than feature.md, so a naive mtime-only freshness check alone would
+  // accept it) but is missing most of its sections, because the model's own response was
+  // truncated mid-reply. The outer regen gate already catches this via missingSections; this
+  // test pins down that generateTechSpec's OWN internal regenSkeleton decision agrees — a real
+  // gap found and fixed while writing this test (both now check completeness, not just mtime).
   const dispatch = jest.fn(phase1Dispatch);
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  fs.writeFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), '## 1. Overview\n\n## 2. Architecture\n');
+  fs.writeFileSync(path.join(f.dir, 'spec', 'index.md'), '## 1. Overview\n\n## 2. Architecture\n');
   dispatch.mockClear();
   const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).not.toContain('gaia-generate-tech-spec');
+  expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).toContain('gaia-generate-tech-spec');
   expect(result.validation.summary).toContain('clean');
-  const finalContent = fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8');
-  expect(finalContent).not.toContain('## 1. Overview\n\n## 2. Architecture');
-  for (let n = 1; n <= 12; n++) expect(finalContent).toMatch(new RegExp(`^## ${n}\\.\\s`, 'm'));
+  const finalSkeleton = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
+  expect(finalSkeleton).not.toContain('## 1. Overview\n\n## 2. Architecture');
+  for (let n = 1; n <= 12; n++) expect(finalSkeleton).toMatch(new RegExp(`^## ${n}\\.\\s`, 'm'));
 });
 
 test('pm-phase1 Tech-Spec resume-by-existence dispatches only missing components', async () => {
@@ -261,13 +263,10 @@ test('pm-phase1 Tech-Spec resume-by-existence dispatches only missing components
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
   expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'a.js.md'))).toBe(true);
   expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'b.js.md'))).toBe(true);
-  // The outer gate that decides whether generateTechSpec runs at all is keyed on the
-  // ASSEMBLED file('Tech-Spec')'s own freshness (pm-phase1.js line ~273) — deleting only the
-  // component would never reach the per-component resume logic below, since the assembled doc
-  // would still look fresh and the whole stage would be skipped. Removing it too simulates a
-  // crash between "component b never got written" and "assembly never got re-run".
+  // The outer gate that decides whether generateTechSpec runs at all notices a missing
+  // component file directly (anyComponentFileMissing), since there is no assembled file to
+  // corrupt/delete anymore — deleting just the component is enough to force re-entry.
   fs.unlinkSync(path.join(f.dir, 'spec', 'components', 'b.js.md'));
-  fs.unlinkSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'));
   dispatchFn.mockClear();
   const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
   const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
@@ -305,9 +304,9 @@ test('two components with colliding basenames receive distinct, deterministic fi
   const indexDoc = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
   expect(indexDoc).toContain('src/a/index.js | example a | AC-01 | BE | [components/index.js.md](components/index.js.md)');
   expect(indexDoc).toContain('src/b/index.js | example b | AC-01 | BE | [components/b-index.js.md](components/b-index.js.md)');
-  const finalContent = fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8');
-  expect(finalContent).toContain('body-of-a');
-  expect(finalContent).toContain('body-of-b');
+  // No assembled Tech-Spec file exists anymore — read each component's own detail file directly.
+  expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'index.js.md'), 'utf8')).toContain('body-of-a');
+  expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'b-index.js.md'), 'utf8')).toContain('body-of-b');
 });
 // Closes the gap flagged when the gaia-* templates were moved into the toolkit: the per-UC
 // generation agent is deliberately never given req/index.md's Business Rules/Acceptance
@@ -318,6 +317,14 @@ test('pm-phase1 appends host-computed Related Business Rules/Acceptance Criteria
   const twoUcTable = '| UC ID | Title | Actor | Priority | File |\n|---|---|---|---|---|\n' +
     '| UC-01 | First | User | Must | [use-cases/UC-01.md](use-cases/UC-01.md) |\n' +
     '| UC-02 | Second | User | Should | [use-cases/UC-02.md](use-cases/UC-02.md) |\n';
+  // tech-spec-ac-check's underlying parseAcTable (wb-graph-checks.js) resolves each referenced
+  // UC's priority from the Section 2 index table's own Priority column (a fallback added
+  // alongside this fix — a split-format skeleton has no per-UC "### UC-NN:" heading at all, that
+  // detail lives in a separate req/use-cases/UC-NN.md file). Do NOT inject fake "### UC-NN:"
+  // sub-tables into Section 2's body here — every pipe-starting line within a section's range is
+  // read as an index-table ROW by req-assembler.js's own parser (no sub-heading awareness), so a
+  // "| Field | Value |" sub-table row gets misparsed as a bogus extra UC row (a real bug, found
+  // exactly this way: req-skeleton-check.js rejected it as "malformed File column for UC 'Field'").
   const reqDocWithBRs = Array.from({ length: 9 }, (_, i) => {
     const n = i + 1;
     if (n === 2) return `## 2. Use Cases\n\n${twoUcTable}`;
@@ -461,7 +468,7 @@ function phase2Dispatch(wb, semanticVerdict = { valid: true, findings: [] }) {
     return { exitCode: 0, result: { is_error: false, structured_output: semanticVerdict, usage: { input_tokens: 10, output_tokens: 5 } } };
   };
 }
-test.each([true, false])('pm-phase2 runs real validator/renderer and blocks a negative semantic verdict: %s', async valid => {
+test.each([true, false])('pm-phase2 runs real validator and blocks a negative semantic verdict: %s', async valid => {
   const wb = phase2Setup();
   const dispatch = jest.fn(phase2Dispatch(wb, { valid, findings: [] }));
   const promise = runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
@@ -469,7 +476,11 @@ test.each([true, false])('pm-phase2 runs real validator/renderer and blocks a ne
     const result = await promise;
     expect(result.gate2_payload.gate2_blocked).toBe(false);
     expect(result.total_tasks).toBe(Object.keys(wb.tasks).length);
-    expect(fs.readFileSync(result.tasks_csv_path, 'utf8')).toContain('phase_id|');
+    // FTR-025: wb-render.js is no longer called automatically — tasks_csv_path is still a
+    // computed path (lib/workflow-artifacts.js), but the file itself is only ever produced via
+    // the new assemble-docs.js, on demand.
+    expect(fs.existsSync(result.tasks_csv_path)).toBe(false);
+    expect(result.gate2_payload.renderer_result).toBeUndefined();
     expect(result.gate2_payload.ac_task_matrix_path).toBeDefined();
     const matrixContent = fs.readFileSync(result.gate2_payload.ac_task_matrix_path, 'utf8');
     expect(matrixContent).toContain('AC ↔ Task Traceability Matrix');
@@ -553,6 +564,45 @@ test('pm-phase2 fails closed when the recorded Docs Digest no longer matches Req
   await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).rejects.toThrow('Gate 1 approval is stale');
   expect(dispatch).not.toHaveBeenCalled();
   expect(f.entries()[0].status).toBe('failed');
+});
+// FTR-025: pm-phase1.js no longer writes the assembled Requirements/Tech-Spec files — pm-phase2's
+// own unmodified internals still need them, so it bridges the gap itself, transparently, from
+// real req/+spec/ split sources, every run.
+test('pm-phase2 bridges fresh Requirements/Tech-Spec from real req/+spec/ split sources before its own Gate 1 check', async () => {
+  const { loadRequirements } = require('../../src/claude/scripts/req-assembler');
+  const { loadTechSpec } = require('../../src/claude/scripts/tech-spec-assembler');
+  fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-021-req'), path.join(f.dir, 'req'), { recursive: true });
+  fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-024-spec'), path.join(f.dir, 'spec'), { recursive: true });
+  const assembledReq = loadRequirements(path.join(f.dir, 'req'));
+  const assembledSpec = loadTechSpec(path.join(f.dir, 'spec'));
+  const digest = docsDigestFor(assembledReq, assembledSpec);
+  fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'),
+    `## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n\n**Docs Digest:** \`${digest}\`\n`);
+  const wb = {
+    schemaVersion: 3, feature: 'FTR-099',
+    phases: [{ id: 'US-01', type: 'user-story', title: 'US-01', sourceUC: ['UC-01'], context: 'Context.',
+      commit: { type: 'feat', subject: 'us01' }, taskIds: ['US-01-TASK-BE-01'] }],
+    tasks: { 'US-01-TASK-BE-01': {
+      title: 'Example task', outcome: 'Example outcome', domain: 'BE', agentType: 'developer-backend',
+      dependsOn: [], acceptanceCriteria: ['AC-01'], estimate: { agentMinutes: 8, tokens: 10000 },
+      outputCount: 1, commit: { type: 'feat', subject: 'example' },
+    } },
+  };
+  const dispatch = jest.fn(phase2Dispatch(wb));
+  const result = await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+  expect(result.gate2_payload.gate2_blocked).toBe(false);
+  expect(fs.readFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), 'utf8')).toBe(assembledReq);
+  expect(fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8')).toBe(assembledSpec);
+});
+test('pm-phase2\'s bridge step is a no-op for a legacy feature (monolithic files only, no req/spec/)', async () => {
+  const wb = phase2Setup(); // writes FTR-099-Requirements.md/FTR-099-Tech-Spec.md directly, no req/spec/ dirs
+  const before = {
+    req: fs.readFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), 'utf8'),
+    spec: fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8'),
+  };
+  await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: jest.fn(phase2Dispatch(wb)) });
+  expect(fs.readFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), 'utf8')).toBe(before.req);
+  expect(fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8')).toBe(before.spec);
 });
 test('malformed WB fails deterministic validation before semantic dispatch', async () => {
   // FTR-020: the skeleton call is schema-validated by worker() itself — a response that isn't

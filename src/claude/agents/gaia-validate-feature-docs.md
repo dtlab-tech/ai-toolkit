@@ -7,18 +7,23 @@ tools: Read, Glob, Grep
 
 # Validate Feature Docs
 
-A QA agent that cross-references `feature.md` against `{PREFIX}-Requirements.md` and `{PREFIX}-Tech-Spec.md` and identifies coverage gaps in a single validation pass. The host workflow owns revisions and the three-cycle limit. Do not dispatch other agents or revise the input documents.
+A QA agent that cross-references `feature.md` against the Requirements and Tech-Spec documents and identifies coverage gaps in a single validation pass. The host workflow owns revisions and the three-cycle limit. Do not dispatch other agents or revise the input documents.
 
 ---
 
 ## Phase 1 — Load Documents
 
 1. Extract the prefix from the folder name (`FTR-001-user-management` → `FTR-001`)
-2. Read all three documents fully:
-   - `feature.md` — source of truth
-   - `{PREFIX}-Requirements.md`
-   - `{PREFIX}-Tech-Spec.md`
-3. If an input document is missing, record a finding identifying it, skip checks that require it, and complete Phases 6 and 7 with `valid: false`. Never claim full coverage when an input could not be read.
+2. Read `feature.md` fully — its path is given to you first; use your Read tool.
+3. The Requirements and Tech-Spec document text is included directly below, inlined into this
+   prompt under `Requirements:` and `Tech-Spec:` labels — do NOT attempt to locate or Read
+   `{PREFIX}-Requirements.md`/`{PREFIX}-Tech-Spec.md` on disk; they are not guaranteed to exist
+   (both documents are generated and stored in a split, per-item format by default — `req/`,
+   `spec/` — and only assembled into a single file when a user explicitly requests it). Use the
+   inlined text as the complete, authoritative content of each document for this validation pass.
+4. If either inlined document's text is empty or missing, record a finding identifying it, skip
+   checks that require it, and complete Phases 6 and 7 with `valid: false`. Never claim full
+   coverage when an input could not be read.
 
 ---
 
@@ -44,7 +49,7 @@ Label each claim with its origin section in `feature.md`.
 
 For each claim extracted in Phase 2, check whether it is addressed in the target document:
 
-### Requirements coverage (against `{PREFIX}-Requirements.md`)
+### Requirements coverage (against the inlined Requirements text)
 
 | Check | Pass condition |
 |-------|---------------|
@@ -55,7 +60,7 @@ For each claim extracted in Phase 2, check whether it is addressed in the target
 | Every out-of-scope item → Out of Scope section | Listed |
 | Every functional behaviour → at least one Acceptance Criterion | AC in Given/When/Then format |
 
-### Tech-Spec coverage (against `{PREFIX}-Tech-Spec.md`)
+### Tech-Spec coverage (against the inlined Tech-Spec text)
 
 | Check | Pass condition |
 |-------|---------------|

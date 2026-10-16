@@ -117,6 +117,30 @@ function parseAcTable(requirementsPath) {
     }
   }
 
+  // Fallback: a split-format Requirements SKELETON (req/index.md, FTR-021) has no per-UC
+  // "### UC-NN:" heading at all — that detail lives in a separate req/use-cases/UC-NN.md file,
+  // outside the document this function is ever actually given when called against the skeleton
+  // (tech-spec-ac-check, FTR-025). It does still have a "## 2. Use Cases" INDEX table with its
+  // own Priority column, which is exactly the information this map needs — read it for any UC
+  // not already resolved by a real heading, so a monolithic document's (possibly more precise,
+  // definitely already-present) per-UC heading is never overridden by this fallback.
+  let ucSectionIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (/^## 2\. Use Cases\s*$/.test(lines[i])) { ucSectionIdx = i; break }
+  }
+  if (ucSectionIdx !== -1) {
+    for (let i = ucSectionIdx + 1; i < lines.length; i++) {
+      if (/^## \d+\.\s/.test(lines[i])) break
+      if (!lines[i].trim().startsWith('|')) continue
+      const cells = splitTableRow(lines[i]).slice(1, -1).map(c => c.trim())
+      if (cells.every(c => /^[\s\-:]+$/.test(c))) continue // separator row
+      const [ucId, , , priority] = cells
+      if (ucId && /^UC-\d+$/.test(ucId) && priority && !ucPriorityMap.has(ucId)) {
+        ucPriorityMap.set(ucId, priority)
+      }
+    }
+  }
+
   // ── Locate ## 7. Acceptance Criteria section ──────────────────────────────
   let acSectionIdx = -1
   for (let i = 0; i < lines.length; i++) {

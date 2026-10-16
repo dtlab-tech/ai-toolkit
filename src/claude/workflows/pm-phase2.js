@@ -183,6 +183,34 @@ const c = control
 const { featurePath, featureDir, prefix } = c.feature(args[0])
 return c.run(meta.name, featureDir, prefix, async () => {
   const file = suffix => `${featureDir}/${prefix}-${suffix}`
+
+  // FTR-025: pm-phase1.js no longer writes the assembled Requirements/Tech-Spec files — this
+  // phase's own unmodified internals (the Gate 1 digest re-check right below, wb-skeleton-
+  // check.js, wb-validate.js, the semantic validator prompt, ac-task-matrix.js, and
+  // gaia-generate-work-breakdown, which hard-aborts without these files) still need them on
+  // disk. Transparently bridge the gap: assemble fresh from req/+spec/ every run (same two
+  // subprocess calls pm-phase1.js used to make, relocated here), before anything below reads
+  // them. A legacy feature (monolithic files only, no req/spec/ directories — generated before
+  // this feature existed) is left untouched: nothing to assemble, no error.
+  await c.activity('bridge-requirements-tech-spec', async () => {
+    const reqDir = `${featureDir}/req`, specDir = `${featureDir}/spec`
+    // c.exists() only checks isFile() — never true for a directory — so this checks each
+    // split's own index.md (a real file) rather than the directory itself.
+    const hasReq = c.exists(`${reqDir}/index.md`), hasSpec = c.exists(`${specDir}/index.md`)
+    if (!hasReq && !hasSpec) return { bridged: false, reason: 'legacy (no split sources)' }
+    if (hasReq) {
+      const assembledRequirements = c.command(['run-asset', 'scripts/req-assembler.js',
+        '--project', c.root, '--', reqDir]).stdout
+      c.writeOutput(file('Requirements.md'), assembledRequirements)
+    }
+    if (hasSpec) {
+      const assembledTechSpec = c.command(['run-asset', 'scripts/tech-spec-assembler.js',
+        '--project', c.root, '--', specDir]).stdout
+      c.writeOutput(file('Tech-Spec.md'), assembledTechSpec)
+    }
+    return { bridged: true }
+  })
+
   const approvals = c.read(file('Approvals.md'))
   const gate = approvals.match(/^## Gate 1\b[^\n]*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)
   if (!gate || !/✅\s*Approved/.test(gate[1])) throw new Error('Gate 1 approval evidence missing')
@@ -269,14 +297,10 @@ return c.run(meta.name, featureDir, prefix, async () => {
       type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array' } }, required: ['valid', 'findings'],
     } })
   if (!semantic.valid || semantic.findings.some(f => f.blocking)) throw new Error('Work breakdown semantic validation failed')
-  const rendered = await c.activity('wb-render', async () => {
-    const result = c.command(['run-asset', 'scripts/wb-render.js', '--project', c.root, '--', wbsDir, prefix])
-    const markdownPath = file('Work-Breakdown.md'), csvPath = file('Work-Breakdown.csv')
-    if (!c.exists(markdownPath) || !c.exists(csvPath)) throw new Error('Renderer outputs missing')
-    // Read the actual bytes now: unreadable output must never produce an approved gate.
-    c.read(markdownPath); c.read(csvPath)
-    return { ...result, markdownPath, csvPath, markdownExists: true, csvExists: true }
-  })
+  // FTR-025: wb-render.js is no longer called automatically here — nothing downstream ever read
+  // {PREFIX}-Work-Breakdown.md/.csv (every real consumer already reads wbs/ directly via
+  // wbs-assembler.js's loadWorkBreakdown()), so this view is now produced only on demand, via
+  // assemble-docs.js.
   // FTR-022: a new deterministic rendering step — no new data, no new validation, purely a
   // view over AC<->task coverage wb-validate.js's checks 19-21 already enforce. Cannot fail
   // for a feature that already reached this point in the pipeline (BR-02/NFR-03).
@@ -301,7 +325,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
       skeleton_check_report: skeletonCheck, skeleton_check_failed: false,
       js_validator_report: report, js_validator_failed: false,
       semantic_validator_result: semantic, semantic_validator_failed: false,
-      renderer_result: rendered, renderer_failed: false, gate2_blocked: false,
+      gate2_blocked: false,
       ac_task_matrix_path: acTaskMatrix.matrixPath,
       duration_bands: report.durationBands, domain_distribution: report.domainDistribution,
       warning_band_tasks: report.warnings.filter(w => w.category === 'duration_warning').map(w => ({ taskId: w.taskId, agentMinutes: w.details?.agentMinutes })),

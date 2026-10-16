@@ -352,3 +352,36 @@ describe('parseAcTable() — criterion extension (FTR-022)', () => {
     expect(acMap.get('AC-02').criterion).toBe('A criterion');
   });
 });
+
+describe('parseAcTable() — Section 2 index-table Priority fallback (FTR-025)', () => {
+  // A split-format Requirements SKELETON (req/index.md) has no per-UC "### UC-NN:" heading at
+  // all — that detail lives in a separate req/use-cases/UC-NN.md file. tech-spec-ac-check now
+  // points this parser at the skeleton directly, so it must resolve each UC's priority from the
+  // Section 2 index table's own Priority column instead, when no real heading exists.
+  function makeSkeletonReqMd(ucRows, acRows) {
+    const ucTable = '| UC ID | Title | Actor | Priority | File |\n|---|---|---|---|---|\n' +
+      ucRows.map(([id, pri]) => `| ${id} | Title | Actor | ${pri} | [use-cases/${id}.md](use-cases/${id}.md) |`).join('\n')
+    const acTable = '| ID | Criterion | Related UC |\n|----|-----------|------------|\n' +
+      acRows.map(([id, relUc]) => `| ${id} | A criterion | ${relUc} |`).join('\n')
+    return `## 2. Use Cases\n\n${ucTable}\n\n## 7. Acceptance Criteria\n\n${acTable}\n`
+  }
+
+  test('resolves a scoped AC\'s related UC priority from the index table, with no "### UC-NN:" heading anywhere', () => {
+    const reqPath = writeReq(makeSkeletonReqMd([['UC-01', 'Must'], ['UC-02', 'Should']], [['AC-01', 'UC-01']]));
+    const acMap = parseAcTable(reqPath);
+    expect(acMap.get('AC-01')).toBeDefined();
+    expect(acMap.get('AC-01').priority).toBe('Must');
+    expect(acMap.get('AC-01').allowedUserStories).toEqual(['US-01']);
+  });
+
+  test('a real "### UC-NN:" heading, when present, is never overridden by the index-table fallback', () => {
+    // Deliberately conflicting priorities (Must in the real heading, Should in the index table) —
+    // the heading must win, since it is the more specific, already-existing source this fallback
+    // must never shadow.
+    const indexOnly = makeSkeletonReqMd([['UC-01', 'Should']], [['AC-01', 'UC-01']]);
+    const withRealHeading = indexOnly + '\n### UC-01: Description\n| Field | Value |\n|-------|-------|\n| Priority | Must |\n';
+    const reqPath = writeReq(withRealHeading);
+    const acMap = parseAcTable(reqPath);
+    expect(acMap.get('AC-01').priority).toBe('Must');
+  });
+});
