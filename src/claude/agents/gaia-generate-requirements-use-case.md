@@ -23,18 +23,21 @@ The host supplies, in the dispatch prompt:
 3. The path to `feature.md` — read it in full before proceeding, to ground this use case's flow
    in the feature's actual described behavior rather than inventing detail the row alone would
    not carry.
+4. The canonical field-table/flow structure, inlined under a `Template (req/use-cases/{UC-ID}.md):`
+   label. Use this text — do NOT attempt to Read, Glob, or otherwise search the filesystem for
+   `gaia-use-case-template.md` yourself; it is not guaranteed to be reachable from where this agent
+   runs, and searching for it is not a safe fallback either.
 
 You do not read `req/index.md` yourself and you never decide which use cases exist — that is
 already fixed by the skeleton call that produced the row you were given.
 
-Read `.claude/scripts/templates/gaia-use-case-template.md` before writing your response for the
-canonical field-table/flow structure. Note: that template also shows "Related Business Rules"/
-"Related Acceptance Criteria" cross-reference lines at the end of the file — do NOT produce them
-yourself. The host computes both, mechanically, from `req/index.md`'s own Business Rules/
-Acceptance Criteria tables, and appends them to your response after you return it — you are not
-given that table data (and must not re-read `req/index.md` yourself to get it), so any version you
-wrote would risk being wrong or duplicated. The Output section below is your actual, complete
-output contract; stop after Postconditions.
+Note: the inlined template also shows "Related Business Rules"/"Related Acceptance Criteria"
+cross-reference lines at the end of the file — do NOT produce them yourself. The host computes
+both, mechanically, from `req/index.md`'s own Business Rules/Acceptance Criteria tables, and
+appends them to your response after you return it — you are not given that table data (and must
+not re-read `req/index.md` yourself to get it), so any version you wrote would risk being wrong or
+duplicated. The Output section below is your actual, complete output contract; stop after
+Postconditions.
 
 ## Mandatory instruction
 

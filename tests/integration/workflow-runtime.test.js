@@ -354,6 +354,31 @@ test('pm-phase1 appends host-computed Related Business Rules/Acceptance Criteria
   expect(uc02).toContain('**Related Business Rules:** BR-02 (see [index.md](../index.md#3-business-rules))');
   expect(uc02).toContain('**Related Acceptance Criteria:** — (see [index.md](../index.md#7-acceptance-criteria))');
 });
+// Regression test for a real production bug: a headless `--print --no-session-persistence`
+// worker has no TTY to answer a permission prompt, so an agent instructed to Read its own
+// toolkit template file (outside the project root for a globally-installed toolkit) was
+// silently denied ("Worker permission denied: ...; tools: Read") even though the rest of its
+// response was generated correctly. Fixed by having the host inline each template's text
+// directly into the prompt (via the new print-asset CLI command) instead of telling the agent
+// to Read it itself — this test locks in that every one of the four pm-phase1 agents that used
+// to read a template actually receives it inlined now.
+test('pm-phase1 inlines each agent\'s own template text into its prompt, instead of making it Read the file itself', async () => {
+  const prompts = {};
+  const dispatch = async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (!prompts[name]) prompts[name] = options.prompt;
+    return phase1Dispatch(options);
+  };
+  await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(prompts['gaia-generate-requirements']).toContain('Template (req/index.md):');
+  expect(prompts['gaia-generate-requirements']).toContain('REQUIREMENTS INDEX TEMPLATE');
+  expect(prompts['gaia-generate-requirements-use-case']).toContain('Template (req/use-cases/{UC-ID}.md):');
+  expect(prompts['gaia-generate-requirements-use-case']).toContain('USE CASE TEMPLATE');
+  expect(prompts['gaia-generate-tech-spec']).toContain('Template (spec/index.md):');
+  expect(prompts['gaia-generate-tech-spec']).toContain('TECH-SPEC INDEX TEMPLATE');
+  expect(prompts['gaia-generate-tech-spec-component']).toContain('Template (spec/components/{fileSlug}.md):');
+  expect(prompts['gaia-generate-tech-spec-component']).toContain('COMPONENT TEMPLATE');
+});
 test('fresh outputs skip workers; force requests them again', async () => {
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
   const dispatch = jest.fn(phase1Dispatch);
@@ -650,6 +675,11 @@ test('pm-phase2 gives each per-task worker only its own AC-matched Tech-Spec com
   expect(taskPrompts['US-01-TASK-BE-01']).not.toContain('deploy.yml');
   expect(taskPrompts['US-01-TASK-BE-02']).toContain("full Components table below");
   expect(taskPrompts['US-01-TASK-BE-02']).toContain('src/example-be.js');
+  // Regression: the task-detail template used to be a Read the agent performed itself — a path
+  // outside the project for a globally-installed toolkit, silently denied under a headless
+  // `--print` worker with no TTY to answer a permission prompt. Now inlined by the host instead.
+  expect(taskPrompts['US-01-TASK-BE-01']).toContain('Template (tasks/{TASK_ID}.md):');
+  expect(taskPrompts['US-01-TASK-BE-01']).toContain('TASK DETAIL TEMPLATE');
   expect(taskPrompts['US-01-TASK-BE-02']).toContain('src/example-fe.tsx');
 });
 test('pm-phase2 does not write Requirements/Tech-Spec files for a legacy feature either (monolithic files only, no req/spec/)', async () => {

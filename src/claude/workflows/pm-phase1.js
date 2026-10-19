@@ -36,6 +36,21 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const valId = 'gaia.agent.planner.validate-feature-docs'
   const output = (suffix, inputs = [featurePath]) => ({ path: file(suffix), inputs })
 
+  // Templates live under the toolkit's own installed scripts/templates/ — outside this project
+  // for a globally-installed toolkit, which a non-interactive `--print` worker invocation has no
+  // way to get permission for (no TTY to answer a prompt; confirmed by a real run failing with
+  // "Worker permission denied: ...; tools: Read" against exactly this kind of path). The host
+  // reads the template itself (a plain Node process, never subject to the Claude Code
+  // tool-permission system) via the dedicated print-asset CLI command, and inlines its text
+  // directly into the prompt — the agent is never asked to Read it. Same pattern FTR-025 already
+  // established for inlining Requirements/Tech-Spec text into gaia-validate-feature-docs' prompt.
+  function readTemplate(templateFile) {
+    return c.command(['print-asset', `scripts/templates/${templateFile}`, '--project', c.root]).stdout
+  }
+  function withTemplate(prompt, label, templateFile) {
+    return `${prompt}\n\nTemplate (${label}):\n${readTemplate(templateFile)}`
+  }
+
   // Deliberately NOT file('req') — same reasoning as FTR-020's wbsDir: this is a directory
   // nested inside the feature's own already-prefixed folder, so a second prefix would be
   // redundant.
@@ -109,11 +124,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
       (relatedACs.length ? relatedACs.join(', ') : '—') + ' (see [index.md](../index.md#7-acceptance-criteria))\n'
   }
 
-  function buildUcPrompt(row, ucTable, featurePathArg) {
+  function buildUcPrompt(row, ucTable, featurePathArg, ucTemplate) {
     const compactIndex = ucTable.map(r => `${r.id}: ${r.title} (${r.actor})`).join('\n')
-    return `${featurePathArg}\n\nGenerate the full detail for this use case:\n` +
+    const base = `${featurePathArg}\n\nGenerate the full detail for this use case:\n` +
       `UC ID: ${row.id}\nTitle: ${row.title}\nActor: ${row.actor}\nPriority: ${row.priority}\n\n` +
       `Full use-case index (for cross-UC awareness, do not restate):\n${compactIndex}`
+    return `${base}\n\nTemplate (req/use-cases/{UC-ID}.md):\n${ucTemplate}`
   }
 
   // forceAll: bypasses resume-by-existence entirely, re-dispatching the skeleton and every
@@ -144,7 +160,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     // 1. Skeleton (no declared worker() output — host writes it itself, mirroring FTR-020's
     // skeleton step)
     if (regenSkeleton) {
-      const skeleton = await c.worker(reqId, featurePath)
+      const skeleton = await c.worker(reqId, withTemplate(featurePath, 'req/index.md', 'gaia-requirements-index-template.md'))
       c.writeOutput(reqIndexPath, skeleton)
     }
 
@@ -162,13 +178,15 @@ return c.run(meta.name, featureDir, prefix, async () => {
 
     // 3. Per-use-case generation, resume-by-existence, sequential
     const ucTable = parseUseCaseIndexTable(c.read(reqIndexPath))
+    // Read once, outside the loop — the template is identical for every use case in this run.
+    const ucTemplate = ucTable.length ? readTemplate('gaia-use-case-template.md') : null
     for (const row of ucTable) {
       const ucPath = `${reqDir}/${row.file}`
       // If the skeleton itself was just (re)generated, every use case must regenerate too —
       // an existing use-case file would have been written against the OLD skeleton's row
       // (title/actor/priority may have changed) and cannot be trusted as-is.
       if (!regenSkeleton && c.exists(ucPath)) continue // resume: skip, no dispatch
-      const detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath),
+      const detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath, ucTemplate),
         { label: `requirements-use-case:${row.id}` })
       c.writeOutput(ucPath, detail.trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id))
     }
@@ -223,11 +241,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return entries
   }
 
-  function buildComponentPrompt(row, components, featurePathArg) {
+  function buildComponentPrompt(row, components, featurePathArg, componentTemplate) {
     const compactIndex = components.map(c => `${c.filePath} (${c.domain})`).join('\n')
-    return `${featurePathArg}\n\nGenerate the full technical design for this component:\n` +
+    const base = `${featurePathArg}\n\nGenerate the full technical design for this component:\n` +
       `Path: ${row.filePath}\nChange: ${row.changeType}\nDomain: ${row.domain}\nAddresses: ${row.addresses}\n\n` +
       `Full component index (for cross-component awareness, do not restate):\n${compactIndex}`
+    return `${base}\n\nTemplate (spec/components/{fileSlug}.md):\n${componentTemplate}`
   }
 
   // Deterministic, host-computed — never asks the model to pick unique names (same principle
@@ -279,7 +298,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
 
     // 1. Skeleton (no declared worker() output — host writes it itself)
     if (regenSkeleton) {
-      const skeleton = await c.worker(specId, featurePath)
+      const skeleton = await c.worker(specId, withTemplate(featurePath, 'spec/index.md', 'gaia-tech-spec-index-template.md'))
       c.writeOutput(specIndexPath, disambiguateFileSlugs(skeleton))
     }
 
@@ -298,10 +317,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
 
     // 3. Per-component generation, resume-by-existence, sequential
     const components = parseComponentsTable(c.read(specIndexPath))
+    // Read once, outside the loop — the template is identical for every component in this run.
+    const componentTemplate = components.length ? readTemplate('gaia-component-template.md') : null
     for (const comp of components) {
       const compPath = `${specDir}/components/${comp.fileSlug}`
       if (!regenSkeleton && c.exists(compPath)) continue // resume: skip, no dispatch
-      const detail = await c.worker(specComponentId, buildComponentPrompt(comp, components, featurePath),
+      const detail = await c.worker(specComponentId, buildComponentPrompt(comp, components, featurePath, componentTemplate),
         { label: `tech-spec-component:${comp.fileSlug}` })
       c.writeOutput(compPath, detail)
     }
