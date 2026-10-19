@@ -45,6 +45,10 @@ function computeTechSpecCoverage(entries, acMap) {
 }
 
 function renderMatrix(prefix, acMap, coverage, techSpecCoverage = new Map()) {
+  const mustEntries = [...acMap.entries()].filter(([, ac]) => ac.priority === 'Must')
+  const mustCovered = mustEntries.filter(([id]) => coverage.get(id).taskIds.size > 0).length
+  const summary = `**Must-AC coverage:** ${mustCovered}/${mustEntries.length} covered. ` +
+    'Machine-readable data: [index.json](index.json).'
   const rows = [...acMap.entries()].map(([acId, ac]) => {
     const relatedUc = ac.unscoped ? 'All UCs' : ac.relatedUCs.join(', ')
     const cov = coverage.get(acId)
@@ -53,7 +57,7 @@ function renderMatrix(prefix, acMap, coverage, techSpecCoverage = new Map()) {
     const techSpecFiles = [...(techSpecCoverage.get(acId) || [])].join(', ') || '—'
     return `| ${acId} | ${ac.criterion} | ${ac.priority} | ${relatedUc} | ${techSpecFiles} | ${taskIds} | ${phaseIds} |`
   })
-  return `# AC ↔ Task Traceability Matrix — ${prefix}\n\n` +
+  return `# AC ↔ Task Traceability Matrix — ${prefix}\n\n${summary}\n\n` +
     '| AC ID | Criterion | Priority | Related UC | Addressed by Tech-Spec File(s) | Covering Task(s) | Covering Phase(s) |\n' +
     '|---|---|---|---|---|---|---|\n' +
     rows.join('\n') + '\n\n' +
@@ -68,10 +72,36 @@ function renderMatrix(prefix, acMap, coverage, techSpecCoverage = new Map()) {
     'belong to, comma-separated, or `—` if none.\n'
 }
 
+// FTR-026: serializes the same in-memory data renderMatrix() already consumes into a
+// machine-readable shape — one entry per Requirements AC, in table order. No new computation.
+function buildMatrixJson(prefix, acMap, coverage, techSpecCoverage = new Map()) {
+  const acceptanceCriteria = [...acMap.entries()].map(([acId, ac]) => {
+    const cov = coverage.get(acId)
+    return {
+      id: acId,
+      criterion: ac.criterion,
+      priority: ac.priority,
+      unscoped: !!ac.unscoped,
+      relatedUCs: ac.unscoped ? [] : ac.relatedUCs,
+      techSpecFiles: [...(techSpecCoverage.get(acId) || [])],
+      taskIds: [...cov.taskIds],
+      phaseIds: [...cov.phaseIds],
+    }
+  })
+  return { prefix, generatedAt: new Date().toISOString(), acceptanceCriteria }
+}
+
 if (require.main === module) {
-  const [wbsPath, requirementsPath, techSpecPath, prefix] = process.argv.slice(2)
-  if (!wbsPath || !requirementsPath || !techSpecPath || !prefix) {
-    process.stderr.write('Usage: node ac-task-matrix.js <wbs-path> <requirements-path> <tech-spec-path> <prefix>\n')
+  // FTR-026: featureDir is REQUIRED (not optional) — confirmed by grep that pm-phase2.js and this
+  // script's own test suite are the only callers, so there is no backward-compatible no-arg case
+  // worth preserving. Output moves from one loose {prefix}-AC-Task-Matrix.md file (whose location
+  // used to be derived from path.dirname(requirementsPath) — a real bug: that would have silently
+  // moved once a caller passes a Requirements path living under req/) into a dedicated
+  // coverage-matrix/ subfolder under featureDir, as a JSON+MD pair.
+  const [wbsPath, requirementsPath, techSpecPath, prefix, featureDir] = process.argv.slice(2)
+  if (!wbsPath || !requirementsPath || !techSpecPath || !prefix || !featureDir) {
+    process.stderr.write(
+      'Usage: node ac-task-matrix.js <wbs-path> <requirements-path> <tech-spec-path> <prefix> <feature-dir>\n')
     process.exit(1)
   }
   const wb = loadWorkBreakdown(path.resolve(wbsPath))
@@ -79,9 +109,13 @@ if (require.main === module) {
   const coverage = computeCoverage(wb, acMap)
   const techSpecEntries = parseFileInventoryEntries(fs.readFileSync(path.resolve(techSpecPath), 'utf8'))
   const techSpecCoverage = computeTechSpecCoverage(techSpecEntries, acMap)
-  const outPath = path.join(path.dirname(path.resolve(requirementsPath)), `${prefix}-AC-Task-Matrix.md`)
-  fs.writeFileSync(outPath, renderMatrix(prefix, acMap, coverage, techSpecCoverage))
-  console.log(JSON.stringify({ outputPath: outPath }))
+  const outDir = path.join(path.resolve(featureDir), 'coverage-matrix')
+  fs.mkdirSync(outDir, { recursive: true })
+  const jsonPath = path.join(outDir, 'index.json')
+  const mdPath = path.join(outDir, 'index.md')
+  fs.writeFileSync(jsonPath, JSON.stringify(buildMatrixJson(prefix, acMap, coverage, techSpecCoverage), null, 2))
+  fs.writeFileSync(mdPath, renderMatrix(prefix, acMap, coverage, techSpecCoverage))
+  console.log(JSON.stringify({ jsonPath, mdPath }))
 }
 
-module.exports = { computeCoverage, renderMatrix, computeTechSpecCoverage }
+module.exports = { computeCoverage, renderMatrix, computeTechSpecCoverage, buildMatrixJson }

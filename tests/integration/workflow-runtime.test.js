@@ -481,8 +481,13 @@ test.each([true, false])('pm-phase2 runs real validator and blocks a negative se
     // the new assemble-docs.js, on demand.
     expect(fs.existsSync(result.tasks_csv_path)).toBe(false);
     expect(result.gate2_payload.renderer_result).toBeUndefined();
-    expect(result.gate2_payload.ac_task_matrix_path).toBeDefined();
-    const matrixContent = fs.readFileSync(result.gate2_payload.ac_task_matrix_path, 'utf8');
+    // FTR-026: output moved from one loose {PREFIX}-AC-Task-Matrix.md file into a dedicated
+    // coverage-matrix/ subfolder, as a JSON+MD pair.
+    expect(result.gate2_payload.ac_task_matrix_json_path).toBe(`${f.dir}/coverage-matrix/index.json`);
+    expect(result.gate2_payload.ac_task_matrix_md_path).toBe(`${f.dir}/coverage-matrix/index.md`);
+    const matrixJson = JSON.parse(fs.readFileSync(result.gate2_payload.ac_task_matrix_json_path, 'utf8'));
+    expect(matrixJson.acceptanceCriteria.some(ac => ac.id === 'AC-01')).toBe(true);
+    const matrixContent = fs.readFileSync(result.gate2_payload.ac_task_matrix_md_path, 'utf8');
     expect(matrixContent).toContain('AC ↔ Task Traceability Matrix');
     expect(matrixContent).toContain('AC-01');
     expect(f.entries()[0].status).toBe('done');
@@ -565,10 +570,10 @@ test('pm-phase2 fails closed when the recorded Docs Digest no longer matches Req
   expect(dispatch).not.toHaveBeenCalled();
   expect(f.entries()[0].status).toBe('failed');
 });
-// FTR-025: pm-phase1.js no longer writes the assembled Requirements/Tech-Spec files — pm-phase2's
-// own unmodified internals still need them, so it bridges the gap itself, transparently, from
-// real req/+spec/ split sources, every run.
-test('pm-phase2 bridges fresh Requirements/Tech-Spec from real req/+spec/ split sources before its own Gate 1 check', async () => {
+// FTR-026: pm-phase2.js is split-source-native — every call site reads req/index.md/spec/index.md
+// directly; in-memory assembly feeds only the Gate 1 digest re-check and is never written to disk
+// (the bridge-requirements-tech-spec activity FTR-025 added as a transitional shim is gone).
+test('pm-phase2 reads real req/+spec/ split sources directly, without ever writing an assembled file', async () => {
   const { loadRequirements } = require('../../src/claude/scripts/req-assembler');
   const { loadTechSpec } = require('../../src/claude/scripts/tech-spec-assembler');
   fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-021-req'), path.join(f.dir, 'req'), { recursive: true });
@@ -588,13 +593,66 @@ test('pm-phase2 bridges fresh Requirements/Tech-Spec from real req/+spec/ split 
       outputCount: 1, commit: { type: 'feat', subject: 'example' },
     } },
   };
-  const dispatch = jest.fn(phase2Dispatch(wb));
+  // Captures the semantic validator's own prompt to confirm it receives the split req/index.md
+  // path, not an assembled/legacy file path (US-02's own repointing).
+  let semanticPrompt;
+  const innerDispatch = phase2Dispatch(wb);
+  const dispatch = jest.fn(async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (name === 'gaia-validate-work-breakdown-semantic') semanticPrompt = options.prompt;
+    return innerDispatch(options);
+  });
   const result = await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
   expect(result.gate2_payload.gate2_blocked).toBe(false);
-  expect(fs.readFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), 'utf8')).toBe(assembledReq);
-  expect(fs.readFileSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'), 'utf8')).toBe(assembledSpec);
+  expect(fs.existsSync(path.join(f.dir, 'FTR-099-Requirements.md'))).toBe(false);
+  expect(fs.existsSync(path.join(f.dir, 'FTR-099-Tech-Spec.md'))).toBe(false);
+  expect(semanticPrompt).toContain(`${f.dir}/req/index.md`);
+  expect(semanticPrompt).not.toContain('FTR-099-Requirements.md');
+  const matrixJson = JSON.parse(fs.readFileSync(path.join(f.dir, 'coverage-matrix', 'index.json'), 'utf8'));
+  expect(matrixJson.acceptanceCriteria.some(ac => ac.id === 'AC-01')).toBe(true);
 });
-test('pm-phase2\'s bridge step is a no-op for a legacy feature (monolithic files only, no req/spec/)', async () => {
+// FTR-026 (UC-04): the per-task worker no longer receives the entire assembled Tech-Spec — only
+// the component(s) whose Addresses column cites that task's own acceptanceCriteria, or the full
+// Components table as a fallback when nothing matches.
+test('pm-phase2 gives each per-task worker only its own AC-matched Tech-Spec component, with a full-table fallback', async () => {
+  fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-021-req'), path.join(f.dir, 'req'), { recursive: true });
+  fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-024-spec'), path.join(f.dir, 'spec'), { recursive: true });
+  fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'), '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
+  const wb = {
+    schemaVersion: 3, feature: 'FTR-099',
+    phases: [{ id: 'US-01', type: 'user-story', title: 'US-01', sourceUC: ['UC-01', 'UC-02'], context: 'Context.',
+      commit: { type: 'feat', subject: 'us01' }, taskIds: ['US-01-TASK-BE-01', 'US-01-TASK-BE-02'] }],
+    tasks: {
+      'US-01-TASK-BE-01': { title: 'Matched task', outcome: 'o1', domain: 'BE', agentType: 'developer-backend',
+        dependsOn: [], acceptanceCriteria: ['AC-01'], estimate: { agentMinutes: 8, tokens: 10000 },
+        outputCount: 1, commit: { type: 'feat', subject: 'matched' } },
+      'US-01-TASK-BE-02': { title: 'Unmatched task', outcome: 'o2', domain: 'BE', agentType: 'developer-backend',
+        dependsOn: [], acceptanceCriteria: [], estimate: { agentMinutes: 8, tokens: 10000 },
+        outputCount: 1, commit: { type: 'feat', subject: 'unmatched' } },
+    },
+  };
+  const taskPrompts = {};
+  const dispatch = async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (name === 'gaia-generate-work-breakdown') {
+      return { exitCode: 0, result: { is_error: false, structured_output: wb, usage: { input_tokens: 10, output_tokens: 5 } } };
+    }
+    if (name === 'gaia-generate-work-breakdown-task') {
+      const taskId = options.prompt.match(/"id":\s*"([^"]+)"/)[1];
+      taskPrompts[taskId] = options.prompt;
+      return success(taskDetailDoc(taskId));
+    }
+    return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] }, usage: { input_tokens: 10, output_tokens: 5 } } };
+  };
+  await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+  expect(taskPrompts['US-01-TASK-BE-01']).toContain('src/example-be.js');
+  expect(taskPrompts['US-01-TASK-BE-01']).not.toContain('example-fe.tsx');
+  expect(taskPrompts['US-01-TASK-BE-01']).not.toContain('deploy.yml');
+  expect(taskPrompts['US-01-TASK-BE-02']).toContain("full Components table below");
+  expect(taskPrompts['US-01-TASK-BE-02']).toContain('src/example-be.js');
+  expect(taskPrompts['US-01-TASK-BE-02']).toContain('src/example-fe.tsx');
+});
+test('pm-phase2 does not write Requirements/Tech-Spec files for a legacy feature either (monolithic files only, no req/spec/)', async () => {
   const wb = phase2Setup(); // writes FTR-099-Requirements.md/FTR-099-Tech-Spec.md directly, no req/spec/ dirs
   const before = {
     req: fs.readFileSync(path.join(f.dir, 'FTR-099-Requirements.md'), 'utf8'),

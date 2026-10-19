@@ -1,6 +1,10 @@
 'use strict'
 
-const { computeCoverage, renderMatrix, computeTechSpecCoverage } = require('../src/claude/scripts/ac-task-matrix')
+const { spawnSync } = require('child_process')
+const os = require('os')
+const fs = require('fs')
+const path = require('path')
+const { computeCoverage, renderMatrix, computeTechSpecCoverage, buildMatrixJson } = require('../src/claude/scripts/ac-task-matrix')
 
 function wbWith(phases) { return { schemaVersion: 2, feature: 'FTR-TEST', phases } }
 function acMapWith(entries) { return new Map(entries.map(e => [e.id, e])) }
@@ -105,5 +109,94 @@ describe('renderMatrix() — Tech-Spec column (FTR-023)', () => {
     const techSpecCoverage = new Map([['AC-01', new Set(['a.js'])]])
     const md = renderMatrix('FTR-TEST', acMap, coverage, techSpecCoverage)
     expect(md).toContain('| AC-01 | x | Should | UC-01 | a.js | — | — |')
+  })
+})
+
+describe('renderMatrix() — Must-AC coverage summary (FTR-026)', () => {
+  test('summary counts covered vs. total Must ACs and links index.json', () => {
+    const acMap = acMapWith([
+      { id: 'AC-01', criterion: 'x', priority: 'Must', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false },
+      { id: 'AC-02', criterion: 'y', priority: 'Must', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false },
+      { id: 'AC-03', criterion: 'z', priority: 'Should', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false },
+    ])
+    const coverage = new Map([
+      ['AC-01', { taskIds: new Set(['T-01']), phaseIds: new Set(['US-01']) }],
+      ['AC-02', { taskIds: new Set(), phaseIds: new Set() }],
+      ['AC-03', { taskIds: new Set(), phaseIds: new Set() }],
+    ])
+    const md = renderMatrix('FTR-TEST', acMap, coverage)
+    expect(md).toContain('**Must-AC coverage:** 1/2 covered.')
+    expect(md).toContain('[index.json](index.json)')
+  })
+})
+
+describe('buildMatrixJson() (FTR-026)', () => {
+  test('one entry per AC, in table order, with all relation fields populated', () => {
+    const acMap = acMapWith([
+      { id: 'AC-02', criterion: 'second', priority: 'Must', allowedUserStories: ['US-01'], relatedUCs: ['UC-01'], unscoped: false },
+      { id: 'AC-01', criterion: 'first', priority: 'Should', allowedUserStories: [], relatedUCs: [], unscoped: true },
+    ])
+    const coverage = new Map([
+      ['AC-02', { taskIds: new Set(['US-01-TASK-BE-01']), phaseIds: new Set(['US-01']) }],
+      ['AC-01', { taskIds: new Set(), phaseIds: new Set() }],
+    ])
+    const techSpecCoverage = new Map([['AC-02', new Set(['a.js'])]])
+    const json = buildMatrixJson('FTR-TEST', acMap, coverage, techSpecCoverage)
+    expect(json.prefix).toBe('FTR-TEST')
+    expect(typeof json.generatedAt).toBe('string')
+    expect(json.acceptanceCriteria).toEqual([
+      { id: 'AC-02', criterion: 'second', priority: 'Must', unscoped: false, relatedUCs: ['UC-01'], techSpecFiles: ['a.js'], taskIds: ['US-01-TASK-BE-01'], phaseIds: ['US-01'] },
+      { id: 'AC-01', criterion: 'first', priority: 'Should', unscoped: true, relatedUCs: [], techSpecFiles: [], taskIds: [], phaseIds: [] },
+    ])
+  })
+})
+
+describe('ac-task-matrix.js CLI — coverage-matrix/ output (FTR-026)', () => {
+  const CLI = path.resolve(__dirname, '../src/claude/scripts/ac-task-matrix.js')
+  const WBS = path.resolve(__dirname, 'fixtures/ftr-020-wbs')
+  const REQ = path.resolve(__dirname, 'fixtures/ftr-021-req-clean/index.md')
+  const SPEC = path.resolve(__dirname, 'fixtures/ftr-024-spec/index.md')
+  const PREFIX = 'FTR-TEST'
+
+  function runCli(args) {
+    return spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' })
+  }
+
+  test('writes coverage-matrix/index.json and index.md under the given feature directory', () => {
+    const featureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-task-matrix-'))
+    try {
+      const result = runCli([WBS, REQ, SPEC, PREFIX, featureDir])
+      expect(result.status).toBe(0)
+      const { jsonPath, mdPath } = JSON.parse(result.stdout)
+      expect(jsonPath).toBe(path.join(featureDir, 'coverage-matrix', 'index.json'))
+      expect(mdPath).toBe(path.join(featureDir, 'coverage-matrix', 'index.md'))
+      expect(fs.existsSync(jsonPath)).toBe(true)
+      expect(fs.existsSync(mdPath)).toBe(true)
+      const written = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+      expect(written.prefix).toBe(PREFIX)
+      expect(Array.isArray(written.acceptanceCriteria)).toBe(true)
+      const md = fs.readFileSync(mdPath, 'utf8')
+      expect(md).toMatch(/\*\*Must-AC coverage:\*\* \d+\/\d+ covered/)
+      expect(md).toContain('[index.json](index.json)')
+    } finally {
+      fs.rmSync(featureDir, { recursive: true, force: true })
+    }
+  })
+
+  test('creates the coverage-matrix/ subfolder when it does not already exist', () => {
+    const featureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-task-matrix-'))
+    try {
+      expect(fs.existsSync(path.join(featureDir, 'coverage-matrix'))).toBe(false)
+      runCli([WBS, REQ, SPEC, PREFIX, featureDir])
+      expect(fs.existsSync(path.join(featureDir, 'coverage-matrix'))).toBe(true)
+    } finally {
+      fs.rmSync(featureDir, { recursive: true, force: true })
+    }
+  })
+
+  test('exits 1 with a usage message when featureDir is omitted', () => {
+    const result = runCli([WBS, REQ, SPEC, PREFIX])
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('Usage:')
   })
 })

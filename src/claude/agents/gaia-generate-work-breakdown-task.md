@@ -23,7 +23,7 @@ This is the **second of two generation passes** (FTR-020). The skeleton pass (`g
 The caller supplies, in the prompt (you do not read `{PREFIX}-Work-Breakdown.json`/`wbs/index.json` yourself — the host extracts and hands you exactly what you need):
 
 1. **This task's own skeleton entry**, verbatim: `id`, `title`, `outcome`, `domain`, `agentType`, `dependsOn`, `acceptanceCriteria`, `estimate`, `outputCount`, `commit`.
-2. **The relevant Tech-Spec excerpt** for this task's domain (not the whole Tech-Spec — keeps this call small, which is the whole point of the per-task split).
+2. **The relevant Tech-Spec excerpt** for this task's own Acceptance Criteria (matched by the host against each component's `Addresses` column in `spec/index.md` — not the whole Tech-Spec, which is the whole point of the per-task split). If no component's `Addresses` column cites any of this task's Acceptance Criteria, you instead receive the full Components table from `spec/index.md` as a fallback — in that case, use your own judgment about which listed component(s) are actually relevant, the same way you would if asked to work from the full Tech-Spec directly.
 3. **The compact full-skeleton task list**: every task's `id` + `title` + `outcome` only (no detail), so you can tell whether another task already built the behavior this one would otherwise duplicate.
 
 If the prompt is missing any of these three, stop and report exactly what is missing — do not guess at a skeleton entry you were not given.

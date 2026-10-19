@@ -17,12 +17,20 @@ This is the **first of two generation passes** (FTR-020). This call decides the 
 
 The user provides the path to a `feature.md` file. From the same directory, read:
 
-1. `{PREFIX}-Requirements.md` — source of User Stories (derived from Use Cases), acceptance criteria, business rules
-2. `{PREFIX}-Tech-Spec.md` — source of technical tasks, implementation order, file inventory, architecture decisions
+1. Requirements — `req/index.md` (the split format, FTR-021; source of User Stories derived from
+   Use Cases, acceptance criteria, business rules) if it exists, otherwise the legacy
+   `{PREFIX}-Requirements.md`
+2. Tech-Spec — `spec/index.md` (the split format, FTR-024; source of technical tasks,
+   implementation order, file inventory, architecture decisions) if it exists, otherwise the
+   legacy `{PREFIX}-Tech-Spec.md`
 3. `{PREFIX}-Validation-Report.md` — confirms both documents passed coverage validation
 4. `{PREFIX}-Approvals.md` — confirms user has approved the documents
 
-**This agent runs ONLY after validation and human approval.** If any of the four input files is missing, abort and report:
+See Step 1 below for exactly how to read whichever shape (1)/(2) actually are, including per-item
+drilldown into `req/use-cases/*.md`/`spec/components/*.md`.
+
+**This agent runs ONLY after validation and human approval.** If Requirements/Tech-Spec exist in
+neither shape, or (3)/(4) are missing, abort and report:
 ```
 Cannot generate work breakdown: `{file}` not found.
 The work breakdown requires validated and approved Requirements + Tech-Spec.
@@ -79,8 +87,25 @@ Every task must be the **smallest independently implementable, verifiable, and c
 
 ### Step 1 — Load and Cross-Reference
 
-1. Read `{PREFIX}-Requirements.md` fully — extract all Use Cases (UC-XX), acceptance criteria (AC-XX), business rules (BR-XX), NFRs
-2. Read `{PREFIX}-Tech-Spec.md` fully — extract architecture, file inventory, implementation order, data model, API endpoints, frontend components
+1. Check whether `req/index.md` exists (the split Requirements format, FTR-021). If it does:
+   - Read `req/index.md` fully — it already contains the full Use Cases index table, all Business
+     Rules, all Acceptance Criteria, and all NFRs (FTR-021 kept these feature-wide, not per-UC)
+   - For any UC whose own full flow description you need beyond the index's short Title/Actor
+     summary, Read `req/use-cases/{UC-ID}.md` directly
+   If `req/index.md` does not exist (a legacy feature), Read `{PREFIX}-Requirements.md` fully
+   instead — extract the same information from the monolithic file.
+2. Check whether `spec/index.md` exists (the split Tech-Spec format, FTR-024). If it does:
+   - Read `spec/index.md` fully — it already contains Architecture, Section 9's complete File
+     Inventory/Components table (with Domain/Addresses routing), Implementation Order, and Risks
+   - For any component whose own Backend/Frontend/design detail you need beyond the Components
+     table's one-line Purpose/Addresses summary, Read `spec/components/{file-slug}.md` directly —
+     the `Spec` column in Section 9's table gives you the exact path
+   - If, after reading the index, you cannot determine from its own summary tables which per-item
+     files are relevant to a given phase/task decision, fall back to reading every file under
+     `spec/components/` rather than proceeding with incomplete context
+   If `spec/index.md` does not exist (a legacy feature), Read `{PREFIX}-Tech-Spec.md` fully
+   instead — extract architecture, file inventory, implementation order, data model, API
+   endpoints, frontend components from the monolithic file.
 
 ### Step 2 — Derive User Stories from Use Cases
 

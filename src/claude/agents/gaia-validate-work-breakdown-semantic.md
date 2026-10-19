@@ -15,12 +15,17 @@ You do NOT repeat structural checks (schema conformance, required fields, ID for
 
 ## Input
 
-The user provides the path to `{PREFIX}-Work-Breakdown.json`. From the same directory, locate and read:
+The prompt gives you two paths, one per line, in this order:
 
-1. `{PREFIX}-Work-Breakdown.json` — the validated work breakdown (schema v2)
-2. `{PREFIX}-Requirements.md` — User Story descriptions and Acceptance Criteria text
+1. The Work Breakdown directory (the split format, FTR-020) — contains `index.json` (the
+   validated skeleton, schema v2) plus `user-stories/*.md`/`tasks/*.md` detail files. Use Glob/Read
+   to explore it as needed; do not expect a single `{PREFIX}-Work-Breakdown.json` file.
+2. The Requirements source — `req/index.md` for a feature using the split Requirements format
+   (FTR-021; User Story descriptions and Acceptance Criteria text live in its own tables there,
+   unaffected by the per-UC split), or a legacy `{PREFIX}-Requirements.md` file otherwise. Read
+   whichever path is actually given — do not assume either shape.
 
-Derive the prefix from the filename (e.g., `FTR-014-Work-Breakdown.json` → prefix `FTR-014`).
+Derive the prefix from the Work Breakdown directory's own `index.json`'s `feature` field.
 
 ---
 
