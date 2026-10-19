@@ -19,11 +19,15 @@ together with those per-use-case files afterward (FTR-021).
 
 The user provides the path to a `feature.md` file. Read it in full before proceeding.
 
-Also read `.claude/scripts/templates/gaia-requirements-index-template.md` before writing your
-response — it is the canonical, authoritative structure for `req/index.md` (section order,
-exact headings, table column contracts, and the parsing contract `req-skeleton-check.js`/
-`req-assembler.js` rely on). The Output Structure section below summarizes it; the template
-itself is the source of truth if the two ever disagree.
+The prompt also includes, inlined under a `Template (req/index.md):` label, the canonical,
+authoritative structure for `req/index.md` (section order, exact headings, table column
+contracts, and the parsing contract `req-skeleton-check.js`/`req-assembler.js` rely on). Use the
+inlined text — do NOT attempt to Read, Glob, or otherwise search the filesystem for
+`gaia-requirements-index-template.md` yourself; it is not guaranteed to be reachable from where
+this agent runs, and searching for it is not a safe fallback either (your Glob/Grep tools remain
+available for exploring the feature's own project, just not for locating this template). The
+Output Structure section below summarizes it; the inlined template text is the source of truth if
+the two ever disagree.
 
 ## Process
 

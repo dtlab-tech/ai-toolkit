@@ -2056,6 +2056,51 @@ async function main() {
       process.stderr.write(err.message + '\n');
       process.exit(1);
     }
+  } else if (argv[0] === 'print-asset') {
+    // print-asset <relativePath> [--project <dir>] [--home <dir>]
+    // Security constraints: scripts/templates/ subpath only; .md extension only — the
+    // read-only counterpart to run-asset's "scripts category, .js only, execute" contract.
+    //
+    // Exists so a sandboxed workflow script (pm-phase1.js/pm-phase2.js — no `require()`, no
+    // filesystem access outside its own project root) can fetch a toolkit template's raw
+    // text and inline it directly into a worker's prompt, instead of telling the headless
+    // agent to Read the template file itself. That file lives outside the project root for
+    // a globally-installed toolkit, which is exactly the boundary a non-interactive `--print`
+    // session (no TTY to answer a permission prompt) cannot grant — confirmed by a real
+    // worker run failing with "Worker permission denied: ...; tools: Read" against exactly
+    // this path. Inlining via the host (a plain Node process, never subject to the Claude
+    // Code tool-permission system) sidesteps the problem entirely, the same pattern FTR-025
+    // already established for inlining Requirements/Tech-Spec text into gaia-validate-
+    // feature-docs' prompt instead of telling it to Read those files itself.
+    const remaining = argv.slice(1);
+    let relativePath = null;
+    let projectDir   = process.cwd();
+    let home;
+    for (let i = 0; i < remaining.length; i++) {
+      if      (remaining[i] === '--project' && remaining[i + 1]) { projectDir = remaining[++i]; }
+      else if (remaining[i] === '--home'    && remaining[i + 1]) { home       = remaining[++i]; }
+      else if (!remaining[i].startsWith('-'))                     { relativePath = remaining[i]; }
+    }
+    if (!relativePath) {
+      process.stderr.write('Error: print-asset requires a relative path argument\n');
+      process.exit(1);
+    }
+    if (!relativePath.startsWith('scripts/templates/')) {
+      process.stderr.write(`Error: print-asset is restricted to scripts/templates/ (got: ${relativePath})\n`);
+      process.exit(1);
+    }
+    if (!relativePath.endsWith('.md')) {
+      process.stderr.write(`Error: print-asset only reads .md files (got: ${relativePath})\n`);
+      process.exit(1);
+    }
+    try {
+      const assetPath = resolveClaudeRuntimeAsset(relativePath, { projectDir, home });
+      process.stdout.write(fs.readFileSync(assetPath, 'utf8'));
+      process.exit(0);
+    } catch (err) {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
   } else if (argv[0] === 'list-assets') {
     // list-assets --project <dir> --category <name> [--format json|plain] [--home <dir>]
     // Both --project and --category are MANDATORY (Tech Spec contract).

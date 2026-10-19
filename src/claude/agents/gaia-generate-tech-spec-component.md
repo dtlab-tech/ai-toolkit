@@ -28,10 +28,15 @@ The host supplies, in the dispatch prompt:
 You do not read `spec/index.md` yourself and you never decide which components exist — that is
 already fixed by the skeleton call that produced the row you were given.
 
-Read `.claude/scripts/templates/gaia-component-template.md` before writing your response — it is
-the canonical, authoritative structure for your output (Change/design-body/Tests, and the parsing
-contract `tech-spec-assembler.js`'s `parseComponentDetail` relies on). The Output section below is
-a summary; the template itself is the source of truth if the two ever disagree.
+The prompt also includes, inlined under a `Template (spec/components/{fileSlug}.md):` label, the
+canonical, authoritative structure for your output (Change/design-body/Tests, and the parsing
+contract `tech-spec-assembler.js`'s `parseComponentDetail` relies on). Use the inlined text — do
+NOT attempt to Read, Glob, or otherwise search the filesystem for `gaia-component-template.md`
+yourself under any circumstances, including as a fallback if you are unsure of its exact path; it
+is not guaranteed to be reachable from where this agent runs, and guessing at or searching for its
+absolute path is not a safe substitute for the text already given to you below. The Output
+section below is a summary; the inlined template text is the source of truth if
+the two ever disagree.
 
 ## Mandatory instruction
 

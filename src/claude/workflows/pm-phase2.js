@@ -239,7 +239,7 @@ function buildTaskTechSpecExcerpt(components, task, specDir, specIndexContent) {
 // implementation awareness), and the Tech-Spec excerpt (FTR-026: already pre-sliced to this
 // task's own relevant component(s) by buildTaskTechSpecExcerpt, or the full legacy Tech-Spec
 // text for a feature with no spec/ directory).
-function buildTaskPrompt(index, taskId, techSpecText) {
+function buildTaskPrompt(index, taskId, techSpecText, taskTemplate) {
   const task = index.tasks[taskId]
   const siblingList = Object.entries(index.tasks)
     .map(([id, t]) => `- ${id}: ${t.title} — ${t.outcome}`).join('\n')
@@ -247,6 +247,7 @@ function buildTaskPrompt(index, taskId, techSpecText) {
     `Task skeleton entry (restate these fields verbatim; do not re-derive them):\n${JSON.stringify({ id: taskId, ...task }, null, 2)}`,
     `Tech-Spec:\n${techSpecText}`,
     `All tasks in this feature (for duplicate-implementation awareness):\n${siblingList}`,
+    `Template (tasks/{TASK_ID}.md):\n${taskTemplate}`,
   ].join('\n\n')
 }
 
@@ -339,6 +340,13 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // own Acceptance Criteria, not the entire assembled spec — computed once, before the loop, by
   // matching each task's acceptanceCriteria against spec/index.md's own Addresses column.
   const components = hasSpec ? parseComponentsTableLocal(c.read(specIndexPath)) : []
+  // The template lives under the toolkit's own installed scripts/templates/ — outside the
+  // project for a globally-installed toolkit, which a non-interactive worker invocation has no
+  // way to get Read permission for. Read once via print-asset, inline into every task's prompt,
+  // instead of telling the agent to Read it itself (same reasoning as pm-phase1.js's
+  // readTemplate/withTemplate — this runtime duplicates the primitive, not requires it, for the
+  // same "no `require`" reason as every other duplicated helper in this file).
+  const taskTemplate = c.command(['print-asset', 'scripts/templates/gaia-task-template.md', '--project', c.root]).stdout
   for (const phase of index.phases) {
     for (const taskId of phase.taskIds) {
       const task = index.tasks[taskId]
@@ -348,7 +356,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
         ? buildTaskTechSpecExcerpt(components, task, specDir, c.read(specIndexPath))
         : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text
       const detail = await c.worker('gaia.agent.planner.work-breakdown-task',
-        buildTaskPrompt(index, taskId, techSpecExcerpt), { label: `work-breakdown-task:${taskId}` })
+        buildTaskPrompt(index, taskId, techSpecExcerpt, taskTemplate), { label: `work-breakdown-task:${taskId}` })
       c.writeOutput(detailPath, detail)
       task.status = 'generated'
       c.writeOutput(indexPath, JSON.stringify(index, null, 2)) // persist status after each task
