@@ -90,6 +90,16 @@ return c.run(meta.name, featureDir, prefix, async () => {
     })
   }
 
+  // FTR-027: resume-by-existence must not trust mere presence — a use-case file that exists but
+  // is garbled/off-topic (e.g. echoes a different UC) should be regenerated, not skipped forever.
+  // Only the ID fragment is checked, never the free-text title after the colon: the title is
+  // prose the agent may legitimately phrase differently across a retry, and comparing it would
+  // reject a valid regeneration for no real reason.
+  function isValidUseCaseFile(content, ucId) {
+    const escaped = ucId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`^###\\s+${escaped}:\\s`).test(content.trimStart())
+  }
+
   // Business Rules' "Applies to" / Acceptance Criteria's "Related UC" columns are the same
   // cross-cutting-reference shape: a comma-separated UC-ID list, or the literal "All UCs". Both
   // are 100% mechanically derivable from req/index.md's own tables — no LLM judgment needed,
@@ -185,7 +195,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
       // If the skeleton itself was just (re)generated, every use case must regenerate too —
       // an existing use-case file would have been written against the OLD skeleton's row
       // (title/actor/priority may have changed) and cannot be trusted as-is.
-      if (!regenSkeleton && c.exists(ucPath)) continue // resume: skip, no dispatch
+      if (!regenSkeleton && c.exists(ucPath) && isValidUseCaseFile(c.read(ucPath), row.id)) continue // resume: skip, no dispatch
       const detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath, ucTemplate),
         { label: `requirements-use-case:${row.id}` })
       c.writeOutput(ucPath, detail.trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id))
@@ -241,6 +251,36 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return entries
   }
 
+  // FTR-027: duplicates tech-spec-assembler.js's parseComponentDetail's own fence-aware
+  // "## Change"/"## Tests" heading scan (see that file for the full "why length-aware, not a
+  // boolean toggle" rationale) — returns a boolean instead of throwing/returning parsed sections,
+  // since every call site here only needs the yes/no "is this a structurally valid component
+  // file" signal, for resume-by-existence: a component file that exists but fails this check
+  // (e.g. a whole-response fence wrap, a truncated reply) must be regenerated, not skipped
+  // forever — found via a real incident where exactly this silently blocked every retry.
+  function _nonFencedHeadingIndexesLocal(lines, predicate) {
+    let fenceLen = 0
+    const indexes = []
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^(`{3,})/)
+      if (m) {
+        const runLen = m[1].length
+        if (fenceLen === 0) fenceLen = runLen
+        else if (runLen >= fenceLen) fenceLen = 0
+        continue
+      }
+      if (fenceLen !== 0) continue
+      if (predicate(lines[i])) indexes.push(i)
+    }
+    return indexes
+  }
+  function isValidComponentDetail(content) {
+    const lines = content.split('\n')
+    const changeIdx = _nonFencedHeadingIndexesLocal(lines, l => l.trim() === '## Change')[0] ?? -1
+    const testsIdx = _nonFencedHeadingIndexesLocal(lines, l => l.trim() === '## Tests')[0] ?? -1
+    return changeIdx !== -1 && testsIdx !== -1
+  }
+
   function buildComponentPrompt(row, components, featurePathArg, componentTemplate) {
     const compactIndex = components.map(c => `${c.filePath} (${c.domain})`).join('\n')
     const base = `${featurePathArg}\n\nGenerate the full technical design for this component:\n` +
@@ -253,6 +293,16 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // as materializeIndex's detailFile/status derivations in the Work Breakdown's own skeleton,
   // FTR-020). Rewrites any colliding fileSlug's Spec-column link in place, right-to-left
   // prepending path segments until unique.
+  //
+  // Also enforces the ".md" suffix itself, never trusting the model to have included it. The
+  // component template's own contract calls this Spec link "provisional, not final" specifically
+  // so the host can rewrite it — originally only exercised for collisions, but a real production
+  // run showed the model omits ".md" entirely a meaningful fraction of the time (confirmed: 20 of
+  // ~61 components in one real Tech-Spec skeleton), writing e.g. `components/Settings.tsx`
+  // instead of `components/Settings.tsx.md` — the host then faithfully wrote that component's
+  // Markdown CONTENT into a file literally named `Settings.tsx`. Normalized here before the
+  // collision check runs, so two rows that only differ by their original extension (already
+  // present in the Path column) still correctly collide-and-disambiguate on the normalized slug.
   //
   // Operates per-LINE, not via a global string .replace() over the whole document — a real bug,
   // found by testing two colliding entries directly: when both rows share byte-identical Spec
@@ -270,6 +320,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
       const m = cells[4].match(/\(components\/([^)]+)\)/)
       if (!m) continue // header/separator row, or a row with no valid Spec link yet
       let slug = m[1]
+      if (!slug.endsWith('.md')) {
+        const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const normalized = `${slug}.md`
+        lines[i] = lines[i].replace(new RegExp(`components/${escaped}`, 'g'), `components/${normalized}`)
+        slug = normalized
+      }
       if (seenSlugs.has(slug)) {
         const segments = filePath.split('/')
         let depth = 1
@@ -279,7 +335,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
           candidate = segments.slice(-depth).join('-') + '.md'
         }
         const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        lines[i] = line.replace(new RegExp(`components/${escaped}`, 'g'), `components/${candidate}`)
+        lines[i] = lines[i].replace(new RegExp(`components/${escaped}`, 'g'), `components/${candidate}`)
         slug = candidate
       }
       seenSlugs.add(slug)
@@ -321,7 +377,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     const componentTemplate = components.length ? readTemplate('gaia-component-template.md') : null
     for (const comp of components) {
       const compPath = `${specDir}/components/${comp.fileSlug}`
-      if (!regenSkeleton && c.exists(compPath)) continue // resume: skip, no dispatch
+      if (!regenSkeleton && c.exists(compPath) && isValidComponentDetail(c.read(compPath))) continue // resume: skip, no dispatch
       const detail = await c.worker(specComponentId, buildComponentPrompt(comp, components, featurePath, componentTemplate),
         { label: `tech-spec-component:${comp.fileSlug}` })
       c.writeOutput(compPath, detail)
@@ -352,8 +408,17 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // for free by gating on the assembled document's own freshness (which could never look
   // "complete" while a referenced item was missing) — removing that gate (FTR-025) removed this
   // side effect along with it, so it needs restating explicitly here.
-  const anyUcFileMissing = indexContent => parseUseCaseIndexTable(indexContent).some(row => !c.exists(`${reqDir}/${row.file}`))
-  const anyComponentFileMissing = indexContent => parseComponentsTable(indexContent).some(comp => !c.exists(`${specDir}/components/${comp.fileSlug}`))
+  // FTR-027: "missing" now also means "present but invalid" — a structurally broken-but-existing
+  // file must trigger re-entry into generation the same way an absent one already does, otherwise
+  // the outer gate alone could never notice it (only the per-item loop would, one phase later).
+  const anyUcFileMissing = indexContent => parseUseCaseIndexTable(indexContent).some(row => {
+    const ucPath = `${reqDir}/${row.file}`
+    return !c.exists(ucPath) || !isValidUseCaseFile(c.read(ucPath), row.id)
+  })
+  const anyComponentFileMissing = indexContent => parseComponentsTable(indexContent).some(comp => {
+    const compPath = `${specDir}/components/${comp.fileSlug}`
+    return !c.exists(compPath) || !isValidComponentDetail(c.read(compPath))
+  })
 
   let changed = false
   if (force || !fresh(reqIndexPath) || missingSections(c.read(reqIndexPath), 9).length ||

@@ -1,0 +1,278 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-027",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-01"
+      ],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-02"
+      ],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01",
+        "US-02-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-03"
+      ],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-TEST-01",
+        "US-03-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": [],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": [
+        "US-04-TASK-TEST-01"
+      ]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Add a parseComponentDetail-based validity check to Tech-Spec component resume",
+      "outcome": "pm-phase1.js gains a local isValidComponentDetail(content) (duplicating tech-spec-assembler.js's parseComponentDetail fence-aware ## Change/## Tests scan as a boolean check); anyComponentFileMissing and the per-component loop's resume condition both require it in addition to c.exists()",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-02",
+        "AC-03"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "fix",
+        "scope": "pm-phase1",
+        "subject": "regenerate an invalid Tech-Spec component instead of trusting existence alone"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Cover invalid/valid Tech-Spec component resume behavior end to end",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: an invalid-but-present component file is regenerated on resume; a valid one is still skipped; the outer gate alone (before the per-component loop) detects an invalid file the same way it already detects a missing one",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-02",
+        "AC-03"
+      ],
+      "estimate": {
+        "agentMinutes": 22,
+        "tokens": 28000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "cover invalid/valid Tech-Spec component resume behavior"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Add a heading-match validity check to Requirements use-case resume",
+      "outcome": "pm-phase1.js gains a local isValidUseCaseFile(content, ucId) checking the content starts with '### {ucId}: '; anyUcFileMissing and the per-use-case loop's resume condition both require it in addition to c.exists()",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-04",
+        "AC-05"
+      ],
+      "estimate": {
+        "agentMinutes": 15,
+        "tokens": 18000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "fix",
+        "scope": "pm-phase1",
+        "subject": "regenerate an invalid Requirements use-case file instead of trusting existence alone"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Update the pm-phase1-req-resume.test.js mirror and source-text guard",
+      "outcome": "tests/pm-phase1-req-resume.test.js's selectPendingUcIds mirror gains an isValidFn parameter and a new test case; its source-text guard asserts the updated literal condition",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-04",
+        "AC-05"
+      ],
+      "estimate": {
+        "agentMinutes": 14,
+        "tokens": 16000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1-req-resume",
+        "subject": "cover the use-case validity condition in the resume mirror"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-02": {
+      "title": "Cover invalid/valid use-case resume behavior end to end",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: a use-case file starting with the wrong UC heading is regenerated on resume; a correctly-headed one is still skipped",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-04",
+        "AC-05"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "cover invalid/valid use-case resume behavior end to end"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-02.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Add a parseTaskDetailBlock-based validity check to Work Breakdown task resume",
+      "outcome": "pm-phase2.js gains a local hasVerificationCommands(content) (duplicating wbs-assembler.js's _parseVerificationCommands last-marker-wins algorithm as a boolean check); the per-task resume-by-status loop requires it in addition to status === 'generated' && c.exists()",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-06",
+        "AC-07"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "fix",
+        "scope": "pm-phase2",
+        "subject": "regenerate an invalid Work Breakdown task instead of trusting status alone"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Update pm-phase2-flow.js and pm-phase2-wbs-resume.test.js for the task validity condition",
+      "outcome": "tests/helpers/pm-phase2-flow.js's selectPendingTaskIds gains an isValidFn parameter; tests/pm-phase2-wbs-resume.test.js's source-text guard and all call sites are updated, plus a new test case for the invalid-but-generated task",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-06",
+        "AC-07"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase2-wbs-resume",
+        "subject": "cover the task validity condition in the resume mirror"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-02": {
+      "title": "Cover invalid/valid Work Breakdown task resume behavior end to end",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: a task marked generated with a detail file present but zero verification commands is regenerated on resume; a task with at least one verification command is still skipped",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-06",
+        "AC-07"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase2",
+        "subject": "cover invalid/valid Work Breakdown task resume behavior end to end"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-02.md",
+      "status": "pending"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Confirm force/revision-cycle bypass is unaffected, then run the full regression suite",
+      "outcome": "A new test confirms --force and needsRequirementsFix/needsTechSpecFix still regenerate every item unconditionally despite the new validity checks (AC-08); full npm test suite passes",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "US-02-TASK-BE-01",
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-08",
+        "AC-09"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1, pm-phase2",
+        "subject": "confirm force/revision-cycle bypass is unaffected; run the full regression"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}

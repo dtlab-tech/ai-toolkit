@@ -29,34 +29,45 @@ function makeIndex(taskStatuses) {
 
 describe('pm-phase2 resume-by-status: mirror stays in sync with the real script', () => {
   test('pm-phase2.js still contains the exact resume-by-status condition the mirror replicates', () => {
-    expect(PM_PHASE2_SOURCE).toContain("task.status === 'generated' && c.exists(detailPath)");
+    expect(PM_PHASE2_SOURCE).toContain(
+      "task.status === 'generated' && c.exists(detailPath) && hasVerificationCommands(c.read(detailPath))");
   });
 });
+
+const alwaysValid = () => true;
 
 describe('selectPendingTaskIds()', () => {
   test('dispatches only pending tasks; generated tasks with an existing file are skipped', () => {
     const index = makeIndex({ 'T-01': 'generated', 'T-02': 'pending', 'T-03': 'generated' });
     const existing = new Set(['/wbs/tasks/T-01.md', '/wbs/tasks/T-03.md']); // T-02 has no file yet
-    const pending = selectPendingTaskIds(index, '/wbs', p => existing.has(p));
+    const pending = selectPendingTaskIds(index, '/wbs', p => existing.has(p), alwaysValid);
     expect(pending).toEqual(['T-02']);
   });
 
   test('a "generated" task whose detail file is missing is treated as pending, not trusted on status alone', () => {
     const index = makeIndex({ 'T-01': 'generated', 'T-02': 'generated' });
     const existing = new Set(['/wbs/tasks/T-01.md']); // T-02's file went missing
-    const pending = selectPendingTaskIds(index, '/wbs', p => existing.has(p));
+    const pending = selectPendingTaskIds(index, '/wbs', p => existing.has(p), alwaysValid);
     expect(pending).toEqual(['T-02']);
   });
 
   test('all tasks pending on a fresh skeleton (none generated yet) dispatch in phase/taskIds order', () => {
     const index = makeIndex({ 'T-01': 'pending', 'T-02': 'pending' });
-    const pending = selectPendingTaskIds(index, '/wbs', () => false);
+    const pending = selectPendingTaskIds(index, '/wbs', () => false, alwaysValid);
     expect(pending).toEqual(['T-01', 'T-02']);
   });
 
   test('no tasks dispatch when every task is already generated with its file present', () => {
     const index = makeIndex({ 'T-01': 'generated', 'T-02': 'generated' });
-    const pending = selectPendingTaskIds(index, '/wbs', () => true);
+    const pending = selectPendingTaskIds(index, '/wbs', () => true, alwaysValid);
     expect(pending).toEqual([]);
+  });
+
+  test('a "generated" task whose detail file exists but has no verification commands is treated as pending', () => {
+    const index = makeIndex({ 'T-01': 'generated', 'T-02': 'generated' });
+    const existing = new Set(['/wbs/tasks/T-01.md', '/wbs/tasks/T-02.md']);
+    const isValidFn = p => p.endsWith('T-01.md'); // T-02's file exists but has no commands
+    const pending = selectPendingTaskIds(index, '/wbs', p => existing.has(p), isValidFn);
+    expect(pending).toEqual(['T-02']);
   });
 });
