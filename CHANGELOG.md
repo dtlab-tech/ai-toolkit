@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.20.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.19.2...v0.20.0) (2026-10-19)
+
+
+### Features
+
+* **pm-phase1, pm-phase2:** resume-safe per-item generation (FTR-027) ([41e021f](https://github.com/dtlab-tech/ai-toolkit/commit/41e021f65aad694c18d51b6a7876e4a83373a4d9))
+* resume-safe per-item generation + component fileSlug normalization (FTR-027) ([e7e6b89](https://github.com/dtlab-tech/ai-toolkit/commit/e7e6b89596f267c4954c9be92bc2c4b3de8b9194))
+
 ## [0.19.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.19.1...v0.19.2) (2026-10-19)
 
 
