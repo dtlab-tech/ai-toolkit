@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-026",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-01"
+      ],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-03",
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01",
+        "US-01-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-02"
+      ],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-03"
+      ],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": [
+        "US-03-TASK-BE-01"
+      ]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-04"
+      ],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-02",
+        "US-04-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-05",
+      "type": "user-story",
+      "sourceUC": [],
+      "detailFile": "user-stories/US-05.md",
+      "taskIds": [
+        "US-05-TASK-INFRA-01",
+        "US-05-TASK-TEST-01"
+      ]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Recompute the Gate 1 docs digest from split sources, in-memory",
+      "outcome": "pm-phase2.js gains reqIndexPath/specIndexPath local consts (hasReq/hasSpec-detected, falling back to the legacy monolithic paths); the Gate 1 digest re-check recomputes currentDigest from in-memory req-assembler.js/tech-spec-assembler.js subprocess output instead of c.read(file('Requirements.md'))/c.read(file('Tech-Spec.md'))",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-02"
+      ],
+      "estimate": {
+        "agentMinutes": 15,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase2",
+        "subject": "recompute Gate 1 docs digest from split sources in-memory"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-BE-03": {
+      "title": "Redesign ac-task-matrix.js's output into a coverage-matrix/ subfolder (JSON+MD)",
+      "outcome": "ac-task-matrix.js's CLI requires a 5th featureDir argument and writes coverage-matrix/index.json (full AC<->Task<->Phase<->Tech-Spec-file relation data) and coverage-matrix/index.md (human-readable, with a Must-AC coverage summary and a link to index.json) under it, replacing the single {PREFIX}-AC-Task-Matrix.md file",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-03",
+        "AC-10"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "ac-task-matrix",
+        "subject": "write coverage-matrix/index.json+index.md under an explicit feature directory"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-03.md",
+      "status": "pending"
+    },
+    "US-01-TASK-BE-02": {
+      "title": "Repoint wb-skeleton-check.js/wb-validate.js/ac-task-matrix.js at split index paths",
+      "outcome": "pm-phase2.js's three c.command() calls to wb-skeleton-check.js, wb-validate.js, and ac-task-matrix.js receive reqIndexPath/specIndexPath instead of file('Requirements.md')/file('Tech-Spec.md'); the ac-task-matrix.js call also passes featureDir as its required 5th argument, and the surrounding activity wrapper/gate2_payload are updated for the new coverage-matrix/index.json+index.md output paths",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-03"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 24000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase2",
+        "subject": "repoint wb-skeleton-check/wb-validate/ac-task-matrix at split index paths"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-02": {
+      "title": "Cover ac-task-matrix.js's coverage-matrix/ JSON+MD output",
+      "outcome": "tests/ac-task-matrix.test.js asserts the CLI writes coverage-matrix/index.json+index.md under the given featureDir (creating the subfolder if needed), that index.json matches buildMatrixJson()'s own shape, that index.md contains the Must-AC coverage summary and a link to index.json, and that omitting featureDir exits 1 with a usage message",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-03",
+        "AC-10"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "ac-task-matrix",
+        "subject": "cover the coverage-matrix/ JSON+MD output"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-02.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Cover digest parity, repointed call sites, and the legacy fallback",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests asserting: (a) the in-memory digest matches pm-phase1.js's own digest for an unchanged real-split fixture, (b) wb-skeleton-check.js/wb-validate.js receive reqIndexPath for a real-split fixture and ac-task-matrix.js receives reqIndexPath/specIndexPath/featureDir with gate2_payload exposing the new coverage-matrix paths, (c) all of the above fall back to the legacy monolithic paths for a feature fixture with no req//spec/ directories",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-02",
+        "AC-03",
+        "AC-07"
+      ],
+      "estimate": {
+        "agentMinutes": 24,
+        "tokens": 30000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase2",
+        "subject": "cover digest parity, repointed call sites, and legacy fallback"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Read req/index.md in the semantic work-breakdown validator",
+      "outcome": "gaia-validate-work-breakdown-semantic.md's Step 2 reads req/index.md (falling back to {PREFIX}-Requirements.md for a legacy feature); pm-phase2.js's dispatch call's prompt second line changes from file('Requirements.md') to reqIndexPath",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-04"
+      ],
+      "estimate": {
+        "agentMinutes": 12,
+        "tokens": 16000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase2",
+        "subject": "read req/index.md in the semantic work-breakdown validator"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Cover the semantic validator split-source prompt path",
+      "outcome": "tests/integration/workflow-runtime.test.js asserts the gaia.agent.planner.validate-work-breakdown mock dispatch receives reqIndexPath for a real-split fixture and the legacy path for a legacy fixture",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-04",
+        "AC-07"
+      ],
+      "estimate": {
+        "agentMinutes": 14,
+        "tokens": 18000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase2",
+        "subject": "cover the semantic validator split-source prompt path"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Generate the Work Breakdown skeleton from split req//spec/ sources with targeted drilldown",
+      "outcome": "gaia-generate-work-breakdown.md's Step 1 reads req/index.md+spec/index.md first for a real-split feature (falling back to the two monolithic files for a legacy feature), drilling into req/use-cases/*.md/spec/components/*.md only as needed via its existing Read/Glob/Grep tools; steps 2 onward are unchanged",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-05"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 24000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "gaia-generate-work-breakdown",
+        "subject": "read split req/spec index files with targeted per-item drilldown"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-01": {
+      "title": "Compute a per-task Tech-Spec excerpt from AC-matched components",
+      "outcome": "pm-phase2.js gains a local parseComponentsTableLocal(specIndexContent) + buildTaskTechSpecExcerpt(components, task, specDir) pair, wired into the per-task dispatch loop in place of c.read(file('Tech-Spec.md')); a task whose acceptanceCriteria matches a component's Addresses column receives only that component's body, with a full-Components-table fallback when nothing matches",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-06"
+      ],
+      "estimate": {
+        "agentMinutes": 20,
+        "tokens": 28000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase2",
+        "subject": "compute a per-task Tech-Spec excerpt from AC-matched components"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-02": {
+      "title": "Describe the AC-matched Tech-Spec excerpt contract in the per-task agent",
+      "outcome": "gaia-generate-work-breakdown-task.md's Input §2 wording changes from \"the relevant Tech-Spec excerpt for this task's domain\" to naming the actual Addresses-column matching mechanism and documenting the full-Components-table fallback case",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-04-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-06"
+      ],
+      "estimate": {
+        "agentMinutes": 10,
+        "tokens": 12000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "docs",
+        "scope": "gaia-generate-work-breakdown-task",
+        "subject": "describe the AC-matched Tech-Spec excerpt contract"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Cover matched and fallback per-task Tech-Spec excerpts",
+      "outcome": "tests/integration/workflow-runtime.test.js asserts a task whose acceptanceCriteria matches exactly one component's Addresses column receives only that component's body, and a task matching no component receives the full Components table",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-06",
+        "AC-07"
+      ],
+      "estimate": {
+        "agentMinutes": 20,
+        "tokens": 26000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase2",
+        "subject": "cover matched and fallback per-task Tech-Spec excerpts"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-05-TASK-INFRA-01": {
+      "title": "Remove the now-dead bridge-requirements-tech-spec step",
+      "outcome": "pm-phase2.js's bridge-requirements-tech-spec activity (and the automatic file('Requirements.md')/file('Tech-Spec.md') writes it performed) is deleted entirely; no call site in this file depends on an assembled monolithic file existing on disk for a real-split feature",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02",
+        "US-02-TASK-BE-01",
+        "US-03-TASK-BE-01",
+        "US-04-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-01"
+      ],
+      "estimate": {
+        "agentMinutes": 10,
+        "tokens": 12000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "refactor",
+        "scope": "pm-phase2",
+        "subject": "remove the now-dead bridge-requirements-tech-spec step"
+      },
+      "detailFile": "tasks/US-05-TASK-INFRA-01.md",
+      "status": "pending"
+    },
+    "US-05-TASK-TEST-01": {
+      "title": "Cover bridge-step removal and run the full regression suite",
+      "outcome": "tests/integration/workflow-runtime.test.js asserts 'bridge-requirements-tech-spec' no longer appears in c.tokenLedger's activity list and that no {PREFIX}-Requirements.md/{PREFIX}-Tech-Spec.md file is written for a real-split fixture; full npm test suite passes",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-05-TASK-INFRA-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-08",
+        "AC-09"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase2",
+        "subject": "cover bridge-step removal and run the full regression suite"
+      },
+      "detailFile": "tasks/US-05-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}

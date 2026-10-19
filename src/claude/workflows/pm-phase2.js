@@ -164,10 +164,81 @@ function computeDependsOnPhases(skeleton, phaseId, taskIdToPhase) {
   return [...deps]
 }
 
+// FTR-026: local re-implementation of tech-spec-assembler.js's findSectionRange/parseTableRows
+// (from req-assembler.js)/findSubsectionRange/parseComponentsTable — duplicated, not imported,
+// same "sandboxed runtime has no `require`" reason as the template-engine primitives above.
+// Keep in sync with tech-spec-assembler.js if spec/index.md's Section 9 table shape ever changes.
+function _findSectionRange(content, sectionNumber) {
+  const lines = content.split('\n')
+  let start = -1, end = lines.length
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^## (\d+)\.\s/)
+    if (!m) continue
+    const n = Number(m[1])
+    if (n === sectionNumber) start = i
+    else if (start !== -1 && n > sectionNumber) { end = i; break }
+  }
+  if (start === -1) throw new Error(`missing section ${sectionNumber}`)
+  return { start, end, lines }
+}
+function _parseTableRows(lines, start, end) {
+  const tableLines = lines.slice(start, end).filter(l => l.trim().startsWith('|'))
+  if (tableLines.length < 2) return []
+  return tableLines.slice(2).map(line =>
+    line.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1))
+}
+function _findSubsectionRange(lines, start, end, heading) {
+  let subStart = -1
+  for (let i = start; i < end; i++) {
+    if (lines[i].trim() === `### ${heading}`) { subStart = i; break }
+  }
+  if (subStart === -1) return null
+  let subEnd = end
+  for (let i = subStart + 1; i < end; i++) {
+    if (/^#{2,3}\s/.test(lines[i])) { subEnd = i; break }
+  }
+  return { start: subStart, end: subEnd }
+}
+function parseComponentsTableLocal(specIndexContent) {
+  const { start, end, lines } = _findSectionRange(specIndexContent, 9)
+  const entries = []
+  for (const [heading, changeType] of [['New files', 'New'], ['Modified files', 'Modified']]) {
+    const sub = _findSubsectionRange(lines, start, end, heading)
+    if (!sub) continue
+    for (const cells of _parseTableRows(lines, sub.start, sub.end)) {
+      const [filePath, purposeOrChange, addresses, domain, specLink] = cells
+      const m = specLink && specLink.match(/\(components\/([^)]+)\)/)
+      if (!m) throw new Error(`malformed Spec column for "${filePath}" in spec/index.md`)
+      entries.push({ filePath, purposeOrChange, changeType, domain, addresses, fileSlug: m[1] })
+    }
+  }
+  return entries
+}
+
+// Matches a task's own acceptanceCriteria against each component's Addresses column (the same
+// relation spec/index.md's own Section 9 table already expresses) to give the per-task worker
+// only the Tech-Spec content relevant to its own task, instead of the entire assembled spec —
+// the single largest structural token cost this feature removes. Falls back to the full
+// Components table (never zero content) when nothing matches, e.g. a purely organizational task.
+function buildTaskTechSpecExcerpt(components, task, specDir, specIndexContent) {
+  const acSet = new Set(task.acceptanceCriteria || [])
+  const relevant = components.filter(comp =>
+    (comp.addresses || '').split(',').map(s => s.trim()).some(acId => acSet.has(acId)))
+  if (relevant.length === 0) {
+    return "_No component's Addresses column cites this task's Acceptance Criteria — full " +
+      'Components table below._\n\n' + specIndexContent
+  }
+  return relevant.map(comp => {
+    const body = c.read(`${specDir}/components/${comp.fileSlug}`)
+    return `### ${comp.filePath}\n\n${body}`
+  }).join('\n\n')
+}
+
 // Compact prompt for the per-task detail-generation worker: this task's own skeleton entry,
 // the full skeleton's sibling task list (id + title + outcome only, for duplicate-
-// implementation awareness), and the Tech-Spec text (the per-task agent further narrows its
-// own Read/Grep use as needed — this call does not pre-slice the Tech-Spec by domain).
+// implementation awareness), and the Tech-Spec excerpt (FTR-026: already pre-sliced to this
+// task's own relevant component(s) by buildTaskTechSpecExcerpt, or the full legacy Tech-Spec
+// text for a feature with no spec/ directory).
 function buildTaskPrompt(index, taskId, techSpecText) {
   const task = index.tasks[taskId]
   const siblingList = Object.entries(index.tasks)
@@ -184,32 +255,19 @@ const { featurePath, featureDir, prefix } = c.feature(args[0])
 return c.run(meta.name, featureDir, prefix, async () => {
   const file = suffix => `${featureDir}/${prefix}-${suffix}`
 
-  // FTR-025: pm-phase1.js no longer writes the assembled Requirements/Tech-Spec files — this
-  // phase's own unmodified internals (the Gate 1 digest re-check right below, wb-skeleton-
-  // check.js, wb-validate.js, the semantic validator prompt, ac-task-matrix.js, and
-  // gaia-generate-work-breakdown, which hard-aborts without these files) still need them on
-  // disk. Transparently bridge the gap: assemble fresh from req/+spec/ every run (same two
-  // subprocess calls pm-phase1.js used to make, relocated here), before anything below reads
-  // them. A legacy feature (monolithic files only, no req/spec/ directories — generated before
-  // this feature existed) is left untouched: nothing to assemble, no error.
-  await c.activity('bridge-requirements-tech-spec', async () => {
-    const reqDir = `${featureDir}/req`, specDir = `${featureDir}/spec`
-    // c.exists() only checks isFile() — never true for a directory — so this checks each
-    // split's own index.md (a real file) rather than the directory itself.
-    const hasReq = c.exists(`${reqDir}/index.md`), hasSpec = c.exists(`${specDir}/index.md`)
-    if (!hasReq && !hasSpec) return { bridged: false, reason: 'legacy (no split sources)' }
-    if (hasReq) {
-      const assembledRequirements = c.command(['run-asset', 'scripts/req-assembler.js',
-        '--project', c.root, '--', reqDir]).stdout
-      c.writeOutput(file('Requirements.md'), assembledRequirements)
-    }
-    if (hasSpec) {
-      const assembledTechSpec = c.command(['run-asset', 'scripts/tech-spec-assembler.js',
-        '--project', c.root, '--', specDir]).stdout
-      c.writeOutput(file('Tech-Spec.md'), assembledTechSpec)
-    }
-    return { bridged: true }
-  })
+  // FTR-026: pm-phase2.js is now split-source-native itself — every call site below reads
+  // req/index.md/spec/index.md directly, in-memory assembly feeds only the Gate 1 digest
+  // re-check, and nothing here writes an assembled monolithic file to disk (the
+  // bridge-requirements-tech-spec activity FTR-025 added as a transitional shim is gone; see
+  // git history for FTR-025's original version of this block). A legacy feature (monolithic
+  // files only, no req/spec/ directories) falls back to reading those files directly at every
+  // site below, unchanged from pre-FTR-026 behavior.
+  const reqDir = `${featureDir}/req`, specDir = `${featureDir}/spec`
+  // c.exists() only checks isFile() — never true for a directory — so this checks each split's
+  // own index.md (a real file) rather than the directory itself.
+  const hasReq = c.exists(`${reqDir}/index.md`), hasSpec = c.exists(`${specDir}/index.md`)
+  const reqIndexPath = hasReq ? `${reqDir}/index.md` : file('Requirements.md')
+  const specIndexPath = hasSpec ? `${specDir}/index.md` : file('Tech-Spec.md')
 
   const approvals = c.read(file('Approvals.md'))
   const gate = approvals.match(/^## Gate 1\b[^\n]*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)
@@ -225,7 +283,16 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // re-approved, not silently carried forward on stale consent.
   const digestMatch = gate[1].match(/\*\*Docs Digest:\*\*\s*`([^`]+)`/)
   if (digestMatch) {
-    const currentDigest = c.hash(c.read(file('Requirements.md')) + '\u0000' + c.read(file('Tech-Spec.md')))
+    // FTR-026: recomputed in-memory from the split sources (same req-assembler.js/
+    // tech-spec-assembler.js subprocess calls pm-phase1.js already makes for its own
+    // docsDigest) instead of reading an assembled file from disk — never written here.
+    const assembledRequirements = hasReq
+      ? c.command(['run-asset', 'scripts/req-assembler.js', '--project', c.root, '--', reqDir]).stdout
+      : c.read(file('Requirements.md'))
+    const assembledTechSpec = hasSpec
+      ? c.command(['run-asset', 'scripts/tech-spec-assembler.js', '--project', c.root, '--', specDir]).stdout
+      : c.read(file('Tech-Spec.md'))
+    const currentDigest = c.hash(assembledRequirements + '\u0000' + assembledTechSpec)
     if (digestMatch[1] !== currentDigest) {
       throw new Error('Gate 1 approval is stale: Requirements/Tech-Spec content no longer matches what was approved (docs digest mismatch) — re-approve Gate 1 before proceeding')
     }
@@ -259,7 +326,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // wb-validate.js now imports — run via subprocess since this runtime has no `require`)
   const skeletonCheck = await c.activity('wb-skeleton-check', async () => {
     const res = c.command(['run-asset', 'scripts/wb-skeleton-check.js', '--project', c.root,
-      '--', indexPath, file('Requirements.md')], [0, 1])
+      '--', indexPath, reqIndexPath], [0, 1])
     const parsed = JSON.parse(res.stdout)
     if (typeof parsed.valid !== 'boolean' || !Array.isArray(parsed.errors) ||
         (res.exitCode === 0) !== parsed.valid) throw new Error('Invalid skeleton-check result')
@@ -268,13 +335,20 @@ return c.run(meta.name, featureDir, prefix, async () => {
   })
 
   // 3. Per-task generation, resume-by-status, sequential
+  // FTR-026: each task's own worker call now receives only the Tech-Spec content relevant to its
+  // own Acceptance Criteria, not the entire assembled spec — computed once, before the loop, by
+  // matching each task's acceptanceCriteria against spec/index.md's own Addresses column.
+  const components = hasSpec ? parseComponentsTableLocal(c.read(specIndexPath)) : []
   for (const phase of index.phases) {
     for (const taskId of phase.taskIds) {
       const task = index.tasks[taskId]
       const detailPath = `${wbsDir}/${task.detailFile}`
       if (task.status === 'generated' && c.exists(detailPath)) continue // resume: skip, no dispatch
+      const techSpecExcerpt = hasSpec
+        ? buildTaskTechSpecExcerpt(components, task, specDir, c.read(specIndexPath))
+        : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text
       const detail = await c.worker('gaia.agent.planner.work-breakdown-task',
-        buildTaskPrompt(index, taskId, c.read(file('Tech-Spec.md'))), { label: `work-breakdown-task:${taskId}` })
+        buildTaskPrompt(index, taskId, techSpecExcerpt), { label: `work-breakdown-task:${taskId}` })
       c.writeOutput(detailPath, detail)
       task.status = 'generated'
       c.writeOutput(indexPath, JSON.stringify(index, null, 2)) // persist status after each task
@@ -285,7 +359,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // existing pipeline, unchanged past this point except the path passed in
   const report = await c.activity('wb-validate', async () => {
     const res = c.command(['run-asset', 'scripts/wb-validate.js', '--project', c.root,
-      '--', wbsDir, file('Requirements.md')], [0, 1])
+      '--', wbsDir, reqIndexPath], [0, 1])
     const parsed = JSON.parse(res.stdout)
     if (typeof parsed.valid !== 'boolean' || !Array.isArray(parsed.errors) ||
         !Array.isArray(parsed.warnings) || (res.exitCode === 0) !== parsed.valid) throw new Error('Invalid validator result')
@@ -293,7 +367,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return parsed
   })
   const semantic = await c.worker('gaia.agent.planner.validate-work-breakdown',
-    `${wbsDir}\n${file('Requirements.md')}`, { schema: {
+    `${wbsDir}\n${reqIndexPath}`, { schema: {
       type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array' } }, required: ['valid', 'findings'],
     } })
   if (!semantic.valid || semantic.findings.some(f => f.blocking)) throw new Error('Work breakdown semantic validation failed')
@@ -307,12 +381,17 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const acTaskMatrix = await c.activity('ac-task-matrix', async () => {
     // FTR-023: ac-task-matrix.js's CLI gained a 3rd positional argument (Tech-Spec path) to
     // render the "Addressed by Tech-Spec File(s)" column.
+    // FTR-026: gained a required 5th (featureDir) argument; output moved from one loose
+    // {PREFIX}-AC-Task-Matrix.md file into a coverage-matrix/ subfolder as a JSON+MD pair.
     const result = c.command(['run-asset', 'scripts/ac-task-matrix.js', '--project', c.root,
-      '--', wbsDir, file('Requirements.md'), file('Tech-Spec.md'), prefix])
-    const matrixPath = file('AC-Task-Matrix.md')
-    if (!c.exists(matrixPath)) throw new Error('AC-Task matrix output missing')
-    c.read(matrixPath) // never trust an unread write
-    return { ...result, matrixPath }
+      '--', wbsDir, reqIndexPath, specIndexPath, prefix, featureDir])
+    const matrixJsonPath = `${featureDir}/coverage-matrix/index.json`
+    const matrixMdPath = `${featureDir}/coverage-matrix/index.md`
+    if (!c.exists(matrixJsonPath)) throw new Error('AC-Task matrix JSON output missing')
+    if (!c.exists(matrixMdPath)) throw new Error('AC-Task matrix MD output missing')
+    c.read(matrixJsonPath) // never trust an unread write
+    c.read(matrixMdPath)
+    return { ...result, matrixJsonPath, matrixMdPath }
   })
   // Assembled structure for c.estimates()'s metrics — via wbs-assembler.js's own CLI mode
   // (subprocess), since this runtime cannot `require` it in-process either.
@@ -326,7 +405,8 @@ return c.run(meta.name, featureDir, prefix, async () => {
       js_validator_report: report, js_validator_failed: false,
       semantic_validator_result: semantic, semantic_validator_failed: false,
       gate2_blocked: false,
-      ac_task_matrix_path: acTaskMatrix.matrixPath,
+      ac_task_matrix_json_path: acTaskMatrix.matrixJsonPath,
+      ac_task_matrix_md_path: acTaskMatrix.matrixMdPath,
       duration_bands: report.durationBands, domain_distribution: report.domainDistribution,
       warning_band_tasks: report.warnings.filter(w => w.category === 'duration_warning').map(w => ({ taskId: w.taskId, agentMinutes: w.details?.agentMinutes })),
       split_required_tasks: [], must_ac_uncovered: [], phase_unschedulable: [],
