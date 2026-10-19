@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.19.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.18.0...v0.19.0) (2026-10-19)
+
+
+### Features
+
+* make the Work Breakdown pipeline split-source-native (FTR-026) ([9d08a17](https://github.com/dtlab-tech/ai-toolkit/commit/9d08a1743e199534753b6c6d47b855ec7953f032))
+* **pm-phase2, ac-task-matrix:** make the Work Breakdown pipeline split-source-native (FTR-026) ([067a8e3](https://github.com/dtlab-tech/ai-toolkit/commit/067a8e369f8a5db72678670bebb62c91c93303d1))
+
 ## [0.18.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.5...v0.18.0) (2026-10-19)
 
 
