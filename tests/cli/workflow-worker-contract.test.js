@@ -100,6 +100,72 @@ test('a JSON output with no recoverable JSON document is written through unchang
   expect(fs.readFileSync(dest, 'utf8')).toBe('I need more information before I can proceed.');
 });
 
+// Regression tests for a real production bug: a plain-text (non-schema) component-detail worker
+// wrapped its entire deliverable in conversational prose + an outer ```markdown fence. Its own
+// real "## Change"/"## Tests" headings landed inside that fence and were (correctly) treated as
+// non-headings by tech-spec-assembler.js's fence-aware parser, so the written file's real content
+// was unreachable — surfacing only much later, during final Tech-Spec assembly, as an opaque
+// "component file is missing its ## Change section" error naming no file at all.
+describe('extractMarkdownDocument (non-schema plain-text worker payload)', () => {
+  test('a whole response wrapped in conversational prose + an outer fence is unwrapped to the real document', async () => {
+    const wrapped = 'Perfect! Now I have enough context. Let me create the technical design.\n\n'
+      + '```markdown\n# src/demo/app/src/locales/en.json — New\n\n## Change\n\nExample change text.\n\n'
+      + '## Tests\n\nExample tests text.\n```';
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: wrapped }) });
+    const detail = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    expect(detail).toContain('# src/demo/app/src/locales/en.json — New');
+    expect(detail).toContain('## Change');
+    expect(detail).toContain('## Tests');
+    expect(detail).not.toContain('Perfect! Now I have enough context');
+    expect(detail).not.toMatch(/^```/);
+    expect(detail.trim()).not.toMatch(/```\s*$/);
+  });
+
+  test('a nested fenced example inside the real content (e.g. a Data Model section) survives the unwrap intact', async () => {
+    // The non-greedy "first ``` ... last ```" regex approach would wrongly stop at this NESTED
+    // closing fence instead of the real outer one — exactly why the fix is line-range based
+    // (matching the last line's close back to the first same-length open), not regex-based.
+    const wrapped = 'Let me write this component.\n\n```markdown\n# src/x.json — New\n\n## Change\n\nAdds config.\n\n'
+      + '## Data Model\n\n```json\n{\n  "key": "value"\n}\n```\n\nMirrors the shape above.\n\n'
+      + '## Tests\n\nAssert the JSON parses.\n```';
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: wrapped }) });
+    const detail = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    expect(detail).toContain('## Data Model');
+    expect(detail).toContain('"key": "value"');
+    expect(detail).toContain('Mirrors the shape above.');
+    expect(detail).toContain('## Tests');
+    expect(detail).not.toContain('Let me write this component.');
+  });
+
+  test('a well-formed document ending in its own real fenced code example is left completely untouched', async () => {
+    // The false-positive this design must avoid: a document whose real headings are already
+    // unfenced, that simply happens to end with a legitimate trailing fenced Tests example as its
+    // own last line — must NOT be mistaken for a whole-response wrap and have that fence stripped.
+    const wellFormed = '# src/x.js — Modified\n\n## Change\n\nReal change.\n\n## Tests\n\n'
+      + 'Run:\n\n```\nnpm test -- x.test.js\n```';
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: wellFormed }) });
+    const detail = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    expect(detail).toBe(wellFormed);
+  });
+
+  test('a response with no recoverable heading at all is written through unchanged', async () => {
+    const noHeading = 'I need more information before I can design this component.';
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: noHeading }) });
+    const detail = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    expect(detail).toBe(noHeading);
+  });
+
+  test('the fix applies identically when the caller declares a worker output (not just the bare return value)', async () => {
+    const dest = path.join(f.dir, 'component.md');
+    const wrapped = 'Perfect. Here is the design.\n\n```markdown\n# src/y.js — New\n\n## Change\n\nx.\n\n## Tests\n\ny.\n```';
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: wrapped }) });
+    await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', { outputs: [{ path: dest }] }));
+    const written = fs.readFileSync(dest, 'utf8');
+    expect(written).toContain('# src/y.js — New');
+    expect(written).not.toContain('Perfect. Here is the design.');
+  });
+});
+
 test('a declared output cannot authorize a file outside the project', async () => {
   const dispatch = jest.fn();
   const c = createControl({ ...f.options, dispatch });

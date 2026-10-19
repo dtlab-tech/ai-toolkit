@@ -148,7 +148,18 @@ function loadTechSpec(inputPath) {
   for (const c of components) {
     const compPath = path.join(inputPath, 'components', c.fileSlug)
     if (!fs.existsSync(compPath)) throw new AssemblyError(`component "${c.filePath}" has no detail file at ${compPath}`)
-    detailByPath[c.filePath] = parseComponentDetail(fs.readFileSync(compPath, 'utf8'))
+    try {
+      detailByPath[c.filePath] = parseComponentDetail(fs.readFileSync(compPath, 'utf8'))
+    } catch (err) {
+      // parseComponentDetail's own error names only the symptom ("missing its ## Change
+      // section"), never which file — a real diagnosability bug, found when exactly this error
+      // surfaced during final assembly with nothing identifying which of ~60 component files was
+      // actually malformed (the real culprit here was a whole-response-wrapped-in-a-fence worker
+      // reply — see lib/workflow-control.js's extractMarkdownDocument for the fix to that other
+      // half of this same incident). Re-thrown with the file identified, never silently swallowed.
+      if (err instanceof AssemblyError) throw new AssemblyError(`${err.message} (component "${c.filePath}" at ${compPath})`)
+      throw err
+    }
   }
 
   let doc = rewriteSection9(indexContent, components)
