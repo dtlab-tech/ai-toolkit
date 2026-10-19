@@ -1,4 +1,25 @@
 ## 0.1.4 (2026-07-21)
+## [0.18.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.5...v0.18.0) (2026-10-19)
+
+
+### Features
+
+* **planning-pipeline:** split Work Breakdown and Requirements generation into skeleton+per-item passes ([f7e7b66](https://github.com/dtlab-tech/ai-toolkit/commit/f7e7b66efe94a860bbd867402a250c5d92d56f4a))
+* **pm-phase1/pm-phase2:** split-only document generation with on-demand assembly ([40d8700](https://github.com/dtlab-tech/ai-toolkit/commit/40d87007d2125789c7943348ee4000467bffc882))
+* **pm-phase1:** split Tech-Spec generation into skeleton+per-component passes ([a42a83c](https://github.com/dtlab-tech/ai-toolkit/commit/a42a83c9413275888c7e0fa5bfae80a165da3d71))
+* **pm-phase1:** tag Tech-Spec File Inventory with AC IDs and extend the traceability matrix ([4a15510](https://github.com/dtlab-tech/ai-toolkit/commit/4a15510c4d2da110445976d1b9586b6d45252c6f))
+* **pm-phase2:** render an AC-to-Task traceability matrix at Gate 2 ([d975942](https://github.com/dtlab-tech/ai-toolkit/commit/d9759423771454a8d677f747bc0d4fc1e00de375))
+* **templates:** move the FTR-020 doc templates into the toolkit and make generation use them ([de7ffca](https://github.com/dtlab-tech/ai-toolkit/commit/de7ffca19b42ae324d8c8f8460cc9aeda23d8298))
+* traceability matrix, template relocation, split-only doc generation (FTR-025) ([bf17caa](https://github.com/dtlab-tech/ai-toolkit/commit/bf17caa1517fa28a4f28b3efb44f7a327661e184))
+
+
+### Bug Fixes
+
+* **pm-phase1:** host-compute each use case's Related Business Rules/Acceptance Criteria ([507ecfa](https://github.com/dtlab-tech/ai-toolkit/commit/507ecfa94cb8094049a3543dbf44d47c2ea38f80))
+* **tech-spec-assembler:** make the component Change/Tests heading scan fence-aware ([90af9ca](https://github.com/dtlab-tech/ai-toolkit/commit/90af9ca0585d3280ee12a97d3f745bae7de5fe69))
+* **wb-graph-checks:** scope AC-task validation by a phase's own sourceUC, not its ID ([fab14cb](https://github.com/dtlab-tech/ai-toolkit/commit/fab14cbcb2f4fc180e5b2bb234dad25a5d7a2b61))
+* **wbs:** wire the FTR-020 phase-detail template into real WB generation; fix a second sourceUC-drop ([54ed68e](https://github.com/dtlab-tech/ai-toolkit/commit/54ed68e5921e271a8b6ba4c54b0db748303648b1))
+
 ## [0.17.5](https://github.com/dtlab-tech/ai-toolkit/compare/v0.17.4...v0.17.5) (2026-10-13)
 
 
