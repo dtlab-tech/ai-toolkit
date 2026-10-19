@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.19.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.19.1...v0.19.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **workflow-control, tech-spec-assembler:** unwrap whole response fences in Markdown documents to prevent content loss ([fe88582](https://github.com/dtlab-tech/ai-toolkit/commit/fe885821bb7b813237a1d53ed827c70e09b6c9d0))
+* **workflow-control, tech-spec-assembler:** unwrap whole response fences in Markdown documents to prevent content loss ([358e484](https://github.com/dtlab-tech/ai-toolkit/commit/358e4847fe74c314c3c1158dbeda08669530c1f8))
+
 ## [0.19.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.19.0...v0.19.1) (2026-10-19)
 
 
