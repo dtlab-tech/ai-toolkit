@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "feature": "FTR-020",
+  "generatedFrom": "wbs",
+  "digestAlgorithmVersion": 1,
+  "sourceDigest": "sha256:83faa4e68c8d4a1f5ed4d1bdef2605ee5934541e779ccdb42f2a7d988a2cbb7e",
+  "phaseWaves": [
+    ["INFRA", "US-01", "US-03"],
+    ["US-02", "US-05"],
+    ["US-04"]
+  ],
+  "phaseGraph": {
+    "INFRA": [],
+    "US-01": [],
+    "US-02": ["INFRA"],
+    "US-03": [],
+    "US-04": ["INFRA", "US-01", "US-02", "US-03", "US-05"],
+    "US-05": ["INFRA"]
+  },
+  "phases": [
+    { "id": "INFRA", "type": "infrastructure", "taskIds": ["INFRA-TASK-BE-01", "INFRA-TASK-TEST-01", "INFRA-TASK-BE-02", "INFRA-TASK-TEST-02"], "checksum": "sha256:bdc2936d6496b936268f10588617bdf53e62973bdec0cfe3ff9150a9873e1bcc" },
+    { "id": "US-01", "type": "user-story", "taskIds": ["US-01-TASK-INFRA-01"], "checksum": "sha256:cd546855cd6d2cffe0f8e45bbd99f35d92e55ebfc00ea775981b4e54c475e22c" },
+    { "id": "US-02", "type": "user-story", "taskIds": ["US-02-TASK-BE-01", "US-02-TASK-BE-02", "US-02-TASK-TEST-01"], "checksum": "sha256:509bbbb65e0542f7da95e536ffbb3d3fa14b8793a614b1d1e32d9bb664dd9cbc" },
+    { "id": "US-03", "type": "user-story", "taskIds": ["US-03-TASK-INFRA-01"], "checksum": "sha256:008f9afdafff3148b39d1f96a85219e3ee73a0c556d8837bff1f7d45ad809682" },
+    { "id": "US-04", "type": "user-story", "taskIds": ["US-04-TASK-BE-01", "US-04-TASK-BE-02", "US-04-TASK-BE-03", "US-04-TASK-BE-04", "US-04-TASK-TEST-01"], "checksum": "sha256:8c50aede5a74f11ca6ad028d9090572ecdd089f63f78ba2425701878aff50091" },
+    { "id": "US-05", "type": "user-story", "taskIds": ["US-05-TASK-BE-01", "US-05-TASK-TEST-01"], "checksum": "sha256:0e745d2adec255f491785041d94e5bbe5af14022d5ebac213a77d19b597b839e" }
+  ],
+  "readyQueue": [
+    { "sequence": 1, "id": "INFRA-TASK-BE-01", "phaseId": "INFRA", "domain": "BE", "agentType": "developer-backend", "dependsOn": [], "detailFile": "tasks/INFRA-TASK-BE-01.md", "checksum": "sha256:e540e8aaba19ac2dd4f3a5b9bfc14fd7147dfe9e6d307d268c6c0c7c1a99f294" },
+    { "sequence": 2, "id": "INFRA-TASK-TEST-01", "phaseId": "INFRA", "domain": "TEST", "agentType": "developer-testing", "dependsOn": ["INFRA-TASK-BE-01"], "detailFile": "tasks/INFRA-TASK-TEST-01.md", "checksum": "sha256:fa4d59bbb5f5e6bf9d912ee8be1ff8d54d858ba4325dbd249d9af8683a41302e" },
+    { "sequence": 3, "id": "INFRA-TASK-BE-02", "phaseId": "INFRA", "domain": "BE", "agentType": "developer-backend", "dependsOn": [], "detailFile": "tasks/INFRA-TASK-BE-02.md", "checksum": "sha256:f0fddb1cbce9349661a9447d8fd060e3f166d72f51c43781df764a062c63d752" },
+    { "sequence": 4, "id": "INFRA-TASK-TEST-02", "phaseId": "INFRA", "domain": "TEST", "agentType": "developer-testing", "dependsOn": ["INFRA-TASK-BE-02"], "detailFile": "tasks/INFRA-TASK-TEST-02.md", "checksum": "sha256:dfde187d480c5b173f03b8852a1613da325d29d6772aa960b7c10633dc58cdd6" },
+    { "sequence": 5, "id": "US-02-TASK-BE-01", "phaseId": "US-02", "domain": "BE", "agentType": "developer-backend", "dependsOn": ["INFRA-TASK-BE-01"], "detailFile": "tasks/US-02-TASK-BE-01.md", "checksum": "sha256:9776deac9f91374dab0473bc4df35678fd0604872bdb08ffc473b2fe28f009d0" },
+    { "sequence": 6, "id": "US-02-TASK-BE-02", "phaseId": "US-02", "domain": "BE", "agentType": "developer-backend", "dependsOn": ["INFRA-TASK-BE-02", "US-02-TASK-BE-01"], "detailFile": "tasks/US-02-TASK-BE-02.md", "checksum": "sha256:0fd5fefe3fc1b8d9037a152513c41e943eb47694f8080acd63cd996251983f34" },
+    { "sequence": 7, "id": "US-02-TASK-TEST-01", "phaseId": "US-02", "domain": "TEST", "agentType": "developer-testing", "dependsOn": ["US-02-TASK-BE-01", "US-02-TASK-BE-02"], "detailFile": "tasks/US-02-TASK-TEST-01.md", "checksum": "sha256:5d921b338402b1049d3e1b46c3b3a38744280ab907c6949e8f80ec72b1770d25" },
+    { "sequence": 8, "id": "US-05-TASK-BE-01", "phaseId": "US-05", "domain": "BE", "agentType": "developer-backend", "dependsOn": ["INFRA-TASK-BE-02"], "detailFile": "tasks/US-05-TASK-BE-01.md", "checksum": "sha256:2fd1cab29fb2c7b68f415111d2277c23781ba2e373e3a858e5b283ad060b01fe" },
+    { "sequence": 9, "id": "US-05-TASK-TEST-01", "phaseId": "US-05", "domain": "TEST", "agentType": "developer-testing", "dependsOn": ["US-05-TASK-BE-01"], "detailFile": "tasks/US-05-TASK-TEST-01.md", "checksum": "sha256:be1336d820d32a94691642b73194c80566699fc463115d26cf1ba78938da609a" },
+    { "sequence": 10, "id": "US-01-TASK-INFRA-01", "phaseId": "US-01", "domain": "INFRA", "agentType": "developer-backend", "dependsOn": [], "detailFile": "tasks/US-01-TASK-INFRA-01.md", "checksum": "sha256:f32f319ea5c95c70729212190e6453622b7ce261d9203ab30e3bc0134dc2a6ea" },
+    { "sequence": 11, "id": "US-03-TASK-INFRA-01", "phaseId": "US-03", "domain": "INFRA", "agentType": "developer-backend", "dependsOn": [], "detailFile": "tasks/US-03-TASK-INFRA-01.md", "checksum": "sha256:84ab33e25cd8ff5b222066c8462c37c8829156f1b07f7a0918b12b44a55cf307" },
+    { "sequence": 12, "id": "US-04-TASK-BE-01", "phaseId": "US-04", "domain": "BE", "agentType": "developer-backend", "dependsOn": ["US-01-TASK-INFRA-01", "INFRA-TASK-BE-02"], "detailFile": "tasks/US-04-TASK-BE-01.md", "checksum": "sha256:059dd26dadee52171b873ed01e7fe43b8802aa895ab4c6650f4fee00c67b3759" },
+    { "sequence": 13, "id": "US-04-TASK-BE-02", "phaseId": "US-04", "domain": "BE", "agentType": "developer-backend", "dependsOn": ["INFRA-TASK-BE-01", "US-04-TASK-BE-01"], "detailFile": "tasks/US-04-TASK-BE-02.md", "checksum": "sha256:6266cb8e59df3f73f8a5339089001594e907b7e41489b4c700b6c451d91cfdfe" },
+    { "sequence": 14, "id": "US-04-TASK-BE-03", "phaseId": "US-04", "domain": "BE", "agentType": "developer-backend", "dependsOn": ["US-03-TASK-INFRA-01", "US-04-TASK-BE-02"], "detailFile": "tasks/US-04-TASK-BE-03.md", "checksum": "sha256:a70601062c1589083419033364a697390293b2ef1a12a8cff28c110a3b230327" },
+    { "sequence": 15, "id": "US-04-TASK-BE-04", "phaseId": "US-04", "domain": "BE", "agentType": "developer-backend", "dependsOn": ["US-02-TASK-BE-02", "US-05-TASK-BE-01", "US-04-TASK-BE-03"], "detailFile": "tasks/US-04-TASK-BE-04.md", "checksum": "sha256:cddfbfc42b32035787f020464a7ab72d3d8e1ec9b07b6ae8f9bb468028c69d78" },
+    { "sequence": 16, "id": "US-04-TASK-TEST-01", "phaseId": "US-04", "domain": "TEST", "agentType": "developer-testing", "dependsOn": ["US-04-TASK-BE-04"], "detailFile": "tasks/US-04-TASK-TEST-01.md", "checksum": "sha256:0053a09acd4d44e0d72eebdc7f945f4b4312d9cf306c8b88a75a69cfe801c4b0" }
+  ]
+}

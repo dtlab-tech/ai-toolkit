@@ -1,0 +1,3 @@
+This directory is deliberately empty (no index.md) — used by tech-spec-assembler.test.js to
+assert the "missing spec/index.md" structured-error path. Keep this file so Git tracks the
+directory.

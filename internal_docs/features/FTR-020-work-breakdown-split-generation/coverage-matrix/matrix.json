@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "feature": "FTR-020",
+  "entries": [
+    {
+      "id": "AC-01",
+      "criterion": "Skeleton call produces wbs/index.json",
+      "priority": "Must",
+      "relatedUC": ["UC-01"],
+      "specComponents": ["gaia-generate-work-breakdown.md", "pm-phase2.md"],
+      "wbPhasesViaComponents": ["US-01", "US-04"],
+      "wbPhasesViaUC": ["US-01", "US-04"],
+      "gate1Covered": true,
+      "gate2Covered": true
+    },
+    {
+      "id": "AC-02",
+      "criterion": "One call dispatched per task after checks pass",
+      "priority": "Must",
+      "relatedUC": ["UC-02", "UC-03"],
+      "specComponents": ["wb-graph-checks.md", "gaia-generate-work-breakdown-task.md", "pm-phase2.md"],
+      "wbPhasesViaComponents": ["INFRA", "US-03", "US-04"],
+      "wbPhasesViaUC": ["US-03", "US-04"],
+      "gate1Covered": true,
+      "gate2Covered": true
+    },
+    {
+      "id": "AC-03",
+      "criterion": "Resume retries only the failed task",
+      "priority": "Must",
+      "relatedUC": ["UC-04"],
+      "specComponents": ["pm-phase2.md"],
+      "wbPhasesViaComponents": ["US-04"],
+      "wbPhasesViaUC": ["US-04"],
+      "gate1Covered": true,
+      "gate2Covered": true
+    },
+    {
+      "id": "AC-04",
+      "criterion": "wb-validate.js assembles unchanged (23 checks)",
+      "priority": "Must",
+      "relatedUC": ["UC-05"],
+      "specComponents": ["wb-validate.md", "wbs-assembler.md"],
+      "wbPhasesViaComponents": ["US-02", "INFRA"],
+      "wbPhasesViaUC": ["US-02", "US-05"],
+      "gate1Covered": true,
+      "gate2Covered": true
+    },
+    {
+      "id": "AC-05",
+      "criterion": "wb-render.js byte-identical output",
+      "priority": "Must",
+      "relatedUC": ["UC-05"],
+      "specComponents": ["wb-render.md", "wbs-assembler.md"],
+      "wbPhasesViaComponents": ["US-05", "INFRA"],
+      "wbPhasesViaUC": ["US-02", "US-05"],
+      "gate1Covered": true,
+      "gate2Covered": true
+    },
+    {
+      "id": "AC-06",
+      "criterion": "Legacy JSON loads unchanged",
+      "priority": "Must",
+      "relatedUC": ["UC-05"],
+      "specComponents": ["wbs-assembler.md"],
+      "wbPhasesViaComponents": ["INFRA"],
+      "wbPhasesViaUC": ["US-02", "US-05"],
+      "gate1Covered": true,
+      "gate2Covered": true
+    },
+    {
+      "id": "AC-07",
+      "criterion": "Structured error on missing/malformed file",
+      "priority": "Must",
+      "relatedUC": ["UC-05"],
+      "specComponents": ["wbs-assembler.md"],
+      "wbPhasesViaComponents": ["INFRA"],
+      "wbPhasesViaUC": ["US-02", "US-05"],
+      "gate1Covered": true,
+      "gate2Covered": true
+    },
+    {
+      "id": "AC-08",
+      "criterion": "plan.js/developer agents/worker() untouched",
+      "priority": "Must",
+      "relatedUC": ["All UCs"],
+      "specComponents": ["wb-graph-checks.md", "wb-validate.md", "wb-render.md", "wbs-assembler.md", "gaia-generate-work-breakdown.md", "gaia-generate-work-breakdown-task.md", "pm-phase2.md"],
+      "wbPhasesViaComponents": ["INFRA", "US-01", "US-02", "US-03", "US-04", "US-05"],
+      "wbPhasesViaUC": ["INFRA", "US-01", "US-02", "US-03", "US-04", "US-05"],
+      "gate1Covered": true,
+      "gate2Covered": true,
+      "gate2Kind": "verified-by-omission"
+    },
+    {
+      "id": "AC-09",
+      "criterion": "npm test passes (all suites)",
+      "priority": "Must",
+      "relatedUC": ["All UCs"],
+      "specComponents": ["wb-graph-checks.md", "wb-validate.md", "wb-render.md", "wbs-assembler.md", "gaia-generate-work-breakdown.md", "gaia-generate-work-breakdown-task.md", "pm-phase2.md"],
+      "wbPhasesViaComponents": ["INFRA", "US-01", "US-02", "US-03", "US-04", "US-05"],
+      "wbPhasesViaUC": ["INFRA", "US-01", "US-02", "US-03", "US-04", "US-05"],
+      "gate1Covered": true,
+      "gate2Covered": true,
+      "gate2Kind": "aggregate-across-test-tasks"
+    }
+  ]
+}

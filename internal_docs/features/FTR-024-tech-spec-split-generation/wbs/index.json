@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-024",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": ["UC-01"],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": ["US-01-TASK-INFRA-01"]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": ["UC-03"],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": ["US-03-TASK-INFRA-01"]
+    },
+    {
+      "id": "US-05",
+      "type": "user-story",
+      "sourceUC": ["UC-05"],
+      "detailFile": "user-stories/US-05.md",
+      "taskIds": ["US-05-TASK-BE-01", "US-05-TASK-TEST-01"]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": ["UC-01", "UC-02", "UC-03", "UC-04"],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": ["US-04-TASK-BE-01", "US-04-TASK-BE-02", "US-04-TASK-BE-03", "US-04-TASK-BE-04", "US-04-TASK-TEST-01"]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-INFRA-01": {
+      "title": "Repurpose gaia-generate-tech-spec.md to emit the skeleton only",
+      "outcome": "src/claude/agents/gaia-generate-tech-spec.md's Output Structure keeps Sections 1, 2, 6, 7, 8, 11, 12 verbatim; Section 9's two File Inventory tables gain a Domain column (BE|FE|DB|DevOps|INFRA|TEST) between Purpose-or-Change and Addresses, and a Spec column after Addresses; Sections 3, 4, 5, 10 are removed from this agent's own output; Process step updated to describe the reduced, skeleton-only scope",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-01"],
+      "estimate": { "agentMinutes": 16, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "repurpose gaia-generate-tech-spec.md to emit skeleton only" },
+      "detailFile": "tasks/US-01-TASK-INFRA-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-INFRA-01": {
+      "title": "Create gaia-generate-tech-spec-component.md agent and register it in the agent catalog",
+      "outcome": "src/claude/agents/gaia-generate-tech-spec-component.md exists (haiku, no Write tool) taking one component's index-table row plus the compact full component index plus the relevant Requirements/feature.md excerpt as input, returning that component's Change/Algorithm-or-Schema/Tests detail in the component-template.md shape; lib/agent-registry.js's CATALOG gains the matching gaia.agent.planner.tech-spec-component entry (the lesson from FTR-021/022: a new agent not registered here hard-fails the instant it is actually dispatched)",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-02"],
+      "estimate": { "agentMinutes": 16, "tokens": 22000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add gaia-generate-tech-spec-component.md per-component detail agent" },
+      "detailFile": "tasks/US-03-TASK-INFRA-01.md",
+      "status": "pending"
+    },
+    "US-05-TASK-BE-01": {
+      "title": "Create tech-spec-assembler.js",
+      "outcome": "src/claude/scripts/tech-spec-assembler.js exists exporting loadTechSpec(inputPath) (file input returns content unchanged; directory input reads spec/index.md, parses the Components table including its Domain/Spec columns, reads each component file, and reconstructs the 12-section document: Section 9 reduced back to 3 columns, Sections 3/4/5 populated per Domain routing under per-component subheadings, Section 10 built from every component's own Tests subsection), plus a require.main CLI entry point",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-04", "AC-06"],
+      "estimate": { "agentMinutes": 24, "tokens": 38000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add tech-spec-assembler.js with directory/legacy loader and domain-routed section rebuild" },
+      "detailFile": "tasks/US-05-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-05-TASK-TEST-01": {
+      "title": "Unit tests for tech-spec-assembler.js",
+      "outcome": "tests/tech-spec-assembler.test.js exists covering: a hand-built spec/ fixture with at least one BE, one FE, and one unclassified-domain component (asserting all 12 sections present, Section 9 reduced to 3 columns, Sections 3/4/5 populated per Domain routing, Section 10 containing every component's Tests subsection in order), the legacy monolithic-file path, missing index.md, missing a referenced component file, and an empty Components table",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-05-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-04", "AC-05", "AC-06", "AC-08"],
+      "estimate": { "agentMinutes": 20, "tokens": 30000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "add unit tests for tech-spec-assembler.js" },
+      "detailFile": "tasks/US-05-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-01": {
+      "title": "Implement skeleton-call step with fileSlug collision disambiguation in pm-phase1.js",
+      "outcome": "pm-phase1.js's new generateTechSpec(forceAll) dispatches gaia.agent.planner.tech-spec (no declared worker() output) only when spec/index.md is missing, stale relative to feature.md, or forceAll is set; the coordinator deterministically disambiguates any duplicate fileSlug across the skeleton's Components table (prepending path segments until unique) before writing spec/index.md via c.writeOutput",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-INFRA-01"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 18, "tokens": 28000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add skeleton-call step with fileSlug disambiguation to pm-phase1.js" },
+      "detailFile": "tasks/US-04-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-02": {
+      "title": "Move and repoint the structural pre-check at the Tech-Spec skeleton",
+      "outcome": "generateTechSpec() runs tech-spec-graph-checks.js (unmodified) via c.command(['run-asset', ...]) against spec/index.md immediately after the skeleton-call step and before any per-component dispatch; the existing tech-spec-ac-check activity block (FTR-023) is moved from its old post-generation position into this earlier, pre-dispatch position",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-04-TASK-BE-01"],
+      "acceptanceCriteria": [],
+      "estimate": { "agentMinutes": 14, "tokens": 20000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "repoint tech-spec-ac-check at the Tech-Spec skeleton, before per-component dispatch" },
+      "detailFile": "tasks/US-04-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-03": {
+      "title": "Implement per-component generation loop with resume-by-existence in pm-phase1.js",
+      "outcome": "generateTechSpec() parses spec/index.md's Components table, and for each row whose spec/components/{fileSlug} does not already exist (or unconditionally if the skeleton was just regenerated), dispatches gaia.agent.planner.tech-spec-component via buildComponentPrompt() and writes the response via c.writeOutput; rows whose file already exists (and the skeleton was not regenerated) are skipped without dispatch",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-03-TASK-INFRA-01", "US-04-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-03"],
+      "estimate": { "agentMinutes": 20, "tokens": 30000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add per-component generation loop with resume-by-existence to pm-phase1.js" },
+      "detailFile": "tasks/US-04-TASK-BE-03.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-04": {
+      "title": "Wire generateTechSpec() to assemble via tech-spec-assembler.js and replace the old techSpec() call sites",
+      "outcome": "generateTechSpec() calls tech-spec-assembler.js via c.command(['run-asset', ...]) against the spec/ directory and writes the assembled document to file('Tech-Spec') via c.writeOutput; the old techSpec = () => c.worker(specId, featurePath, { outputs: [...] }) binding is removed, and both its call sites (initial generation, needsTechSpecFix branch) now call generateTechSpec(force) / generateTechSpec(true) respectively, mirroring generateRequirements's exact pattern",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-05-TASK-BE-01", "US-04-TASK-BE-03"],
+      "acceptanceCriteria": ["AC-07"],
+      "estimate": { "agentMinutes": 14, "tokens": 20000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "wire pm-phase1.js Tech-Spec generation to assemble via tech-spec-assembler.js" },
+      "detailFile": "tasks/US-04-TASK-BE-04.md",
+      "status": "pending"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Integration tests: pm-phase1 Tech-Spec resume-by-existence, fileSlug collisions, and existing-suite regression",
+      "outcome": "tests/integration/workflow-runtime.test.js's shared Tech-Spec mock fixture is updated to the new skeleton+per-component contract and every existing Tech-Spec-related pm-phase1 test (truncation, needsTechSpecFix, tech-spec-ac-check dangling-reference rejection) passes against the new path; new tests assert resume-by-existence dispatches only missing components, and that two components with colliding basenames receive distinct, deterministically-disambiguated fileSlug values",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-04-TASK-BE-04"],
+      "acceptanceCriteria": ["AC-03", "AC-08"],
+      "estimate": { "agentMinutes": 22, "tokens": 32000 },
+      "outputCount": 1,
+      "groupingRationale": "Fixing the shared pm-phase1 mock fixtures (the fallout this exact wiring pattern caused twice before, in FTR-021 and FTR-023) and adding the two new resume/collision tests are inseparable: the new tests cannot run against the old fixture shape, and verifying the fixture fix means re-running the whole existing Tech-Spec-related suite, not a separable sub-task.",
+      "commit": { "type": "test", "subject": "add pm-phase1 tech-spec resume and fileSlug-collision integration tests" },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}

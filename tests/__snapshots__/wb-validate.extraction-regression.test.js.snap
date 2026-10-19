@@ -1,0 +1,317 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`wb-validate.js extraction regression — full report snapshot per fixture wb-invalid-bad-domain.json: exit code and report are stable: wb-invalid-bad-domain.json 1`] = `
+{
+  "exitCode": 1,
+  "report": {
+    "dependencies": {
+      "phaseCycles": [],
+      "phaseGraph": {
+        "INFRA": [],
+      },
+      "phaseUnschedulable": [],
+      "phaseWaves": [
+        [
+          "INFRA",
+        ],
+      ],
+      "taskCycles": [],
+      "taskGraph": {
+        "INFRA-TASK-INFRA-01": [],
+      },
+    },
+    "domainDistribution": {
+      "BE": 0,
+      "DB": 0,
+      "DevOps": 0,
+      "FE": 0,
+      "INFRA": 0,
+      "TEST": 0,
+    },
+    "durationBands": {
+      "above_target": 0,
+      "split_required": 0,
+      "target": 1,
+      "warning": 0,
+    },
+    "errors": [
+      {
+        "category": "invalid_domain",
+        "details": {
+          "domain": "BACKEND",
+          "taskId": "INFRA-TASK-INFRA-01",
+          "validDomains": [
+            "BE",
+            "FE",
+            "DB",
+            "DevOps",
+            "INFRA",
+            "TEST",
+          ],
+        },
+        "field": "domain",
+        "message": "Task "INFRA-TASK-INFRA-01" has invalid domain "BACKEND"; must be one of BE, FE, DB, DevOps, INFRA, TEST",
+        "severity": "error",
+        "taskId": "INFRA-TASK-INFRA-01",
+      },
+    ],
+    "schemaVersion": 2,
+    "taskCount": 1,
+    "valid": false,
+    "warnings": [],
+  },
+}
+`;
+
+exports[`wb-validate.js extraction regression — full report snapshot per fixture wb-invalid-cycle.json: exit code and report are stable: wb-invalid-cycle.json 1`] = `
+{
+  "exitCode": 1,
+  "report": {
+    "dependencies": {
+      "phaseCycles": [],
+      "phaseGraph": {
+        "INFRA": [],
+      },
+      "phaseUnschedulable": [],
+      "phaseWaves": [
+        [
+          "INFRA",
+        ],
+      ],
+      "taskCycles": [
+        [
+          "INFRA-TASK-INFRA-01",
+          "INFRA-TASK-INFRA-02",
+        ],
+      ],
+      "taskGraph": {
+        "INFRA-TASK-INFRA-01": [
+          "INFRA-TASK-INFRA-02",
+        ],
+        "INFRA-TASK-INFRA-02": [
+          "INFRA-TASK-INFRA-01",
+        ],
+      },
+    },
+    "domainDistribution": {
+      "BE": 0,
+      "DB": 0,
+      "DevOps": 0,
+      "FE": 0,
+      "INFRA": 2,
+      "TEST": 0,
+    },
+    "durationBands": {
+      "above_target": 0,
+      "split_required": 0,
+      "target": 2,
+      "warning": 0,
+    },
+    "errors": [
+      {
+        "category": "task_cycle_detected",
+        "details": {
+          "cycleMembers": [
+            "INFRA-TASK-INFRA-01",
+            "INFRA-TASK-INFRA-02",
+          ],
+        },
+        "field": null,
+        "message": "Dependency cycle detected among tasks: INFRA-TASK-INFRA-01 → INFRA-TASK-INFRA-02 → INFRA-TASK-INFRA-01",
+        "severity": "error",
+        "taskId": null,
+      },
+    ],
+    "schemaVersion": 2,
+    "taskCount": 2,
+    "valid": false,
+    "warnings": [],
+  },
+}
+`;
+
+exports[`wb-validate.js extraction regression — full report snapshot per fixture wb-invalid-duplicate-id.json: exit code and report are stable: wb-invalid-duplicate-id.json 1`] = `
+{
+  "exitCode": 1,
+  "report": {
+    "dependencies": {
+      "phaseCycles": [],
+      "phaseGraph": {
+        "INFRA": [],
+        "US-01": [],
+      },
+      "phaseUnschedulable": [],
+      "phaseWaves": [
+        [
+          "INFRA",
+          "US-01",
+        ],
+      ],
+      "taskCycles": [],
+      "taskGraph": {
+        "INFRA-TASK-INFRA-01": [],
+      },
+    },
+    "domainDistribution": {
+      "BE": 1,
+      "DB": 0,
+      "DevOps": 0,
+      "FE": 0,
+      "INFRA": 1,
+      "TEST": 0,
+    },
+    "durationBands": {
+      "above_target": 0,
+      "split_required": 0,
+      "target": 2,
+      "warning": 0,
+    },
+    "errors": [
+      {
+        "category": "unique_id_violation",
+        "details": {
+          "taskId": "INFRA-TASK-INFRA-01",
+        },
+        "field": "id",
+        "message": "Duplicate task ID "INFRA-TASK-INFRA-01" appears in multiple phases",
+        "severity": "error",
+        "taskId": "INFRA-TASK-INFRA-01",
+      },
+      {
+        "category": "phase_id_mismatch",
+        "details": {
+          "expectedPhase": "INFRA",
+          "phaseId": "US-01",
+          "taskId": "INFRA-TASK-INFRA-01",
+        },
+        "field": "id",
+        "message": "Task "INFRA-TASK-INFRA-01" has INFRA prefix but is in phase "US-01"; INFRA tasks must be in the INFRA phase",
+        "severity": "error",
+        "taskId": "INFRA-TASK-INFRA-01",
+      },
+    ],
+    "schemaVersion": 2,
+    "taskCount": 2,
+    "valid": false,
+    "warnings": [],
+  },
+}
+`;
+
+exports[`wb-validate.js extraction regression — full report snapshot per fixture wb-invalid-missing-field.json: exit code and report are stable: wb-invalid-missing-field.json 1`] = `
+{
+  "exitCode": 1,
+  "report": {
+    "dependencies": {
+      "phaseCycles": [],
+      "phaseGraph": {
+        "INFRA": [],
+      },
+      "phaseUnschedulable": [],
+      "phaseWaves": [
+        [
+          "INFRA",
+        ],
+      ],
+      "taskCycles": [],
+      "taskGraph": {
+        "INFRA-TASK-INFRA-01": [],
+      },
+    },
+    "domainDistribution": {
+      "BE": 0,
+      "DB": 0,
+      "DevOps": 0,
+      "FE": 0,
+      "INFRA": 1,
+      "TEST": 0,
+    },
+    "durationBands": {
+      "above_target": 0,
+      "split_required": 0,
+      "target": 1,
+      "warning": 0,
+    },
+    "errors": [
+      {
+        "category": "missing_field",
+        "details": {
+          "field": "outcome",
+          "taskId": "INFRA-TASK-INFRA-01",
+        },
+        "field": "outcome",
+        "message": "Task "INFRA-TASK-INFRA-01" is missing required field "outcome"",
+        "severity": "error",
+        "taskId": "INFRA-TASK-INFRA-01",
+      },
+    ],
+    "schemaVersion": 2,
+    "taskCount": 1,
+    "valid": false,
+    "warnings": [],
+  },
+}
+`;
+
+exports[`wb-validate.js extraction regression — full report snapshot per fixture wb-valid.json: exit code and report are stable: wb-valid.json 1`] = `
+{
+  "exitCode": 0,
+  "report": {
+    "dependencies": {
+      "phaseCycles": [],
+      "phaseGraph": {
+        "INFRA": [],
+        "US-01": [
+          "INFRA",
+        ],
+      },
+      "phaseUnschedulable": [],
+      "phaseWaves": [
+        [
+          "INFRA",
+        ],
+        [
+          "US-01",
+        ],
+      ],
+      "taskCycles": [],
+      "taskGraph": {
+        "INFRA-TASK-INFRA-01": [],
+        "INFRA-TASK-INFRA-02": [
+          "INFRA-TASK-INFRA-01",
+        ],
+        "INFRA-TASK-TEST-01": [],
+        "US-01-TASK-BE-01": [
+          "INFRA-TASK-INFRA-02",
+        ],
+        "US-01-TASK-BE-02": [
+          "US-01-TASK-BE-01",
+        ],
+        "US-01-TASK-TEST-01": [
+          "US-01-TASK-BE-01",
+          "US-01-TASK-BE-02",
+        ],
+      },
+    },
+    "domainDistribution": {
+      "BE": 2,
+      "DB": 0,
+      "DevOps": 0,
+      "FE": 0,
+      "INFRA": 2,
+      "TEST": 2,
+    },
+    "durationBands": {
+      "above_target": 0,
+      "split_required": 0,
+      "target": 6,
+      "warning": 0,
+    },
+    "errors": [],
+    "schemaVersion": 2,
+    "taskCount": 6,
+    "valid": true,
+    "warnings": [],
+  },
+}
+`;

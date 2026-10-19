@@ -6,8 +6,6 @@ function buildGate2Payload(options) {
     validateFailed = false,
     semanticResult = null,
     semanticFailed = false,
-    renderResult = null,
-    renderFailed = false,
   } = options
 
   const wbValidatorPassed = !validateFailed
@@ -21,8 +19,6 @@ function buildGate2Payload(options) {
     js_validator_failed:       validateFailed,
     semantic_validator_result: semanticResult,
     semantic_validator_failed: semanticFailed,
-    renderer_result:           renderResult,
-    renderer_failed:           renderFailed,
     duration_bands:      wbValidatorReport ? wbValidatorReport.durationBands : null,
     domain_distribution: wbValidatorReport ? wbValidatorReport.domainDistribution : null,
     warning_band_tasks:  wbValidatorReport
@@ -47,7 +43,6 @@ function buildGate2Payload(options) {
       validateFailed ||
       !wbValidatorPassed ||
       semanticFailed ||
-      renderFailed ||
       Boolean(semanticResult && semanticResult.findings && semanticResult.findings.some(f => f.blocking)),
   }
 }

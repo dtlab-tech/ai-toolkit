@@ -65,8 +65,11 @@ The host verifies the installed workflow and each worker and owns all ledger tra
 
 Extract from the result:
 - `prefix` — feature prefix (e.g. `FTR-009`)
-- `requirements.summary` — requirements file summary
-- `tech_spec.summary` — tech-spec file summary
+- `requirements.path` / `requirements.summary` — Requirements artifact path (the split
+  `req/index.md` by default — generation no longer produces a single assembled file
+  automatically) and its summary
+- `tech_spec.path` / `tech_spec.summary` — Tech-Spec artifact path (the split `spec/index.md` by
+  default) and its summary
 - `validation.summary` — validation result (gaps or clean)
 - `docs_digest` — content digest binding this approval to the exact Requirements/Tech-Spec
   bytes just produced; embed verbatim into `{PREFIX}-Approvals.md` in Step 2 below
@@ -85,9 +88,12 @@ Present the following to the user:
 ```
 Documents generated for {PREFIX}:
 
-  {PREFIX}-Requirements.md — {requirements.summary}
-  {PREFIX}-Tech-Spec.md    — {tech_spec.summary}
+  {requirements.path} — {requirements.summary}
+  {tech_spec.path}    — {tech_spec.summary}
   {PREFIX}-Validation-Report.md — {validation.summary}
+
+To view a single combined document instead of the split source files, run:
+  /assemble-docs {PREFIX} [req|spec|all]
 ```
 
 Then output this hard-stop message and **wait for a text reply from the user**:
@@ -115,8 +121,8 @@ The pipeline CANNOT continue until you reply directly.
 
 | Document | Status | Date | Notes |
 |----------|--------|------|-------|
-| {PREFIX}-Requirements.md | ✅ Approved | {today} | {notes or —} |
-| {PREFIX}-Tech-Spec.md | ✅ Approved | {today} | {notes or —} |
+| {requirements.path} | ✅ Approved | {today} | {notes or —} |
+| {tech_spec.path} | ✅ Approved | {today} | {notes or —} |
 | {PREFIX}-Validation-Report.md | ✅ Approved | {today} | {notes or —} |
 
 **Docs Digest:** `{docs_digest}`

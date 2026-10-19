@@ -18,15 +18,13 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
 
   describe('gate2_blocked flag', () => {
 
-    test('is false when wb-validate passed, semantic ok, render ok, and no blocking findings', () => {
+    test('is false when wb-validate passed, semantic ok, and no blocking findings', () => {
       // Arrange
       const options = {
         wbValidatorReport: REPORT_CLEAN,
         validateFailed:    false,
         semanticResult:    { findings: [{ blocking: false, message: 'style suggestion' }] },
         semanticFailed:    false,
-        renderResult:      { ok: true },
-        renderFailed:      false,
       };
       // Act
       const payload = buildGate2Payload(options);
@@ -40,7 +38,6 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
         wbValidatorReport: REPORT_CLEAN,
         validateFailed:    true,
         semanticFailed:    false,
-        renderFailed:      false,
         semanticResult:    null,
       };
       // Act
@@ -55,7 +52,6 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
         wbValidatorReport: REPORT_INVALID,
         validateFailed:    false,
         semanticFailed:    false,
-        renderFailed:      false,
         semanticResult:    null,
       };
       // Act
@@ -70,22 +66,6 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
         wbValidatorReport: REPORT_CLEAN,
         validateFailed:    false,
         semanticFailed:    true,
-        renderFailed:      false,
-        semanticResult:    null,
-      };
-      // Act
-      const payload = buildGate2Payload(options);
-      // Assert
-      expect(payload.gate2_blocked).toBe(true);
-    });
-
-    test('is true when renderFailed is true', () => {
-      // Arrange
-      const options = {
-        wbValidatorReport: REPORT_CLEAN,
-        validateFailed:    false,
-        semanticFailed:    false,
-        renderFailed:      true,
         semanticResult:    null,
       };
       // Act
@@ -100,7 +80,6 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
         wbValidatorReport: REPORT_CLEAN,
         validateFailed:    false,
         semanticFailed:    false,
-        renderFailed:      false,
         semanticResult:    { findings: [{ blocking: true, message: 'critical scope gap' }] },
       };
       // Act
@@ -115,7 +94,6 @@ describe('pm-phase2 gate2_payload assembly — buildGate2Payload()', () => {
         wbValidatorReport: REPORT_CLEAN,
         validateFailed:    false,
         semanticFailed:    false,
-        renderFailed:      false,
         semanticResult:    {
           findings: [
             { blocking: false, message: 'minor wording suggestion' },

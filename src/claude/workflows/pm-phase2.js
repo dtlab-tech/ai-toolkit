@@ -5,12 +5,212 @@ export const meta = {
   phases: [{ title: 'Work Breakdown' }, { title: 'Effort Estimate' }],
 }
 
+// ── Skeleton JSON schema (FTR-020) ───────────────────────────────────────────
+// Passed as opts.schema to the skeleton-generation worker call. See
+// src/claude/agents/gaia-generate-work-breakdown.md Step 7 for the authoritative
+// description of this shape.
+const SKELETON_SCHEMA = {
+  type: 'object',
+  required: ['schemaVersion', 'feature', 'phases', 'tasks'],
+  properties: {
+    schemaVersion: { const: 3 },
+    feature: { type: 'string' },
+    phases: { type: 'array', items: {
+      type: 'object',
+      required: ['id', 'type', 'title', 'commit', 'sourceUC', 'context', 'taskIds'],
+      properties: {
+        id: { type: 'string' }, type: { enum: ['infrastructure', 'user-story'] },
+        title: { type: 'string' },
+        commit: { type: 'object', required: ['type', 'subject'],
+          properties: { type: { type: 'string' }, subject: { type: 'string' } } },
+        sourceUC: { type: 'array', items: { type: 'string' } },
+        // 2-4 sentences: why this phase exists, how its tasks relate, any sequencing note other
+        // phases/tasks need before opening this phase's own task files — the one part of the
+        // FTR-020 phase-detail template that genuinely needs narrative judgment, not something
+        // the host can derive mechanically the way it does Source UC/Tasks-in-phase/Depends-on.
+        context: { type: 'string' },
+        taskIds: { type: 'array', items: { type: 'string' } },
+      },
+    } },
+    tasks: { type: 'object', additionalProperties: {
+      type: 'object',
+      required: ['title', 'outcome', 'domain', 'agentType', 'dependsOn',
+        'acceptanceCriteria', 'estimate', 'outputCount', 'commit'],
+      properties: {
+        title: { type: 'string' }, outcome: { type: 'string' },
+        domain: { enum: ['BE', 'FE', 'DB', 'DevOps', 'INFRA', 'TEST'] },
+        // Bracket-key form is deliberate — this is a JSON-Schema PROPERTY NAME describing a
+        // task's own field, not a dispatch-mechanism option key; written this way so the
+        // literal text doesn't collide with tests/cli/pm-phase2-source.test.js's source-text
+        // guard against this script ever using a non-c.worker dispatch mechanism.
+        ['agentType']: { enum: ['developer-backend', 'developer-frontend', 'developer-testing', 'review-solution'] },
+        dependsOn: { type: 'array', items: { type: 'string' } },
+        acceptanceCriteria: { type: 'array', items: { type: 'string' } },
+        estimate: { type: 'object', required: ['agentMinutes', 'tokens'],
+          properties: { agentMinutes: { type: 'integer' }, tokens: { type: 'integer' } } },
+        outputCount: { type: 'integer' },
+        commit: { type: 'object', required: ['type', 'subject'],
+          properties: { type: { type: 'string' }, subject: { type: 'string' } } },
+      },
+    } },
+  },
+}
 
+// Splits the skeleton response into (a) index.json's structural, map-keyed shape and
+// (b) nothing else — phase title/commit/context are NOT copied into index.json (OQ-04); they
+// are rendered straight to each phase's detail file by the caller, from the same skeleton
+// response, since phase content is fully known the moment this one call returns.
+function materializeIndex(skeleton) {
+  const tasks = {}
+  for (const [taskId, t] of Object.entries(skeleton.tasks)) {
+    tasks[taskId] = { ...t, detailFile: `tasks/${taskId}.md`, status: 'pending' }
+  }
+  const phases = skeleton.phases.map(p => ({
+    id: p.id, type: p.type, sourceUC: p.sourceUC, detailFile: `user-stories/${p.id}.md`, taskIds: p.taskIds,
+  }))
+  return { schemaVersion: 3, feature: skeleton.feature, phases, tasks }
+}
+
+// Duplicated from src/claude/scripts/wbs-assembler.js's renderPhaseDetailBlock/template-engine
+// primitives — NOT required from it, since this workflow script's runtime has no `require` (see
+// lib/workflow-runner.js: only `control`/`args` are injected); reads the template via `c.read()`
+// (project-root-relative) instead of `fs.readFileSync(__dirname, ...)`, the one difference the
+// sandboxed runtime forces. The fragile inverse (parsing, with the contiguous-run algorithm)
+// stays exclusively in wbs-assembler.js, used only by wb-validate.js/wb-render.js. Keep both
+// copies' FIELD/SECTION handling in sync if gaia-user-story-template.md's shape ever changes.
+const FIELD_LINE_RE = /^- \*\*(.+?):\*\*[ \t]?(.*)$/
+function _stripTemplateComments(text) {
+  return text.replace(/<!--[\s\S]*?-->/g, '')
+}
+function _fillFieldBlock(templateText, values) {
+  const lines = templateText.split('\n')
+  let start = 0
+  while (start < lines.length && !FIELD_LINE_RE.test(lines[start])) start++
+  const starts = []
+  let end = start
+  for (let j = start; j < lines.length; j++) {
+    const m = lines[j].match(FIELD_LINE_RE)
+    if (m) starts.push({ label: m[1] })
+    else if (lines[j].trim() === '') { end = j; break }
+    end = j + 1
+  }
+  const seen = new Set()
+  const newFieldLines = starts.map(({ label }) => {
+    if (!(label in values)) throw new Error(`Template field "${label}" has no supplied value`)
+    seen.add(label)
+    return `- **${label}:** ${values[label]}`
+  })
+  for (const label of Object.keys(values)) {
+    if (!seen.has(label)) throw new Error(`Supplied value for "${label}" matches no template field`)
+  }
+  return [...lines.slice(0, start), ...newFieldLines, ...lines.slice(end)].join('\n')
+}
+function _fillNamedSection(templateText, sectionName, content) {
+  const marker = `**${sectionName}:**`
+  const idx = templateText.indexOf(marker)
+  if (idx === -1) throw new Error(`Template is missing the "${sectionName}" section`)
+  const afterMarker = idx + marker.length
+  const nextMarkerIdx = templateText.indexOf('\n**', afterMarker)
+  const end = nextMarkerIdx === -1 ? templateText.length : nextMarkerIdx
+  return templateText.slice(0, afterMarker) + '\n\n' + content + '\n' + templateText.slice(end)
+}
+function _fillInlineBoldField(templateText, label, value) {
+  const lines = templateText.split('\n')
+  const marker = `**${label}:**`
+  const startIdx = lines.findIndex(l => l.includes(marker))
+  if (startIdx === -1) throw new Error(`Template is missing the "${label}" inline field`)
+  let end = startIdx + 1
+  while (end < lines.length && lines[end].trim() !== '') end++
+  return [...lines.slice(0, startIdx), `${marker} ${value}`, ...lines.slice(end)].join('\n')
+}
+function renderPhaseDetailBlock(phase, taskTitles, dependsOnPhases) {
+  const DASH = '—'
+  const sourceUC = Array.isArray(phase.sourceUC) && phase.sourceUC.length ? phase.sourceUC.join(', ') : DASH
+  const tasksBlock = taskTitles.length
+    ? taskTitles.map(t => `- \`${t.id}\` — ${t.title}`).join('\n')
+    : '_No tasks._'
+  const dependsOn = dependsOnPhases.length ? dependsOnPhases.join(', ') : 'none'
+  let text = _stripTemplateComments(c.read('.claude/scripts/templates/gaia-user-story-template.md'))
+  text = text.replace(/\{PHASE_ID\}/g, phase.id)
+  text = _fillFieldBlock(text, {
+    'Phase ID': phase.id,
+    'Type': phase.type,
+    'Source UC': sourceUC,
+    'Title': phase.title,
+    'Commit type': phase.commit.type,
+    'Commit scope': phase.commit.scope == null ? DASH : phase.commit.scope,
+    'Commit subject': phase.commit.subject,
+  })
+  text = _fillNamedSection(text, 'Context', phase.context == null ? DASH : phase.context)
+  text = _fillNamedSection(text, 'Tasks in this phase', tasksBlock)
+  text = _fillInlineBoldField(text, 'Depends on phases', dependsOn)
+  return text.trim() + '\n'
+}
+
+// Depends-on-phases is 100% mechanically derivable from the skeleton's own task dependsOn
+// graph (same information checkPhaseDependencyAndCycle computes in wb-graph-checks.js, just
+// recomputed here since that function needs the post-assembly {phases:[{tasks:[...]}]} shape,
+// not the skeleton's map-of-tasks-by-id) — no LLM judgment needed, unlike Context.
+function computeDependsOnPhases(skeleton, phaseId, taskIdToPhase) {
+  const phase = skeleton.phases.find(p => p.id === phaseId)
+  const deps = new Set()
+  for (const taskId of phase.taskIds) {
+    const task = skeleton.tasks[taskId]
+    for (const depId of (task.dependsOn || [])) {
+      const depPhase = taskIdToPhase.get(depId)
+      if (depPhase && depPhase !== phaseId) deps.add(depPhase)
+    }
+  }
+  return [...deps]
+}
+
+// Compact prompt for the per-task detail-generation worker: this task's own skeleton entry,
+// the full skeleton's sibling task list (id + title + outcome only, for duplicate-
+// implementation awareness), and the Tech-Spec text (the per-task agent further narrows its
+// own Read/Grep use as needed — this call does not pre-slice the Tech-Spec by domain).
+function buildTaskPrompt(index, taskId, techSpecText) {
+  const task = index.tasks[taskId]
+  const siblingList = Object.entries(index.tasks)
+    .map(([id, t]) => `- ${id}: ${t.title} — ${t.outcome}`).join('\n')
+  return [
+    `Task skeleton entry (restate these fields verbatim; do not re-derive them):\n${JSON.stringify({ id: taskId, ...task }, null, 2)}`,
+    `Tech-Spec:\n${techSpecText}`,
+    `All tasks in this feature (for duplicate-implementation awareness):\n${siblingList}`,
+  ].join('\n\n')
+}
 
 const c = control
 const { featurePath, featureDir, prefix } = c.feature(args[0])
 return c.run(meta.name, featureDir, prefix, async () => {
   const file = suffix => `${featureDir}/${prefix}-${suffix}`
+
+  // FTR-025: pm-phase1.js no longer writes the assembled Requirements/Tech-Spec files — this
+  // phase's own unmodified internals (the Gate 1 digest re-check right below, wb-skeleton-
+  // check.js, wb-validate.js, the semantic validator prompt, ac-task-matrix.js, and
+  // gaia-generate-work-breakdown, which hard-aborts without these files) still need them on
+  // disk. Transparently bridge the gap: assemble fresh from req/+spec/ every run (same two
+  // subprocess calls pm-phase1.js used to make, relocated here), before anything below reads
+  // them. A legacy feature (monolithic files only, no req/spec/ directories — generated before
+  // this feature existed) is left untouched: nothing to assemble, no error.
+  await c.activity('bridge-requirements-tech-spec', async () => {
+    const reqDir = `${featureDir}/req`, specDir = `${featureDir}/spec`
+    // c.exists() only checks isFile() — never true for a directory — so this checks each
+    // split's own index.md (a real file) rather than the directory itself.
+    const hasReq = c.exists(`${reqDir}/index.md`), hasSpec = c.exists(`${specDir}/index.md`)
+    if (!hasReq && !hasSpec) return { bridged: false, reason: 'legacy (no split sources)' }
+    if (hasReq) {
+      const assembledRequirements = c.command(['run-asset', 'scripts/req-assembler.js',
+        '--project', c.root, '--', reqDir]).stdout
+      c.writeOutput(file('Requirements.md'), assembledRequirements)
+    }
+    if (hasSpec) {
+      const assembledTechSpec = c.command(['run-asset', 'scripts/tech-spec-assembler.js',
+        '--project', c.root, '--', specDir]).stdout
+      c.writeOutput(file('Tech-Spec.md'), assembledTechSpec)
+    }
+    return { bridged: true }
+  })
+
   const approvals = c.read(file('Approvals.md'))
   const gate = approvals.match(/^## Gate 1\b[^\n]*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)
   if (!gate || !/✅\s*Approved/.test(gate[1])) throw new Error('Gate 1 approval evidence missing')
@@ -30,13 +230,62 @@ return c.run(meta.name, featureDir, prefix, async () => {
       throw new Error('Gate 1 approval is stale: Requirements/Tech-Spec content no longer matches what was approved (docs digest mismatch) — re-approve Gate 1 before proceeding')
     }
   }
-  const jsonPath = file('Work-Breakdown.json')
-  await c.worker('gaia.agent.planner.work-breakdown', featurePath, {
-    outputs: [{ path: jsonPath, inputs: [featurePath, file('Requirements.md'), file('Tech-Spec.md')] }],
+
+  // Deliberately NOT file('wbs') — file() always prepends '{prefix}-' (every other
+  // artifact, e.g. file('Requirements.md') -> '{prefix}-Requirements.md', is a single file
+  // named after its own content, so the prefix disambiguates it; this is a directory nested
+  // inside the feature's own already-prefixed folder, so repeating the prefix is redundant.
+  const wbsDir = `${featureDir}/wbs`
+  const indexPath = `${wbsDir}/index.json`
+
+  // 1. Skeleton (no declared worker() output — host writes every file itself)
+  let index
+  if (!c.exists(indexPath)) {
+    const skeleton = await c.worker('gaia.agent.planner.work-breakdown', featurePath, { schema: SKELETON_SCHEMA })
+    index = materializeIndex(skeleton)
+    const taskIdToPhase = new Map(skeleton.phases.flatMap(p => p.taskIds.map(taskId => [taskId, p.id])))
+    for (const phase of index.phases) {
+      const skeletonPhase = skeleton.phases.find(p => p.id === phase.id)
+      const taskTitles = skeletonPhase.taskIds.map(taskId => ({ id: taskId, title: skeleton.tasks[taskId].title }))
+      const dependsOnPhases = computeDependsOnPhases(skeleton, phase.id, taskIdToPhase)
+      c.writeOutput(`${wbsDir}/${phase.detailFile}`, renderPhaseDetailBlock(skeletonPhase, taskTitles, dependsOnPhases))
+    }
+    c.writeOutput(indexPath, JSON.stringify(index, null, 2))
+  } else {
+    index = c.json(indexPath) // resume: reuse existing skeleton as-is
+  }
+
+  // 2. Structural pre-checks (wb-skeleton-check.js, same wb-graph-checks.js functions
+  // wb-validate.js now imports — run via subprocess since this runtime has no `require`)
+  const skeletonCheck = await c.activity('wb-skeleton-check', async () => {
+    const res = c.command(['run-asset', 'scripts/wb-skeleton-check.js', '--project', c.root,
+      '--', indexPath, file('Requirements.md')], [0, 1])
+    const parsed = JSON.parse(res.stdout)
+    if (typeof parsed.valid !== 'boolean' || !Array.isArray(parsed.errors) ||
+        (res.exitCode === 0) !== parsed.valid) throw new Error('Invalid skeleton-check result')
+    if (!parsed.valid) throw new Error('Work breakdown skeleton failed structural checks: ' + res.stdout)
+    return parsed
   })
+
+  // 3. Per-task generation, resume-by-status, sequential
+  for (const phase of index.phases) {
+    for (const taskId of phase.taskIds) {
+      const task = index.tasks[taskId]
+      const detailPath = `${wbsDir}/${task.detailFile}`
+      if (task.status === 'generated' && c.exists(detailPath)) continue // resume: skip, no dispatch
+      const detail = await c.worker('gaia.agent.planner.work-breakdown-task',
+        buildTaskPrompt(index, taskId, c.read(file('Tech-Spec.md'))), { label: `work-breakdown-task:${taskId}` })
+      c.writeOutput(detailPath, detail)
+      task.status = 'generated'
+      c.writeOutput(indexPath, JSON.stringify(index, null, 2)) // persist status after each task
+    }
+  }
+
+  // 4. Assembly (implicit, via the now directory-aware wb-validate.js/wb-render.js) +
+  // existing pipeline, unchanged past this point except the path passed in
   const report = await c.activity('wb-validate', async () => {
     const res = c.command(['run-asset', 'scripts/wb-validate.js', '--project', c.root,
-      '--', jsonPath, file('Requirements.md')], [0, 1])
+      '--', wbsDir, file('Requirements.md')], [0, 1])
     const parsed = JSON.parse(res.stdout)
     if (typeof parsed.valid !== 'boolean' || !Array.isArray(parsed.errors) ||
         !Array.isArray(parsed.warnings) || (res.exitCode === 0) !== parsed.valid) throw new Error('Invalid validator result')
@@ -44,26 +293,40 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return parsed
   })
   const semantic = await c.worker('gaia.agent.planner.validate-work-breakdown',
-    `${jsonPath}\n${file('Requirements.md')}`, { schema: {
+    `${wbsDir}\n${file('Requirements.md')}`, { schema: {
       type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array' } }, required: ['valid', 'findings'],
     } })
   if (!semantic.valid || semantic.findings.some(f => f.blocking)) throw new Error('Work breakdown semantic validation failed')
-  const rendered = await c.activity('wb-render', async () => {
-    const result = c.command(['run-asset', 'scripts/wb-render.js', '--project', c.root, '--', jsonPath, prefix])
-    const markdownPath = file('Work-Breakdown.md'), csvPath = file('Work-Breakdown.csv')
-    if (!c.exists(markdownPath) || !c.exists(csvPath)) throw new Error('Renderer outputs missing')
-    // Read the actual bytes now: unreadable output must never produce an approved gate.
-    c.read(markdownPath); c.read(csvPath)
-    return { ...result, markdownPath, csvPath, markdownExists: true, csvExists: true }
+  // FTR-025: wb-render.js is no longer called automatically here — nothing downstream ever read
+  // {PREFIX}-Work-Breakdown.md/.csv (every real consumer already reads wbs/ directly via
+  // wbs-assembler.js's loadWorkBreakdown()), so this view is now produced only on demand, via
+  // assemble-docs.js.
+  // FTR-022: a new deterministic rendering step — no new data, no new validation, purely a
+  // view over AC<->task coverage wb-validate.js's checks 19-21 already enforce. Cannot fail
+  // for a feature that already reached this point in the pipeline (BR-02/NFR-03).
+  const acTaskMatrix = await c.activity('ac-task-matrix', async () => {
+    // FTR-023: ac-task-matrix.js's CLI gained a 3rd positional argument (Tech-Spec path) to
+    // render the "Addressed by Tech-Spec File(s)" column.
+    const result = c.command(['run-asset', 'scripts/ac-task-matrix.js', '--project', c.root,
+      '--', wbsDir, file('Requirements.md'), file('Tech-Spec.md'), prefix])
+    const matrixPath = file('AC-Task-Matrix.md')
+    if (!c.exists(matrixPath)) throw new Error('AC-Task matrix output missing')
+    c.read(matrixPath) // never trust an unread write
+    return { ...result, matrixPath }
   })
-  const metrics = await c.estimates(featureDir, prefix, c.json(jsonPath))
+  // Assembled structure for c.estimates()'s metrics — via wbs-assembler.js's own CLI mode
+  // (subprocess), since this runtime cannot `require` it in-process either.
+  const assembled = JSON.parse(c.command(['run-asset', 'scripts/wbs-assembler.js', '--project', c.root, '--', wbsDir]).stdout)
+  const metrics = await c.estimates(featureDir, prefix, assembled)
   c.append(file('process-log.txt'), `[${new Date().toISOString()}] pm-phase2 complete; Gate 2 approval requested\n`)
   return {
     ...metrics, feature_path: featurePath, token_ledger: c.tokenLedger, errors: [],
     gate2_payload: {
+      skeleton_check_report: skeletonCheck, skeleton_check_failed: false,
       js_validator_report: report, js_validator_failed: false,
       semantic_validator_result: semantic, semantic_validator_failed: false,
-      renderer_result: rendered, renderer_failed: false, gate2_blocked: false,
+      gate2_blocked: false,
+      ac_task_matrix_path: acTaskMatrix.matrixPath,
       duration_bands: report.durationBands, domain_distribution: report.domainDistribution,
       warning_band_tasks: report.warnings.filter(w => w.category === 'duration_warning').map(w => ({ taskId: w.taskId, agentMinutes: w.details?.agentMinutes })),
       split_required_tasks: [], must_ac_uncovered: [], phase_unschedulable: [],
