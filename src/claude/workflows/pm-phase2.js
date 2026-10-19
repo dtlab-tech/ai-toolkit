@@ -234,6 +234,22 @@ function buildTaskTechSpecExcerpt(components, task, specDir, specIndexContent) {
   }).join('\n\n')
 }
 
+// FTR-027: duplicates wbs-assembler.js's own _parseVerificationCommands algorithm (last
+// occurrence of the marker wins — an illustrative example earlier in Implementation notes must
+// never be mistaken for the real section) — returns a boolean instead of the parsed array, since
+// resume-by-status only needs the yes/no "does this task file have at least one verification
+// command" signal, per the task template's own documented "Must be non-empty" contract. A task
+// file that exists and is marked `generated` but has none is regenerated, not skipped forever.
+const FENCE_RE_LOCAL = /```[^\n]*\n([\s\S]*?)```/g
+function hasVerificationCommands(content) {
+  const marker = '**Verification commands:**'
+  const idx = content.lastIndexOf(marker)
+  if (idx === -1) return false
+  const verifPart = content.slice(idx + marker.length)
+  FENCE_RE_LOCAL.lastIndex = 0
+  return FENCE_RE_LOCAL.test(verifPart)
+}
+
 // Compact prompt for the per-task detail-generation worker: this task's own skeleton entry,
 // the full skeleton's sibling task list (id + title + outcome only, for duplicate-
 // implementation awareness), and the Tech-Spec excerpt (FTR-026: already pre-sliced to this
@@ -351,7 +367,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     for (const taskId of phase.taskIds) {
       const task = index.tasks[taskId]
       const detailPath = `${wbsDir}/${task.detailFile}`
-      if (task.status === 'generated' && c.exists(detailPath)) continue // resume: skip, no dispatch
+      if (task.status === 'generated' && c.exists(detailPath) && hasVerificationCommands(c.read(detailPath))) continue // resume: skip, no dispatch
       const techSpecExcerpt = hasSpec
         ? buildTaskTechSpecExcerpt(components, task, specDir, c.read(specIndexPath))
         : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text

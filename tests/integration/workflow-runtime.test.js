@@ -277,6 +277,76 @@ test('pm-phase1 Tech-Spec resume-by-existence dispatches only missing components
   expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'b.js.md'))).toBe(true);
   expect(result.validation.summary).toContain('clean');
 });
+// FTR-027: resume-by-existence must not trust mere presence — a component file that exists but
+// is missing its "## Change" section (the real production shape: a whole-response fence wrap,
+// since separately fixed at the source) must be regenerated, not silently treated as done forever.
+describe('FTR-027 — Tech-Spec component resume validity', () => {
+  function twoComponentFixture() {
+    const twoComponentsTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+      '| a.js | example a | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n' +
+      '| b.js | example b | AC-01 | BE | [components/b.js.md](components/b.js.md) |\n\n' +
+      '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+    const twoComponentSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      return n === 9 ? `## 9. File Inventory\n\n${twoComponentsTable}` : `## ${n}. Section ${n}\n`;
+    }).join('\n');
+    const componentDetail = name => `# ${name} — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\n${name} body.\n\n## Tests\n\nExample tests.\n`;
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(twoComponentSkeletonDoc);
+      if (name === 'gaia-generate-tech-spec-component') {
+        const compName = options.prompt.includes('Path: a.js') ? 'a.js' : 'b.js';
+        return success(componentDetail(compName));
+      }
+      return phase1Dispatch(options);
+    };
+    return { dispatch };
+  }
+
+  test('a component missing its ## Change section is regenerated, not skipped', async () => {
+    const { dispatch } = twoComponentFixture();
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+    fs.writeFileSync(path.join(f.dir, 'spec', 'components', 'a.js.md'), '# a.js — New\n\nNo Change heading here.\n');
+    const dispatchFn = jest.fn(dispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).not.toContain('gaia-generate-tech-spec'); // skeleton still fresh, never re-dispatched
+    const componentCalls = dispatchFn.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-tech-spec-component');
+    expect(componentCalls.some(c => c.prompt.includes('Path: a.js'))).toBe(true);
+    expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'a.js.md'), 'utf8')).toContain('## Change');
+  });
+
+  test('a valid component is still skipped on resume (no regression)', async () => {
+    const { dispatch } = twoComponentFixture();
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+    const dispatchFn = jest.fn(dispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const componentCalls = dispatchFn.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-tech-spec-component');
+    expect(componentCalls).toHaveLength(0);
+  });
+});
+// FTR-027: same gap, for Requirements use cases — a file that exists but starts with the wrong
+// UC heading (a garbled or off-topic response) must be regenerated, not skipped forever.
+describe('FTR-027 — Requirements use-case resume validity', () => {
+  test('a UC file starting with the wrong heading is regenerated, not skipped', async () => {
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(phase1Dispatch) });
+    fs.writeFileSync(path.join(f.dir, 'req', 'use-cases', 'UC-01.md'), '### UC-02: Wrong use case\n\nGarbled.\n');
+    const dispatchFn = jest.fn(phase1Dispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).toContain('gaia-generate-requirements-use-case');
+    expect(calledAgents).not.toContain('gaia-generate-requirements'); // skeleton still fresh
+    expect(fs.readFileSync(path.join(f.dir, 'req', 'use-cases', 'UC-01.md'), 'utf8')).toContain('### UC-01:');
+  });
+
+  test('a valid UC file is still skipped on resume (no regression)', async () => {
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(phase1Dispatch) });
+    const dispatchFn = jest.fn(phase1Dispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).not.toContain('gaia-generate-requirements-use-case');
+  });
+});
 test('two components with colliding basenames receive distinct, deterministic fileSlug values', async () => {
   const collidingTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
     '| src/a/index.js | example a | AC-01 | BE | [components/index.js.md](components/index.js.md) |\n' +
@@ -307,6 +377,34 @@ test('two components with colliding basenames receive distinct, deterministic fi
   // No assembled Tech-Spec file exists anymore — read each component's own detail file directly.
   expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'index.js.md'), 'utf8')).toContain('body-of-a');
   expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'b-index.js.md'), 'utf8')).toContain('body-of-b');
+});
+// Real production bug: the component template's own Spec link is explicitly "provisional, not
+// final" so the host can rewrite it — disambiguateFileSlugs only ever did so for COLLISIONS,
+// never enforcing the ".md" suffix itself. A real Tech-Spec skeleton had the model omit ".md"
+// entirely for 20 of ~61 components (e.g. `[components/Settings.tsx](components/Settings.tsx)`),
+// so the host faithfully wrote that component's Markdown CONTENT into a file literally named
+// `Settings.tsx` — confusing at best, and indistinguishable on disk from the real source file's
+// own extension. Fixed by normalizing every slug to end in ".md" before the collision check runs.
+test('a component Spec link missing its ".md" suffix is normalized before being written to disk', async () => {
+  const noSuffixTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+    '| src/shell/app/src/pages/Settings/Settings.tsx | Replace strings | AC-01 | FE | [components/shell-app-Settings.tsx](components/shell-app-Settings.tsx) |\n\n' +
+    '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+  const noSuffixSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
+    const n = i + 1;
+    return n === 9 ? `## 9. File Inventory\n\n${noSuffixTable}` : `## ${n}. Section ${n}\n`;
+  }).join('\n');
+  const componentDetail = () => '# Settings.tsx — Modified\n\n## Change\n\nExample change.\n\n## Algorithm\n\nExample body.\n\n## Tests\n\nExample tests.\n';
+  const dispatch = async options => {
+    const name = options.args[options.args.indexOf('--agent') + 1];
+    if (name === 'gaia-generate-tech-spec') return success(noSuffixSkeletonDoc);
+    if (name === 'gaia-generate-tech-spec-component') return success(componentDetail());
+    return phase1Dispatch(options);
+  };
+  await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'shell-app-Settings.tsx'))).toBe(false);
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'shell-app-Settings.tsx.md'))).toBe(true);
+  const indexDoc = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
+  expect(indexDoc).toContain('[components/shell-app-Settings.tsx.md](components/shell-app-Settings.tsx.md)');
 });
 // Closes the gap flagged when the gaia-* templates were moved into the toolkit: the per-UC
 // generation agent is deliberately never given req/index.md's Business Rules/Acceptance
@@ -385,6 +483,11 @@ test('fresh outputs skip workers; force requests them again', async () => {
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
   expect(dispatch).not.toHaveBeenCalled();
   await runWorkflow('pm-phase1', [f.feature, '--force'], { ...f.options, dispatch });
+  // FTR-027 (AC-08): every item generated above is genuinely VALID, so the new
+  // isValidComponentDetail/isValidUseCaseFile checks never cause a skip either — the middle
+  // assertion above (dispatch not called) already proves the new checks don't force unwanted
+  // regeneration, and this one proves --force still regenerates everything unconditionally
+  // regardless of validity, exactly as before this feature.
   expect(dispatch).toHaveBeenCalledTimes(5); // requirements skeleton + 1 use case + tech-spec skeleton + 1 component + validate
 });
 test('pm-phase2 stops before dispatch without Gate 1', async () => {
@@ -493,6 +596,31 @@ function phase2Dispatch(wb, semanticVerdict = { valid: true, findings: [] }) {
     return { exitCode: 0, result: { is_error: false, structured_output: semanticVerdict, usage: { input_tokens: 10, output_tokens: 5 } } };
   };
 }
+// FTR-027: same gap, for Work Breakdown tasks — a task file marked "generated" but with zero
+// verification commands (the task template's own documented "Must be non-empty" contract) must be
+// regenerated, not skipped forever.
+describe('FTR-027 — Work Breakdown task resume validity', () => {
+  test('a generated task with zero verification commands is regenerated, not skipped', async () => {
+    const wb = phase2Setup();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: jest.fn(phase2Dispatch(wb)) });
+    const taskPath = path.join(f.dir, 'wbs', 'tasks', 'INFRA-TASK-BE-01.md');
+    const noCommands = fs.readFileSync(taskPath, 'utf8').replace(/\*\*Verification commands:\*\*[\s\S]*$/, '**Verification commands:**\n');
+    fs.writeFileSync(taskPath, noCommands);
+    const dispatchFn = jest.fn(phase2Dispatch(wb));
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).toContain('gaia-generate-work-breakdown-task');
+  });
+
+  test('a generated task with a real verification command is still skipped (no regression)', async () => {
+    const wb = phase2Setup();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: jest.fn(phase2Dispatch(wb)) });
+    const dispatchFn = jest.fn(phase2Dispatch(wb));
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).not.toContain('gaia-generate-work-breakdown-task');
+  });
+});
 test.each([true, false])('pm-phase2 runs real validator and blocks a negative semantic verdict: %s', async valid => {
   const wb = phase2Setup();
   const dispatch = jest.fn(phase2Dispatch(wb, { valid, findings: [] }));

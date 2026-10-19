@@ -26,17 +26,19 @@ function gate2IsBlocked(validateFailed, wbValidatorReport, semanticFailed, rende
     || Boolean(semanticResult && semanticResult.findings && semanticResult.findings.some(f => f.blocking))
 }
 
-// Mirrors pm-phase2.js's per-task resume-by-status selection (FTR-020 UC-04): a task is
-// skipped (not dispatched) only when BOTH its recorded status is "generated" AND its detail
-// file actually exists on disk — status alone is never trusted. Returns task IDs in the same
-// phase-then-taskIds order pm-phase2.js's own loop iterates, since dispatch order matters.
-function selectPendingTaskIds(index, wbsDir, existsFn) {
+// Mirrors pm-phase2.js's per-task resume-by-status selection (FTR-020 UC-04, hardened by
+// FTR-027): a task is skipped (not dispatched) only when its recorded status is "generated", its
+// detail file actually exists on disk, AND isValidFn(detailPath) confirms the file is
+// structurally valid (pm-phase2.js's own hasVerificationCommands check) — status and existence
+// alone are never trusted. Returns task IDs in the same phase-then-taskIds order pm-phase2.js's
+// own loop iterates, since dispatch order matters.
+function selectPendingTaskIds(index, wbsDir, existsFn, isValidFn) {
   const pending = []
   for (const phase of index.phases) {
     for (const taskId of phase.taskIds) {
       const task = index.tasks[taskId]
       const detailPath = `${wbsDir}/${task.detailFile}`
-      if (task.status === 'generated' && existsFn(detailPath)) continue
+      if (task.status === 'generated' && existsFn(detailPath) && isValidFn(detailPath)) continue
       pending.push(taskId)
     }
   }

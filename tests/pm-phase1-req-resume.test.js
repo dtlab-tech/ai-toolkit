@@ -17,13 +17,17 @@ const path = require('path')
 const PM_PHASE1_SOURCE = fs.readFileSync(
   path.join(__dirname, '../src/claude/workflows/pm-phase1.js'), 'utf8')
 
-function selectPendingUcIds(ucTable, reqDir, existsFn, regenSkeleton) {
-  return ucTable.filter(row => !(!regenSkeleton && existsFn(`${reqDir}/${row.file}`))).map(row => row.id)
+function selectPendingUcIds(ucTable, reqDir, existsFn, regenSkeleton, isValidFn) {
+  return ucTable.filter(row => {
+    const p = `${reqDir}/${row.file}`
+    return !(!regenSkeleton && existsFn(p) && isValidFn(p, row.id))
+  }).map(row => row.id)
 }
 
 describe('pm-phase1 requirements resume-by-existence: mirror stays in sync with the real script', () => {
   test('pm-phase1.js still contains the exact resume-by-existence condition the mirror replicates', () => {
-    expect(PM_PHASE1_SOURCE).toContain('if (!regenSkeleton && c.exists(ucPath)) continue')
+    expect(PM_PHASE1_SOURCE).toContain(
+      'if (!regenSkeleton && c.exists(ucPath) && isValidUseCaseFile(c.read(ucPath), row.id)) continue')
   })
 
   test('pm-phase1.js forces full use-case regeneration whenever the skeleton itself was (re)generated', () => {
@@ -35,28 +39,37 @@ describe('pm-phase1 requirements resume-by-existence: mirror stays in sync with 
   })
 })
 
+const alwaysValid = () => true
+
 describe('selectPendingUcIds() — skeleton unchanged this run (regenSkeleton = false)', () => {
   test('dispatches only UC IDs whose detail file is missing', () => {
     const ucTable = [{ id: 'UC-01', file: 'use-cases/UC-01.md' }, { id: 'UC-02', file: 'use-cases/UC-02.md' }]
     const existing = new Set(['/req/use-cases/UC-01.md'])
-    expect(selectPendingUcIds(ucTable, '/req', p => existing.has(p), false)).toEqual(['UC-02'])
+    expect(selectPendingUcIds(ucTable, '/req', p => existing.has(p), false, alwaysValid)).toEqual(['UC-02'])
   })
 
   test('dispatches nothing when every UC file already exists', () => {
     const ucTable = [{ id: 'UC-01', file: 'use-cases/UC-01.md' }]
-    expect(selectPendingUcIds(ucTable, '/req', () => true, false)).toEqual([])
+    expect(selectPendingUcIds(ucTable, '/req', () => true, false, alwaysValid)).toEqual([])
   })
 
   test('dispatches every UC on a fresh skeleton with no files yet', () => {
     const ucTable = [{ id: 'UC-01', file: 'use-cases/UC-01.md' }, { id: 'UC-02', file: 'use-cases/UC-02.md' }]
-    expect(selectPendingUcIds(ucTable, '/req', () => false, false)).toEqual(['UC-01', 'UC-02'])
+    expect(selectPendingUcIds(ucTable, '/req', () => false, false, alwaysValid)).toEqual(['UC-01', 'UC-02'])
+  })
+
+  test('a UC file that exists but fails the validity check is treated as pending, not trusted on existence alone', () => {
+    const ucTable = [{ id: 'UC-01', file: 'use-cases/UC-01.md' }, { id: 'UC-02', file: 'use-cases/UC-02.md' }]
+    const existing = new Set(['/req/use-cases/UC-01.md', '/req/use-cases/UC-02.md'])
+    const isValidFn = p => p.endsWith('UC-01.md') // UC-02's file exists but is "invalid"
+    expect(selectPendingUcIds(ucTable, '/req', p => existing.has(p), false, isValidFn)).toEqual(['UC-02'])
   })
 })
 
 describe('selectPendingUcIds() — skeleton was just (re)generated (regenSkeleton = true)', () => {
   test('dispatches every UC even when its file already exists on disk', () => {
     const ucTable = [{ id: 'UC-01', file: 'use-cases/UC-01.md' }, { id: 'UC-02', file: 'use-cases/UC-02.md' }]
-    expect(selectPendingUcIds(ucTable, '/req', () => true, true)).toEqual(['UC-01', 'UC-02'])
+    expect(selectPendingUcIds(ucTable, '/req', () => true, true, alwaysValid)).toEqual(['UC-01', 'UC-02'])
   })
 })
 
