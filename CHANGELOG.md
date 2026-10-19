@@ -1,4 +1,11 @@
 ## 0.1.4 (2026-07-21)
+## [0.19.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.19.0...v0.19.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* stop headless workers from Reading their own toolkit templates ([0f2c707](https://github.com/dtlab-tech/ai-toolkit/commit/0f2c7079799cdfb95ab99dcf7333f615a8f49a8e))
+
 ## [0.19.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.18.0...v0.19.0) (2026-10-19)
 
 
