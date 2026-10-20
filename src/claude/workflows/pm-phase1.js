@@ -281,6 +281,67 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return changeIdx !== -1 && testsIdx !== -1
   }
 
+  // FTR-028/UC-02: purely deterministic, zero-LLM-cost AC<->component traceability check. Reuses
+  // the two table parsers already duplicated in this file — no new parsing contract invented.
+  // Both directions produce a "Tech-Spec: " finding (always closed by a Tech-Spec revision —
+  // either add missing coverage, or fix a bad AC-ID reference).
+  function computeAcComponentTraceabilityGaps(reqIndexContent, specIndexContent) {
+    const acIds = new Set(parseAcTableRelatedUc(reqIndexContent).map(r => r.id))
+    const components = parseComponentsTable(specIndexContent)
+    const addressedAcIds = new Set()
+    const findings = []
+    for (const comp of components) {
+      const refs = (comp.addresses || '').split(',').map(s => s.trim()).filter(s => s && s !== '—')
+      for (const ref of refs) {
+        addressedAcIds.add(ref)
+        if (!acIds.has(ref)) findings.push(`Tech-Spec: component ${comp.filePath} references nonexistent ${ref}`)
+      }
+    }
+    for (const id of acIds) {
+      if (!addressedAcIds.has(id)) findings.push(`Tech-Spec: ${id} is not addressed by any Tech-Spec component`)
+    }
+    return findings
+  }
+
+  // FTR-028/UC-03: validates each needsComponentDetail entry's fileSlug against the real
+  // component table (a hallucinated/mistyped reference is dropped and reported, never
+  // dispatched), deduplicates by fileSlug (two claims against the same file collapse into one
+  // batch slot), and splits the remaining unique components into groups of at most
+  // DRILL_DOWN_BATCH_SIZE — never one call per claim, never one call covering every flagged
+  // component regardless of count.
+  const DRILL_DOWN_BATCH_SIZE = 8 // fixed constant, not externally configurable
+  function prepareDrillDownBatches(needsComponentDetail, specIndexContent) {
+    const validSlugs = new Set(parseComponentsTable(specIndexContent).map(c => c.fileSlug))
+    const extraFindings = []
+    const claimsByFileSlug = new Map()
+    for (const entry of needsComponentDetail || []) {
+      if (!validSlugs.has(entry.fileSlug)) {
+        extraFindings.push(`Tech-Spec: component-detail check referenced a non-existent file "${entry.fileSlug}" for claim "${entry.claim}"`)
+        continue
+      }
+      if (!claimsByFileSlug.has(entry.fileSlug)) claimsByFileSlug.set(entry.fileSlug, [])
+      claimsByFileSlug.get(entry.fileSlug).push(entry.claim)
+    }
+    const fileSlugs = [...claimsByFileSlug.keys()]
+    const batches = []
+    for (let i = 0; i < fileSlugs.length; i += DRILL_DOWN_BATCH_SIZE) {
+      batches.push(fileSlugs.slice(i, i + DRILL_DOWN_BATCH_SIZE)
+        .map(slug => ({ fileSlug: slug, claims: claimsByFileSlug.get(slug) })))
+    }
+    return { batches, extraFindings }
+  }
+
+  // specDir is already absolute (derived from c.feature()'s realpath-resolved featureDir), so
+  // this needs no extra path.resolve — same reasoning that already lets featurePath be handed to
+  // agents directly elsewhere in this file.
+  function buildDrillDownPrompt(batch) {
+    return batch.map(({ fileSlug, claims }) =>
+      claims.map(claim => `Claim: ${claim}\nComponent file: ${specDir}/components/${fileSlug}`).join('\n\n')
+    ).join('\n\n')
+  }
+
+  const drillDownId = 'gaia.agent.planner.validate-tech-spec-component-detail'
+
   function buildComponentPrompt(row, components, featurePathArg, componentTemplate) {
     const compactIndex = components.map(c => `${c.filePath} (${c.domain})`).join('\n')
     const base = `${featurePathArg}\n\nGenerate the full technical design for this component:\n` +
@@ -445,26 +506,81 @@ return c.run(meta.name, featureDir, prefix, async () => {
       // finding mentioning both document names, or neither, would mis-route or
       // silently skip). The validator agent itself decides which document(s) its
       // own findings implicate.
+      // FTR-028/UC-01: Tech-Spec text is the raw skeleton (c.read(specIndexPath)), never
+      // assembledTechSpec's fully-spliced output — bounds this prompt's size to component COUNT,
+      // not per-component prose length. Requirements stays assembledRequirements (full UC
+      // detail), unchanged — no real incident has shown UC count x flow length to pose the same
+      // risk.
       const result = await c.worker(valId,
-        `${featurePath}\n\nRequirements:\n${assembledRequirements}\n\nTech-Spec:\n${assembledTechSpec}\n\n` +
-        'Validate only; the host owns the revision loop. Return valid, a findings array (one string per remaining gap), needsRequirementsFix/needsTechSpecFix (true only if at least one finding implicates that document), and the full validation report content. Do not dispatch other agents.',
-        { label: `validation:${cycle}`, outputs: [output('Validation-Report', [featurePath, reqIndexPath, specIndexPath])], schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } }, needsRequirementsFix: { type: 'boolean' }, needsTechSpecFix: { type: 'boolean' }, report: { type: 'string' } }, required: ['valid', 'findings', 'needsRequirementsFix', 'needsTechSpecFix', 'report'] } })
-      // A model returning valid:true alongside non-empty findings (or valid:false
-      // with none) contradicts its own schema's intent — never silently treated as
-      // "not clean yet" and spent on another cycle without surfacing the
-      // inconsistency; fail closed instead of masking a confused response.
-      if (result.valid === (result.findings.length > 0)) {
-        throw new Error(`Validation agent returned a contradictory result on cycle ${cycle}: valid=${result.valid} with ${result.findings.length} finding(s)`)
+        `${featurePath}\n\nRequirements:\n${assembledRequirements}\n\nTech-Spec:\n${c.read(specIndexPath)}\n\n` +
+        'Validate only; the host owns the revision loop. Return valid, a findings array (one string per remaining gap), needsRequirementsFix/needsTechSpecFix (true only if at least one finding implicates that document), needsComponentDetail (claims needing a component\'s own design body to verify — see your own instructions for when to use this instead of a finding), and the full validation report content. Do not dispatch other agents.',
+        { label: `validation:${cycle}`, outputs: [output('Validation-Report', [featurePath, reqIndexPath, specIndexPath])], schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } }, needsRequirementsFix: { type: 'boolean' }, needsTechSpecFix: { type: 'boolean' }, report: { type: 'string' }, needsComponentDetail: { type: 'array', items: { type: 'object', properties: { claim: { type: 'string' }, fileSlug: { type: 'string' } }, required: ['claim', 'fileSlug'] } } }, required: ['valid', 'findings', 'needsRequirementsFix', 'needsTechSpecFix', 'report'] } })
+        // needsComponentDetail is declared in `properties` but deliberately NOT in the schema's
+        // top-level `required` array: every pre-existing mocked test response for this agent
+        // (predating this feature) omits the field entirely, and making it hard-required would
+        // break every one of them for no real gain — prepareDrillDownBatches already treats an
+        // absent/undefined value as "no entries" via `needsComponentDetail || []`.
+
+      // Raw self-consistency guard on the MODEL'S OWN response, before any host-side merge: a
+      // pending needsComponentDetail entry is itself a form of "not yet resolved", same as a
+      // non-empty findings array — valid:true requires BOTH to be empty, valid:false requires at
+      // least one to be non-empty. This is intentionally separate from mergedValid below (which
+      // is NOT required to track this raw self-report: a valid:false caused only by
+      // needsComponentDetail entries that the drill-down subsequently confirms must still resolve
+      // to a clean cycle, not a false "contradiction").
+      const rawHasOpenItems = result.findings.length > 0 || (result.needsComponentDetail || []).length > 0
+      if (result.valid === rawHasOpenItems) {
+        throw new Error(`Validation agent returned a contradictory result on cycle ${cycle}: valid=${result.valid} with ${result.findings.length} finding(s) and ${(result.needsComponentDetail || []).length} needsComponentDetail entry(ies)`)
       }
-      if (result.valid) {
+
+      // FTR-028/UC-02 + UC-03: every finding source for this cycle, computed/dispatched AFTER the
+      // main call returns (re-reading the index files fresh, since a prior cycle may have
+      // regenerated them). Zero added LLM cost when both come back empty (the common case).
+      const reqIndexContent = c.read(reqIndexPath)
+      const specIndexContent = c.read(specIndexPath)
+      const structuralFindings = computeAcComponentTraceabilityGaps(reqIndexContent, specIndexContent)
+      const { batches, extraFindings } = prepareDrillDownBatches(result.needsComponentDetail, specIndexContent)
+
+      const drillDownFindings = []
+      for (let b = 0; b < batches.length; b++) {
+        const batchResult = await c.worker(drillDownId, buildDrillDownPrompt(batches[b]),
+          { label: `validation:${cycle}:component-detail:${b + 1}`,
+            schema: { type: 'object', properties: { findings: { type: 'array', items: { type: 'string' } } }, required: ['findings'] } })
+        drillDownFindings.push(...batchResult.findings)
+      }
+
+      // BR-04: merge everything BEFORE the contradiction guard. A model returning valid:true
+      // while the host's own independent checks found a real gap is not a self-contradiction (it
+      // was never shown that gap) — it is simply now-invalid, same as any other unresolved
+      // finding.
+      const newFindings = [...structuralFindings, ...extraFindings, ...drillDownFindings]
+      const mergedFindings = [...result.findings, ...newFindings]
+      // Deliberately NOT `result.valid && ...`: result.valid may be false SOLELY because of
+      // needsComponentDetail entries that the drill-down above has now fully confirmed (zero
+      // drillDownFindings) — that must resolve to clean, not stay stuck on the model's own
+      // now-stale self-report. The only authoritative signal for the final verdict is whether any
+      // finding remains, from any source, after every check this cycle has run.
+      const mergedValid = mergedFindings.length === 0
+      const mergedNeedsTechSpecFix = result.needsTechSpecFix || newFindings.some(f => f.startsWith('Tech-Spec:'))
+      const mergedNeedsRequirementsFix = result.needsRequirementsFix || newFindings.some(f => f.startsWith('Requirements:'))
+
+      // c.worker() already wrote result.report verbatim via its own outputs[0] contract; only
+      // overwrite it when this cycle actually added findings the LLM's own report text doesn't
+      // mention — the common clean case (newFindings.length === 0) never re-writes the file.
+      if (newFindings.length) {
+        c.write(file('Validation-Report'), result.report +
+          '\n\n## Additional findings (deterministic + component-detail drill-down)\n' +
+          newFindings.map(f => `- ${f}`).join('\n') + '\n')
+      }
+      if (mergedValid) {
         if (!fresh(file('Validation-Report'), [featurePath, reqIndexPath, specIndexPath])) throw new Error('Validation agent did not produce its report')
         validationSummary = `0 gaps (clean on cycle ${cycle})`
         break
       }
       if (cycle === 3) throw new Error('Validation gaps remain after 3 cycles')
-      if (!result.needsRequirementsFix && !result.needsTechSpecFix) throw new Error(`Validation agent reported gaps on cycle ${cycle} but flagged neither document for revision`)
-      if (result.needsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }
-      if (result.needsTechSpecFix) { await generateTechSpec(true); assembledTechSpec = assembleTechSpec() }
+      if (!mergedNeedsRequirementsFix && !mergedNeedsTechSpecFix) throw new Error(`Validation agent reported gaps on cycle ${cycle} but flagged neither document for revision`)
+      if (mergedNeedsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }
+      if (mergedNeedsTechSpecFix) { await generateTechSpec(true); assembledTechSpec = assembleTechSpec() }
     }
   }
   // Binds Gate 1's eventual approval to the EXACT Requirements/Tech-Spec bytes

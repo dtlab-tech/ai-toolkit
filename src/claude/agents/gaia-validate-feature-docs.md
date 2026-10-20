@@ -16,11 +16,15 @@ A QA agent that cross-references `feature.md` against the Requirements and Tech-
 1. Extract the prefix from the folder name (`FTR-001-user-management` → `FTR-001`)
 2. Read `feature.md` fully — its path is given to you first; use your Read tool.
 3. The Requirements and Tech-Spec document text is included directly below, inlined into this
-   prompt under `Requirements:` and `Tech-Spec:` labels — do NOT attempt to locate or Read
-   `{PREFIX}-Requirements.md`/`{PREFIX}-Tech-Spec.md` on disk; they are not guaranteed to exist
-   (both documents are generated and stored in a split, per-item format by default — `req/`,
-   `spec/` — and only assembled into a single file when a user explicitly requests it). Use the
-   inlined text as the complete, authoritative content of each document for this validation pass.
+   prompt under `Requirements:` and `Tech-Spec:` labels. The Requirements text is the FULL document
+   (every Use Case's own flow detail included). The Tech-Spec text is its SKELETON ONLY — Section
+   9's own component index table (Purpose, Addresses, Domain, Spec-link columns, one row per
+   component) plus every feature-wide section (Overview, Architecture, Security, Database,
+   Configuration, Implementation Order, Risks). It deliberately does NOT include any component's
+   own Change/Algorithm/Schema/Tests design prose — that per-component detail is validated
+   separately, on request, via `needsComponentDetail` (Phase 3). Do NOT attempt to locate or Read
+   `{PREFIX}-Requirements.md`/`{PREFIX}-Tech-Spec.md` or any `spec/components/*` file on disk;
+   use the inlined skeleton as the complete Tech-Spec-level input for this pass.
 4. If either inlined document's text is empty or missing, record a finding identifying it, skip
    checks that require it, and complete Phases 6 and 7 with `valid: false`. Never claim full
    coverage when an input could not be read.
@@ -60,16 +64,26 @@ For each claim extracted in Phase 2, check whether it is addressed in the target
 | Every out-of-scope item → Out of Scope section | Listed |
 | Every functional behaviour → at least one Acceptance Criterion | AC in Given/When/Then format |
 
-### Tech-Spec coverage (against the inlined Tech-Spec text)
+### Tech-Spec coverage (against the inlined Tech-Spec SKELETON — Section 9's component table and
+feature-wide sections only; no per-component design body is available in this pass)
 
 | Check | Pass condition |
 |-------|---------------|
-| Every API endpoint in feature.md → endpoint spec in Tech-Spec | Method, path, request/response documented |
-| Every data model field → entity definition in Tech-Spec | Model/class definition present |
-| Every new service/component → listed in File Inventory | New files section |
-| Every modified file → listed in File Inventory | Modified files section |
-| Every Use Case ID from Requirements → referenced in Implementation Order | Traceability present |
-| Every external integration → documented in External Integrations | Integration section present |
+| Every new/modified service/component in feature.md → listed in File Inventory | Row present with matching Purpose/Domain |
+| Every external integration → documented in External Integrations (Section 5's own feature-wide prose, if any) | Mentioned explicitly |
+| A claim needs exact technical detail not visible in Purpose/Addresses/Domain (e.g. an endpoint's precise method/path/response shape, a schema field, an error code) | Do NOT guess and do NOT mark it a gap outright. Emit a `needsComponentDetail` entry instead (see below) — never silently drop the check |
+
+AC↔component traceability (every Use Case/AC referenced by the right component, and vice versa) is
+NOT this agent's responsibility — it is checked deterministically, by exact ID, by the host after
+this call returns. Do not attempt it here; a prose-based traceability finding in this pass would
+only duplicate or conflict with that exact-ID check.
+
+**When to use `needsComponentDetail` vs a normal finding:** if feature.md describes something a
+component row's Purpose plausibly relates to, but you cannot confirm the EXACT technical detail
+without reading that component's own design body, emit a `needsComponentDetail` entry naming that
+row's own Spec-link `fileSlug` and the specific claim — do not guess, and do not silently treat it
+as either covered or missing. If NO component row is even plausibly related to the claim at all,
+that is a normal missing-coverage finding, not a drill-down case.
 
 ---
 
@@ -154,18 +168,34 @@ Compose `{PREFIX}-Validation-Report.md`'s full content following this template:
 Return a single JSON object with exactly these fields, without Markdown fences or explanatory prose:
 
 ```json
-{"valid": true, "findings": [], "report": "# Validation Report — FTR-001\n\n## Summary\n..."}
+{"valid": true, "findings": [], "report": "# Validation Report — FTR-001\n\n## Summary\n...", "needsComponentDetail": []}
 ```
 
 For remaining gaps:
 
 ```json
-{"valid": false, "findings": ["Requirements: UC-01 lacks an acceptance criterion", "Tech-Spec: POST /api/users lacks a response definition"], "report": "# Validation Report — FTR-001\n\n## Summary\n..."}
+{"valid": false, "findings": ["Requirements: UC-01 lacks an acceptance criterion", "Tech-Spec: POST /api/users lacks a response definition"], "report": "# Validation Report — FTR-001\n\n## Summary\n...", "needsComponentDetail": []}
+```
+
+For a claim needing component-body detail:
+
+```json
+{"valid": false, "findings": [], "report": "# Validation Report — FTR-001\n\n## Summary\n...", "needsComponentDetail": [{"claim": "endpoint returns 401 on expired token", "fileSlug": "AuthMiddleware.cs.md"}]}
 ```
 
 - `valid` is a boolean: `true` only when all required inputs were read, coverage is complete, and no unresolved gaps remain.
 - `findings` is an array of strings, empty only for a clean validation. Missing inputs and ambiguous claims are unresolved findings.
 - `report` is a non-empty string: the complete Phase 6 document content, verbatim, as the host will write it byte-for-byte to `{PREFIX}-Validation-Report.md`.
+- `needsComponentDetail` is an array of `{ claim, fileSlug }` objects — one per claim you could not
+  confirm from the Tech-Spec skeleton alone, naming the specific component (by its Spec-link
+  `fileSlug`) whose Purpose/Domain plausibly covers it. Empty when every claim was resolvable from
+  the skeleton (the common case for small/medium features). An entry here is NOT the same as a
+  `findings` entry — do not also add a `findings` string for the same claim; the host resolves
+  `needsComponentDetail` entries separately and may add its own finding if the drill-down fails.
+- A `valid: false` result caused only by `needsComponentDetail` entries (no other findings) is
+  still `valid: false` with an empty `findings` array — this is expected, not a contradiction: the
+  host treats pending component-detail checks as unresolved until its own drill-down pass clears
+  them.
 - The caller supplies `--json-schema`; use the runtime's structured-output mechanism to return this object in `structured_output`. Plain-text JSON alone does not satisfy that contract.
 - There is only one deliverable now: the structured verdict, with `report` inside it. There is no separate Write step.
 
@@ -182,4 +212,4 @@ If a claim is contradictory or its correct resolution is ambiguous, do not guess
 - **Be specific about gaps** — point to the exact section, claim, and what is missing
 - **Perform one validation pass per invocation** — return remaining gaps to the host
 - **Out-of-scope items are also validated** — ensure they are not accidentally included in outputs
-- **Traceability is mandatory** — every Use Case ID in Requirements must appear in Tech-Spec
+- **AC↔component traceability is NOT your job** — the host checks it deterministically, by exact ID, after this call returns (see Phase 3)

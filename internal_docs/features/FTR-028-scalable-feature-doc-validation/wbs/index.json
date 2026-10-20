@@ -1,0 +1,264 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-028",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-01"
+      ],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-02"
+      ],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-03"
+      ],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": [],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": [
+        "US-04-TASK-TEST-01"
+      ]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Swap the validator's Tech-Spec input from the fully assembled document to the skeleton",
+      "outcome": "pm-phase1.js's validation-cycle prompt uses c.read(specIndexPath) instead of assembledTechSpec for the Tech-Spec label; gaia-validate-feature-docs.md's Phase 1 step 3 is reworded to describe the skeleton-only contract",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-01"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 2,
+      "commit": {
+        "type": "fix",
+        "scope": "pm-phase1",
+        "subject": "bound the feature-doc validator's Tech-Spec input to the skeleton, not the fully assembled document"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Cover the skeleton-only validator prompt end to end",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: the validator's dispatch prompt contains no per-component Change/Algorithm/Tests prose; Requirements' own full UC detail is still inlined unchanged; docsDigest still hashes the full assembled documents",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-05",
+        "AC-13"
+      ],
+      "estimate": {
+        "agentMinutes": 20,
+        "tokens": 26000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "cover the skeleton-only validator prompt and unaffected docsDigest"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Add the deterministic AC<->component traceability check and the merge-before-guard mechanism",
+      "outcome": "pm-phase1.js gains computeAcComponentTraceabilityGaps(reqIndexContent, specIndexContent); the validation cycle merges its findings into result before the valid/findings contradiction guard, recomputing valid/needsTechSpecFix/needsRequirementsFix from the merged set, and appends any new findings to the persisted Validation-Report",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05"
+      ],
+      "estimate": {
+        "agentMinutes": 24,
+        "tokens": 30000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase1",
+        "subject": "enforce AC<->component traceability deterministically, merged before the validator's own contradiction guard"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Cover deterministic AC<->component traceability and the merge-forces-invalid behavior",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: an AC addressed by zero components produces a finding and forces needsTechSpecFix even when the LLM pass returns valid:true; a component referencing a nonexistent AC-ID is reported by name; no gaps + a clean LLM pass stays valid, unchanged from today",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05"
+      ],
+      "estimate": {
+        "agentMinutes": 22,
+        "tokens": 28000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "cover deterministic AC<->component traceability and the merge-before-guard behavior"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Register the new component-detail drill-down agent and extend the validator's schema",
+      "outcome": "lib/agent-registry.js gains the gaia.agent.planner.validate-tech-spec-component-detail entry; a new src/claude/agents/gaia-validate-tech-spec-component-detail.md defines the narrow drill-down agent; gaia-validate-feature-docs.md's Phase 3/schema/Phase 7 gain needsComponentDetail with guidance on when to use it; pm-phase1.js's main validator worker schema literal gains the matching needsComponentDetail field",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-06"
+      ],
+      "estimate": {
+        "agentMinutes": 22,
+        "tokens": 28000
+      },
+      "outputCount": 3,
+      "commit": {
+        "type": "feat",
+        "scope": "agent-registry, pm-phase1",
+        "subject": "register the new component-detail drill-down agent and extend the validator's schema"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-02": {
+      "title": "Add fileSlug validation, dedup/batching, and drill-down dispatch to the validation cycle",
+      "outcome": "pm-phase1.js gains prepareDrillDownBatches/buildDrillDownPrompt/DRILL_DOWN_BATCH_SIZE; needsComponentDetail entries are validated against spec/index.md's own component table, deduplicated by fileSlug, batched at K=8, and dispatched one gaia-validate-tech-spec-component-detail call per batch; the merge logic from US-02 is extended to also fold in drill-down and bad-fileSlug findings",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-01",
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "estimate": {
+        "agentMinutes": 28,
+        "tokens": 34000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase1",
+        "subject": "dispatch batched component-detail drill-down calls and fold their findings into the merge"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Cover component-detail drill-down dispatch, validation, dedup, and batching end to end",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: a valid fileSlug dispatches a drill-down call reading only that file; a hallucinated fileSlug is dropped and reported, never dispatched; two claims on the same fileSlug collapse into one batch slot; more unique flagged components than K produce multiple bounded calls; zero needsComponentDetail entries dispatch zero drill-down calls; a drill-down finding forces needsTechSpecFix even when the main pass reported clean",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "estimate": {
+        "agentMinutes": 28,
+        "tokens": 36000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "cover component-detail drill-down dispatch, validation, dedup, and batching"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Run the full regression suite and confirm no behavior regressed",
+      "outcome": "Full npm test suite passes with every new AC-01 through AC-13 test green alongside the full pre-existing suite (FTR-020 through FTR-027's own tests unaffected); AC-14 satisfied",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "US-02-TASK-BE-01",
+        "US-03-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-14"
+      ],
+      "estimate": {
+        "agentMinutes": 14,
+        "tokens": 16000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "confirm the full regression suite passes with the scalable validator in place"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}
