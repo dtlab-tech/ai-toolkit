@@ -130,7 +130,13 @@ function renderPhaseDetailBlock(phase, taskTitles, dependsOnPhases) {
     ? taskTitles.map(t => `- \`${t.id}\` — ${t.title}`).join('\n')
     : '_No tasks._'
   const dependsOn = dependsOnPhases.length ? dependsOnPhases.join(', ') : 'none'
-  let text = _stripTemplateComments(c.read('.claude/scripts/templates/gaia-user-story-template.md'))
+  // The template lives under the toolkit's own installed scripts/templates/ — outside the project
+  // for a globally-installed toolkit, which a plain c.read() has no way to resolve (it only reads
+  // project-relative paths). Read via print-asset instead, same as gaia-task-template.md below —
+  // this was previously a bare c.read() of a local-install-relative path, which only worked when
+  // the toolkit happened to be installed locally into this project's own .claude/ folder (a real
+  // incident: a project with only a global install failed with ENOENT on this exact line).
+  let text = _stripTemplateComments(c.command(['print-asset', 'scripts/templates/gaia-user-story-template.md', '--project', c.root]).stdout)
   text = text.replace(/\{PHASE_ID\}/g, phase.id)
   text = _fillFieldBlock(text, {
     'Phase ID': phase.id,
