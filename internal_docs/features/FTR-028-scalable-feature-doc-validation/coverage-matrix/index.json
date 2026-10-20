@@ -1,0 +1,294 @@
+{
+  "prefix": "FTR-028",
+  "generatedAt": "2026-10-20T13:01:24.872Z",
+  "acceptanceCriteria": [
+    {
+      "id": "AC-01",
+      "criterion": "Given `spec/index.md` plus N component files with large design bodies, when `pm-phase1`'s validation step builds the main validator's prompt, then the prompt contains the Tech-Spec skeleton content but none of the per-component Change/Algorithm/Schema/Tests prose",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase1.js",
+        "src/claude/agents/gaia-validate-feature-docs.md",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-02",
+      "criterion": "Given a component's Addresses column references an AC-ID absent from `req/index.md`'s AC table, when `pm-phase1`'s validation step runs, then a deterministic `\"Tech-Spec: ...\"` finding is produced and `needsTechSpecFix` is forced true",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "tests/pm-phase1-ac-traceability.test.js",
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-03",
+      "criterion": "Given an AC-ID in `req/index.md`'s AC table is referenced by zero Tech-Spec components, when `pm-phase1`'s validation step runs, then a deterministic `\"Tech-Spec: ...\"` finding is produced and `needsTechSpecFix` is forced true",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-04",
+      "criterion": "Given the main validator returns `valid: true` with empty `findings`/`needsComponentDetail`, but AC-02 or AC-03's condition holds, when `pm-phase1`'s validation step runs, then the merged result is not treated as valid; the correct fix flag is forced true and the revision cycle continues",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-05",
+      "criterion": "Given no deterministic structural gaps exist and no `needsComponentDetail` entries are produced, when the main validator independently returns `valid: true`, then the merged result is valid, unchanged behavior from today",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01",
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase1.js",
+        "src/claude/agents/gaia-validate-feature-docs.md",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-TEST-01",
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01",
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-06",
+      "criterion": "Given a claim needs component-body detail to verify (not visible in Purpose/Addresses/Domain), when the main validator runs, then it returns a `needsComponentDetail` entry `{ claim, fileSlug }` naming a real, existing skeleton row, instead of guessing or silently dropping the check",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-validate-tech-spec-component-detail.md",
+        "src/claude/workflows/pm-phase1.js",
+        "src/claude/agents/gaia-validate-feature-docs.md",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-07",
+      "criterion": "Given a `needsComponentDetail` entry names a `fileSlug` that exists in `spec/index.md`'s table, when the host processes the main validator's result, then a drill-down worker call is dispatched, Reading only that component's file (and any others batched with it)",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-validate-tech-spec-component-detail.md",
+        "src/claude/workflows/pm-phase1.js",
+        "lib/agent-registry.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-08",
+      "criterion": "Given a `needsComponentDetail` entry names a `fileSlug` absent from `spec/index.md`'s table, when the host processes the main validator's result, then the entry is dropped before dispatch and a `\"Tech-Spec: ...\"` finding about the bad reference is produced instead",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-validate-tech-spec-component-detail.md",
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-09",
+      "criterion": "Given the drill-down worker reads a named component and confirms the claim is satisfied by its content, when the drill-down call completes, then no finding is added for that claim",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-validate-tech-spec-component-detail.md",
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-10",
+      "criterion": "Given the drill-down worker reads a named component and the claim is NOT satisfied by its content, when the drill-down call completes, then a `\"Tech-Spec: ...\"` finding is added, merged into the overall result, forcing `needsTechSpecFix`",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-validate-tech-spec-component-detail.md",
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-11",
+      "criterion": "Given `needsComponentDetail` names more unique components than the batch size `K`, when the host dispatches drill-down calls, then `ceil(N/K)` batched calls are issued, each bounded to at most `K` components — never one call covering all of them",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-validate-tech-spec-component-detail.md",
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-12",
+      "criterion": "Given two `needsComponentDetail` entries name the same `fileSlug`, when the host processes the main validator's result, then the component is deduplicated to a single read/batch slot, both claims checked against it",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-validate-tech-spec-component-detail.md",
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-13",
+      "criterion": "Given a validation cycle completes (clean or not), regardless of whether drill-down ran, when `docsDigest` is computed, then it still hashes the full, unreduced `assembledRequirements`/`assembledTechSpec` content",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase1.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-14",
+      "criterion": "Given all changes are delivered, when `npm test` runs, then all tests pass: new regression tests for AC-01 through AC-13, and a full-suite regression",
+      "priority": "Must",
+      "unscoped": true,
+      "relatedUCs": [],
+      "techSpecFiles": [],
+      "taskIds": [
+        "US-04-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    }
+  ]
+}

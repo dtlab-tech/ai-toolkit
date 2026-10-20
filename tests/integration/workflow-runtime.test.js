@@ -903,10 +903,255 @@ test('pm-phase1 rejects a Tech-Spec with a dangling Addresses reference before s
 });
 
 test('pm-phase1 proceeds unchanged for a clean (dash-only) Tech-Spec', async () => {
+  // FTR-028: a dash-only component (addressing no AC) is only "clean" if Requirements also has no
+  // AC left unaddressed — pair the dash with an empty AC table so the new deterministic
+  // AC<->component traceability check (computeAcComponentTraceabilityGaps) has nothing to flag;
+  // this test's own intent (dash is accepted by the pre-existing dangling-reference check, not
+  // rejected like "AC-99") is otherwise unaffected.
+  const requirementsNoAcDoc = () => Array.from({ length: 9 }, (_, i) => {
+    const n = i + 1;
+    if (n === 2) return `## 2. Use Cases\n\n${USE_CASE_TABLE}`;
+    if (n === 7) return '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n';
+    return `## ${n}. Section ${n}\n`;
+  }).join('\n');
   const dispatch = async options => {
+    if (options.args.includes('gaia-generate-requirements')) return success(requirementsNoAcDoc());
     if (options.args.includes('gaia-generate-tech-spec')) return success(techSpecDocWithFileInventory('—'));
     return phase1Dispatch(options);
   };
   const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
   expect(result.validation.summary).toContain('0 gaps');
+});
+
+// FTR-028: gaia-validate-feature-docs's own prompt no longer grows with per-component design
+// prose — only Section 9's skeleton (one row per component) is inlined for the Tech-Spec side.
+describe('FTR-028 — validator prompt uses the Tech-Spec skeleton only', () => {
+  function sentinelFixture() {
+    const componentsTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+      '| a.js | example | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n\n' +
+      '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+    const skeletonDoc = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      return n === 9 ? `## 9. File Inventory\n\n${componentsTable}` : `## ${n}. Section ${n}\n`;
+    }).join('\n');
+    const componentDetail = '# a.js — New\n\n## Change\n\nSENTINEL_COMPONENT_BODY_TEXT\n\n## Algorithm\n\nSENTINEL_COMPONENT_BODY_TEXT\n\n## Tests\n\nExample tests.\n';
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(skeletonDoc);
+      if (name === 'gaia-generate-tech-spec-component') return success(componentDetail);
+      return phase1Dispatch(options);
+    };
+    return { dispatch };
+  }
+  function findValidatorCall(dispatchFn) {
+    return dispatchFn.mock.calls.map(([o]) => o)
+      .find(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-validate-feature-docs');
+  }
+
+  test('the main validator dispatch prompt contains no per-component Change/Algorithm/Tests prose', async () => {
+    const { dispatch } = sentinelFixture();
+    const dispatchFn = jest.fn(dispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const validatorCall = findValidatorCall(dispatchFn);
+    expect(validatorCall.prompt).not.toContain('SENTINEL_COMPONENT_BODY_TEXT');
+    expect(validatorCall.prompt).toContain('## 9. File Inventory'); // skeleton's own section still present
+  });
+
+  test('Requirements text passed to the validator is unchanged (full UC detail still inlined)', async () => {
+    const { dispatch } = sentinelFixture();
+    const dispatchFn = jest.fn(dispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    const validatorCall = findValidatorCall(dispatchFn);
+    expect(validatorCall.prompt).toContain('Main flow'); // useCaseDetailDoc()'s own flow text — only the Tech-Spec side was reduced
+  });
+});
+
+// FTR-028/UC-02: AC<->component traceability is checked deterministically (host-only, zero LLM
+// cost) and merged into the result BEFORE the contradiction guard — a model saying valid:true can
+// still be overridden by a real structural gap it was never shown.
+describe('FTR-028 — deterministic AC<->component traceability (UC-02)', () => {
+  const requirementsTwoAcDoc = () => Array.from({ length: 9 }, (_, i) => {
+    const n = i + 1;
+    if (n === 2) return `## 2. Use Cases\n\n${USE_CASE_TABLE}`;
+    if (n === 7) return '## 7. Acceptance Criteria\n\n| ID | Criterion | Related UC |\n|---|---|---|\n| AC-01 | placeholder | All UCs |\n| AC-02 | orphan | All UCs |\n';
+    return `## ${n}. Section ${n}\n`;
+  }).join('\n');
+  function cleanValidateResponse() {
+    const response = success('# Result\n');
+    response.result.structured_output = { valid: true, findings: [], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n' };
+    return response;
+  }
+
+  test('an AC addressed by zero components produces a finding and forces needsTechSpecFix despite a clean LLM pass', async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements') return success(requirementsTwoAcDoc()); // AC-01 + AC-02, only AC-01 addressed
+      if (name === 'gaia-validate-feature-docs') return cleanValidateResponse(); // LLM never sees this gap — it's purely ID-based
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn })).rejects.toThrow('gaps remain after 3 cycles');
+    const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
+    expect(report).toContain('AC-02 is not addressed by any Tech-Spec component');
+    const validateCalls = dispatchFn.mock.calls.filter(([o]) => o.args[o.args.indexOf('--agent') + 1] === 'gaia-validate-feature-docs');
+    expect(validateCalls.length).toBe(3); // every cycle re-dispatched despite the LLM's own valid:true each time
+  });
+
+  // "A component referencing a nonexistent AC-ID" (the other direction of the same traceability
+  // check) is NOT exercised end to end here: a Tech-Spec with a genuinely dangling AC reference is
+  // already hard-rejected earlier, at generation time, by the pre-existing tech-spec-ac-check
+  // (FTR-023) — reaching the validation step with that condition true is not a realistic pipeline
+  // state. See tests/pm-phase1-ac-traceability.test.js for a direct, deterministic unit test of
+  // that direction against the real (mirrored) computeAcComponentTraceabilityGaps() logic.
+
+  test('no traceability gaps + a genuinely clean LLM pass stays valid, with no additional-findings section', async () => {
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(phase1Dispatch) });
+    expect(result.validation.summary).toContain('clean');
+    const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
+    expect(report).not.toContain('## Additional findings');
+  });
+});
+
+// FTR-028/UC-03: claims the skeleton-only pass can't verify are drilled into narrowly — only the
+// specific named component file(s), batched, never the whole Tech-Spec.
+describe('FTR-028 — component-detail drill-down (UC-03)', () => {
+  function validateResponseWithComponentDetail(entries, valid = false) {
+    const response = success('# Result\n');
+    response.result.structured_output = { valid, findings: [], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n', needsComponentDetail: entries };
+    return response;
+  }
+  function drillDownResponse(findings) {
+    const response = success('# Result\n');
+    response.result.structured_output = { findings };
+    return response;
+  }
+  function findDrillDownCalls(dispatchFn) {
+    return dispatchFn.mock.calls.map(([o]) => o)
+      .filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-validate-tech-spec-component-detail');
+  }
+
+  test('a needsComponentDetail entry naming a real fileSlug dispatches a drill-down call reading only that file', async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-validate-feature-docs') return validateResponseWithComponentDetail([{ claim: 'endpoint returns 401 on expired token', fileSlug: 'a.js.md' }]);
+      if (name === 'gaia-validate-tech-spec-component-detail') return drillDownResponse([]); // confirmed
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    expect(result.validation.summary).toContain('clean');
+    const drillDownCalls = findDrillDownCalls(dispatchFn);
+    expect(drillDownCalls).toHaveLength(1);
+    expect(drillDownCalls[0].prompt).toContain('a.js.md');
+    expect(drillDownCalls[0].prompt).toContain('endpoint returns 401 on expired token');
+  });
+
+  test('a needsComponentDetail entry naming a nonexistent fileSlug is dropped and reported, never dispatched', async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-validate-feature-docs') return validateResponseWithComponentDetail([{ claim: 'some claim', fileSlug: 'DoesNotExist.cs.md' }]);
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn })).rejects.toThrow('gaps remain after 3 cycles');
+    expect(findDrillDownCalls(dispatchFn)).toHaveLength(0);
+    const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
+    expect(report).toContain('component-detail check referenced a non-existent file "DoesNotExist.cs.md"');
+  });
+
+  test('an unsatisfied drill-down claim forces needsTechSpecFix even when the main pass has no other findings', async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-validate-feature-docs') return validateResponseWithComponentDetail([{ claim: 'endpoint returns 401 on expired token', fileSlug: 'a.js.md' }]);
+      if (name === 'gaia-validate-tech-spec-component-detail') return drillDownResponse(['Tech-Spec: a.js.md does not document a 401 response for an expired token']);
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn })).rejects.toThrow('gaps remain after 3 cycles');
+    const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
+    expect(report).toContain('does not document a 401 response');
+  });
+
+  test('two needsComponentDetail entries naming the same fileSlug collapse into one batch slot', async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-validate-feature-docs') return validateResponseWithComponentDetail([
+        { claim: 'claim A', fileSlug: 'a.js.md' },
+        { claim: 'claim B', fileSlug: 'a.js.md' },
+      ]);
+      if (name === 'gaia-validate-tech-spec-component-detail') return drillDownResponse([]);
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    expect(result.validation.summary).toContain('clean');
+    const drillDownCalls = findDrillDownCalls(dispatchFn);
+    expect(drillDownCalls).toHaveLength(1);
+    expect(drillDownCalls[0].prompt).toContain('claim A');
+    expect(drillDownCalls[0].prompt).toContain('claim B');
+  });
+
+  test('more unique flagged components than the batch size produce multiple bounded drill-down calls', async () => {
+    const COMPONENT_COUNT = 11; // DRILL_DOWN_BATCH_SIZE (8) + 3 -> ceil(11/8) = 2 batches
+    const rows = Array.from({ length: COMPONENT_COUNT }, (_, i) =>
+      `| c${i + 1}.js | example | AC-01 | BE | [components/c${i + 1}.js.md](components/c${i + 1}.js.md) |`).join('\n');
+    const manyComponentsTable = `### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n${rows}\n\n` +
+      '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+    const manySkeletonDoc = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      return n === 9 ? `## 9. File Inventory\n\n${manyComponentsTable}` : `## ${n}. Section ${n}\n`;
+    }).join('\n');
+    const entries = Array.from({ length: COMPONENT_COUNT }, (_, i) => ({ claim: `claim ${i + 1}`, fileSlug: `c${i + 1}.js.md` }));
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(manySkeletonDoc);
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (c\d+\.js)/);
+        return success(`# ${match[1]} — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\nExample body.\n\n## Tests\n\nExample tests.\n`);
+      }
+      if (name === 'gaia-validate-feature-docs') return validateResponseWithComponentDetail(entries);
+      if (name === 'gaia-validate-tech-spec-component-detail') return drillDownResponse([]);
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    expect(result.validation.summary).toContain('clean');
+    const drillDownCalls = findDrillDownCalls(dispatchFn);
+    expect(drillDownCalls).toHaveLength(2);
+    for (const call of drillDownCalls) {
+      const occurrences = (call.prompt.match(/Component file:/g) || []).length;
+      expect(occurrences).toBeLessThanOrEqual(8);
+    }
+  });
+
+  test('no needsComponentDetail entries dispatch zero drill-down calls (common-case cost)', async () => {
+    const dispatchFn = jest.fn(phase1Dispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    expect(findDrillDownCalls(dispatchFn)).toHaveLength(0);
+  });
+});
+
+describe('FTR-028 — docsDigest unaffected', () => {
+  test('docsDigest still hashes the full assembled Requirements + Tech-Spec regardless of drill-down activity', async () => {
+    const { loadRequirements } = require('../../src/claude/scripts/req-assembler');
+    const { loadTechSpec } = require('../../src/claude/scripts/tech-spec-assembler');
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-validate-feature-docs') {
+        const response = success('# Result\n');
+        response.result.structured_output = { valid: false, findings: [], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n', needsComponentDetail: [{ claim: 'x', fileSlug: 'a.js.md' }] };
+        return response;
+      }
+      if (name === 'gaia-validate-tech-spec-component-detail') {
+        const response = success('# Result\n');
+        response.result.structured_output = { findings: [] };
+        return response;
+      }
+      return phase1Dispatch(options);
+    };
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+    const reqText = loadRequirements(path.join(f.dir, 'req'));
+    const specText = loadTechSpec(path.join(f.dir, 'spec'));
+    expect(result.docs_digest).toBe(docsDigestFor(reqText, specText));
+  });
 });

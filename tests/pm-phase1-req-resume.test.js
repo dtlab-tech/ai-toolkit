@@ -35,7 +35,11 @@ describe('pm-phase1 requirements resume-by-existence: mirror stays in sync with 
   })
 
   test('the needsRequirementsFix branch always forces a full regeneration, never a resume', () => {
-    expect(PM_PHASE1_SOURCE).toContain('if (result.needsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }')
+    // FTR-028: the condition is now `mergedNeedsRequirementsFix` (result.needsRequirementsFix
+    // OR'd with any new deterministic/drill-down finding prefixed "Requirements:") — the branch's
+    // own behavior (force a full regen, never a resume) is unchanged, only the routing flag's
+    // source is now the merged, not raw, verdict.
+    expect(PM_PHASE1_SOURCE).toContain('if (mergedNeedsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }')
   })
 })
 
