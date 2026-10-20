@@ -13,7 +13,7 @@
 const fs = require('fs')
 const path = require('path')
 const graphChecks = require('./req-graph-checks')
-const { parseUseCaseIndexTable, parseAcTable, parseBusinessRulesTable } = require('./req-assembler')
+const { parseUseCaseIndexTable, parseAcTable, parseBusinessRulesTable, findSectionRange, parseTableHeader } = require('./req-assembler')
 
 function main() {
   const indexPath = process.argv[2]
@@ -31,9 +31,15 @@ function main() {
   }
 
   let ucTable, acTable, businessRules
+  const acHeaderErrors = []
   try {
     ucTable = parseUseCaseIndexTable(indexContent)
-    acTable = parseAcTable(indexContent)
+    // UC-02: validate the AC table's column header BEFORE parseAcTable's positional destructure
+    // ever runs across data rows — a malformed header (e.g. a 5-column table) must never be
+    // silently misparsed into the wrong fields.
+    const { start, end, lines } = findSectionRange(indexContent, 7)
+    acHeaderErrors.push(...graphChecks.checkAcTableHeader(parseTableHeader(lines, start, end)))
+    acTable = acHeaderErrors.length ? [] : parseAcTable(indexContent)
     businessRules = parseBusinessRulesTable(indexContent)
   } catch (e) {
     console.log(JSON.stringify({ valid: false, errors: [{ message: `parse failure: ${e.message}` }] }))
@@ -47,6 +53,7 @@ function main() {
     : []
 
   const errors = [
+    ...acHeaderErrors,
     ...graphChecks.checkUniqueUcIds({ ucIds }),
     ...graphChecks.checkUcIdFormat({ ucIds }),
     ...graphChecks.checkUcTableFileParity({ ucIds }, existingUcFiles),

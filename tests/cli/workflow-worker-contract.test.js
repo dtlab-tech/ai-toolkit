@@ -164,6 +164,77 @@ describe('extractMarkdownDocument (non-schema plain-text worker payload)', () =>
     expect(written).toContain('# src/y.js — New');
     expect(written).not.toContain('Perfect. Here is the design.');
   });
+
+  // FTR-029/UC-03: an unclosed whole-response fence wrap — the model opens a ```fence but the
+  // response simply ends without a matching close — defeats the closed-fence-unwrap above
+  // entirely (no closing line to match) AND the fence-aware heading scan (fence depth never
+  // returns to zero, hiding every real heading after the opener).
+  test('an unclosed whole-response fence wrap is recovered (opener stripped, real heading revealed)', async () => {
+    const unclosed = 'The validation is complete. Here is my component.\n\n```markdown\n'
+      + '# src/x.js — New\n\n## Change\n\nExample change.\n\n## Tests\n\nExample tests.\n';
+      // deliberately NO closing ``` — the model's turn simply ends
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: unclosed }) });
+    const detail = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    expect(detail).toContain('## Change');
+    expect(detail).toContain('## Tests');
+    expect(detail).not.toContain('Here is my component');
+    expect(detail).not.toMatch(/^```/);
+  });
+
+  test('an unclosed fence whose remainder reveals no heading is left unchanged (no false-positive strip)', async () => {
+    const noHeadingAfterStrip = '```\njust some code, not a real document, never closed\n';
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: noHeadingAfterStrip }) });
+    const detail = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    expect(detail).toBe(noHeadingAfterStrip);
+  });
+
+  test('a closed whole-response fence wrap is still recovered (regression, v0.19.2 behavior unchanged)', async () => {
+    const closed = 'Perfect! Let me write this.\n\n```markdown\n# src/z.js — New\n\n## Change\n\nx.\n\n## Tests\n\ny.\n```';
+    const c = createControl({ ...f.options, dispatch: async () => response({ result: closed }) });
+    const detail = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+    expect(detail).toContain('## Change');
+    expect(detail).not.toContain('Perfect! Let me write this');
+  });
+});
+
+// FTR-029/UC-01: a schema-required worker's response can end up with no usable structured_output
+// for a reason beyond the "needsRequirementsFix/needsTechSpecFix omitted" case the relaxed schema
+// already resolves on the first attempt — this is the secondary, bounded defense for that.
+describe('worker() missing-structured-output retry (FTR-029)', () => {
+  const schema = { type: 'object', properties: { valid: { type: 'boolean' } }, required: ['valid'] };
+
+  test('a clean-exit attempt with no recoverable structured output is retried with a corrective nudge', async () => {
+    let callCount = 0;
+    const dispatch = async ({ prompt }) => {
+      callCount++;
+      if (callCount === 1) {
+        expect(prompt).not.toContain('did not populate the required');
+        return response({ result: 'I need more time to think about this.' }); // no JSON at all
+      }
+      expect(prompt).toContain('did not populate the required'); // the nudge was appended
+      return response({ structured_output: { valid: true } });
+    };
+    const c = createControl({ ...f.options, dispatch });
+    const result = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', { schema }));
+    expect(result.valid).toBe(true);
+    expect(callCount).toBe(2);
+  });
+
+  test('a response recoverable via the existing text fallback is NOT retried', async () => {
+    const dispatch = async () => response({ result: '```json\n{"valid": true}\n```' });
+    const dispatchFn = jest.fn(dispatch);
+    const c = createControl({ ...f.options, dispatch: dispatchFn });
+    const result = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', { schema }));
+    expect(result.valid).toBe(true);
+    expect(dispatchFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('exhausting every attempt without usable structured output still throws the existing error', async () => {
+    const dispatch = async () => response({ result: 'Still no JSON.' });
+    const c = createControl({ ...f.options, dispatch });
+    await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', { schema })))
+      .rejects.toThrow('Worker returned no structured output');
+  });
 });
 
 test('a declared output cannot authorize a file outside the project', async () => {
@@ -246,11 +317,14 @@ test('spawn and parse failures still have durable diagnostic records', async () 
 });
 
 test('structured-output failure retains token usage and raw-response diagnostics', async () => {
+  // FTR-029: 'Done' has no JSON-shaped candidate at all, so this now exhausts all 3 attempts
+  // (the missing-structured-output retry) before failing — 42 tokens/attempt accumulated across
+  // all of them, not just the first.
   const c = createControl({ ...f.options, dispatch: async () => response() });
   await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test', {
     schema: { type: 'object', required: ['valid'] },
   }))).rejects.toThrow('no structured output');
-  expect(f.entries().find(e => e.agentId).phase_delta_tokens).toBe(42);
+  expect(f.entries().find(e => e.agentId).phase_delta_tokens).toBe(126);
   expect(evidence().response.result.result).toBe('Done');
 });
 

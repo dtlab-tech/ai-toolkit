@@ -38,6 +38,15 @@ function parseTableRows(lines, start, end) {
     line.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1))
 }
 
+// Returns the raw header-row cells for the first Markdown table found inside [start, end), or
+// null if no table is present at all. Companion to parseTableRows, which deliberately discards
+// this same row — UC-02's AC-table header validation (req-skeleton-check.js) needs it back.
+function parseTableHeader(lines, start, end) {
+  const tableLines = lines.slice(start, end).filter(l => l.trim().startsWith('|'))
+  if (tableLines.length < 1) return null
+  return tableLines[0].split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1)
+}
+
 // The "## 2. Use Cases" index table: UC ID | Title | Actor | Priority | File.
 // `File` is a Markdown link `[use-cases/UC-01.md](use-cases/UC-01.md)` — the link
 // TARGET (inside the parens) is authoritative, not the link text.
@@ -123,5 +132,6 @@ module.exports = {
   spliceSection2,
   findSectionRange,
   parseTableRows,
+  parseTableHeader,
   AssemblyError,
 }

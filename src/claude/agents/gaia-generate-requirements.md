@@ -123,11 +123,12 @@ Describe how pages connect and how the user moves between them.
 
 ## 7. Acceptance Criteria
 
-For each use case, define testable acceptance criteria:
+For each use case, define testable acceptance criteria. Use the EXACT 4-column shape below — do
+not add, remove, split, or reorder columns; the host's positional parser requires this exact shape:
 
-| ID | Criterion | Related UC |
-|----|-----------|-----------|
-| AC-01 | Given [context], when [action], then [result] | UC-01 |
+| ID | Criterion | Related UC | Priority |
+|----|-----------|-------------|----------|
+| AC-01 | Given [context], when [action], then [result] | UC-01 | Must |
 
 ## 8. Dependencies & Assumptions
 
