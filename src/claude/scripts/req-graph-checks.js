@@ -63,9 +63,33 @@ function checkCrossReferencesResolve({ ucIds, acTable, businessRules }) {
   return errors
 }
 
+// UC-02: the AC table's first 3 columns must be exactly "ID", "Criterion", "Related UC" in that
+// order — mirrors wb-graph-checks.js's own identical check for the Work-Breakdown-side AC table
+// (same names, same order, same "at least 3 columns" tolerance for a missing trailing Priority
+// column). Runs BEFORE req-assembler.js's parseAcTable positional destructure, so a malformed
+// header is reported as its own distinct, correctly-attributed error instead of a misleading
+// downstream DANGLING_AC_UC_REFERENCE (the real incident this closes: a 5-column table shifted
+// every cell, silently misattributing "When [...]" text into the Related UC field).
+function checkAcTableHeader(headerCells) {
+  if (!headerCells || headerCells.length < 3) {
+    return [{
+      category: 'MALFORMED_AC_TABLE_HEADER', severity: 'error',
+      message: `AC table header has fewer than 3 columns (found ${headerCells ? headerCells.length : 0})`,
+    }]
+  }
+  if (headerCells[0] !== 'ID' || headerCells[1] !== 'Criterion' || headerCells[2] !== 'Related UC') {
+    return [{
+      category: 'MALFORMED_AC_TABLE_HEADER', severity: 'error',
+      message: `AC table columns must be "ID", "Criterion", "Related UC" in order; got "${headerCells[0]}", "${headerCells[1]}", "${headerCells[2]}"`,
+    }]
+  }
+  return []
+}
+
 module.exports = {
   checkUniqueUcIds,
   checkUcIdFormat,
   checkUcTableFileParity,
   checkCrossReferencesResolve,
+  checkAcTableHeader,
 }

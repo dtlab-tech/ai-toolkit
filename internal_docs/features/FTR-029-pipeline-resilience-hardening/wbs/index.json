@@ -1,0 +1,437 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-029",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-01"
+      ],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01",
+        "US-01-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-02"
+      ],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-BE-02",
+        "US-02-TASK-BE-03",
+        "US-02-TASK-TEST-01",
+        "US-02-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-03"
+      ],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": [
+        "UC-04"
+      ],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-02",
+        "US-04-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-05",
+      "type": "user-story",
+      "sourceUC": [],
+      "detailFile": "user-stories/US-05.md",
+      "taskIds": [
+        "US-05-TASK-TEST-01"
+      ]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Add a bounded, nudge-retried second trigger for a missing-structured-output response",
+      "outcome": "lib/workflow-control.js's worker() attempt loop gains _isMissingStructuredOutput(result, schema) and STRUCTURED_OUTPUT_RETRY_NUDGE; a clean-exit attempt with no usable structured output (even after extractDelimitedStructuredOutput) is retried, bounded by the existing WORKER_MAX_ATTEMPTS/WORKER_RETRY_BACKOFF_MS, with the nudge appended to the next attempt's prompt",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-03",
+        "AC-04"
+      ],
+      "estimate": {
+        "agentMinutes": 20,
+        "tokens": 26000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "workflow-control",
+        "subject": "retry a schema-required worker once when structured output is missing, with a corrective nudge"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-BE-02": {
+      "title": "Relax the feature-doc validator's schema to not require the fix-routing booleans",
+      "outcome": "pm-phase1.js's gaia-validate-feature-docs worker call schema drops needsRequirementsFix/needsTechSpecFix from its required array (both remain in properties, still type-checked when present)",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-02"
+      ],
+      "estimate": {
+        "agentMinutes": 12,
+        "tokens": 14000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "fix",
+        "scope": "pm-phase1",
+        "subject": "stop requiring needsRequirementsFix/needsTechSpecFix in the validator's schema"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Cover the missing-structured-output retry and nudge end to end",
+      "outcome": "tests/cli/workflow-worker-contract.test.js has passing tests: a clean-exit attempt with no recoverable structured output is retried with the nudge appended; a response already recoverable via the existing text fallback is NOT retried; exhausting every attempt still throws the existing error",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-03",
+        "AC-04"
+      ],
+      "estimate": {
+        "agentMinutes": 20,
+        "tokens": 26000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "workflow-control",
+        "subject": "cover the missing-structured-output retry and corrective nudge"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-02": {
+      "title": "Cover the relaxed validator schema end to end against the real pm-phase1 dispatch path",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: a clean validator response omitting needsRequirementsFix/needsTechSpecFix still reaches Gate 1; a response that DOES include both fields with the correct type is still validated when present",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-02"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "cover the relaxed validator schema end to end"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-02.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Add parseTableHeader and checkAcTableHeader",
+      "outcome": "req-assembler.js gains parseTableHeader(lines, start, end), exported alongside findSectionRange/parseTableRows; req-graph-checks.js gains checkAcTableHeader(headerCells), mirroring wb-graph-checks.js's own AC-table header check",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-05",
+        "AC-06"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 2,
+      "commit": {
+        "type": "feat",
+        "scope": "req-assembler, req-graph-checks",
+        "subject": "add AC-table header extraction and validation"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-02": {
+      "title": "Wire the AC-table header check into req-skeleton-check.js before the positional parse",
+      "outcome": "req-skeleton-check.js calls parseTableHeader/checkAcTableHeader on Section 7's AC table before parseAcTable; a malformed header short-circuits acTable to [] for the run and folds a MALFORMED_AC_TABLE_HEADER error into the existing unified errors[] output",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-05",
+        "AC-06"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "req-skeleton-check",
+        "subject": "validate the AC table's column header before parsing it"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-03": {
+      "title": "Correct the stale 3-column AC example in gaia-generate-requirements.md",
+      "outcome": "gaia-generate-requirements.md's inline Section 7 example is corrected from a 3-column shape (missing Priority) to the real, authoritative 4-column shape, matching gaia-requirements-index-template.md",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-07"
+      ],
+      "estimate": {
+        "agentMinutes": 8,
+        "tokens": 9000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "fix",
+        "scope": "gaia-generate-requirements",
+        "subject": "correct the stale 3-column AC table example"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-03.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Cover parseTableHeader and checkAcTableHeader with direct unit tests",
+      "outcome": "tests/req-assembler.test.js and tests/req-graph-checks.test.js each gain direct unit tests for the new functions, including the BR-03 no-trailing-Priority tolerance case",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-05",
+        "AC-06"
+      ],
+      "estimate": {
+        "agentMinutes": 16,
+        "tokens": 20000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "req-assembler, req-graph-checks",
+        "subject": "cover parseTableHeader and checkAcTableHeader"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-02": {
+      "title": "Cover the end-to-end malformed-AC-header rejection via the real req-skeleton-check.js CLI",
+      "outcome": "tests/req-skeleton-check.test.js has passing fixture-based tests: a malformed (5-column) AC header fails with MALFORMED_AC_TABLE_HEADER and no dangling-reference noise; a 3-column header (no Priority) still passes",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-05",
+        "AC-06"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "req-skeleton-check",
+        "subject": "cover the end-to-end malformed AC-header rejection"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-02.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Recover an unclosed whole-response fence wrap in extractMarkdownDocument",
+      "outcome": "lib/workflow-control.js gains _stripUnclosedLeadingFence(text), wired into extractMarkdownDocument as a third recovery strategy, re-validated via the existing _hasUnfencedHeading before use",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-08",
+        "AC-09"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "fix",
+        "scope": "workflow-control",
+        "subject": "recover an unclosed whole-response fence wrap"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Cover unclosed-fence recovery end to end against the real pm-phase1 dispatch path",
+      "outcome": "tests/cli/workflow-worker-contract.test.js has passing tests: an unclosed fence wrap with a real heading after the opener is recovered; an unclosed fence whose remainder reveals no heading is left unchanged; a CLOSED fence wrap is still recovered (regression)",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-08",
+        "AC-09"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "workflow-control",
+        "subject": "cover unclosed-fence recovery and the closed-fence regression"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-01": {
+      "title": "Validate a per-component generation result immediately, with one bounded retry",
+      "outcome": "pm-phase1.js's per-component loop validates each worker's response via isValidComponentDetail immediately after dispatch, before writing to disk; an invalid result is retried once (identical prompt); still-invalid throws a precise error naming the component",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-10",
+        "AC-11"
+      ],
+      "estimate": {
+        "agentMinutes": 20,
+        "tokens": 26000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase1",
+        "subject": "fail fast on an invalid Tech-Spec component, with one bounded retry"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-BE-02": {
+      "title": "Validate a per-UC generation result immediately, with one bounded retry",
+      "outcome": "pm-phase1.js's per-UC loop validates each worker's response via isValidUseCaseFile immediately after dispatch, before writing to disk; an invalid result is retried once (identical prompt); still-invalid throws a precise error naming the UC",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-12"
+      ],
+      "estimate": {
+        "agentMinutes": 18,
+        "tokens": 22000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "scope": "pm-phase1",
+        "subject": "fail fast on an invalid Requirements use case, with one bounded retry"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Cover fail-fast per-item validation end to end, both loops",
+      "outcome": "tests/integration/workflow-runtime.test.js has passing tests: an invalid component valid on retry is written and used with no error; an invalid component on both attempts throws immediately, naming it, before any later component is dispatched; an invalid use case on both attempts throws immediately, naming it",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "estimate": {
+        "agentMinutes": 24,
+        "tokens": 30000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1",
+        "subject": "cover fail-fast per-item validation for both the component and use-case loops"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-05-TASK-TEST-01": {
+      "title": "Run the full regression suite and confirm no behavior regressed",
+      "outcome": "Full npm test suite passes with every new AC-01 through AC-12 test green alongside the full pre-existing suite; AC-13 satisfied",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02",
+        "US-02-TASK-BE-02",
+        "US-02-TASK-BE-03",
+        "US-03-TASK-BE-01",
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-13"
+      ],
+      "estimate": {
+        "agentMinutes": 14,
+        "tokens": 16000
+      },
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "scope": "pm-phase1, workflow-control",
+        "subject": "confirm the full regression suite passes with all four resilience fixes in place"
+      },
+      "detailFile": "tasks/US-05-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}

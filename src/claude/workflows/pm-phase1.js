@@ -35,6 +35,10 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const specComponentId = 'gaia.agent.planner.tech-spec-component'
   const valId = 'gaia.agent.planner.validate-feature-docs'
   const output = (suffix, inputs = [featurePath]) => ({ path: file(suffix), inputs })
+  // FTR-029/UC-04: bounded immediate retry, fixed constants (not externally configurable) for the
+  // per-UC and per-component generation loops' own fail-fast validity check.
+  const USE_CASE_RETRY_ATTEMPTS = 2
+  const COMPONENT_RETRY_ATTEMPTS = 2
 
   // Templates live under the toolkit's own installed scripts/templates/ — outside this project
   // for a globally-installed toolkit, which a non-interactive `--print` worker invocation has no
@@ -196,8 +200,15 @@ return c.run(meta.name, featureDir, prefix, async () => {
       // an existing use-case file would have been written against the OLD skeleton's row
       // (title/actor/priority may have changed) and cannot be trusted as-is.
       if (!regenSkeleton && c.exists(ucPath) && isValidUseCaseFile(c.read(ucPath), row.id)) continue // resume: skip, no dispatch
-      const detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath, ucTemplate),
-        { label: `requirements-use-case:${row.id}` })
+      // FTR-029/UC-04: validate immediately, before writing to disk and before moving to the next
+      // use case — same reasoning as the per-component loop above.
+      let detail, valid = false
+      for (let attempt = 1; attempt <= USE_CASE_RETRY_ATTEMPTS && !valid; attempt++) {
+        detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath, ucTemplate),
+          { label: `requirements-use-case:${row.id}:${attempt}` })
+        valid = isValidUseCaseFile(detail, row.id)
+      }
+      if (!valid) throw new Error(`Requirements use case "${row.id}" failed structural validation after ${USE_CASE_RETRY_ATTEMPTS} attempts — missing the required "### ${row.id}: " heading`)
       c.writeOutput(ucPath, detail.trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id))
     }
     // No assembly/write step here — generation only ever produces req/index.md + its per-UC
@@ -439,8 +450,16 @@ return c.run(meta.name, featureDir, prefix, async () => {
     for (const comp of components) {
       const compPath = `${specDir}/components/${comp.fileSlug}`
       if (!regenSkeleton && c.exists(compPath) && isValidComponentDetail(c.read(compPath))) continue // resume: skip, no dispatch
-      const detail = await c.worker(specComponentId, buildComponentPrompt(comp, components, featurePath, componentTemplate),
-        { label: `tech-spec-component:${comp.fileSlug}` })
+      // FTR-029/UC-04: validate immediately, before writing to disk and before moving to the next
+      // component — a bad result otherwise silently continued through every remaining component,
+      // only discovered (expensively) at final assembly or a later invocation's resume check.
+      let detail, valid = false
+      for (let attempt = 1; attempt <= COMPONENT_RETRY_ATTEMPTS && !valid; attempt++) {
+        detail = await c.worker(specComponentId, buildComponentPrompt(comp, components, featurePath, componentTemplate),
+          { label: `tech-spec-component:${comp.fileSlug}:${attempt}` })
+        valid = isValidComponentDetail(detail)
+      }
+      if (!valid) throw new Error(`Tech-Spec component "${comp.filePath}" (${comp.fileSlug}) failed structural validation after ${COMPONENT_RETRY_ATTEMPTS} attempts — missing a real "## Change"/"## Tests" heading`)
       c.writeOutput(compPath, detail)
     }
     // No assembly/write step here — generation only ever produces spec/index.md + its
@@ -514,7 +533,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
       const result = await c.worker(valId,
         `${featurePath}\n\nRequirements:\n${assembledRequirements}\n\nTech-Spec:\n${c.read(specIndexPath)}\n\n` +
         'Validate only; the host owns the revision loop. Return valid, a findings array (one string per remaining gap), needsRequirementsFix/needsTechSpecFix (true only if at least one finding implicates that document), needsComponentDetail (claims needing a component\'s own design body to verify — see your own instructions for when to use this instead of a finding), and the full validation report content. Do not dispatch other agents.',
-        { label: `validation:${cycle}`, outputs: [output('Validation-Report', [featurePath, reqIndexPath, specIndexPath])], schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } }, needsRequirementsFix: { type: 'boolean' }, needsTechSpecFix: { type: 'boolean' }, report: { type: 'string' }, needsComponentDetail: { type: 'array', items: { type: 'object', properties: { claim: { type: 'string' }, fileSlug: { type: 'string' } }, required: ['claim', 'fileSlug'] } } }, required: ['valid', 'findings', 'needsRequirementsFix', 'needsTechSpecFix', 'report'] } })
+        { label: `validation:${cycle}`, outputs: [output('Validation-Report', [featurePath, reqIndexPath, specIndexPath])], schema: { type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array', items: { type: 'string' } }, needsRequirementsFix: { type: 'boolean' }, needsTechSpecFix: { type: 'boolean' }, report: { type: 'string' }, needsComponentDetail: { type: 'array', items: { type: 'object', properties: { claim: { type: 'string' }, fileSlug: { type: 'string' } }, required: ['claim', 'fileSlug'] } } }, required: ['valid', 'findings', 'report'] } })
+        // FTR-029: needsRequirementsFix/needsTechSpecFix stay declared in `properties` (still
+        // type-checked when present) but are no longer hard-required — confirmed against three
+        // real evidence files that the model reasonably omits both when there is nothing to fix;
+        // the host's own merge logic already treats an absent value as falsy
+        // (mergedNeedsRequirementsFix/mergedNeedsTechSpecFix below), so no further change needed.
         // needsComponentDetail is declared in `properties` but deliberately NOT in the schema's
         // top-level `required` array: every pre-existing mocked test response for this agent
         // (predating this feature) omits the field entirely, and making it hard-required would

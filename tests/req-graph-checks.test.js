@@ -5,6 +5,7 @@ const {
   checkUcIdFormat,
   checkUcTableFileParity,
   checkCrossReferencesResolve,
+  checkAcTableHeader,
 } = require('../src/claude/scripts/req-graph-checks')
 
 describe('checkUniqueUcIds()', () => {
@@ -80,5 +81,34 @@ describe('checkCrossReferencesResolve()', () => {
 
   test('handles a missing acTable/businessRules gracefully', () => {
     expect(checkCrossReferencesResolve({ ucIds: ['UC-01'] })).toHaveLength(0)
+  })
+})
+
+describe('checkAcTableHeader()', () => {
+  test('a correct 4-column header produces no errors', () => {
+    expect(checkAcTableHeader(['ID', 'Criterion', 'Related UC', 'Priority'])).toEqual([])
+  })
+
+  test('a correct 3-column header (no trailing Priority) also produces no errors', () => {
+    expect(checkAcTableHeader(['ID', 'Criterion', 'Related UC'])).toEqual([])
+  })
+
+  test('fewer than 3 columns produces one MALFORMED_AC_TABLE_HEADER error', () => {
+    const errors = checkAcTableHeader(['ID', 'Criterion'])
+    expect(errors).toHaveLength(1)
+    expect(errors[0].category).toBe('MALFORMED_AC_TABLE_HEADER')
+  })
+
+  test('a 5-column header (Given/When/Then split) produces one MALFORMED_AC_TABLE_HEADER error', () => {
+    const errors = checkAcTableHeader(['ID', 'Given', 'When', 'Then', 'Priority'])
+    expect(errors).toHaveLength(1)
+    expect(errors[0].category).toBe('MALFORMED_AC_TABLE_HEADER')
+    expect(errors[0].message).toContain('"ID", "Given", "When"')
+  })
+
+  test('null header (no table found) produces one MALFORMED_AC_TABLE_HEADER error', () => {
+    const errors = checkAcTableHeader(null)
+    expect(errors).toHaveLength(1)
+    expect(errors[0].category).toBe('MALFORMED_AC_TABLE_HEADER')
   })
 })

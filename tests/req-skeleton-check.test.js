@@ -38,3 +38,17 @@ test('exits 2 on an unparseable index.md (no Use Cases table)', () => {
 test('exits 2 with a usage message when no path argument is given', () => {
   expect(() => execFileSync('node', [SCRIPT], { encoding: 'utf8' })).toThrow()
 })
+
+test('exits 1 with MALFORMED_AC_TABLE_HEADER on a malformed AC table header, no dangling-reference noise', () => {
+  const { exitCode, report } = run('ftr-029-req-malformed-ac-header/index.md')
+  expect(exitCode).toBe(1)
+  expect(report.valid).toBe(false)
+  expect(report.errors.some(e => e.category === 'MALFORMED_AC_TABLE_HEADER')).toBe(true)
+  expect(report.errors.some(e => e.category === 'DANGLING_AC_UC_REFERENCE')).toBe(false)
+})
+
+test('exits 0 on an AC table missing only the trailing Priority column', () => {
+  const { exitCode, report } = run('ftr-029-req-ac-header-no-priority/index.md')
+  expect(exitCode).toBe(0)
+  expect(report.valid).toBe(true)
+})
