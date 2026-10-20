@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.21.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.21.0...v0.21.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* harden pipeline resilience across four real-world failures (FTR-029) ([ef57862](https://github.com/dtlab-tech/ai-toolkit/commit/ef578623541c084d17aeb6b0f53dba076e5a449e))
+* **workflow-control, pm-phase1:** harden pipeline resilience across four real-world failures (FTR-029) ([34a9ec9](https://github.com/dtlab-tech/ai-toolkit/commit/34a9ec9db645d1475e41e0c3875c8431a1ae0fda))
+
 ## [0.21.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.20.0...v0.21.0) (2026-10-20)
 
 
