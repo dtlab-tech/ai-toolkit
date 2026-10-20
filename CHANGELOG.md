@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.21.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.20.0...v0.21.0) (2026-10-20)
+
+
+### Features
+
+* bound the feature-doc validator to the Tech-Spec skeleton (FTR-028) ([80869ce](https://github.com/dtlab-tech/ai-toolkit/commit/80869ced8b8d24ef7b0669fabbb152e8bf243794))
+* **pm-phase1, agent-registry:** bound the feature-doc validator to the Tech-Spec skeleton (FTR-028) ([9eb7f72](https://github.com/dtlab-tech/ai-toolkit/commit/9eb7f7222ff80eb2b26815a4f58f923f9ca09f1d))
+
 ## [0.20.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.19.2...v0.20.0) (2026-10-19)
 
 
