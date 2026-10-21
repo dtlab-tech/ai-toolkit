@@ -35,7 +35,7 @@ const SKELETON_SCHEMA = {
     tasks: { type: 'object', additionalProperties: {
       type: 'object',
       required: ['title', 'outcome', 'domain', 'agentType', 'dependsOn',
-        'acceptanceCriteria', 'estimate', 'outputCount', 'commit'],
+        'acceptanceCriteria', 'outputCount', 'commit'],
       properties: {
         title: { type: 'string' }, outcome: { type: 'string' },
         domain: { enum: ['BE', 'FE', 'DB', 'DevOps', 'INFRA', 'TEST'] },
@@ -46,8 +46,11 @@ const SKELETON_SCHEMA = {
         ['agentType']: { enum: ['developer-backend', 'developer-frontend', 'developer-testing', 'review-solution'] },
         dependsOn: { type: 'array', items: { type: 'string' } },
         acceptanceCriteria: { type: 'array', items: { type: 'string' } },
-        estimate: { type: 'object', required: ['agentMinutes', 'tokens'],
-          properties: { agentMinutes: { type: 'integer' }, tokens: { type: 'integer' } } },
+        // FTR-032: estimate (agentMinutes/tokens) deliberately removed from this schema — the
+        // per-task detail call already produces a real one in every response (its own template
+        // asks for it); wbs-assembler.js's parseTaskDetailBlock/loadWorkBreakdown now reads that
+        // value back instead, so asking for it again here would be pure duplicated cost on top
+        // of a call that already has to reason about every task in the feature in one turn.
         outputCount: { type: 'integer' },
         commit: { type: 'object', required: ['type', 'subject'],
           properties: { type: { type: 'string' }, subject: { type: 'string' } } },

@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-032",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": ["UC-01"],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": ["US-01-TASK-BE-01", "US-01-TASK-BE-02", "US-01-TASK-TEST-01"]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "sourceUC": ["UC-02"],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": ["US-02-TASK-BE-01", "US-02-TASK-TEST-01"]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "sourceUC": ["UC-03"],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": ["US-03-TASK-BE-01", "US-03-TASK-BE-02", "US-03-TASK-TEST-01"]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "sourceUC": [],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": ["US-04-TASK-TEST-01"]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Read the per-task effort estimate back from its own detail response",
+      "outcome": "wbs-assembler.js's parseTaskDetailBlock also returns estimate{agentMinutes,tokens} parsed from the task detail field block; loadWorkBreakdown's per-task mapping uses it instead of the skeleton-derived value",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-02", "AC-03"],
+      "estimate": { "agentMinutes": 15, "tokens": 18000 },
+      "outputCount": 1,
+      "commit": { "type": "fix", "subject": "read the per-task effort estimate back from its own detail response instead of the skeleton" },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-BE-02": {
+      "title": "Remove the per-task effort estimate from the WBS skeleton schema",
+      "outcome": "pm-phase2.js's SKELETON_SCHEMA no longer requires or declares estimate per task; materializeIndex no longer copies it",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-01", "AC-03", "AC-04"],
+      "estimate": { "agentMinutes": 8, "tokens": 8000 },
+      "outputCount": 1,
+      "commit": { "type": "fix", "subject": "drop the per-task effort estimate from the WBS skeleton schema" },
+      "detailFile": "tasks/US-01-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Cover the skeleton/detail estimate boundary move end to end",
+      "outcome": "New describe block in workflow-runtime.test.js proving AC-01 through AC-04: a skeleton without estimate is accepted, the assembled task's estimate comes from the per-task detail response, c.estimates() and the structural checks are unaffected",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-01-TASK-BE-01", "US-01-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-01", "AC-02", "AC-03", "AC-04"],
+      "estimate": { "agentMinutes": 15, "tokens": 20000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "cover the WBS skeleton/detail estimate boundary move end to end" },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Persist evidence for implementation and review dispatches",
+      "outcome": "dispatchTaskAttempt and runReview each wrap their own claudeProcess.spawnClaudeAgent call with lib/workflow-worker-evidence.js's createEvidence/save, scoped under executionRoot/evidence/<runId>/",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-05"],
+      "estimate": { "agentMinutes": 15, "tokens": 18000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "persist turn-by-turn evidence for implementation and review dispatches" },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Cover dispatch evidence capture end to end",
+      "outcome": "New tests/task-executor/dispatch-evidence.test.js proves a real implementation dispatch and a real review dispatch each leave an independently-readable evidence file, including on a failed attempt",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-02-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-05"],
+      "estimate": { "agentMinutes": 15, "tokens": 20000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "cover implementation/review dispatch evidence capture end to end" },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Let setTaskStatus record an optional reason alongside a task's status",
+      "outcome": "store.js's State.setTaskStatus gains a third, optional extra parameter merged into the task entry, backward-compatible with every existing 2-argument call site",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-06"],
+      "estimate": { "agentMinutes": 8, "tokens": 6000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "let setTaskStatus record an optional reason alongside a task's status" },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-03-TASK-BE-02": {
+      "title": "Short-circuit dispatch for a task already satisfied before its first attempt",
+      "outcome": "_runTaskToResolution runs a task's verification commands once before its first attempt only; an all-pass result marks it 'skipped' with reason 'already-satisfied-pre-dispatch', without ever calling dispatchTaskAttempt",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-03-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-06", "AC-07", "AC-08", "AC-09", "AC-10"],
+      "estimate": { "agentMinutes": 15, "tokens": 16000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "short-circuit dispatch for a task already satisfied before its first attempt" },
+      "detailFile": "tasks/US-03-TASK-BE-02.md",
+      "status": "pending"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Cover the pre-dispatch short-circuit end to end",
+      "outcome": "New tests/task-executor/skip-already-satisfied.test.js proves AC-06 through AC-10 against a real execute() run, backed by a new fake-claude-cli.js --mode=fail-if-invoked that hard-fails if ever spawned",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-03-TASK-BE-01", "US-03-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-06", "AC-07", "AC-08", "AC-09", "AC-10"],
+      "estimate": { "agentMinutes": 20, "tokens": 28000 },
+      "outputCount": 2,
+      "groupingRationale": "The new fake-claude-cli.js fixture mode has no purpose without the test file that exercises it, and the test file cannot assert its strongest guarantee (never dispatched) without that mode — generating them separately would leave one half meaningless on its own.",
+      "commit": { "type": "test", "subject": "cover the pre-dispatch verification short-circuit end to end" },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Run the full regression suite and confirm no behavior regressed",
+      "outcome": "Full npm test suite passes with every new AC-01 through AC-10 test green alongside the full pre-existing suite; AC-11 satisfied",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-01-TASK-BE-01", "US-01-TASK-BE-02", "US-02-TASK-BE-01", "US-03-TASK-BE-01", "US-03-TASK-BE-02"],
+      "acceptanceCriteria": ["AC-11"],
+      "estimate": { "agentMinutes": 14, "tokens": 16000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "confirm the full regression suite passes with both cost-hardening fixes in place" },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "pending"
+    }
+  }
+}

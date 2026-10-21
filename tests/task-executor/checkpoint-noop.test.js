@@ -183,7 +183,15 @@ describe('checkpoint: no-op completion when changedPaths is empty', () => {
     const tasks = [{
       id: TASK_ID, title: 'Already-satisfied task', outcome: 'Deliverable already present',
       domain: 'BE', agentType: 'developer-backend', dependsOn: [],
-      verificationCommands: ['test -f already-done.txt'],
+      // FTR-032 (UC-03): deliberately ZERO verification commands, not a check against
+      // already-done.txt — a task with any verification commands that already pass before its
+      // first attempt is now caught EARLIER by the new pre-dispatch short-circuit (never
+      // dispatched at all), which would no longer reach the post-hoc "changedPaths is empty"
+      // path this test exists to guard. A task with zero verification commands is explicitly
+      // exempt from that short-circuit (AC-08), so it still reaches a real dispatch, still
+      // trivially "passes" verification (no commands to fail), and still reproduces the exact
+      // original STAGING_VALIDATION_ERROR scenario this test is named for.
+      verificationCommands: [],
     }];
     writeWorkBreakdownFixture(featureDir, 'FTR-780', tasks);
 

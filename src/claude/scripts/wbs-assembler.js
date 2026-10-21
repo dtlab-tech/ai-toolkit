@@ -33,6 +33,19 @@ function _stringOrNull(value) {
   return value === DASH ? null : value
 }
 
+// Mirrors lib/task-executor/plan.js's own identically-named function — a non-numeric value is a
+// parse error, not silently coerced (the task's own "Estimate — agent minutes"/"Estimate —
+// tokens" fields are never `—`, per gaia-task-template.md's own placeholder contract, so `null`
+// here only ever means the label itself was missing from the field block).
+function _numberOrNull(value) {
+  if (value == null) return null
+  const n = Number(value)
+  if (Number.isNaN(n)) {
+    throw new Error(`wbs-assembler: expected a numeric value, got ${JSON.stringify(value)}`)
+  }
+  return n
+}
+
 // ── Template engine ───────────────────────────────────────────────────────────
 // Loads a canonical templates/gaia-{name}-template.md file and fills in its placeholders. The
 // template file is the single source of truth for field labels, their order, and section
@@ -147,6 +160,13 @@ function _parseVerificationCommands(text) {
 function parseTaskDetailBlock(text) {
   const fields = _parseFieldBlock(text)
   return {
+    // FTR-032: the per-task detail call's own template already asks for a real estimate in every
+    // response — the WBS skeleton call no longer does (see loadWorkBreakdown's per-task mapping
+    // below), so THIS is now the authoritative source, not a value silently discarded as before.
+    estimate: {
+      agentMinutes: _numberOrNull(fields['Estimate — agent minutes']),
+      tokens: _numberOrNull(fields['Estimate — tokens']),
+    },
     groupingRationale: _stringOrNull(fields['Grouping rationale']),
     verificationCommands: _parseVerificationCommands(text),
   }
@@ -298,7 +318,7 @@ function loadWorkBreakdown(inputPath) {
           agentType: skeletonTask.agentType,
           dependsOn: skeletonTask.dependsOn,
           acceptanceCriteria: skeletonTask.acceptanceCriteria,
-          estimate: skeletonTask.estimate,
+          estimate: detail.estimate,
           outputCount: skeletonTask.outputCount,
           groupingRationale: detail.groupingRationale,
           commit: skeletonTask.commit,

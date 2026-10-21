@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { runWorkflow } = require('../../lib/workflow-runner');
 const { fixture } = require('../helpers/workflow-fixture');
+const { loadWorkBreakdown } = require('../../src/claude/scripts/wbs-assembler');
 let f;
 beforeEach(() => { f = fixture(); });
 afterEach(() => { f.clean(); });
@@ -623,6 +624,62 @@ describe('FTR-027 — Work Breakdown task resume validity', () => {
     expect(calledAgents).not.toContain('gaia-generate-work-breakdown-task');
   });
 });
+
+// FTR-032: the WBS skeleton call no longer asks for a per-task effort estimate — the per-task
+// detail call already produces one (its own template asks for it), the skeleton used to just
+// discard it. These tests prove: a skeleton response omitting `estimate` entirely is accepted; the
+// assembled task's `estimate` comes from the per-task detail response, not the (now estimate-less)
+// skeleton; and nothing downstream (c.estimates(), the structural checks) regresses.
+describe('FTR-032 — WBS skeleton call no longer requires estimate; per-task detail call is the source of truth', () => {
+  const taskDetailDocWithEstimate = (taskId, { agentMinutes, tokens }) =>
+    taskDetailDoc(taskId)
+      .replace(/- \*\*Estimate — agent minutes:\*\* \d+/, `- **Estimate — agent minutes:** ${agentMinutes}`)
+      .replace(/- \*\*Estimate — tokens:\*\* \d+/, `- **Estimate — tokens:** ${tokens}`);
+
+  test('a skeleton response omitting estimate entirely is accepted (AC-01)', async () => {
+    const wb = phase2Setup();
+    delete wb.tasks['INFRA-TASK-BE-01'].estimate;
+    const dispatch = jest.fn(phase2Dispatch(wb));
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).resolves.toBeDefined();
+  });
+
+  test('the assembled task\'s estimate comes from the per-task detail response, not the skeleton (AC-02)', async () => {
+    const wb = phase2Setup();
+    delete wb.tasks['INFRA-TASK-BE-01'].estimate; // skeleton no longer carries it at all
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown-task') {
+        // deliberately a DIFFERENT value than any skeleton-era fixture ever used, so a pass
+        // here can only mean the per-task response's own estimate was actually read
+        return success(taskDetailDocWithEstimate('INFRA-TASK-BE-01', { agentMinutes: 13, tokens: 31000 }));
+      }
+      return phase2Dispatch(wb)(options);
+    };
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const assembled = loadWorkBreakdown(path.join(f.dir, 'wbs'));
+    const task = assembled.phases[0].tasks.find(t => t.id === 'INFRA-TASK-BE-01');
+    expect(task.estimate).toEqual({ agentMinutes: 13, tokens: 31000 });
+  });
+
+  test('c.estimates() still reports effort totals correctly with the shrunk skeleton (AC-03)', async () => {
+    const wb = phase2Setup();
+    delete wb.tasks['INFRA-TASK-BE-01'].estimate;
+    const dispatch = jest.fn(phase2Dispatch(wb));
+    const result = await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    expect(result.human_estimate).toBeDefined();
+    expect(result.agent_estimate).toBeDefined();
+  });
+
+  test('wb-skeleton-check/wb-graph-checks still pass against a skeleton with no estimate field at all (AC-04)', async () => {
+    const wb = phase2Setup();
+    delete wb.tasks['INFRA-TASK-BE-01'].estimate;
+    const dispatch = jest.fn(phase2Dispatch(wb));
+    // a rejection here would mean a structural check regressed against the new shape — none of
+    // wb-skeleton-check.js/wb-graph-checks.js read `estimate`, confirmed by direct inspection
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).resolves.toBeDefined();
+  });
+});
+
 test.each([true, false])('pm-phase2 runs real validator and blocks a negative semantic verdict: %s', async valid => {
   const wb = phase2Setup();
   const dispatch = jest.fn(phase2Dispatch(wb, { valid, findings: [] }));

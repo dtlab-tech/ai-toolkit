@@ -1,0 +1,226 @@
+{
+  "prefix": "FTR-032",
+  "generatedAt": "2026-10-21T21:39:12.367Z",
+  "acceptanceCriteria": [
+    {
+      "id": "AC-01",
+      "criterion": "Given a WBS skeleton generation call, when dispatched, then its schema no longer requires `estimate` (agentMinutes/tokens) per task",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-02",
+      "criterion": "Given a per-task WBS detail generation call's response (already containing a real `estimate` in its template-filled field block, unchanged), when parsed via `wbs-assembler.js`'s `parseTaskDetailBlock`, then `estimate` (agentMinutes/tokens) is now read back from it, alongside the existing `groupingRationale`/verification commands",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/wbs-assembler.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-03",
+      "criterion": "Given a feature generated end-to-end with UC-01 applied, when `c.estimates()` runs, then it reports the same shape/semantics of effort totals as before UC-01",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase2.js",
+        "src/claude/scripts/wbs-assembler.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-04",
+      "criterion": "Given `wb-skeleton-check.js`/`wb-graph-checks.js`'s existing structural checks, when run against a skeleton produced under UC-01's shrunk schema, then all pass exactly as they do today",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-05",
+      "criterion": "Given a real implementation or review dispatch, when it completes (success, failure, or timeout), then a raw transcript/response evidence file is persisted for that specific dispatch attempt, readable independently of the run's own in-progress state",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "lib/task-executor/index.js",
+        "tests/task-executor/dispatch-evidence.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-06",
+      "criterion": "Given a task with one or more verification commands, all already passing before its first attempt, when `_runTaskToResolution` begins that attempt, then neither the implementation agent nor the review agent is ever dispatched, and the task is marked `'skipped'`",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "lib/task-executor/index.js",
+        "lib/task-executor/store.js",
+        "tests/task-executor/skip-already-satisfied.test.js",
+        "tests/fixtures/fake-claude-cli.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-07",
+      "criterion": "Given a task with one or more verification commands, at least one failing before its first attempt, when `_runTaskToResolution` begins that attempt, then a normal implementation dispatch proceeds, unchanged from today",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "lib/task-executor/index.js",
+        "tests/task-executor/skip-already-satisfied.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-08",
+      "criterion": "Given a task with zero verification commands, when `_runTaskToResolution` begins its first attempt, then it is never short-circuited — a normal implementation dispatch proceeds",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "lib/task-executor/index.js",
+        "tests/task-executor/skip-already-satisfied.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-09",
+      "criterion": "Given a task's second or later attempt, when `_runTaskToResolution` begins that attempt, then it is never short-circuited regardless of current verification state",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "lib/task-executor/index.js",
+        "tests/task-executor/skip-already-satisfied.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-10",
+      "criterion": "Given a real run exercising UC-03's short-circuit on at least one task and a normal dispatch on at least one other, when measured, then the short-circuited task's wall-clock/token cost is near-zero compared to the normally-dispatched task",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "lib/task-executor/index.js",
+        "tests/task-executor/skip-already-satisfied.test.js",
+        "tests/fixtures/fake-claude-cli.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-11",
+      "criterion": "Given all changes are delivered, when `npm test` runs, then all tests pass: new regression tests for AC-01 through AC-10, and a full-suite regression",
+      "priority": "Must",
+      "unscoped": true,
+      "relatedUCs": [],
+      "techSpecFiles": [],
+      "taskIds": [
+        "US-04-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    }
+  ]
+}
