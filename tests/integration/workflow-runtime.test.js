@@ -999,6 +999,31 @@ describe('FTR-028 — deterministic AC<->component traceability (UC-02)', () => 
     expect(validateCalls.length).toBe(3); // every cycle re-dispatched despite the LLM's own valid:true each time
   });
 
+  // FTR-030: a real incident — an AC describing a negative/process constraint (e.g. "no files
+  // under _old/ were modified", verified via git diff, never a dedicated component) is a
+  // permanent false-positive orphan finding under the original check, since no component SHOULD
+  // ever address it. The Tech-Spec's own Section 12 (Risks & Mitigations) is where such
+  // constraints are already documented, by literal AC-ID — this must be recognized as addressed.
+  test('an AC documented by ID in Section 12 (Risks & Mitigations) is not a false-positive orphan', async () => {
+    const techSpecWithRisksMention = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      if (n === 9) return '## 9. File Inventory\n\n### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n| a.js | x | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n\n### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+      if (n === 12) return '## 12. Risks & Mitigations\n\n| Risk | Impact | Mitigation |\n|---|---|---|\n| _old/ directory integrity | High — AC-02 requires no modification to `_old/` files | git diff _old/ must be empty |\n';
+      return `## ${n}. Section ${n}\n`;
+    }).join('\n');
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements') return success(requirementsTwoAcDoc()); // AC-01 + AC-02, only AC-01 addressed by a component
+      if (name === 'gaia-generate-tech-spec') return success(techSpecWithRisksMention);
+      if (name === 'gaia-validate-feature-docs') return cleanValidateResponse();
+      return phase1Dispatch(options);
+    };
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+    expect(result.validation.summary).toContain('clean');
+    const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
+    expect(report).not.toContain('AC-02 is not addressed');
+  });
+
   // "A component referencing a nonexistent AC-ID" (the other direction of the same traceability
   // check) is NOT exercised end to end here: a Tech-Spec with a genuinely dangling AC reference is
   // already hard-rejected earlier, at generation time, by the pre-existing tech-spec-ac-check
@@ -1237,5 +1262,88 @@ describe('FTR-029 — fail fast on an invalid per-item generation result (UC-04)
     };
     await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch }))
       .rejects.toThrow(/UC-01.*failed structural validation after 2 attempts/);
+  });
+});
+
+// FTR-030: a real incident — hand-editing 2 of ~58 Tech-Spec skeleton rows (to add a missing AC
+// reference) triggered a full skeleton regeneration, which forced ALL ~88 already-valid components
+// to redispatch, since the per-component resume check was a blanket switch keyed only on "was the
+// skeleton regenerated at all", never on whether a given row actually changed.
+describe('FTR-030 — a naturally-triggered skeleton regen only redispatches components whose row changed', () => {
+  function threeComponentsTable(aPurpose) {
+    return '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+      `| a.js | ${aPurpose} | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n` +
+      '| b.js | example b | AC-01 | BE | [components/b.js.md](components/b.js.md) |\n' +
+      '| c.js | example c | AC-01 | BE | [components/c.js.md](components/c.js.md) |\n\n' +
+      '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+  }
+  function threeComponentSkeletonDoc(aPurpose) {
+    return Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      return n === 9 ? `## 9. File Inventory\n\n${threeComponentsTable(aPurpose)}` : `## ${n}. Section ${n}\n`;
+    }).join('\n');
+  }
+  const componentDetail = name => `# ${name} — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\n${name} body.\n\n## Tests\n\nExample tests.\n`;
+
+  test('only the component whose row actually changed is redispatched; unchanged rows are skipped', async () => {
+    const firstDispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(threeComponentSkeletonDoc('example a'));
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (\w+\.js)/);
+        return success(componentDetail(match[1]));
+      }
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(firstDispatch) });
+
+    // Trigger a NATURAL (not forced) skeleton regen: bump feature.md's own mtime, the same
+    // signal skeletonStale's own freshness check uses — never --force, matching the real
+    // incident exactly (confirmed with the reporting session: no --force was ever used). Just
+    // "now" (not an artificial future offset) — it only needs to be newer than the first run's
+    // own artifacts, and an offset into the future risks the SECOND run's real-time Validation-
+    // Report write (finishing well under a second later) still looking "older" by comparison.
+    const featurePath = f.feature;
+    const now = new Date();
+    fs.utimesSync(featurePath, now, now);
+
+    const secondDispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(threeComponentSkeletonDoc('example a v2')); // only a.js's row changed
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (\w+\.js)/);
+        return success(componentDetail(match[1] + '-v2'));
+      }
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(secondDispatch);
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+
+    const calledAgents = dispatchFn.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).toContain('gaia-generate-tech-spec'); // the skeleton itself WAS regenerated
+    const componentCalls = dispatchFn.mock.calls.map(([o]) => o)
+      .filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-tech-spec-component');
+    expect(componentCalls).toHaveLength(1); // only a.js, whose row changed — b.js/c.js skipped
+    expect(componentCalls[0].prompt).toContain('Path: a.js');
+  });
+
+  test('an explicit --force cycle still regenerates every component, even one whose row is unchanged', async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(threeComponentSkeletonDoc('example a'));
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (\w+\.js)/);
+        return success(componentDetail(match[1]));
+      }
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+
+    const dispatchFn = jest.fn(dispatch); // identical skeleton content — every row UNCHANGED
+    await runWorkflow('pm-phase1', [f.feature, '--force'], { ...f.options, dispatch: dispatchFn });
+
+    const componentCalls = dispatchFn.mock.calls.map(([o]) => o)
+      .filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-tech-spec-component');
+    expect(componentCalls).toHaveLength(3); // --force bypasses row-diffing entirely, by design
   });
 });

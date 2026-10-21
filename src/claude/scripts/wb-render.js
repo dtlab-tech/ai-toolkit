@@ -4,49 +4,6 @@ const fs   = require('fs')
 const path = require('path')
 const { loadWorkBreakdown } = require('./wbs-assembler')
 
-// ── Argument parsing ──────────────────────────────────────────────────────────
-
-const jsonPath = process.argv[2]
-const prefix   = process.argv[3]
-
-if (!jsonPath || !prefix) {
-  process.stderr.write('Usage: node wb-render.js <path-to-work-breakdown.json> <feature-prefix> [destination-dir]\n')
-  process.exit(1)
-}
-
-const destDir = process.argv[4]
-  ? process.argv[4]
-  : path.dirname(path.resolve(jsonPath))
-
-// ── Read and assemble ──────────────────────────────────────────────────────────
-// Accepts either a single legacy JSON file (schema v2) or a {PREFIX}-wbs/ split
-// directory (schema v3), returning the same in-memory shape either way (FTR-020).
-
-let wb
-try {
-  wb = loadWorkBreakdown(jsonPath)
-} catch (err) {
-  process.stderr.write(`Error: ${err.message}\n`)
-  process.exit(1)
-}
-
-// ── Basic structure check ─────────────────────────────────────────────────────
-
-if (wb.schemaVersion !== 2) {
-  process.stderr.write(`Error: schemaVersion must be 2, got ${JSON.stringify(wb.schemaVersion)}\n`)
-  process.exit(2)
-}
-
-if (!Array.isArray(wb.phases)) {
-  process.stderr.write('Error: "phases" must be an array\n')
-  process.exit(2)
-}
-
-// ── Output file paths ─────────────────────────────────────────────────────────
-
-const mdPath  = path.join(destDir, `${prefix}-Work-Breakdown.md`)
-const csvPath = path.join(destDir, `${prefix}-Work-Breakdown.csv`)
-
 // ── Phase-level depends_on aggregation ───────────────────────────────────────
 
 function computePhaseDependsOn(wb) {
@@ -77,16 +34,6 @@ function computePhaseDependsOn(wb) {
     result.set(phase.id, [...extPhases].sort().join(' '))
   }
   return result
-}
-
-// ── Compute phase dependencies ────────────────────────────────────────────────
-
-let phaseDepsMap
-try {
-  phaseDepsMap = computePhaseDependsOn(wb)
-} catch (err) {
-  process.stderr.write(`Error: phase dependency aggregation failed: ${err.message}\n`)
-  process.exit(3)
 }
 
 // ── Field helpers ─────────────────────────────────────────────────────────────
@@ -393,11 +340,66 @@ function renderCsv(wb, prefix, phaseDepsMap) {
   return rows.join('\n') + '\n'
 }
 
-// ── Write files and exit ──────────────────────────────────────────────────────
+module.exports = {
+  computePhaseDependsOn,
+  renderMarkdown,
+  renderCsv,
+}
 
-const md  = renderMarkdown(wb, prefix, phaseDepsMap)
-const csv = renderCsv(wb, prefix, phaseDepsMap)
-fs.writeFileSync(mdPath, md, 'utf8')
-fs.writeFileSync(csvPath, csv, 'utf8')
-process.stdout.write(JSON.stringify({ exitCode: 0, markdownPath: mdPath, csvPath }) + '\n')
-process.exit(0)
+// ── CLI entry point ───────────────────────────────────────────────────────────
+// Same require.main guard pattern as wbs-assembler.js: the functions above are
+// requirable in-process (lib/task-executor/index.js does exactly this, falling
+// back to an in-memory render of the split wbs/ directory when the legacy
+// {PREFIX}-Work-Breakdown.md/.csv files pm-phase2 no longer writes automatically
+// — FTR-025 — are absent), while this block only runs for the standalone CLI use
+// pm-phase2.js's workflow-script runtime (no `require`) and operators still rely on.
+if (require.main === module) {
+  const jsonPath = process.argv[2]
+  const prefix   = process.argv[3]
+
+  if (!jsonPath || !prefix) {
+    process.stderr.write('Usage: node wb-render.js <path-to-work-breakdown.json> <feature-prefix> [destination-dir]\n')
+    process.exit(1)
+  }
+
+  const destDir = process.argv[4]
+    ? process.argv[4]
+    : path.dirname(path.resolve(jsonPath))
+
+  // Accepts either a single legacy JSON file (schema v2) or a {PREFIX}-wbs/ split
+  // directory (schema v3), returning the same in-memory shape either way (FTR-020).
+  let wb
+  try {
+    wb = loadWorkBreakdown(jsonPath)
+  } catch (err) {
+    process.stderr.write(`Error: ${err.message}\n`)
+    process.exit(1)
+  }
+
+  if (wb.schemaVersion !== 2) {
+    process.stderr.write(`Error: schemaVersion must be 2, got ${JSON.stringify(wb.schemaVersion)}\n`)
+    process.exit(2)
+  }
+  if (!Array.isArray(wb.phases)) {
+    process.stderr.write('Error: "phases" must be an array\n')
+    process.exit(2)
+  }
+
+  const mdPath  = path.join(destDir, `${prefix}-Work-Breakdown.md`)
+  const csvPath = path.join(destDir, `${prefix}-Work-Breakdown.csv`)
+
+  let phaseDepsMap
+  try {
+    phaseDepsMap = computePhaseDependsOn(wb)
+  } catch (err) {
+    process.stderr.write(`Error: phase dependency aggregation failed: ${err.message}\n`)
+    process.exit(3)
+  }
+
+  const md  = renderMarkdown(wb, prefix, phaseDepsMap)
+  const csv = renderCsv(wb, prefix, phaseDepsMap)
+  fs.writeFileSync(mdPath, md, 'utf8')
+  fs.writeFileSync(csvPath, csv, 'utf8')
+  process.stdout.write(JSON.stringify({ exitCode: 0, markdownPath: mdPath, csvPath }) + '\n')
+  process.exit(0)
+}

@@ -308,6 +308,20 @@ return c.run(meta.name, featureDir, prefix, async () => {
         if (!acIds.has(ref)) findings.push(`Tech-Spec: component ${comp.filePath} references nonexistent ${ref}`)
       }
     }
+    // FTR-030: a File-Inventory "Addresses" column only fits a positive, per-file deliverable — an
+    // AC describing a negative/process constraint (e.g. "no files under _old/ were modified",
+    // verified via git diff, never a dedicated component) can never be addressed that way, and was
+    // confirmed as a real, permanent false-positive orphan finding (no amount of regeneration could
+    // ever resolve it, since no component SHOULD exist for it). Section 12 (Risks & Mitigations) is
+    // the Tech-Spec's own existing, real place such constraints are already documented (confirmed
+    // against a real Tech-Spec) — an AC-ID mentioned there by its literal ID counts as addressed.
+    const specLines = specIndexContent.split('\n')
+    const { start: risksStart, end: risksEnd } = findReqSection(specLines, 12)
+    const risksText = risksStart === -1 ? '' : specLines.slice(risksStart, risksEnd).join('\n')
+    for (const id of acIds) {
+      const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp(`\\b${escapedId}\\b`).test(risksText)) addressedAcIds.add(id)
+    }
     for (const id of acIds) {
       if (!addressedAcIds.has(id)) findings.push(`Tech-Spec: ${id} is not addressed by any Tech-Spec component`)
     }
@@ -424,6 +438,24 @@ return c.run(meta.name, featureDir, prefix, async () => {
       (!fresh(specIndexPath) || missingSections(c.read(specIndexPath), 12).length > 0)
     const regenSkeleton = forceAll || skeletonStale || !c.exists(specIndexPath)
 
+    // FTR-030: capture the OLD component rows (keyed by fileSlug — the stable per-component
+    // identity, a Spec-link target) BEFORE the skeleton is overwritten, so a NATURALLY-triggered
+    // skeleton regen (staleness/missing, never an explicit forceAll) doesn't force EVERY component
+    // to redispatch when only a FEW rows actually changed. Real incident: hand-editing 2 of ~58
+    // rows (adding a missing AC reference) triggered a full skeleton regeneration, which — with no
+    // per-row comparison — forced ALL ~88 components to redispatch even though the vast majority
+    // of rows were byte-identical to before. Deliberately NOT captured when forceAll is true: an
+    // explicit full regen (a `--force` run, or a needsTechSpecFix revision cycle) means something
+    // was flagged wrong that per-row diffing cannot see (e.g. a missing cross-reference only
+    // visible in a component's own body) — that path keeps today's existing "regenerate
+    // everything unconditionally" behavior, unchanged.
+    const oldComponentsByFileSlug = new Map()
+    if (!forceAll && regenSkeleton && c.exists(specIndexPath)) {
+      try {
+        for (const comp of parseComponentsTable(c.read(specIndexPath))) oldComponentsByFileSlug.set(comp.fileSlug, comp)
+      } catch (e) { /* an unparseable old skeleton has nothing worth diffing against — treat as empty */ }
+    }
+
     // 1. Skeleton (no declared worker() output — host writes it itself)
     if (regenSkeleton) {
       const skeleton = await c.worker(specId, withTemplate(featurePath, 'spec/index.md', 'gaia-tech-spec-index-template.md'))
@@ -449,7 +481,16 @@ return c.run(meta.name, featureDir, prefix, async () => {
     const componentTemplate = components.length ? readTemplate('gaia-component-template.md') : null
     for (const comp of components) {
       const compPath = `${specDir}/components/${comp.fileSlug}`
-      if (!regenSkeleton && c.exists(compPath) && isValidComponentDetail(c.read(compPath))) continue // resume: skip, no dispatch
+      // FTR-030: even when the skeleton itself was regenerated, a component whose OWN row is
+      // byte-identical to its prior version doesn't need a new design call — only a row that is
+      // NEW or actually CHANGED does. `regenSkeleton` alone used to force every component to
+      // redispatch unconditionally the moment the skeleton changed at all; this narrows that to
+      // rows that genuinely changed, while still regenerating any row that's new or different.
+      const oldComp = oldComponentsByFileSlug.get(comp.fileSlug)
+      const rowUnchanged = !!oldComp && oldComp.filePath === comp.filePath &&
+        oldComp.changeType === comp.changeType && oldComp.purposeOrChange === comp.purposeOrChange &&
+        oldComp.addresses === comp.addresses && oldComp.domain === comp.domain
+      if ((!regenSkeleton || rowUnchanged) && c.exists(compPath) && isValidComponentDetail(c.read(compPath))) continue // resume: skip, no dispatch
       // FTR-029/UC-04: validate immediately, before writing to disk and before moving to the next
       // component — a bad result otherwise silently continued through every remaining component,
       // only discovered (expensively) at final assembly or a later invocation's resume check.

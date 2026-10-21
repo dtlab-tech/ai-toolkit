@@ -221,6 +221,27 @@ If the branch already exists, switch to it without recreating:
 git checkout feature/{PREFIX}-{short-slug}
 ```
 
+### Step 5a — Commit the approved planning documents
+
+The task executor (Step 6) dispatches each task directly against this project directory and
+reviews/commits exactly what `git status` reports changed. If the planning documents this
+pipeline just produced (`<feature-dir>/` — feature.md, req/, spec/, wbs/, coverage-matrix/,
+`{PREFIX}-Approvals.md`, `{PREFIX}-Validation-Report.md`) are still sitting uncommitted at this
+point, every task's own review prompt and commit would be contaminated by them — reproduced on a
+real run (hundreds of KB of unrelated planning docs bleeding into a single task's own small diff,
+"Prompt is too long"). Commit them now, on the feature branch just created above, scoped to the
+feature's own directory only:
+
+```bash
+git add <feature-dir>
+git commit -m "docs({PREFIX}): commit approved Requirements/Tech-Spec/Work Breakdown"
+```
+
+Skip this commit if `git status --porcelain <feature-dir>` reports nothing (e.g. a resumed run
+where the docs were already committed in a prior pass) — do not fail or retry, an empty commit is
+never created. `<feature-dir>` is the directory containing feature.md (same directory derived in
+Step 0).
+
 ---
 
 ## Step 6 — Launch the task executor (Implementation Phase)
