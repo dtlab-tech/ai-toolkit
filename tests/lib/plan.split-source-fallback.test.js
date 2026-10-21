@@ -47,3 +47,51 @@ describe('split wbs/ directory -> in-memory MD/CSV -> plan.createPlanSnapshot (e
     expect(snapshot.phases).toHaveLength(index.phases.length);
   });
 });
+
+describe('renderMarkdown() "Generated" line — planDigest determinism (regression)', () => {
+  // Regression test for a real bug (reported against Fincantieri.ISDM.JobScheduler, FTR-012):
+  // renderMarkdown() embedded a live new Date().toISOString() "Generated" line on every call.
+  // The legacy .md/.csv path rendered once to disk and read the same static bytes back every
+  // time (deterministic planDigest); _loadPlanDocs()'s split-wbs/ fallback re-renders in memory
+  // on EVERY execute()/replan() call, so two calls against the exact same unchanged plan
+  // produced DIFFERENT bytes -> different planDigest -> a real replan() then
+  // execute() --from-replan-run-id sequence spuriously failed REPLAN_PLAN_DIGEST_MISMATCH.
+  test('two renders of the identical wb/prefix/phaseDepsMap with NO generatedAt (CLI/default use) are allowed to differ', () => {
+    const wb = loadWorkBreakdown(WBS_DIR);
+    const phaseDepsMap = computePhaseDependsOn(wb);
+    // Not asserting they always differ (a same-millisecond race is theoretically possible) —
+    // only that the default path is still live wall-clock time, i.e. unchanged CLI behavior.
+    const a = renderMarkdown(wb, 'FTR-020', phaseDepsMap);
+    expect(a).toMatch(/\| Generated \| \d{4}-\d{2}-\d{2}T/);
+  });
+
+  test('two renders with an explicit generatedAt are byte-identical, and planDigest agrees across calls', () => {
+    const wb = loadWorkBreakdown(WBS_DIR);
+    const phaseDepsMap = computePhaseDependsOn(wb);
+    const csv = renderCsv(wb, 'FTR-020', phaseDepsMap);
+    const generatedAt = 'FIXED-FOR-TEST';
+
+    const mdCallOne = renderMarkdown(wb, 'FTR-020', phaseDepsMap, generatedAt);
+    const mdCallTwo = renderMarkdown(wb, 'FTR-020', phaseDepsMap, generatedAt);
+    expect(mdCallOne).toBe(mdCallTwo);
+
+    const digestOne = plan.createPlanSnapshot(mdCallOne, csv).planDigest;
+    const digestTwo = plan.createPlanSnapshot(mdCallTwo, csv).planDigest;
+    expect(digestOne).toBe(digestTwo);
+  });
+
+  test('a genuinely different plan (changed wb content) still changes the digest even with the same generatedAt', () => {
+    const wb = loadWorkBreakdown(WBS_DIR);
+    const phaseDepsMap = computePhaseDependsOn(wb);
+    const csv = renderCsv(wb, 'FTR-020', phaseDepsMap);
+    const generatedAt = 'FIXED-FOR-TEST';
+
+    const original = plan.createPlanSnapshot(renderMarkdown(wb, 'FTR-020', phaseDepsMap, generatedAt), csv).planDigest;
+
+    const mutatedWb = JSON.parse(JSON.stringify(wb));
+    mutatedWb.phases[0].tasks[0].title = mutatedWb.phases[0].tasks[0].title + ' (edited)';
+    const mutated = plan.createPlanSnapshot(renderMarkdown(mutatedWb, 'FTR-020', phaseDepsMap, generatedAt), csv).planDigest;
+
+    expect(mutated).not.toBe(original);
+  });
+});

@@ -92,7 +92,17 @@ function buildCommitSubject(task) {
 
 // ── Render stubs (implemented in T03–T05) ─────────────────────────────────────
 
-function renderMarkdown(wb, prefix, phaseDepsMap) {
+// generatedAt: optional override for the "Generated" line below, defaulting to the current
+// wall-clock time (unchanged behavior for the CLI entry point's one-shot render-to-disk use).
+// lib/task-executor/index.js's _loadPlanDocs() passes an explicit, stable value (wbs/index.json's
+// own mtime) instead — it re-renders a split wbs/ directory in memory on EVERY execute()/replan()
+// call (the legacy .md/.csv path renders to disk once and is read back unchanged thereafter), and
+// a live timestamp there made planDigest non-deterministic between two calls against the exact
+// same unchanged plan, spuriously tripping REPLAN_PLAN_DIGEST_MISMATCH on a real replan() ->
+// execute() --from-replan-run-id sequence (reported against a real Fincantieri.ISDM.JobScheduler
+// run). mtime still correctly changes the digest if the plan is genuinely edited between calls —
+// exactly the drift planDigest exists to catch.
+function renderMarkdown(wb, prefix, phaseDepsMap, generatedAt) {
   const DOMAINS = ['BE', 'FE', 'DB', 'DevOps', 'INFRA', 'TEST']
 
   function getAgentMinutes(task) {
@@ -176,7 +186,7 @@ function renderMarkdown(wb, prefix, phaseDepsMap) {
   }
 
   const title     = wb.title ?? wb.feature ?? prefix
-  const generated = new Date().toISOString()
+  const generated = generatedAt == null ? new Date().toISOString() : generatedAt
   const L         = []
 
   // ── Title ──
