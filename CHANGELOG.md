@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.22.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.22.0...v0.22.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **task-executor:** deterministic split-wbs/ render for planDigest stability ([0afbcba](https://github.com/dtlab-tech/ai-toolkit/commit/0afbcba0b0a6d2e09251acd97f6b22b6cc288ce3))
+* **task-executor:** make split-wbs/ in-memory render deterministic for planDigest ([0f500fe](https://github.com/dtlab-tech/ai-toolkit/commit/0f500fe85bff37199601dae2e689f2426a656d6b))
+
 ## [0.22.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.21.2...v0.22.0) (2026-10-21)
 
 
