@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.21.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.21.1...v0.21.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **pm-phase2:** read gaia-user-story-template.md via print-asset, not a local-install-relative path ([4913bcf](https://github.com/dtlab-tech/ai-toolkit/commit/4913bcfb71bd37b56d373d340abf9cee17478154))
+* read gaia-user-story-template.md via print-asset (global-install compatibility) ([29486d9](https://github.com/dtlab-tech/ai-toolkit/commit/29486d9eeec4ae6ea2abfe02ffba4753addfc9fb))
+
 ## [0.21.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.21.0...v0.21.1) (2026-10-20)
 
 
