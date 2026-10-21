@@ -244,6 +244,36 @@ describe('parseMarkdown() — synthetic fixtures', () => {
   });
 });
 
+describe('parseMarkdown() — CRLF line endings (git core.autocrlf=true checkouts)', () => {
+  // TASK_C_LOSSLESS is excluded from the LF/CRLF equality check below: one of
+  // its verification commands embeds a raw multi-line string, so a real CRLF
+  // checkout genuinely stores \r\n inside that fenced content too — parsing
+  // it losslessly (byte-for-byte, per this module's own contract) means the
+  // CRLF and LF parses of THAT command legitimately differ, not a bug.
+  test('parses identically to LF when every newline is \\r\\n', () => {
+    const lf = buildFixture([TASK_A, TASK_B_ALL_DASHES]);
+    const crlf = lf.replace(/\n/g, '\r\n');
+    expect(parseMarkdown(crlf)).toEqual(parseMarkdown(lf));
+  });
+
+  test('does not leak a trailing \\r into the task title', () => {
+    const crlf = buildFixture([TASK_A]).replace(/\n/g, '\r\n');
+    const [task] = parseMarkdown(crlf);
+    expect(task.title).toBe('Fixture task A');
+    expect(task.title).not.toMatch(/\r/);
+  });
+
+  test('parses multiple CRLF tasks in document order, anchors included', () => {
+    const crlf = buildFixture([TASK_A, TASK_B_ALL_DASHES, TASK_C_LOSSLESS]).replace(/\n/g, '\r\n');
+    const tasks = parseMarkdown(crlf);
+    expect(tasks.map(t => t.id)).toEqual([
+      'US-99-TASK-BE-01',
+      'US-99-TASK-BE-02',
+      'US-99-TASK-BE-03',
+    ]);
+  });
+});
+
 describe('parseMarkdown() — real FTR-018-Work-Breakdown.md', () => {
   let markdown;
   let tasks;
