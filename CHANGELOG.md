@@ -1,4 +1,21 @@
 ## 0.1.4 (2026-07-21)
+## [0.22.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.21.2...v0.22.0) (2026-10-21)
+
+
+### Features
+
+* **pm-phase1:** regenerating the Tech-Spec skeleton no longer forces every component to redispatch ([f28173b](https://github.com/dtlab-tech/ai-toolkit/commit/f28173b5dde57f8432eabcb7970af1feeb93711a))
+
+
+### Bug Fixes
+
+* **atomic-rename:** retry a transient Windows EPERM/EBUSY on rename across every atomic-write site ([737d871](https://github.com/dtlab-tech/ai-toolkit/commit/737d871eb98c7d8ea4015734931e344fcef8798e))
+* pm-phase1 AC/Tech-Spec regen, Windows rename retry, task-executor plan parsing & review scoping ([02767d0](https://github.com/dtlab-tech/ai-toolkit/commit/02767d055edea34eb488a46224655199d7c49e43))
+* **pm-phase1:** exempt an AC documented in Risks & Mitigations from the orphan-AC check ([a607306](https://github.com/dtlab-tech/ai-toolkit/commit/a60730650016c97d5895432b20120364f3e4db89))
+* **task-executor/plan:** parse task-detail anchors on CRLF-line-ended Work Breakdowns ([619764f](https://github.com/dtlab-tech/ai-toolkit/commit/619764ff5b4b1b9e4c2456da96ed3b43235aa74a))
+* **task-executor:** execute()/replan() fall back to the split wbs/ directory ([49df349](https://github.com/dtlab-tech/ai-toolkit/commit/49df34902c14f50e8121335700b3fe2f9b32b978))
+* **task-executor:** stop misattributing pre-existing uncommitted content to task commits ([04aee6c](https://github.com/dtlab-tech/ai-toolkit/commit/04aee6c8ab953c1a44997bee5842f7f89296c6d9))
+
 ## [0.21.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.21.1...v0.21.2) (2026-10-21)
 
 
