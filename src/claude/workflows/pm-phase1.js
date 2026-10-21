@@ -308,6 +308,20 @@ return c.run(meta.name, featureDir, prefix, async () => {
         if (!acIds.has(ref)) findings.push(`Tech-Spec: component ${comp.filePath} references nonexistent ${ref}`)
       }
     }
+    // FTR-030: a File-Inventory "Addresses" column only fits a positive, per-file deliverable — an
+    // AC describing a negative/process constraint (e.g. "no files under _old/ were modified",
+    // verified via git diff, never a dedicated component) can never be addressed that way, and was
+    // confirmed as a real, permanent false-positive orphan finding (no amount of regeneration could
+    // ever resolve it, since no component SHOULD exist for it). Section 12 (Risks & Mitigations) is
+    // the Tech-Spec's own existing, real place such constraints are already documented (confirmed
+    // against a real Tech-Spec) — an AC-ID mentioned there by its literal ID counts as addressed.
+    const specLines = specIndexContent.split('\n')
+    const { start: risksStart, end: risksEnd } = findReqSection(specLines, 12)
+    const risksText = risksStart === -1 ? '' : specLines.slice(risksStart, risksEnd).join('\n')
+    for (const id of acIds) {
+      const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp(`\\b${escapedId}\\b`).test(risksText)) addressedAcIds.add(id)
+    }
     for (const id of acIds) {
       if (!addressedAcIds.has(id)) findings.push(`Tech-Spec: ${id} is not addressed by any Tech-Spec component`)
     }

@@ -18,7 +18,9 @@ const path = require('path')
 const PM_PHASE1_SOURCE = fs.readFileSync(
   path.join(__dirname, '../src/claude/workflows/pm-phase1.js'), 'utf8')
 
-function computeAcComponentTraceabilityGaps(acIdsList, components) {
+// risksText defaults to '' — the Section-12 exemption (FTR-030) is additive to the original
+// FTR-028 behavior, so every existing call site/test below that doesn't pass it is unaffected.
+function computeAcComponentTraceabilityGaps(acIdsList, components, risksText = '') {
   const acIds = new Set(acIdsList)
   const addressedAcIds = new Set()
   const findings = []
@@ -28,6 +30,10 @@ function computeAcComponentTraceabilityGaps(acIdsList, components) {
       addressedAcIds.add(ref)
       if (!acIds.has(ref)) findings.push(`Tech-Spec: component ${comp.filePath} references nonexistent ${ref}`)
     }
+  }
+  for (const id of acIds) {
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`\\b${escapedId}\\b`).test(risksText)) addressedAcIds.add(id)
   }
   for (const id of acIds) {
     if (!addressedAcIds.has(id)) findings.push(`Tech-Spec: ${id} is not addressed by any Tech-Spec component`)
@@ -40,6 +46,11 @@ describe('pm-phase1 AC<->component traceability: mirror stays in sync with the r
     expect(PM_PHASE1_SOURCE).toContain('function computeAcComponentTraceabilityGaps(reqIndexContent, specIndexContent)')
     expect(PM_PHASE1_SOURCE).toContain("findings.push(`Tech-Spec: component ${comp.filePath} references nonexistent ${ref}`)")
     expect(PM_PHASE1_SOURCE).toContain('findings.push(`Tech-Spec: ${id} is not addressed by any Tech-Spec component`)')
+  })
+
+  test('pm-phase1.js still exempts an AC mentioned by ID in Section 12 (Risks & Mitigations)', () => {
+    expect(PM_PHASE1_SOURCE).toContain('const { start: risksStart, end: risksEnd } = findReqSection(specLines, 12)')
+    expect(PM_PHASE1_SOURCE).toContain('if (new RegExp(`\\\\b${escapedId}\\\\b`).test(risksText)) addressedAcIds.add(id)')
   })
 
   test('the merge recomputes valid purely from mergedFindings, never from the raw result.valid', () => {
@@ -94,5 +105,34 @@ describe('computeAcComponentTraceabilityGaps()', () => {
       { filePath: 'b.js', addresses: 'AC-01' },
     ])
     expect(findings).toEqual([])
+  })
+
+  // FTR-030: a real incident — AC-13 was "`_old/` must not be modified" (a negative/process
+  // constraint verified via `git diff`, not a positive per-file deliverable) and was a permanent
+  // false-positive orphan finding under FTR-028's original check (no component SHOULD ever
+  // address it). The real Tech-Spec already documented it, by literal ID, in Section 12
+  // (Risks & Mitigations) — this is that same real text, trimmed.
+  const REAL_RISKS_TEXT = '## 12. Risks & Mitigations\n\n' +
+    '| **_old/ directory integrity** | High — AC-13 requires no modification to `_old/` files... |\n'
+
+  test('an AC mentioned by its literal ID in Section 12 is not flagged as orphaned', () => {
+    const findings = computeAcComponentTraceabilityGaps(['AC-01', 'AC-13'], [
+      { filePath: 'a.js', addresses: 'AC-01' },
+    ], REAL_RISKS_TEXT)
+    expect(findings).toEqual([])
+  })
+
+  test('an AC addressed by neither a component nor Section 12 is still flagged (no false-negative)', () => {
+    const findings = computeAcComponentTraceabilityGaps(['AC-01', 'AC-02'], [
+      { filePath: 'a.js', addresses: 'AC-01' },
+    ], REAL_RISKS_TEXT) // mentions AC-13, not AC-02 — must not accidentally exempt AC-02
+    expect(findings).toEqual(['Tech-Spec: AC-02 is not addressed by any Tech-Spec component'])
+  })
+
+  test('the Section-12 match is whole-ID, not a substring match (AC-1 does not satisfy AC-13 or vice versa)', () => {
+    const findingsForAc1 = computeAcComponentTraceabilityGaps(['AC-1'], [], REAL_RISKS_TEXT)
+    expect(findingsForAc1).toEqual(['Tech-Spec: AC-1 is not addressed by any Tech-Spec component'])
+    const findingsForAc130 = computeAcComponentTraceabilityGaps(['AC-130'], [], 'Section 12 mentions AC-13 only.\n')
+    expect(findingsForAc130).toEqual(['Tech-Spec: AC-130 is not addressed by any Tech-Spec component'])
   })
 })

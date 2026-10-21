@@ -999,6 +999,31 @@ describe('FTR-028 — deterministic AC<->component traceability (UC-02)', () => 
     expect(validateCalls.length).toBe(3); // every cycle re-dispatched despite the LLM's own valid:true each time
   });
 
+  // FTR-030: a real incident — an AC describing a negative/process constraint (e.g. "no files
+  // under _old/ were modified", verified via git diff, never a dedicated component) is a
+  // permanent false-positive orphan finding under the original check, since no component SHOULD
+  // ever address it. The Tech-Spec's own Section 12 (Risks & Mitigations) is where such
+  // constraints are already documented, by literal AC-ID — this must be recognized as addressed.
+  test('an AC documented by ID in Section 12 (Risks & Mitigations) is not a false-positive orphan', async () => {
+    const techSpecWithRisksMention = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      if (n === 9) return '## 9. File Inventory\n\n### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n| a.js | x | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n\n### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+      if (n === 12) return '## 12. Risks & Mitigations\n\n| Risk | Impact | Mitigation |\n|---|---|---|\n| _old/ directory integrity | High — AC-02 requires no modification to `_old/` files | git diff _old/ must be empty |\n';
+      return `## ${n}. Section ${n}\n`;
+    }).join('\n');
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements') return success(requirementsTwoAcDoc()); // AC-01 + AC-02, only AC-01 addressed by a component
+      if (name === 'gaia-generate-tech-spec') return success(techSpecWithRisksMention);
+      if (name === 'gaia-validate-feature-docs') return cleanValidateResponse();
+      return phase1Dispatch(options);
+    };
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+    expect(result.validation.summary).toContain('clean');
+    const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
+    expect(report).not.toContain('AC-02 is not addressed');
+  });
+
   // "A component referencing a nonexistent AC-ID" (the other direction of the same traceability
   // check) is NOT exercised end to end here: a Tech-Spec with a genuinely dangling AC reference is
   // already hard-rejected earlier, at generation time, by the pre-existing tech-spec-ac-check
