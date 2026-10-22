@@ -1,4 +1,11 @@
 ## 0.1.4 (2026-07-21)
+## [0.23.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.23.0...v0.23.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **task-executor:** disable MSYS argv path-conversion for verification commands ([00d66ee](https://github.com/dtlab-tech/ai-toolkit/commit/00d66eecb94f7b5464c58cbfec33eb1793e82664))
+
 ## [0.23.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.22.1...v0.23.0) (2026-10-22)
 
 
