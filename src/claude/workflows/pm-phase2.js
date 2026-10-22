@@ -56,7 +56,61 @@ const SKELETON_SCHEMA = {
           properties: { type: { type: 'string' }, subject: { type: 'string' } } },
       },
     } },
+    // Bounded drill-down (mirrors pm-phase1.js's own needsComponentDetail precedent for the
+    // feature-doc validator, FTR-028) — declared in `properties` only, never `required`: the
+    // common case is an empty array, costing nothing extra. See gaia-generate-work-breakdown.md's
+    // own "Requesting Component Detail" section for when the agent should populate this instead
+    // of self-exploring spec/components/* (the real, evidenced dominant cost driver on a large
+    // feature — confirmed against a real run: 1.18M of 1.38M total tokens on one failing attempt
+    // were cache_read_input_tokens, not the declared output schema size).
+    needsComponentDetail: { type: 'array', items: { type: 'object',
+      properties: { fileSlug: { type: 'string' }, reason: { type: 'string' } }, required: ['fileSlug'] } },
   },
+}
+
+// Fixed, not externally configurable (same "no real evidence yet justifies external tuning"
+// precedent as every other bounded retry/batch constant in this codebase) — a safety cap, not a
+// typical case; the skeleton agent's own instructions already frame needsComponentDetail as the
+// exception, reserved for a genuine per-task decision gap, not a substitute for broad exploration.
+const SKELETON_DRILL_DOWN_MAX_COMPONENTS = 20
+
+// Builds the skeleton-generation prompt: Requirements FULL text + Tech-Spec SKELETON ONLY
+// (never per-component bodies) inlined directly, mirroring pm-phase1.js's own
+// gaia-validate-feature-docs prompt shape exactly — the agent no longer self-reads either
+// document or any per-item file via its own Read/Glob/Grep tool access.
+function buildSkeletonPrompt(featurePath, requirementsText, techSpecSkeletonText, drillDownText) {
+  const parts = [
+    featurePath,
+    '',
+    'Requirements:',
+    requirementsText,
+    '',
+    'Tech-Spec:',
+    techSpecSkeletonText,
+  ]
+  if (drillDownText) {
+    parts.push('', 'Component detail you requested:', drillDownText)
+  }
+  return parts.join('\n')
+}
+
+// Validates each needsComponentDetail entry's fileSlug against the real component table (a
+// hallucinated/mistyped reference is dropped, never dispatched — mirrors pm-phase1.js's own
+// prepareDrillDownBatches), deduplicates by fileSlug, and caps the total at
+// SKELETON_DRILL_DOWN_MAX_COMPONENTS. Returns the inlinable text block (or null if nothing valid
+// remains) — this reads files directly (deterministic, free), never dispatches another agent.
+function buildComponentDrillDownText(needsComponentDetail, specIndexContent, specDirArg) {
+  const components = parseComponentsTableLocal(specIndexContent)
+  const bySlug = new Map(components.map(c => [c.fileSlug, c]))
+  const uniqueSlugs = [...new Set((needsComponentDetail || [])
+    .map(e => e.fileSlug)
+    .filter(slug => bySlug.has(slug)))]
+    .slice(0, SKELETON_DRILL_DOWN_MAX_COMPONENTS)
+  if (uniqueSlugs.length === 0) return null
+  return uniqueSlugs.map(slug => {
+    const comp = bySlug.get(slug)
+    return `### ${comp.filePath} (${slug})\n\n${c.read(`${specDirArg}/components/${slug}`)}`
+  }).join('\n\n---\n\n')
 }
 
 // Splits the skeleton response into (a) index.json's structural, map-keyed shape and
@@ -334,7 +388,33 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // 1. Skeleton (no declared worker() output — host writes every file itself)
   let index
   if (!c.exists(indexPath)) {
-    const skeleton = await c.worker('gaia.agent.planner.work-breakdown', featurePath, { schema: SKELETON_SCHEMA })
+    // Requirements FULL text + Tech-Spec SKELETON ONLY, inlined directly — same shape as
+    // pm-phase1.js's own validator prompt (FTR-028). Computed unconditionally here (not reused
+    // from the Gate-1 digest check above, which only runs when Approvals.md carries a digest
+    // line) so this prompt is always built the same way regardless of that check's own outcome.
+    const requirementsForSkeleton = hasReq
+      ? c.command(['run-asset', 'scripts/req-assembler.js', '--project', c.root, '--', reqDir]).stdout
+      : c.read(file('Requirements.md'))
+    const techSpecSkeletonForSkeleton = hasSpec ? c.read(specIndexPath) : c.read(file('Tech-Spec.md'))
+
+    let skeleton = await c.worker('gaia.agent.planner.work-breakdown',
+      buildSkeletonPrompt(featurePath, requirementsForSkeleton, techSpecSkeletonForSkeleton),
+      { schema: SKELETON_SCHEMA })
+
+    // Bounded, single-round drill-down (FTR-028 precedent) — see buildComponentDrillDownText's
+    // own comment. No further rounds: the second call's own response is used as-is, even if it
+    // asks for more (fail-fast rather than open-ended retries, matching this codebase's other
+    // bounded-retry conventions).
+    const needsComponentDetail = skeleton.needsComponentDetail || []
+    if (hasSpec && needsComponentDetail.length > 0) {
+      const drillDownText = buildComponentDrillDownText(needsComponentDetail, c.read(specIndexPath), specDir)
+      if (drillDownText) {
+        skeleton = await c.worker('gaia.agent.planner.work-breakdown',
+          buildSkeletonPrompt(featurePath, requirementsForSkeleton, techSpecSkeletonForSkeleton, drillDownText),
+          { schema: SKELETON_SCHEMA, label: 'work-breakdown-skeleton:with-drilldown' })
+      }
+    }
+
     index = materializeIndex(skeleton)
     const taskIdToPhase = new Map(skeleton.phases.flatMap(p => p.taskIds.map(taskId => [taskId, p.id])))
     for (const phase of index.phases) {
