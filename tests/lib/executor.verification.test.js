@@ -203,4 +203,44 @@ describe('runVerifications', () => {
       expect(ids).toEqual([receiptId(0, 1), receiptId(0, 2)].sort());
     });
   });
+
+  // Regression test for a real bug (reported against Fincantieri.ISDM.JobScheduler, FTR-012):
+  // on Windows, `bash` here is MSYS2/git-bash, which by default auto-converts any argument
+  // shaped like a POSIX path before handing it to a native (non-MSYS-aware) child process. A
+  // verification command invoking a native tool with leading-slash switches — e.g. MSBuild's
+  // `/p:Configuration=Release`, this project's own documented .NET build syntax — got silently
+  // mangled: MSYS stripped the leading `/` (no matching drive for `p:`), leaving the native tool
+  // unable to recognize it as a switch (MSBuild: "MSB1008: Only one project can be specified").
+  // Fixed by setting MSYS2_ARG_CONV_EXCL='*' on the spawn, excluding every argument from MSYS's
+  // automatic path conversion — verification commands never rely on that conversion for a real
+  // path (a real path either resolves natively as a relative repo path, or is already given in
+  // Windows-native form), so excluding all of them is safe.
+  describe('MSYS/git-bash argument mangling (FTR-012 finding)', () => {
+    const IS_WINDOWS = process.platform === 'win32';
+    const itWindowsOnly = IS_WINDOWS ? test : test.skip;
+
+    test('spawn is called with MSYS2_ARG_CONV_EXCL=\'*\' in its env, alongside the rest of process.env', async () => {
+      await runVerifications(baseArgs({ task: makeTask(['echo hi']) }));
+      expect(spawn).toHaveBeenCalledWith('bash', ['-c', 'echo hi'], expect.objectContaining({
+        env: expect.objectContaining({ MSYS2_ARG_CONV_EXCL: '*', PATH: process.env.PATH }),
+      }));
+    });
+
+    itWindowsOnly('a leading-slash switch-style argument passed to a REAL native child process survives intact', async () => {
+      // node.exe itself is the stand-in "native tool" here (never a real external build tool) —
+      // mirrors this suite's own "no real network/LLM call" discipline. Invoked via its real,
+      // absolute path so bash must resolve + exec a genuinely native child, exactly like the
+      // real MSBuild.exe invocation this bug was reported against.
+      const nodeExe = process.execPath.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => '/' + d.toLowerCase());
+      const probeScript = path.join(tmpDir, 'probe.js');
+      fs.writeFileSync(probeScript, 'console.log(JSON.stringify(process.argv.slice(2)));');
+      const command = '"' + nodeExe + '" "' + probeScript + '" /p:Configuration=Release "/p:Platform=Any CPU"';
+
+      const result = await runVerifications(baseArgs({ task: makeTask([command + ' > out.txt']) }));
+
+      expect(result.passed).toBe(true);
+      const output = fs.readFileSync(path.join(tmpDir, 'out.txt'), 'utf8').trim();
+      expect(JSON.parse(output)).toEqual(['/p:Configuration=Release', '/p:Platform=Any CPU']);
+    });
+  });
 });
