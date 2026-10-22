@@ -46,6 +46,15 @@ function readStdin() {
       process.exit(1);
       return;
     }
+    case 'fail-if-invoked': {
+      // FTR-032 (UC-03): a hard, test-enforced guarantee that a short-circuited task's test
+      // never spawns anything — if the pre-dispatch short-circuit ever regresses and dispatches
+      // this subprocess anyway, the spawn itself fails loudly instead of the test relying only
+      // on an absence-of-assertion.
+      process.stderr.write('fake-claude-cli: fail-if-invoked mode was spawned — this subprocess should never have been dispatched\n');
+      process.exit(1);
+      return;
+    }
     case 'malformed': {
       process.stdout.write('not-json{{{');
       process.exit(0);
