@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.23.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.23.1...v0.23.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **pm-phase2:** bound the WBS skeleton call's own Tech-Spec exploration ([6bca6b5](https://github.com/dtlab-tech/ai-toolkit/commit/6bca6b51f4d495b5912434f4ff83bdcefed2d979))
+* **pm-phase2:** bound the WBS skeleton call's own Tech-Spec exploration (needsComponentDetail) ([804d2cc](https://github.com/dtlab-tech/ai-toolkit/commit/804d2ccf529e0e441b81f9e814a168a9a005a783))
+
 ## [0.23.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.23.0...v0.23.1) (2026-10-22)
 
 
