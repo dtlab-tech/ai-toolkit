@@ -5,33 +5,40 @@ export const meta = {
   phases: [{ title: 'Work Breakdown' }, { title: 'Effort Estimate' }],
 }
 
-// ── Skeleton JSON schema (FTR-020) ───────────────────────────────────────────
-// Passed as opts.schema to the skeleton-generation worker call. See
-// src/claude/agents/gaia-generate-work-breakdown.md Step 7 for the authoritative
-// description of this shape.
-const SKELETON_SCHEMA = {
+// ── Phase-enumeration + per-phase JSON schemas (FTR-033) ─────────────────────
+// FTR-033 splits the single monolithic skeleton call (deciding the ENTIRE feature's task graph in
+// one turn — confirmed to fail reliably at real feature scale, independent of prompt size or
+// dispatch mechanism) into two bounded tiers: enumeration (this schema) decides only the ordered
+// phase list; PHASE_TASKS_SCHEMA below decides one phase's own tasks per call.
+const PHASE_ENUMERATION_SCHEMA = {
   type: 'object',
-  required: ['schemaVersion', 'feature', 'phases', 'tasks'],
+  required: ['schemaVersion', 'feature', 'phases'],
   properties: {
     schemaVersion: { const: 3 },
     feature: { type: 'string' },
     phases: { type: 'array', items: {
       type: 'object',
-      required: ['id', 'type', 'title', 'commit', 'sourceUC', 'context', 'taskIds'],
+      required: ['id', 'type', 'title', 'commit', 'sourceUC'],
       properties: {
         id: { type: 'string' }, type: { enum: ['infrastructure', 'user-story'] },
         title: { type: 'string' },
         commit: { type: 'object', required: ['type', 'subject'],
           properties: { type: { type: 'string' }, subject: { type: 'string' } } },
         sourceUC: { type: 'array', items: { type: 'string' } },
-        // 2-4 sentences: why this phase exists, how its tasks relate, any sequencing note other
-        // phases/tasks need before opening this phase's own task files — the one part of the
-        // FTR-020 phase-detail template that genuinely needs narrative judgment, not something
-        // the host can derive mechanically the way it does Source UC/Tasks-in-phase/Depends-on.
-        context: { type: 'string' },
-        taskIds: { type: 'array', items: { type: 'string' } },
       },
     } },
+  },
+}
+
+const PHASE_TASKS_SCHEMA = {
+  type: 'object',
+  required: ['context', 'tasks'],
+  properties: {
+    // 2-4 sentences: why this phase exists, how its tasks relate, any sequencing note other
+    // phases/tasks need before opening this phase's own task files — the one part of the
+    // FTR-020 phase-detail template that genuinely needs narrative judgment, not something
+    // the host can derive mechanically the way it does Source UC/Tasks-in-phase/Depends-on.
+    context: { type: 'string' },
     tasks: { type: 'object', additionalProperties: {
       type: 'object',
       required: ['title', 'outcome', 'domain', 'agentType', 'dependsOn',
@@ -58,11 +65,13 @@ const SKELETON_SCHEMA = {
     } },
     // Bounded drill-down (mirrors pm-phase1.js's own needsComponentDetail precedent for the
     // feature-doc validator, FTR-028) — declared in `properties` only, never `required`: the
-    // common case is an empty array, costing nothing extra. See gaia-generate-work-breakdown.md's
-    // own "Requesting Component Detail" section for when the agent should populate this instead
-    // of self-exploring spec/components/* (the real, evidenced dominant cost driver on a large
-    // feature — confirmed against a real run: 1.18M of 1.38M total tokens on one failing attempt
-    // were cache_read_input_tokens, not the declared output schema size).
+    // common case is an empty array, costing nothing extra. See
+    // gaia-generate-work-breakdown-phase.md's own "Requesting Component Detail" section for when
+    // the agent should populate this instead of self-exploring spec/components/* (the real,
+    // evidenced dominant cost driver on a large feature — confirmed against a real run: 1.18M of
+    // 1.38M total tokens on one failing attempt were cache_read_input_tokens, not the declared
+    // output schema size). FTR-033: available per-phase, not at the enumeration tier — phase-level
+    // decisions (id/type/title/sourceUC/commit) never need a component's own design body.
     needsComponentDetail: { type: 'array', items: { type: 'object',
       properties: { fileSlug: { type: 'string' }, reason: { type: 'string' } }, required: ['fileSlug'] } },
   },
@@ -74,12 +83,15 @@ const SKELETON_SCHEMA = {
 // exception, reserved for a genuine per-task decision gap, not a substitute for broad exploration.
 const SKELETON_DRILL_DOWN_MAX_COMPONENTS = 20
 
-// Builds the skeleton-generation prompt: Requirements FULL text + Tech-Spec SKELETON ONLY
+// Builds the phase-enumeration prompt: Requirements FULL text + Tech-Spec SKELETON ONLY
 // (never per-component bodies) inlined directly, mirroring pm-phase1.js's own
 // gaia-validate-feature-docs prompt shape exactly — the agent no longer self-reads either
-// document or any per-item file via its own Read/Glob/Grep tool access.
-function buildSkeletonPrompt(featurePath, requirementsText, techSpecSkeletonText, drillDownText) {
-  const parts = [
+// document or any per-item file via its own Read/Glob/Grep tool access. No drillDownText
+// parameter — the enumeration call never declares needsComponentDetail (FTR-033: phase-level
+// decisions never need a component's own design body; that mechanism now lives only at the
+// per-phase tier, see buildPhaseTaskPrompt below).
+function buildPhaseEnumerationPrompt(featurePath, requirementsText, techSpecSkeletonText) {
+  return [
     featurePath,
     '',
     'Requirements:',
@@ -87,11 +99,7 @@ function buildSkeletonPrompt(featurePath, requirementsText, techSpecSkeletonText
     '',
     'Tech-Spec:',
     techSpecSkeletonText,
-  ]
-  if (drillDownText) {
-    parts.push('', 'Component detail you requested:', drillDownText)
-  }
-  return parts.join('\n')
+  ].join('\n')
 }
 
 // Validates each needsComponentDetail entry's fileSlug against the real component table (a
@@ -113,19 +121,20 @@ function buildComponentDrillDownText(needsComponentDetail, specIndexContent, spe
   }).join('\n\n---\n\n')
 }
 
-// Splits the skeleton response into (a) index.json's structural, map-keyed shape and
-// (b) nothing else — phase title/commit/context are NOT copied into index.json (OQ-04); they
-// are rendered straight to each phase's detail file by the caller, from the same skeleton
-// response, since phase content is fully known the moment this one call returns.
-function materializeIndex(skeleton) {
-  const tasks = {}
-  for (const [taskId, t] of Object.entries(skeleton.tasks)) {
-    tasks[taskId] = { ...t, detailFile: `tasks/${taskId}.md`, status: 'pending' }
-  }
-  const phases = skeleton.phases.map(p => ({
-    id: p.id, type: p.type, sourceUC: p.sourceUC, detailFile: `user-stories/${p.id}.md`, taskIds: p.taskIds,
+// Materializes the enumeration response into index.json's structural, map-keyed shape.
+// FTR-033 (BR-09): title/commit ARE additively persisted here (unlike the old materializeIndex,
+// which deliberately left them out, OQ-04) — a resumed run between phase-enumeration and the last
+// phase's completion must be able to re-render any EARLIER-but-already-completed phase's own
+// detail file (which needs title/commit) without re-calling the phase-enumeration agent.
+// `context` is still NOT persisted here — it is only known once that phase's own per-phase call
+// returns, and is rendered straight to the phase's detail file at that point (see the per-phase
+// loop below), same "render immediately, don't round-trip through index.json" principle as before.
+function materializeEnumeratedPhases(phaseList) {
+  const phases = phaseList.phases.map(p => ({
+    id: p.id, type: p.type, title: p.title, commit: p.commit, sourceUC: p.sourceUC,
+    detailFile: `user-stories/${p.id}.md`, taskIds: [],
   }))
-  return { schemaVersion: 3, feature: skeleton.feature, phases, tasks }
+  return { schemaVersion: 3, feature: phaseList.feature, phases, tasks: {} }
 }
 
 // Duplicated from src/claude/scripts/wbs-assembler.js's renderPhaseDetailBlock/template-engine
@@ -278,6 +287,50 @@ function parseComponentsTableLocal(specIndexContent) {
   return entries
 }
 
+// FTR-033: local re-implementation of req-assembler.js's own parseUseCaseIndexTable, reusing the
+// ALREADY-local _findSectionRange/_parseTableRows this file established for Tech-Spec's own
+// Section 9 table (FTR-026) — same "sandboxed runtime has no require" reason.
+function parseUseCaseIndexTableLocal(reqIndexContent) {
+  const { start, end, lines } = _findSectionRange(reqIndexContent, 2)
+  return _parseTableRows(lines, start, end).map(cells => {
+    const [id, title, actor, priority, fileCol] = cells
+    const m = fileCol && fileCol.match(/\(([^)]+)\)/)
+    if (!m) throw new Error(`malformed File column for UC "${id}" in req/index.md`)
+    return { id, file: m[1] }
+  })
+}
+
+// Scopes Requirements to one phase's own sourceUC: req/index.md's feature-wide content (Business
+// Rules/AC table/NFRs, never per-UC) is ALWAYS included in full; only the per-UC flow detail is
+// narrowed to this phase's own UC(s). Falls back to the raw text unchanged for a legacy
+// (non-split) feature — hasReq is false, so sourceUC-based file lookups are meaningless anyway.
+function buildPhaseRequirementsExcerpt(reqIndexContent, sourceUC, reqDirArg) {
+  const ucTable = parseUseCaseIndexTableLocal(reqIndexContent)
+  const matched = ucTable.filter(row => (sourceUC || []).includes(row.id))
+  if (matched.length === 0) return reqIndexContent
+  const ucBodies = matched.map(row => c.read(`${reqDirArg}/${row.file}`)).join('\n\n')
+  return `${reqIndexContent}\n\n${ucBodies}`
+}
+
+// Compact prompt for the per-phase task-generation worker: this phase's own skeleton entry, its
+// scoped Requirements excerpt, the Tech-Spec skeleton, and every prior phase's own tasks as a
+// lightweight id/title/outcome/domain projection (never a later phase's tasks, which do not exist
+// yet) — mirrors buildTaskPrompt's own "siblings" list further below, same duplicate-
+// implementation-awareness purpose, one tier up.
+function buildPhaseTaskPrompt(phase, requirementsExcerpt, techSpecSkeletonText, priorTasks, drillDownText) {
+  const priorTasksList = priorTasks.length
+    ? priorTasks.map(t => `- ${t.id}: ${t.title} — ${t.outcome} (domain: ${t.domain})`).join('\n')
+    : '(none — this is the first phase generated)'
+  const parts = [
+    `Phase:\n${JSON.stringify(phase, null, 2)}`,
+    `Requirements (scoped to this phase's own sourceUC, plus feature-wide sections):\n${requirementsExcerpt}`,
+    `Tech-Spec:\n${techSpecSkeletonText}`,
+    `Tasks already decided by prior phases:\n${priorTasksList}`,
+  ]
+  if (drillDownText) parts.push(`Component detail you requested:\n${drillDownText}`)
+  return parts.join('\n\n')
+}
+
 // Matches a task's own acceptanceCriteria against each component's Addresses column (the same
 // relation spec/index.md's own Section 9 table already expresses) to give the per-task worker
 // only the Tech-Spec content relevant to its own task, instead of the entire assembled spec —
@@ -385,7 +438,11 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const wbsDir = `${featureDir}/wbs`
   const indexPath = `${wbsDir}/index.json`
 
-  // 1. Skeleton (no declared worker() output — host writes every file itself)
+  // 1. Phase enumeration (no declared worker() output — host writes every file itself). FTR-033:
+  // split from the old single monolithic skeleton call (which decided every phase AND every task
+  // in one turn — confirmed to fail reliably at real feature scale, independent of prompt size or
+  // dispatch mechanism) into this lightweight enumeration tier plus the bounded per-phase loop
+  // below.
   let index
   if (!c.exists(indexPath)) {
     // Requirements FULL text + Tech-Spec SKELETON ONLY, inlined directly — same shape as
@@ -397,35 +454,65 @@ return c.run(meta.name, featureDir, prefix, async () => {
       : c.read(file('Requirements.md'))
     const techSpecSkeletonForSkeleton = hasSpec ? c.read(specIndexPath) : c.read(file('Tech-Spec.md'))
 
-    let skeleton = await c.worker('gaia.agent.planner.work-breakdown',
-      buildSkeletonPrompt(featurePath, requirementsForSkeleton, techSpecSkeletonForSkeleton),
-      { schema: SKELETON_SCHEMA })
+    // No needsComponentDetail round here — the enumeration agent never declares or asks for it
+    // (PHASE_ENUMERATION_SCHEMA has no such property; gaia-generate-work-breakdown.md's own Output
+    // section doesn't mention it either). Phase-level decisions (id/type/title/sourceUC/commit)
+    // never need a component's own design body; the drill-down mechanism now lives ONLY at the
+    // per-phase tier below, where task-level decisions genuinely can need it.
+    const phaseList = await c.worker('gaia.agent.planner.work-breakdown',
+      buildPhaseEnumerationPrompt(featurePath, requirementsForSkeleton, techSpecSkeletonForSkeleton),
+      { schema: PHASE_ENUMERATION_SCHEMA })
 
-    // Bounded, single-round drill-down (FTR-028 precedent) — see buildComponentDrillDownText's
-    // own comment. No further rounds: the second call's own response is used as-is, even if it
-    // asks for more (fail-fast rather than open-ended retries, matching this codebase's other
-    // bounded-retry conventions).
-    const needsComponentDetail = skeleton.needsComponentDetail || []
-    if (hasSpec && needsComponentDetail.length > 0) {
-      const drillDownText = buildComponentDrillDownText(needsComponentDetail, c.read(specIndexPath), specDir)
+    index = materializeEnumeratedPhases(phaseList)
+    c.writeOutput(indexPath, JSON.stringify(index, null, 2))
+  } else {
+    index = c.json(indexPath) // resume: reuse already-enumerated phases / already-generated tasks as-is
+  }
+
+  // 1b. Per-phase task generation (resume-by-phase: a phase whose taskIds is already non-empty is
+  // skipped entirely, never redispatched — BR-04/BR-05). Dispatched strictly in enumerated order:
+  // INFRA first (if present), then US phases in priority order (same order gaia-generate-
+  // work-breakdown.md's own Guidelines already produce for the phases array).
+  const reqIndexContentForPhases = c.read(reqIndexPath)
+  const techSpecSkeletonForPhases = hasSpec ? c.read(specIndexPath) : c.read(file('Tech-Spec.md'))
+  const taskIdToPhase = new Map()
+  for (const phase of index.phases) {
+    if (phase.taskIds.length > 0) {
+      for (const taskId of phase.taskIds) taskIdToPhase.set(taskId, phase.id)
+      continue
+    }
+    const reqExcerpt = hasReq
+      ? buildPhaseRequirementsExcerpt(reqIndexContentForPhases, phase.sourceUC, reqDir)
+      : reqIndexContentForPhases
+    const priorTasks = Object.entries(index.tasks).map(([id, t]) => ({ id, title: t.title, outcome: t.outcome, domain: t.domain }))
+
+    let phaseResult = await c.worker('gaia.agent.planner.work-breakdown-phase',
+      buildPhaseTaskPrompt(phase, reqExcerpt, techSpecSkeletonForPhases, priorTasks),
+      { schema: PHASE_TASKS_SCHEMA, label: `work-breakdown-phase:${phase.id}` })
+
+    // Bounded, single-round drill-down (FTR-028 precedent, reused unmodified from FTR-032's own
+    // whole-feature-skeleton mechanism) — scoped to this one phase's call now.
+    const phaseNeedsComponentDetail = phaseResult.needsComponentDetail || []
+    if (hasSpec && phaseNeedsComponentDetail.length > 0) {
+      const drillDownText = buildComponentDrillDownText(phaseNeedsComponentDetail, c.read(specIndexPath), specDir)
       if (drillDownText) {
-        skeleton = await c.worker('gaia.agent.planner.work-breakdown',
-          buildSkeletonPrompt(featurePath, requirementsForSkeleton, techSpecSkeletonForSkeleton, drillDownText),
-          { schema: SKELETON_SCHEMA, label: 'work-breakdown-skeleton:with-drilldown' })
+        phaseResult = await c.worker('gaia.agent.planner.work-breakdown-phase',
+          buildPhaseTaskPrompt(phase, reqExcerpt, techSpecSkeletonForPhases, priorTasks, drillDownText),
+          { schema: PHASE_TASKS_SCHEMA, label: `work-breakdown-phase:${phase.id}:with-drilldown` })
       }
     }
 
-    index = materializeIndex(skeleton)
-    const taskIdToPhase = new Map(skeleton.phases.flatMap(p => p.taskIds.map(taskId => [taskId, p.id])))
-    for (const phase of index.phases) {
-      const skeletonPhase = skeleton.phases.find(p => p.id === phase.id)
-      const taskTitles = skeletonPhase.taskIds.map(taskId => ({ id: taskId, title: skeleton.tasks[taskId].title }))
-      const dependsOnPhases = computeDependsOnPhases(skeleton, phase.id, taskIdToPhase)
-      c.writeOutput(`${wbsDir}/${phase.detailFile}`, renderPhaseDetailBlock(skeletonPhase, taskTitles, dependsOnPhases))
+    for (const [taskId, t] of Object.entries(phaseResult.tasks)) {
+      index.tasks[taskId] = { ...t, detailFile: `tasks/${taskId}.md`, status: 'pending' }
+      taskIdToPhase.set(taskId, phase.id)
     }
-    c.writeOutput(indexPath, JSON.stringify(index, null, 2))
-  } else {
-    index = c.json(indexPath) // resume: reuse existing skeleton as-is
+    phase.taskIds = Object.keys(phaseResult.tasks)
+
+    const taskTitles = phase.taskIds.map(taskId => ({ id: taskId, title: index.tasks[taskId].title }))
+    const dependsOnPhases = computeDependsOnPhases(index, phase.id, taskIdToPhase)
+    c.writeOutput(`${wbsDir}/${phase.detailFile}`,
+      renderPhaseDetailBlock({ ...phase, context: phaseResult.context }, taskTitles, dependsOnPhases))
+    c.writeOutput(indexPath, JSON.stringify(index, null, 2)) // persist BEFORE the next phase's call (BR-04)
   }
 
   // 2. Structural pre-checks (wb-skeleton-check.js, same wb-graph-checks.js functions
