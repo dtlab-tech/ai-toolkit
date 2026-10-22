@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.23.2...v0.24.0) (2026-10-22)
+
+
+### Features
+
+* **pm-phase2:** split WBS skeleton generation into phase enumeration + per-phase task generation (FTR-033) ([762684c](https://github.com/dtlab-tech/ai-toolkit/commit/762684c64aac4b3c9c9138cb6620d3c7d26146c9))
+* **pm-phase2:** split WBS skeleton generation into phase enumeration + per-phase task generation (FTR-033) ([a817707](https://github.com/dtlab-tech/ai-toolkit/commit/a817707e7a6aaf7f9b09d51235659ef68435cd49))
+
 ## [0.23.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.23.1...v0.23.2) (2026-10-22)
 
 
