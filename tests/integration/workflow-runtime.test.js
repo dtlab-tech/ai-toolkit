@@ -680,6 +680,100 @@ describe('FTR-032 — WBS skeleton call no longer requires estimate; per-task de
   });
 });
 
+// Same-day follow-up to FTR-032: the skeleton call's effort-estimate removal helped, but a real
+// run (Fincantieri.CommonLibraries.MFExample, FTR-003, v0.23.1) still hit 9/9 consecutive "Stream
+// idle timeout" failures after that fix shipped. Direct evidence inspection showed the dominant
+// cost was never the declared output schema — it was gaia-generate-work-breakdown.md's own
+// self-directed Read/Glob/Grep exploration of spec/components/*.md, including an explicit "if
+// unsure, read every file under spec/components/" fallback, racking up massive
+// cache_read_input_tokens across many tool-use turns (1.18M of 1.38M total on one real failing
+// attempt). Mirrors pm-phase1.js's own gaia-validate-feature-docs fix for the identical
+// anti-pattern (FTR-028): Requirements (full) and Tech-Spec (skeleton only) are now inlined
+// directly in the prompt; the agent no longer self-explores either document, and reports
+// needsComponentDetail instead of guessing when it genuinely needs a specific component's body —
+// the host answers with a single, bounded second call.
+describe('FTR-032 follow-up — bounded needsComponentDetail drill-down for the WBS skeleton call', () => {
+  function writeSplitFixtures(approvalsExtra) {
+    fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-021-req'), path.join(f.dir, 'req'), { recursive: true });
+    fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-024-spec'), path.join(f.dir, 'spec'), { recursive: true });
+    fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'),
+      '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n' + (approvalsExtra || ''));
+  }
+  const finalWb = {
+    schemaVersion: 3, feature: 'FTR-099',
+    phases: [{ id: 'US-01', type: 'user-story', title: 'US-01', sourceUC: ['UC-01'], context: 'Context.',
+      commit: { type: 'feat', subject: 'us01' }, taskIds: ['US-01-TASK-BE-01'] }],
+    tasks: { 'US-01-TASK-BE-01': {
+      title: 'Example task', outcome: 'Example outcome', domain: 'BE', agentType: 'developer-backend',
+      dependsOn: [], acceptanceCriteria: ['AC-01'], outputCount: 1, commit: { type: 'feat', subject: 'example' },
+    } },
+  };
+  function skeletonResponse(wb, needsComponentDetail) {
+    return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
+      structured_output: needsComponentDetail ? { ...wb, needsComponentDetail } : wb } };
+  }
+  function findSkeletonCalls(dispatchFn) {
+    return dispatchFn.mock.calls.map(([o]) => o)
+      .filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown');
+  }
+
+  test('the skeleton prompt inlines Requirements (full) and Tech-Spec (skeleton only), never per-component bodies', async () => {
+    writeSplitFixtures();
+    let skeletonPrompt;
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown') { skeletonPrompt = options.prompt; return skeletonResponse(finalWb); }
+      return phase2Dispatch(finalWb)(options);
+    };
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+    expect(skeletonPrompt).toContain('Requirements:');
+    expect(skeletonPrompt).toContain('Tech-Spec:');
+    expect(skeletonPrompt).toContain('src/example-be.js'); // Section 9's own index row (skeleton)
+    expect(skeletonPrompt).not.toContain('doExampleWork'); // a component's own design BODY — never inlined up front
+  });
+
+  test('a needsComponentDetail entry naming a real fileSlug triggers exactly one bounded second call with that component inlined', async () => {
+    writeSplitFixtures();
+    let skeletonCallCount = 0;
+    const dispatch = jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown') {
+        skeletonCallCount++;
+        if (skeletonCallCount === 1) return skeletonResponse(finalWb, [{ fileSlug: 'example-be.js.md', reason: 'need interface detail' }]);
+        return skeletonResponse(finalWb); // second (final) call
+      }
+      return phase2Dispatch(finalWb)(options);
+    });
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const skeletonCalls = findSkeletonCalls(dispatch);
+    expect(skeletonCalls).toHaveLength(2);
+    expect(skeletonCalls[0].prompt).not.toContain('doExampleWork');
+    expect(skeletonCalls[1].prompt).toContain('Component detail you requested:');
+    expect(skeletonCalls[1].prompt).toContain('example-be.js.md');
+    expect(skeletonCalls[1].prompt).toContain('doExampleWork');
+    const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'wbs', 'index.json'), 'utf8'));
+    expect(index.tasks['US-01-TASK-BE-01']).toBeDefined();
+  });
+
+  test('an invalid fileSlug in needsComponentDetail is dropped; if none remain valid, no second call happens', async () => {
+    writeSplitFixtures();
+    const dispatch = jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown') return skeletonResponse(finalWb, [{ fileSlug: 'DoesNotExist.cs.md', reason: 'hallucinated' }]);
+      return phase2Dispatch(finalWb)(options);
+    });
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    expect(findSkeletonCalls(dispatch)).toHaveLength(1);
+  });
+
+  test('no needsComponentDetail entries (or an empty array) trigger zero extra dispatches (common-case cost)', async () => {
+    writeSplitFixtures();
+    const dispatch = jest.fn(phase2Dispatch(finalWb));
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    expect(findSkeletonCalls(dispatch)).toHaveLength(1);
+  });
+});
+
 test.each([true, false])('pm-phase2 runs real validator and blocks a negative semantic verdict: %s', async valid => {
   const wb = phase2Setup();
   const dispatch = jest.fn(phase2Dispatch(wb, { valid, findings: [] }));
