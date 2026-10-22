@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.23.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.22.1...v0.23.0) (2026-10-22)
+
+
+### Features
+
+* **pm-phase2,task-executor:** shrink WBS skeleton payload, add dispatch evidence, short-circuit already-satisfied tasks (FTR-032) ([1ff9609](https://github.com/dtlab-tech/ai-toolkit/commit/1ff96090811b3ddeea2346fc3425bdae248c6d19))
+* **pm-phase2,task-executor:** WBS skeleton weight + dispatch evidence + already-satisfied short-circuit (FTR-032) ([fbfdb00](https://github.com/dtlab-tech/ai-toolkit/commit/fbfdb00f5a2bbd8afb944f5bcd2616ae1b073a1a))
+
 ## [0.22.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.22.0...v0.22.1) (2026-10-21)
 
 
