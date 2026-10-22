@@ -589,11 +589,27 @@ const taskDetailDoc = taskId => `### ${taskId}\n\n- **Task ID:** ${taskId}\n- **
   '- **Estimate — tokens:** 10000\n- **Output count:** 1\n- **Grouping rationale:** —\n' +
   '- **Commit type:** feat\n- **Commit scope:** —\n- **Commit subject:** example\n\n' +
   '**Verification commands:**\n\n```\nnode --check src/index.js\n```\n';
+// FTR-033: phase-aware — answers BOTH the phase-enumeration call (gaia-generate-work-breakdown,
+// now enumeration-only) and the new per-phase call (gaia-generate-work-breakdown-phase) from the
+// one `wb` object every existing test already passes, so none of the ~15 pre-existing pm-phase2
+// tests using this fixture need to change.
 function phase2Dispatch(wb, semanticVerdict = { valid: true, findings: [] }) {
+  const enumeratedPhases = wb.phases.map(p => ({
+    id: p.id, type: p.type, title: p.title, sourceUC: p.sourceUC, commit: p.commit,
+  }));
   return async options => {
     const name = options.args[options.args.indexOf('--agent') + 1];
     if (name === 'gaia-generate-work-breakdown') {
-      return { exitCode: 0, result: { is_error: false, structured_output: wb, usage: { input_tokens: 10, output_tokens: 5 } } };
+      return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
+        structured_output: { schemaVersion: 3, feature: wb.feature, phases: enumeratedPhases } } };
+    }
+    if (name === 'gaia-generate-work-breakdown-phase') {
+      const m = options.prompt.match(/"id":\s*"([^"]+)"/);
+      const phase = wb.phases.find(p => p.id === (m && m[1]));
+      const tasks = {};
+      for (const taskId of phase.taskIds) tasks[taskId] = wb.tasks[taskId];
+      return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
+        structured_output: { context: phase.context, tasks } } };
     }
     if (name === 'gaia-generate-work-breakdown-task') return success(taskDetailDoc('INFRA-TASK-BE-01'));
     return { exitCode: 0, result: { is_error: false, structured_output: semanticVerdict, usage: { input_tokens: 10, output_tokens: 5 } } };
@@ -680,97 +696,165 @@ describe('FTR-032 — WBS skeleton call no longer requires estimate; per-task de
   });
 });
 
-// Same-day follow-up to FTR-032: the skeleton call's effort-estimate removal helped, but a real
-// run (Fincantieri.CommonLibraries.MFExample, FTR-003, v0.23.1) still hit 9/9 consecutive "Stream
-// idle timeout" failures after that fix shipped. Direct evidence inspection showed the dominant
-// cost was never the declared output schema — it was gaia-generate-work-breakdown.md's own
-// self-directed Read/Glob/Grep exploration of spec/components/*.md, including an explicit "if
-// unsure, read every file under spec/components/" fallback, racking up massive
-// cache_read_input_tokens across many tool-use turns (1.18M of 1.38M total on one real failing
-// attempt). Mirrors pm-phase1.js's own gaia-validate-feature-docs fix for the identical
-// anti-pattern (FTR-028): Requirements (full) and Tech-Spec (skeleton only) are now inlined
-// directly in the prompt; the agent no longer self-explores either document, and reports
-// needsComponentDetail instead of guessing when it genuinely needs a specific component's body —
-// the host answers with a single, bounded second call.
-describe('FTR-032 follow-up — bounded needsComponentDetail drill-down for the WBS skeleton call', () => {
-  function writeSplitFixtures(approvalsExtra) {
+// FTR-033: splits the single monolithic skeleton call (deciding the ENTIRE feature's task graph in
+// one turn — confirmed to fail reliably at real feature scale, 12/12 consecutive failures on a
+// real feature, independent of prompt size post-FTR-032 and of dispatch mechanism, headless and
+// interactive both fail on the byte-identical prompt) into a lightweight phase-enumeration call
+// plus one bounded call per phase. Supersedes the old "FTR-032 follow-up" describe block that used
+// to live here: that block tested needsComponentDetail drill-down AT THE ENUMERATION TIER, a
+// capability this feature does not carry forward (the enumeration call never declares
+// needsComponentDetail; only the per-phase call does, since phase-level decisions never need a
+// component's own design body) — its one still-valid assertion ("the skeleton prompt never inlines
+// a component's own body") is folded into this block's own AC-01 test below; the drill-down
+// mechanism itself is re-proven at its new, correct tier by the AC-08 test.
+describe('FTR-033 — per-phase WBS skeleton generation', () => {
+  function writeSplitFixtures() {
     fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-021-req'), path.join(f.dir, 'req'), { recursive: true });
     fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-024-spec'), path.join(f.dir, 'spec'), { recursive: true });
     fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'),
-      '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n' + (approvalsExtra || ''));
+      '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
   }
-  const finalWb = {
+  const phaseList = {
     schemaVersion: 3, feature: 'FTR-099',
-    phases: [{ id: 'US-01', type: 'user-story', title: 'US-01', sourceUC: ['UC-01'], context: 'Context.',
-      commit: { type: 'feat', subject: 'us01' }, taskIds: ['US-01-TASK-BE-01'] }],
-    tasks: { 'US-01-TASK-BE-01': {
-      title: 'Example task', outcome: 'Example outcome', domain: 'BE', agentType: 'developer-backend',
-      dependsOn: [], acceptanceCriteria: ['AC-01'], outputCount: 1, commit: { type: 'feat', subject: 'example' },
-    } },
+    phases: [
+      { id: 'US-01', type: 'user-story', title: 'US-01 title', sourceUC: ['UC-01'], commit: { type: 'feat', subject: 'us01' } },
+      { id: 'US-02', type: 'user-story', title: 'US-02 title', sourceUC: ['UC-02'], commit: { type: 'feat', subject: 'us02' } },
+    ],
   };
-  function skeletonResponse(wb, needsComponentDetail) {
+  function phaseTasksResponse(taskId, extra) {
+    // AC-01 is scoped to UC-01 (US-01's own sourceUC), AC-02 to UC-02 (US-02's) — per the
+    // ftr-021-req fixture's own AC table. Each phase's task must cite only its own phase's AC or
+    // wb-skeleton-check's ac_wrong_us structural check (AC-scope sourceUC fix) correctly rejects it.
+    const phaseId = taskId.split('-TASK-')[0];
+    const ac = phaseId === 'US-01' ? 'AC-01' : 'AC-02';
     return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
-      structured_output: needsComponentDetail ? { ...wb, needsComponentDetail } : wb } };
+      structured_output: { context: `${phaseId} context.`, tasks: {
+        [taskId]: { title: `${taskId} title`, outcome: 'o', domain: 'BE', agentType: 'developer-backend',
+          dependsOn: [], acceptanceCriteria: [ac], outputCount: 1, commit: { type: 'feat', subject: taskId.toLowerCase() } },
+      }, ...extra } } };
   }
-  function findSkeletonCalls(dispatchFn) {
-    return dispatchFn.mock.calls.map(([o]) => o)
-      .filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown');
-  }
-
-  test('the skeleton prompt inlines Requirements (full) and Tech-Spec (skeleton only), never per-component bodies', async () => {
-    writeSplitFixtures();
-    let skeletonPrompt;
-    const dispatch = async options => {
-      const name = options.args[options.args.indexOf('--agent') + 1];
-      if (name === 'gaia-generate-work-breakdown') { skeletonPrompt = options.prompt; return skeletonResponse(finalWb); }
-      return phase2Dispatch(finalWb)(options);
-    };
-    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
-    expect(skeletonPrompt).toContain('Requirements:');
-    expect(skeletonPrompt).toContain('Tech-Spec:');
-    expect(skeletonPrompt).toContain('src/example-be.js'); // Section 9's own index row (skeleton)
-    expect(skeletonPrompt).not.toContain('doExampleWork'); // a component's own design BODY — never inlined up front
-  });
-
-  test('a needsComponentDetail entry naming a real fileSlug triggers exactly one bounded second call with that component inlined', async () => {
-    writeSplitFixtures();
-    let skeletonCallCount = 0;
-    const dispatch = jest.fn(async options => {
+  function phaseAwareDispatch() {
+    return jest.fn(async options => {
       const name = options.args[options.args.indexOf('--agent') + 1];
       if (name === 'gaia-generate-work-breakdown') {
-        skeletonCallCount++;
-        if (skeletonCallCount === 1) return skeletonResponse(finalWb, [{ fileSlug: 'example-be.js.md', reason: 'need interface detail' }]);
-        return skeletonResponse(finalWb); // second (final) call
+        return { exitCode: 0, result: { is_error: false, structured_output: phaseList, usage: { input_tokens: 10, output_tokens: 5 } } };
       }
-      return phase2Dispatch(finalWb)(options);
+      if (name === 'gaia-generate-work-breakdown-phase') {
+        if (options.prompt.includes('"id": "US-01"')) return phaseTasksResponse('US-01-TASK-BE-01');
+        if (options.prompt.includes('"id": "US-02"')) return phaseTasksResponse('US-02-TASK-BE-01');
+      }
+      if (name === 'gaia-generate-work-breakdown-task') return success(taskDetailDoc(options.prompt.match(/"id":\s*"([^"]+)"/)[1]));
+      return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] }, usage: { input_tokens: 10, output_tokens: 5 } } };
     });
+  }
+  function findCalls(dispatch, agentName) {
+    return dispatch.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === agentName);
+  }
+
+  test('the enumeration call produces only id/type/title/sourceUC/commit per phase, no tasks (AC-01)', async () => {
+    writeSplitFixtures();
+    const dispatch = phaseAwareDispatch();
     await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
-    const skeletonCalls = findSkeletonCalls(dispatch);
-    expect(skeletonCalls).toHaveLength(2);
-    expect(skeletonCalls[0].prompt).not.toContain('doExampleWork');
-    expect(skeletonCalls[1].prompt).toContain('Component detail you requested:');
-    expect(skeletonCalls[1].prompt).toContain('example-be.js.md');
-    expect(skeletonCalls[1].prompt).toContain('doExampleWork');
-    const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'wbs', 'index.json'), 'utf8'));
-    expect(index.tasks['US-01-TASK-BE-01']).toBeDefined();
+    const enumCalls = findCalls(dispatch, 'gaia-generate-work-breakdown');
+    expect(enumCalls).toHaveLength(1);
+    expect(enumCalls[0].prompt).not.toContain('"tasks"');
+    expect(enumCalls[0].prompt).not.toContain('doExampleWork'); // a component's own design BODY — never inlined
   });
 
-  test('an invalid fileSlug in needsComponentDetail is dropped; if none remain valid, no second call happens', async () => {
+  test('exactly one bounded call per phase, dispatched in enumerated order (AC-02)', async () => {
     writeSplitFixtures();
+    const dispatch = phaseAwareDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const phaseCalls = findCalls(dispatch, 'gaia-generate-work-breakdown-phase');
+    expect(phaseCalls).toHaveLength(2);
+    expect(phaseCalls[0].prompt).toContain('"id": "US-01"');
+    expect(phaseCalls[1].prompt).toContain('"id": "US-02"');
+  });
+
+  test('a phase call receives its own scoped Requirements, the Tech-Spec skeleton, and only PRIOR phases\' tasks (AC-03)', async () => {
+    writeSplitFixtures();
+    const dispatch = phaseAwareDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const [us01Call, us02Call] = findCalls(dispatch, 'gaia-generate-work-breakdown-phase');
+    expect(us01Call.prompt).toContain('System does the first thing');
+    expect(us01Call.prompt).not.toContain('System does the second thing');
+    expect(us01Call.prompt).toContain('src/example-be.js'); // Tech-Spec skeleton's own index row
+    expect(us01Call.prompt).toContain('(none — this is the first phase generated)');
+    expect(us02Call.prompt).toContain('System does the second thing');
+    expect(us02Call.prompt).not.toContain('System does the first thing');
+    expect(us02Call.prompt).toContain('US-01-TASK-BE-01'); // US-01's own already-decided task, visible to US-02
+  });
+
+  test('phase N\'s tasks are persisted to index.json before phase N+1 is dispatched (AC-04)', async () => {
+    writeSplitFixtures();
+    const indexSnapshotsAtUs02Dispatch = [];
     const dispatch = jest.fn(async options => {
       const name = options.args[options.args.indexOf('--agent') + 1];
-      if (name === 'gaia-generate-work-breakdown') return skeletonResponse(finalWb, [{ fileSlug: 'DoesNotExist.cs.md', reason: 'hallucinated' }]);
-      return phase2Dispatch(finalWb)(options);
+      if (name === 'gaia-generate-work-breakdown-phase' && options.prompt.includes('"id": "US-02"')) {
+        indexSnapshotsAtUs02Dispatch.push(JSON.parse(fs.readFileSync(path.join(f.dir, 'wbs', 'index.json'), 'utf8')));
+      }
+      return phaseAwareDispatch().getMockImplementation()(options);
     });
     await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
-    expect(findSkeletonCalls(dispatch)).toHaveLength(1);
+    expect(indexSnapshotsAtUs02Dispatch).toHaveLength(1);
+    expect(indexSnapshotsAtUs02Dispatch[0].tasks['US-01-TASK-BE-01']).toBeDefined();
+    expect(indexSnapshotsAtUs02Dispatch[0].tasks['US-02-TASK-BE-01']).toBeUndefined();
   });
 
-  test('no needsComponentDetail entries (or an empty array) trigger zero extra dispatches (common-case cost)', async () => {
+  test('a resumed run with phase 1 already completed skips it and resumes at phase 2 (AC-05)', async () => {
     writeSplitFixtures();
-    const dispatch = jest.fn(phase2Dispatch(finalWb));
+    const firstDispatch = phaseAwareDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: firstDispatch });
+    const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'wbs', 'index.json'), 'utf8'));
+    index.phases[1].taskIds = [];
+    delete index.tasks['US-02-TASK-BE-01'];
+    fs.writeFileSync(path.join(f.dir, 'wbs', 'index.json'), JSON.stringify(index, null, 2));
+    fs.rmSync(path.join(f.dir, 'wbs', 'user-stories', 'US-02.md'), { force: true });
+    f.entries()[0].status = 'running'; // allow a second real dispatch pass
+    const resumeDispatch = phaseAwareDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: resumeDispatch });
+    expect(findCalls(resumeDispatch, 'gaia-generate-work-breakdown')).toHaveLength(0); // enumeration not redispatched
+    const us01Calls = findCalls(resumeDispatch, 'gaia-generate-work-breakdown-phase').filter(o => o.prompt.includes('"id": "US-01"'));
+    expect(us01Calls).toHaveLength(0); // phase 1 not redispatched
+    const us02Calls = findCalls(resumeDispatch, 'gaia-generate-work-breakdown-phase').filter(o => o.prompt.includes('"id": "US-02"'));
+    expect(us02Calls).toHaveLength(1); // phase 2 resumed
+  });
+
+  test('a complete per-phase-produced skeleton passes wb-skeleton-check/wb-graph-checks/wb-validate (AC-06)', async () => {
+    writeSplitFixtures();
+    const dispatch = phaseAwareDispatch();
+    const result = await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    expect(result.gate2_payload.gate2_blocked).toBe(false);
+    expect(result.total_tasks).toBe(2);
+  });
+
+  test('gaia-generate-work-breakdown-task (per-task DETAIL pass) runs unaffected against the assembled skeleton (AC-07)', async () => {
+    writeSplitFixtures();
+    const dispatch = phaseAwareDispatch();
     await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
-    expect(findSkeletonCalls(dispatch)).toHaveLength(1);
+    const detailCalls = findCalls(dispatch, 'gaia-generate-work-breakdown-task');
+    expect(detailCalls).toHaveLength(2);
+  });
+
+  test('needsComponentDetail at the per-phase tier triggers exactly one bounded second call for that phase only (AC-08)', async () => {
+    writeSplitFixtures();
+    let us01CallCount = 0;
+    const dispatch = jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown-phase' && options.prompt.includes('"id": "US-01"')) {
+        us01CallCount++;
+        if (us01CallCount === 1) return phaseTasksResponse('US-01-TASK-BE-01', { needsComponentDetail: [{ fileSlug: 'example-be.js.md', reason: 'need interface detail' }] });
+        return phaseTasksResponse('US-01-TASK-BE-01');
+      }
+      return phaseAwareDispatch().getMockImplementation()(options);
+    });
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const us01Calls = findCalls(dispatch, 'gaia-generate-work-breakdown-phase').filter(o => o.prompt.includes('"id": "US-01"'));
+    expect(us01Calls).toHaveLength(2);
+    expect(us01Calls[1].prompt).toContain('Component detail you requested:');
+    expect(us01Calls[1].prompt).toContain('doExampleWork');
+    const us02Calls = findCalls(dispatch, 'gaia-generate-work-breakdown-phase').filter(o => o.prompt.includes('"id": "US-02"'));
+    expect(us02Calls).toHaveLength(1); // US-02's own call is unaffected by US-01's drill-down round
   });
 });
 
@@ -830,7 +914,15 @@ test('pm-phase2 writes each phase detail file with Source UC/Context/Tasks-in-ph
   const dispatch = async options => {
     const name = options.args[options.args.indexOf('--agent') + 1];
     if (name === 'gaia-generate-work-breakdown') {
-      return { exitCode: 0, result: { is_error: false, structured_output: wb, usage: { input_tokens: 10, output_tokens: 5 } } };
+      const phases = wb.phases.map(p => ({ id: p.id, type: p.type, title: p.title, commit: p.commit, sourceUC: p.sourceUC }));
+      return { exitCode: 0, result: { is_error: false, structured_output: { schemaVersion: 3, feature: wb.feature, phases }, usage: { input_tokens: 10, output_tokens: 5 } } };
+    }
+    if (name === 'gaia-generate-work-breakdown-phase') {
+      const phaseId = options.prompt.match(/"id":\s*"([^"]+)"/)[1];
+      const phase = wb.phases.find(p => p.id === phaseId);
+      const tasks = {};
+      for (const taskId of phase.taskIds) tasks[taskId] = wb.tasks[taskId];
+      return { exitCode: 0, result: { is_error: false, structured_output: { context: phase.context, tasks }, usage: { input_tokens: 10, output_tokens: 5 } } };
     }
     if (name === 'gaia-generate-work-breakdown-task') {
       const taskId = options.prompt.match(/"id":\s*"([^"]+)"/)[1];
@@ -941,7 +1033,15 @@ test('pm-phase2 gives each per-task worker only its own AC-matched Tech-Spec com
   const dispatch = async options => {
     const name = options.args[options.args.indexOf('--agent') + 1];
     if (name === 'gaia-generate-work-breakdown') {
-      return { exitCode: 0, result: { is_error: false, structured_output: wb, usage: { input_tokens: 10, output_tokens: 5 } } };
+      const phases = wb.phases.map(p => ({ id: p.id, type: p.type, title: p.title, commit: p.commit, sourceUC: p.sourceUC }));
+      return { exitCode: 0, result: { is_error: false, structured_output: { schemaVersion: 3, feature: wb.feature, phases }, usage: { input_tokens: 10, output_tokens: 5 } } };
+    }
+    if (name === 'gaia-generate-work-breakdown-phase') {
+      const phaseId = options.prompt.match(/"id":\s*"([^"]+)"/)[1];
+      const phase = wb.phases.find(p => p.id === phaseId);
+      const tasks = {};
+      for (const taskId of phase.taskIds) tasks[taskId] = wb.tasks[taskId];
+      return { exitCode: 0, result: { is_error: false, structured_output: { context: phase.context, tasks }, usage: { input_tokens: 10, output_tokens: 5 } } };
     }
     if (name === 'gaia-generate-work-breakdown-task') {
       const taskId = options.prompt.match(/"id":\s*"([^"]+)"/)[1];
@@ -981,6 +1081,9 @@ test('malformed WB fails deterministic validation before semantic dispatch', asy
   // use a skeleton that IS schema-valid JSON but graph-invalid (a task depending on a
   // nonexistent task ID) — caught by the new structural pre-check (wb-skeleton-check,
   // UC-02) before any per-task or semantic call is ever dispatched.
+  // FTR-033: the structural pre-check now runs only after BOTH tiers complete (phase enumeration
+  // + this one phase's own task-generation call) — 2 dispatches for a single-phase WB, not 1 —
+  // since the broken task graph only exists once a phase's own tasks are generated.
   phase2Setup();
   const brokenWb = {
     schemaVersion: 3, feature: 'FTR-099',
@@ -994,7 +1097,7 @@ test('malformed WB fails deterministic validation before semantic dispatch', asy
   };
   const dispatch = jest.fn(phase2Dispatch(brokenWb));
   await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).rejects.toThrow();
-  expect(dispatch).toHaveBeenCalledTimes(1); // skeleton only — pre-check rejects before any per-task/semantic call
+  expect(dispatch).toHaveBeenCalledTimes(2); // enumeration + one phase's task generation — pre-check rejects before any per-task/semantic call
   expect(f.entries()[0].status).toBe('failed');
   expect(f.entries().find(e => e.agent.includes(':wb-skeleton-check:')).status).toBe('failed');
 });

@@ -1,0 +1,188 @@
+{
+  "prefix": "FTR-033",
+  "generatedAt": "2026-10-22T13:04:26.424Z",
+  "acceptanceCriteria": [
+    {
+      "id": "AC-01",
+      "criterion": "Given a feature's Requirements/Tech-Spec, approved at Gate 1, when the WBS generation step runs, then a phase-enumeration call decides ONLY the ordered phase list (`id`/`type`/`title`/`sourceUC`/`commit`), never any task",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-generate-work-breakdown.md",
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-INFRA-02",
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-02",
+      "criterion": "Given the phase list from AC-01, when the WBS generation step continues, then one bounded call per phase, in the SAME order enumerated, produces that phase's own tasks only",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-generate-work-breakdown-phase.md",
+        "lib/agent-registry.js",
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-INFRA-01",
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-03",
+      "criterion": "Given a phase's own task-generation call, when dispatched, then it receives that phase's own Requirements detail, the Tech-Spec skeleton (with `needsComponentDetail` available), and every PRIOR phase's own task id/title/outcome/domain — never a later phase's tasks",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-generate-work-breakdown-phase.md",
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-INFRA-01",
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-04",
+      "criterion": "Given phase N's own task-generation call succeeds, when the next phase (N+1) has not yet been generated, then phase N's tasks are persisted to `index.json` immediately — a later failure/crash does not lose them",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-05",
+      "criterion": "Given a resumed run where phases 1..K already have `index.json` entries and phase K+1 does not, when WBS generation re-runs, then generation resumes from phase K+1 — phases 1..K are never redispatched",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-06",
+      "criterion": "Given a complete, multi-phase skeleton produced via this feature's own per-phase flow, when `wb-skeleton-check.js`/`wb-graph-checks.js`/`wb-validate.js` run against it, then all pass exactly as they do today",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01",
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-07",
+      "criterion": "Given the complete skeleton from AC-06, when `gaia-generate-work-breakdown-task` (the existing per-task DETAIL pass) runs, then it is unaffected — reads the fully-assembled skeleton exactly as it does today",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-08",
+      "criterion": "Given a per-phase call reports `needsComponentDetail`, when the host processes its response, then the SAME bounded, single-round drill-down FTR-032 already built fires, scoped to that one phase's call",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/agents/gaia-generate-work-breakdown-phase.md",
+        "src/claude/workflows/pm-phase2.js",
+        "tests/integration/workflow-runtime.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-INFRA-01",
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-09",
+      "criterion": "Given all changes are delivered, when `npm test` runs, then all tests pass: new regression/integration tests for AC-01 through AC-08, and a full-suite regression",
+      "priority": "Must",
+      "unscoped": true,
+      "relatedUCs": [],
+      "techSpecFiles": [],
+      "taskIds": [
+        "US-01-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    }
+  ]
+}

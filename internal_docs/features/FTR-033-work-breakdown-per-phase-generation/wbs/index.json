@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-033",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "sourceUC": ["UC-01", "UC-02", "UC-03"],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": ["US-01-TASK-INFRA-01", "US-01-TASK-INFRA-02", "US-01-TASK-BE-01", "US-01-TASK-TEST-01", "US-01-TASK-TEST-02"]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-INFRA-01": {
+      "title": "Create gaia-generate-work-breakdown-phase.md agent and register it in the agent catalog",
+      "outcome": "src/claude/agents/gaia-generate-work-breakdown-phase.md exists (sonnet, Read/Glob/Grep tools) taking one phase's own skeleton entry plus its scoped Requirements excerpt, the Tech-Spec skeleton, and every prior phase's already-decided tasks, returning that phase's own context + tasks (+ optional needsComponentDetail); lib/agent-registry.js's CATALOG gains the matching gaia.agent.planner.work-breakdown-phase entry",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-02", "AC-03", "AC-08"],
+      "estimate": { "agentMinutes": 18, "tokens": 24000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "add gaia-generate-work-breakdown-phase.md per-phase task agent" },
+      "detailFile": "tasks/US-01-TASK-INFRA-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-INFRA-02": {
+      "title": "Repurpose gaia-generate-work-breakdown.md to enumerate phases only",
+      "outcome": "src/claude/agents/gaia-generate-work-breakdown.md's Output is reduced to schemaVersion/feature/phases (id/type/title/commit/sourceUC only, no tasks, no context); Step 0 (AGENTS.md read) and Glob/Grep tool access are removed (Read retained)",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": ["AC-01"],
+      "estimate": { "agentMinutes": 10, "tokens": 10000 },
+      "outputCount": 1,
+      "commit": { "type": "fix", "subject": "narrow gaia-generate-work-breakdown.md to phase enumeration only" },
+      "detailFile": "tasks/US-01-TASK-INFRA-02.md",
+      "status": "pending"
+    },
+    "US-01-TASK-BE-01": {
+      "title": "Split pm-phase2.js's WBS skeleton call into phase enumeration + per-phase generation",
+      "outcome": "pm-phase2.js's SKELETON_SCHEMA is replaced by PHASE_ENUMERATION_SCHEMA + PHASE_TASKS_SCHEMA; a new per-phase loop dispatches gaia.agent.planner.work-breakdown-phase once per phase in enumerated order, persisting index.json after each phase (with title/commit additively carried) and resuming from the first phase whose taskIds is still empty",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": ["US-01-TASK-INFRA-01", "US-01-TASK-INFRA-02"],
+      "acceptanceCriteria": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-08"],
+      "estimate": { "agentMinutes": 20, "tokens": 30000 },
+      "outputCount": 1,
+      "commit": { "type": "feat", "subject": "split WBS skeleton generation into phase enumeration + per-phase task generation" },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Cover per-phase WBS generation end to end and keep every pre-existing pm-phase2 test passing",
+      "outcome": "tests/integration/workflow-runtime.test.js's shared phase2Dispatch fixture is upgraded to answer BOTH the phase-enumeration and per-phase calls from one wb object (so every pre-existing pm-phase2 test keeps passing unmodified); a new FTR-033 describe block proves AC-01 through AC-08 against the real two-tier flow",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-01-TASK-INFRA-01", "US-01-TASK-INFRA-02", "US-01-TASK-BE-01"],
+      "acceptanceCriteria": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08"],
+      "estimate": { "agentMinutes": 20, "tokens": 32000 },
+      "outputCount": 1,
+      "groupingRationale": "The shared-fixture upgrade and the new describe block are one task because the new tests cannot pass without the upgraded fixture, and the fixture upgrade has no independent value without the tests that exercise the two-tier flow it now supports — splitting them risks landing one half without the other, the exact gap this feature's own grouping precedent (FTR-024's agent+registry task) exists to avoid.",
+      "commit": { "type": "test", "subject": "cover per-phase WBS generation end to end, keep pre-existing pm-phase2 tests passing" },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "pending"
+    },
+    "US-01-TASK-TEST-02": {
+      "title": "Run the full regression suite and confirm no behavior regressed",
+      "outcome": "Full npm test suite passes with every new AC-01 through AC-08 test green alongside the full pre-existing suite; AC-09 satisfied",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": ["US-01-TASK-INFRA-01", "US-01-TASK-INFRA-02", "US-01-TASK-BE-01", "US-01-TASK-TEST-01"],
+      "acceptanceCriteria": ["AC-09"],
+      "estimate": { "agentMinutes": 10, "tokens": 8000 },
+      "outputCount": 1,
+      "commit": { "type": "test", "subject": "confirm the full regression suite passes with per-phase WBS generation in place" },
+      "detailFile": "tasks/US-01-TASK-TEST-02.md",
+      "status": "pending"
+    }
+  }
+}
