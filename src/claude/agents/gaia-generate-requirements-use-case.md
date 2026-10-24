@@ -49,7 +49,10 @@ do not reword, re-derive, or second-guess them. Your only new content is **Preco
 
 Return exactly this block as your final response, and nothing else (no preamble, no "here is the
 use case", no Markdown code fence wrapping the whole thing) — you do not have a Write tool; the
-host persists your response verbatim to `req/use-cases/{UC-ID}.md`:
+host persists your response verbatim to `req/use-cases/{UC-ID}.md`. This means: do NOT write a
+lead-in sentence like "Now I'll generate the complete use case details for {UC-ID}..." before the
+`### {UC-ID}: {Title}` heading — the heading is the first thing in your response, with nothing
+before it, not even a single line of narration.
 
 ```markdown
 ### {UC-ID}: {Title}

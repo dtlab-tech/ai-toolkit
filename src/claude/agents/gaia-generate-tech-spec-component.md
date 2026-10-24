@@ -48,7 +48,10 @@ description, its actual design, and its `Tests` section.
 
 Return exactly this block as your final response, and nothing else (no preamble, no "here is the
 component", no Markdown code fence wrapping the whole thing) — you do not have a Write tool; the
-host persists your response verbatim to `spec/components/{fileSlug}.md`:
+host persists your response verbatim to `spec/components/{fileSlug}.md`. This means: do NOT write
+a lead-in sentence like "Now I have the information. Let me generate the design for {Path}..."
+before the `# {Path} — {New | Modified}` heading — the heading is the first thing in your
+response, with nothing before it, not even a single line of narration.
 
 ```markdown
 # {Path} — {New | Modified}
