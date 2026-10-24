@@ -350,6 +350,61 @@ describe('FTR-027 — Requirements use-case resume validity', () => {
     expect(calledAgents).not.toContain('gaia-generate-requirements-use-case');
   });
 });
+// Real, repeated production defect across both per-item generation agents (confirmed via direct
+// worker-evidence inspection, not hypothetical): the model occasionally prefixes its real
+// deliverable with a short conversational lead-in ("Now I'll generate the complete use case
+// details for UC-05...") before the heading it was explicitly instructed to lead with. The
+// agents' own "no preamble" instruction alone did not reliably prevent it, so pm-phase1.js now
+// tolerates and strips a short bounded preamble before validating/persisting, instead of hard-
+// failing (use cases) or silently writing the narration into the file (components).
+describe('FTR-033 follow-up — tolerate a leading conversational preamble before the real heading', () => {
+  test('a UC response with a short narration preamble is stripped before validation and persistence', async () => {
+    const withPreamble = `Now I'll generate the complete use case details for UC-01.\n\n${useCaseDetailDoc()}`;
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements-use-case') return success(withPreamble);
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+    const written = fs.readFileSync(path.join(f.dir, 'req', 'use-cases', 'UC-01.md'), 'utf8');
+    expect(written.startsWith('### UC-01:')).toBe(true);
+    expect(written).not.toContain("Now I'll generate");
+  });
+
+  test('a UC response whose heading never appears at all still fails after exhausting retries (no false positive)', async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements-use-case') return success('Sorry, I could not find enough information to proceed with this request.\n');
+      return phase1Dispatch(options);
+    };
+    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) }))
+      .rejects.toThrow('failed structural validation after 2 attempts');
+  });
+
+  test('a UC response with a preamble longer than the tolerated window still fails (bounded, not unbounded tolerance)', async () => {
+    const tooLongPreamble = Array.from({ length: 6 }, (_, i) => `Narration line ${i + 1}.`).join('\n');
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements-use-case') return success(`${tooLongPreamble}\n${useCaseDetailDoc()}`);
+      return phase1Dispatch(options);
+    };
+    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) }))
+      .rejects.toThrow('failed structural validation after 2 attempts');
+  });
+
+  test('a component response with a narration preamble is stripped before persistence (never silently written)', async () => {
+    const componentDetail = "Now I have the information. Let me generate the design for a.js.\n\n# a.js — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\nExample body.\n\n## Tests\n\nExample tests.\n";
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec-component') return success(componentDetail);
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+    const written = fs.readFileSync(path.join(f.dir, 'spec', 'components', 'a.js.md'), 'utf8');
+    expect(written.startsWith('# a.js — New')).toBe(true);
+    expect(written).not.toContain('Now I have the information');
+  });
+});
 test('two components with colliding basenames receive distinct, deterministic fileSlug values', async () => {
   const collidingTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
     '| src/a/index.js | example a | AC-01 | BE | [components/index.js.md](components/index.js.md) |\n' +

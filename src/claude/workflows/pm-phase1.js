@@ -104,6 +104,25 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return new RegExp(`^###\\s+${escaped}:\\s`).test(content.trimStart())
   }
 
+  // A per-item generation agent occasionally prefixes its real deliverable with a short
+  // conversational lead-in ("Now I'll generate the complete use case details for...") before the
+  // heading it was explicitly instructed to start with — a real, recurring model habit confirmed
+  // across multiple production runs and multiple agents (gaia-generate-requirements-use-case,
+  // gaia-generate-tech-spec-component), not prevented by the agents' own existing "no preamble"
+  // instruction alone. Tolerated here, bounded and conservative: only lines STRICTLY BEFORE the
+  // first line satisfying headingTest, and only within the first few lines, are ever dropped —
+  // content whose heading never appears at all within that short window (genuinely wrong/missing,
+  // not just narrated) is returned completely unchanged and still fails the caller's own validity
+  // check exactly as before this fix.
+  const MAX_PREAMBLE_LINES = 5
+  function stripLeadingNarration(content, headingTest) {
+    const lines = content.split('\n')
+    for (let i = 1; i < Math.min(lines.length, MAX_PREAMBLE_LINES); i++) {
+      if (headingTest(lines[i])) return lines.slice(i).join('\n')
+    }
+    return content
+  }
+
   // Business Rules' "Applies to" / Acceptance Criteria's "Related UC" columns are the same
   // cross-cutting-reference shape: a comma-separated UC-ID list, or the literal "All UCs". Both
   // are 100% mechanically derivable from req/index.md's own tables — no LLM judgment needed,
@@ -202,10 +221,13 @@ return c.run(meta.name, featureDir, prefix, async () => {
       if (!regenSkeleton && c.exists(ucPath) && isValidUseCaseFile(c.read(ucPath), row.id)) continue // resume: skip, no dispatch
       // FTR-029/UC-04: validate immediately, before writing to disk and before moving to the next
       // use case — same reasoning as the per-component loop above.
+      const ucEscaped = row.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const ucHeadingRe = new RegExp(`^###\\s+${ucEscaped}:\\s`)
       let detail, valid = false
       for (let attempt = 1; attempt <= USE_CASE_RETRY_ATTEMPTS && !valid; attempt++) {
-        detail = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath, ucTemplate),
+        const raw = await c.worker(reqUcId, buildUcPrompt(row, ucTable, featurePath, ucTemplate),
           { label: `requirements-use-case:${row.id}:${attempt}` })
+        detail = stripLeadingNarration(raw, l => ucHeadingRe.test(l))
         valid = isValidUseCaseFile(detail, row.id)
       }
       if (!valid) throw new Error(`Requirements use case "${row.id}" failed structural validation after ${USE_CASE_RETRY_ATTEMPTS} attempts — missing the required "### ${row.id}: " heading`)
@@ -494,10 +516,14 @@ return c.run(meta.name, featureDir, prefix, async () => {
       // FTR-029/UC-04: validate immediately, before writing to disk and before moving to the next
       // component — a bad result otherwise silently continued through every remaining component,
       // only discovered (expensively) at final assembly or a later invocation's resume check.
+      // isValidComponentDetail itself tolerates a leading preamble (it searches for ## Change/##
+      // Tests anywhere, not anchored to the start), so it never hard-fails on one — but the file
+      // actually WRITTEN to disk must not carry that narration forward silently; strip it first.
       let detail, valid = false
       for (let attempt = 1; attempt <= COMPONENT_RETRY_ATTEMPTS && !valid; attempt++) {
-        detail = await c.worker(specComponentId, buildComponentPrompt(comp, components, featurePath, componentTemplate),
+        const raw = await c.worker(specComponentId, buildComponentPrompt(comp, components, featurePath, componentTemplate),
           { label: `tech-spec-component:${comp.fileSlug}:${attempt}` })
+        detail = stripLeadingNarration(raw, l => /^#\s+\S/.test(l))
         valid = isValidComponentDetail(detail)
       }
       if (!valid) throw new Error(`Tech-Spec component "${comp.filePath}" (${comp.fileSlug}) failed structural validation after ${COMPONENT_RETRY_ATTEMPTS} attempts — missing a real "## Change"/"## Tests" heading`)
