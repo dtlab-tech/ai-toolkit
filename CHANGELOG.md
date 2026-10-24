@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.0...v0.24.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **gaia-generate-work-breakdown-task:** drop stale estimate-as-input contradiction from FTR-032 ([c157277](https://github.com/dtlab-tech/ai-toolkit/commit/c157277847aedb33b69022d76d2b87ed5eb0ff49))
+* **pm-phase1:** tolerate a leading conversational preamble before per-item headings ([afe638f](https://github.com/dtlab-tech/ai-toolkit/commit/afe638f6bb138335b34b97b1eda776c77ab0778e))
+* tolerate per-item generation preamble + drop stale estimate contradiction in work-breakdown-task agent ([d3438d4](https://github.com/dtlab-tech/ai-toolkit/commit/d3438d4bde7f29b12b12ba589903f951a6c2bf10))
+
 ## [0.24.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.23.2...v0.24.0) (2026-10-22)
 
 
