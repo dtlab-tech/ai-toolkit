@@ -2,7 +2,7 @@
 name: gaia-generate-work-breakdown-phase
 description: "Generates one phase's own tasks (structural fields) and narrative context for a Work Breakdown, given that phase's scoped Requirements/Tech-Spec context and every prior phase's already-decided tasks. Input: the phase to generate, its scoped Requirements excerpt, the Tech-Spec skeleton, and prior-phase task projections"
 model: sonnet
-tools: Read, Glob, Grep
+tools: Read
 ---
 
 # Generate Work Breakdown — Per-Phase Task Pass
@@ -30,12 +30,22 @@ Your prompt directly inlines:
    (not full task objects): use these to reference a real prerequisite in `dependsOn`, and to
    recognize/avoid re-implementing something a prior phase already built. You will NEVER be given
    a LATER phase's tasks — they do not exist yet; never invent a dependency on one.
+5. **The design detail of the components this phase's own Acceptance Criteria cover** — the host
+   resolves this deterministically and inlines it. This is the technical design you need; it
+   already describes the real files, signatures and algorithms involved.
+6. **The project's build/verification conventions**, extracted from `AGENTS.md` by the host.
 
-## Step 0 — Read Project Conventions (MANDATORY)
+## Do not explore the project's source tree
 
-Read `AGENTS.md` from the current working directory — tech stack/frameworks (domain
-classification), directory structure (task file paths), build/verification commands. Ensures your
-tasks reference the correct technologies, paths, and commands.
+Everything above is supplied to you. Do **not** go reading the project's real source files to
+rediscover a design that is already inlined, and do not read `AGENTS.md` yourself — the host has
+already extracted the relevant part. This is not a style preference: on real features, self-directed
+source exploration has cost 36-43 turns and several dollars per call, with the great majority of
+that spent re-deriving information the prompt already contained.
+
+If a decision genuinely needs a component's design body that was NOT inlined, ask for it through
+`needsComponentDetail` (see below) — that is the supported, bounded path, and it is far cheaper
+than exploring.
 
 ## Atomicity Contract
 
@@ -131,7 +141,8 @@ in the common case.
 
 - Write in English. Derive content only from the inlined Requirements/Tech-Spec — never invent a
   task not grounded in them.
-- Never self-explore the filesystem for Requirements/Tech-Spec content — both are inlined.
+- Never self-explore the filesystem — Requirements, Tech-Spec, component design detail and build
+  conventions are all inlined (see "Do not explore the project's source tree" above).
 - Atomicity is mandatory (see Atomicity Contract above).
 - `dependsOn` may reference a task from this phase or any prior phase — never a later one, never a
   dangling reference.

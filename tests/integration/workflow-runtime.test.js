@@ -913,6 +913,112 @@ describe('FTR-033 — per-phase WBS skeleton generation', () => {
   });
 });
 
+// Cost hardening. Measured against two real projects: a per-task call was carrying ~185 KB of
+// host-supplied context (AC-matched component bodies + every task in the feature + a full
+// AGENTS.md read), and per-phase calls — handed only Section 9 index rows — burned 36-43 turns
+// going and reading the project's real source to recover designs the Tech-Spec already stated.
+describe('prompt scoping — per-task and per-phase context is bounded by the host', () => {
+  function splitFixtures() {
+    fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-021-req'), path.join(f.dir, 'req'), { recursive: true });
+    fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-024-spec'), path.join(f.dir, 'spec'), { recursive: true });
+    fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'),
+      '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
+  }
+  // One task NAMES src/example-be.js; both tasks cite AC-01+AC-02, so AC matching alone would
+  // pull in BOTH component bodies.
+  const twoPhaseWb = {
+    schemaVersion: 3, feature: 'FTR-099',
+    phases: [
+      { id: 'US-01', type: 'user-story', title: 'US-01 t', sourceUC: ['UC-01'], context: 'c1',
+        commit: { type: 'feat', subject: 'us01' }, taskIds: ['US-01-TASK-BE-01'] },
+      { id: 'US-02', type: 'user-story', title: 'US-02 t', sourceUC: ['UC-02'], context: 'c2',
+        commit: { type: 'feat', subject: 'us02' }, taskIds: ['US-02-TASK-BE-01'] },
+    ],
+    tasks: {
+      'US-01-TASK-BE-01': { title: 'Implement src/example-be.js', outcome: 'src/example-be.js exists',
+        domain: 'BE', agentType: 'developer-backend', dependsOn: [], acceptanceCriteria: ['AC-01'],
+        outputCount: 1, commit: { type: 'feat', subject: 'be' } },
+      'US-02-TASK-BE-01': { title: 'Second task', outcome: 'something else entirely',
+        domain: 'BE', agentType: 'developer-backend', dependsOn: [], acceptanceCriteria: ['AC-02'],
+        outputCount: 1, commit: { type: 'feat', subject: 'be2' } },
+    },
+  };
+  function capturingDispatch() {
+    return jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown') {
+        const phases = twoPhaseWb.phases.map(p => ({ id: p.id, type: p.type, title: p.title, commit: p.commit, sourceUC: p.sourceUC }));
+        return { exitCode: 0, result: { is_error: false, structured_output: { schemaVersion: 3, feature: 'FTR-099', phases }, usage: { input_tokens: 10, output_tokens: 5 } } };
+      }
+      if (name === 'gaia-generate-work-breakdown-phase') {
+        const phase = twoPhaseWb.phases.find(p => options.prompt.includes(`"id": "${p.id}"`));
+        const tasks = {}; for (const id of phase.taskIds) tasks[id] = twoPhaseWb.tasks[id];
+        return { exitCode: 0, result: { is_error: false, structured_output: { context: phase.context, tasks }, usage: { input_tokens: 10, output_tokens: 5 } } };
+      }
+      if (name === 'gaia-generate-work-breakdown-task') return success(taskDetailDoc(options.prompt.match(/"id":\s*"([^"]+)"/)[1]));
+      return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] }, usage: { input_tokens: 10, output_tokens: 5 } } };
+    });
+  }
+  const taskCalls = d => d.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown-task');
+  const phaseCalls = d => d.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown-phase');
+
+  test("a per-task prompt carries every AC-matched component as an index row, but only the body of the component the task itself names", async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const be = taskCalls(dispatch).find(o => o.prompt.includes('US-01-TASK-BE-01'));
+    expect(be.prompt).toContain('src/example-be.js'); // index row + named component
+    expect(be.prompt).toContain('doExampleWork'); // its body IS inlined
+    expect(be.prompt).not.toContain('ExampleProps'); // a sibling component's body is NOT
+  });
+
+  test('a per-task prompt scopes the sibling list to its own phase and earlier ones, never later ones', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const first = taskCalls(dispatch).find(o => o.prompt.includes('"id": "US-01-TASK-BE-01"'));
+    const second = taskCalls(dispatch).find(o => o.prompt.includes('"id": "US-02-TASK-BE-01"'));
+    expect(first.prompt).not.toContain('US-02-TASK-BE-01'); // a later phase's task is invisible
+    expect(second.prompt).toContain('US-01-TASK-BE-01'); // an earlier phase's task is visible
+  });
+
+  test('a per-phase prompt inlines the design bodies its own Acceptance Criteria cover, so the agent never has to go read the source', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const us01 = phaseCalls(dispatch).find(o => o.prompt.includes('"id": "US-01"'));
+    expect(us01.prompt).toContain('doExampleWork'); // AC-01 -> example-be.js body, inlined up front
+    expect(us01.prompt).not.toContain('ExampleProps'); // AC-02 belongs to US-02, not this phase
+  });
+
+  test("AGENTS.md's command sections are extracted and inlined; unrelated sections are not", async () => {
+    splitFixtures();
+    fs.writeFileSync(path.join(f.root, 'AGENTS.md'),
+      '# Conventions\n\n## Build commands\n\nRun `npm run build-marker`.\n\n## Team history\n\nIrrelevant narrative-marker prose.\n');
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const prompt = taskCalls(dispatch)[0].prompt;
+    expect(prompt).toContain('build-marker');
+    expect(prompt).not.toContain('narrative-marker');
+  });
+
+  test('every worker dispatch carries a runaway budget cap by default', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    for (const call of dispatch.mock.calls.map(([o]) => o)) {
+      expect(call.args).toContain('--max-budget-usd');
+    }
+  });
+
+  test('an explicit budget of 0 disables the cap rather than being rejected', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, workerMaxBudgetUsd: 0, dispatch });
+    expect(dispatch.mock.calls.map(([o]) => o)[0].args).not.toContain('--max-budget-usd');
+  });
+});
+
 test.each([true, false])('pm-phase2 runs real validator and blocks a negative semantic verdict: %s', async valid => {
   const wb = phase2Setup();
   const dispatch = jest.fn(phase2Dispatch(wb, { valid, findings: [] }));
