@@ -425,27 +425,44 @@ test('two components with colliding basenames receive distinct, deterministic fi
     return phase1Dispatch(options);
   };
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  // First occurrence keeps the original slug; the colliding second occurrence is disambiguated
-  // by prepending path segments (host-computed, deterministic — see disambiguateFileSlugs).
+  // First occurrence keeps the readable basename; the colliding second occurrence gets a
+  // directory-hash prefix (host-computed, permanent — see assignComponentSlug), recorded in the
+  // manifest rather than recomputed from table position.
   expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'index.js.md'))).toBe(true);
-  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'b-index.js.md'))).toBe(true);
+  const files = fs.readdirSync(path.join(f.dir, 'spec', 'components'));
+  const hashedFile = files.find(name => /^[0-9a-f]{8}-index\.js\.md$/.test(name));
+  expect(hashedFile).toBeDefined();
+  const manifest = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+  expect(manifest.components['src/a/index.js'].slug).toBe('index.js.md');
+  expect(manifest.components['src/b/index.js'].slug).toBe(hashedFile);
+  expect(manifest.pathHashes['src/b']).toBe(hashedFile.slice(0, 8));
   const indexDoc = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
   expect(indexDoc).toContain('src/a/index.js | example a | AC-01 | BE | [components/index.js.md](components/index.js.md)');
-  expect(indexDoc).toContain('src/b/index.js | example b | AC-01 | BE | [components/b-index.js.md](components/b-index.js.md)');
+  expect(indexDoc).toContain(`src/b/index.js | example b | AC-01 | BE | [components/${hashedFile}](components/${hashedFile})`);
   // No assembled Tech-Spec file exists anymore — read each component's own detail file directly.
   expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'index.js.md'), 'utf8')).toContain('body-of-a');
-  expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'b-index.js.md'), 'utf8')).toContain('body-of-b');
+  expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', hashedFile), 'utf8')).toContain('body-of-b');
+
+  // Stability: a forced full regen (new skeleton call, same two file paths) must reuse the exact
+  // same slugs — the whole point of the manifest over the old per-table disambiguation, where the
+  // very same files could rename themselves on every regeneration.
+  await runWorkflow('pm-phase1', [f.feature, '--force'], { ...f.options, dispatch: jest.fn(dispatch) });
+  const manifestAfterForce = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+  expect(manifestAfterForce.components['src/a/index.js'].slug).toBe('index.js.md');
+  expect(manifestAfterForce.components['src/b/index.js'].slug).toBe(hashedFile);
 });
-// Real production bug: the component template's own Spec link is explicitly "provisional, not
-// final" so the host can rewrite it — disambiguateFileSlugs only ever did so for COLLISIONS,
-// never enforcing the ".md" suffix itself. A real Tech-Spec skeleton had the model omit ".md"
-// entirely for 20 of ~61 components (e.g. `[components/Settings.tsx](components/Settings.tsx)`),
-// so the host faithfully wrote that component's Markdown CONTENT into a file literally named
-// `Settings.tsx` — confusing at best, and indistinguishable on disk from the real source file's
-// own extension. Fixed by normalizing every slug to end in ".md" before the collision check runs.
-test('a component Spec link missing its ".md" suffix is normalized before being written to disk', async () => {
+// Real production bug (pre-manifest): the component template's own Spec link is explicitly
+// "provisional, not final" so the host can rewrite it — the old disambiguation only ever
+// normalized a missing ".md" suffix or fixed a collision, both starting from the agent's own
+// guessed text. A real Tech-Spec skeleton had the model omit ".md" entirely for 20 of ~61
+// components (e.g. `[components/Settings.tsx](components/Settings.tsx)`), so the host faithfully
+// wrote that component's Markdown CONTENT into a file literally named `Settings.tsx`. The manifest
+// makes this a non-issue by construction: the Spec link is now computed ENTIRELY from the real
+// filePath, so whatever the agent's own response contains there — missing suffix, a totally
+// different name, anything — is simply never read.
+test("the Spec link is entirely host-computed from the real file path — the agent's own guess is ignored, not merely normalized", async () => {
   const noSuffixTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
-    '| src/shell/app/src/pages/Settings/Settings.tsx | Replace strings | AC-01 | FE | [components/shell-app-Settings.tsx](components/shell-app-Settings.tsx) |\n\n' +
+    '| src/shell/app/src/pages/Settings/Settings.tsx | Replace strings | AC-01 | FE | [components/anything-the-model-guessed](components/anything-the-model-guessed) |\n\n' +
     '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
   const noSuffixSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
     const n = i + 1;
@@ -459,10 +476,11 @@ test('a component Spec link missing its ".md" suffix is normalized before being 
     return phase1Dispatch(options);
   };
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'shell-app-Settings.tsx'))).toBe(false);
-  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'shell-app-Settings.tsx.md'))).toBe(true);
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'anything-the-model-guessed'))).toBe(false);
+  // Basename-first, no collision for this single row — the host never saw the agent's guess at all.
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'Settings.tsx.md'))).toBe(true);
   const indexDoc = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
-  expect(indexDoc).toContain('[components/shell-app-Settings.tsx.md](components/shell-app-Settings.tsx.md)');
+  expect(indexDoc).toContain('[components/Settings.tsx.md](components/Settings.tsx.md)');
 });
 // Closes the gap flagged when the gaia-* templates were moved into the toolkit: the per-UC
 // generation agent is deliberately never given req/index.md's Business Rules/Acceptance
@@ -1760,5 +1778,74 @@ describe('FTR-030 — a naturally-triggered skeleton regen only redispatches com
     const componentCalls = dispatchFn.mock.calls.map(([o]) => o)
       .filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-tech-spec-component');
     expect(componentCalls).toHaveLength(3); // --force bypasses row-diffing entirely, by design
+  });
+
+  // A project upgrading onto the manifest-backed scheme already has a spec/index.md and
+  // spec/components/*.md written by the OLD per-table-position disambiguation — slugs that may
+  // not even match the new basename-first convention. The manifest must adopt them as-is.
+  test('a project with an existing spec/ but no manifest yet adopts current slugs without renaming anything', async () => {
+    fs.mkdirSync(path.join(f.dir, 'spec', 'components'), { recursive: true });
+    fs.writeFileSync(path.join(f.dir, 'spec', 'index.md'), threeComponentSkeletonDoc('example a'));
+    for (const name of ['a.js.md', 'b.js.md', 'c.js.md']) {
+      fs.writeFileSync(path.join(f.dir, 'spec', 'components', name), componentDetail(name.replace('.md', '')));
+    }
+    expect(fs.existsSync(path.join(f.dir, 'spec', 'components.manifest.json'))).toBe(false);
+
+    const dispatch = jest.fn(phase1Dispatch); // fresh skeleton/components are never dispatched for
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+
+    const calledAgents = dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).not.toContain('gaia-generate-tech-spec'); // fresh, not regenerated
+    expect(calledAgents).not.toContain('gaia-generate-tech-spec-component'); // valid, not regenerated
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+    expect(manifest.components['a.js'].slug).toBe('a.js.md');
+    expect(manifest.components['b.js'].slug).toBe('b.js.md');
+    expect(manifest.components['c.js'].slug).toBe('c.js.md');
+  });
+
+  // lastSeenInSkeleton is updated for every component present in the CURRENT skeleton on every
+  // pass — a component no longer referenced simply stops advancing, without any dedicated orphan
+  // bookkeeping of its own. Not yet surfaced as a warning anywhere; this only proves the data
+  // itself is trustworthy enough that a future check could use it.
+  test("lastSeenInSkeleton advances only for components still present in the current skeleton", async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(threeComponentSkeletonDoc('example a'));
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (\w+\.js)/);
+        return success(componentDetail(match[1]));
+      }
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+    const firstPass = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+    const cLastSeenBefore = firstPass.components['c.js'].lastSeenInSkeleton;
+
+    // A naturally-triggered regen (feature.md touched, never --force) whose new skeleton drops c.js.
+    const now = new Date();
+    fs.utimesSync(f.feature, now, now);
+    const twoComponentsTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+      '| a.js | example a | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n' +
+      '| b.js | example b | AC-01 | BE | [components/b.js.md](components/b.js.md) |\n\n' +
+      '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+    const twoComponentSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      return n === 9 ? `## 9. File Inventory\n\n${twoComponentsTable}` : `## ${n}. Section ${n}\n`;
+    }).join('\n');
+    const dispatch2 = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(twoComponentSkeletonDoc);
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (\w+\.js)/);
+        return success(componentDetail(match[1]));
+      }
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch2) });
+
+    const secondPass = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+    expect(secondPass.components['a.js'].lastSeenInSkeleton).not.toBe(firstPass.components['a.js'].lastSeenInSkeleton);
+    expect(secondPass.components['b.js'].lastSeenInSkeleton).not.toBe(firstPass.components['b.js'].lastSeenInSkeleton);
+    expect(secondPass.components['c.js'].lastSeenInSkeleton).toBe(cLastSeenBefore); // dropped — stopped advancing
   });
 });
