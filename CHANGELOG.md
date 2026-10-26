@@ -1,4 +1,17 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.1...v0.24.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **pm-phase1:** make Tech-Spec component identity permanent via a manifest ([642527f](https://github.com/dtlab-tech/ai-toolkit/commit/642527ffd7de4269d663330a02e1f652920a097e))
+
+
+### Performance Improvements
+
+* bound worker prompt context and stop source-tree exploration ([ebd273b](https://github.com/dtlab-tech/ai-toolkit/commit/ebd273b541fa4adbe34c18fc6172acacc3cb2854))
+* **pm-phase1,pm-phase2:** bound worker prompt context and stop source-tree exploration ([801681a](https://github.com/dtlab-tech/ai-toolkit/commit/801681abbcbdff83600ca68c7434729c9cd27be6))
+
 ## [0.24.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.0...v0.24.1) (2026-10-24)
 
 
