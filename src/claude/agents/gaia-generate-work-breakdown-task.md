@@ -1,7 +1,7 @@
 ---
 name: gaia-generate-work-breakdown-task
 description: "Generates one task's detail block (implementation notes, verification commands, grouping rationale) from its skeleton entry. Input: skeleton task entry + Tech-Spec excerpt + compact sibling task list"
-model: sonnet
+model: haiku
 tools: Read, Glob, Grep
 ---
 
@@ -28,15 +28,17 @@ The caller supplies, in the prompt (you do not read `{PREFIX}-Work-Breakdown.jso
    fallback either. This section and the Output section below summarize it; the inlined template
    text is the source of truth if the two ever disagree.
 
-If the prompt is missing any of these four, stop and report exactly what is missing — do not guess at a skeleton entry you were not given.
+5. **The project's build/verification conventions**, extracted from `AGENTS.md` by the host and inlined under its own label. Use that text for your verification commands — do **not** read `AGENTS.md` yourself; it is tens of kilobytes and the host has already pulled out the command-bearing sections.
+
+If the prompt is missing any of these, stop and report exactly what is missing — do not guess at a skeleton entry you were not given.
 
 ---
 
-## Step 0 — Read Project Conventions (MANDATORY)
+## Scope of the Tech-Spec you are given
 
-Before writing verification commands, you MUST:
+You receive an index line for every component your task's Acceptance Criteria cover, plus the full design body only for the component(s) your own task names. That is deliberate: a task normally touches one or two files, and inlining every AC-matched body measured over 100 KB per call on a real feature.
 
-1. Read `AGENTS.md` from the current working directory — this defines build/test commands appropriate for the project's tech stack.
+If the body you actually need is missing, you may read that one component file under `spec/components/` — but do not go exploring the project's wider source tree to re-derive a design the Tech-Spec already states.
 
 ---
 
@@ -83,7 +85,7 @@ Before writing verification commands, scan the compact sibling task list for any
 
 ## Verification Commands
 
-Supply one or more shell commands in `verification.commands` that an agent can run to confirm the task's output is correct. The array must be non-empty. Use commands appropriate for the project's tech stack (read from `AGENTS.md`). Examples:
+Supply one or more shell commands in `verification.commands` that an agent can run to confirm the task's output is correct. The array must be non-empty. Use commands appropriate for the project's tech stack, taken from the build/verification conventions inlined in your prompt. Examples:
 - Compilation check: `npx tsc --noEmit`, `dotnet build`, `node --check <file>`
 - Targeted test run: `npm test -- --testPathPattern=<file>`, `npx jest --testPathPattern=<file>`, `dotnet test --filter <class>`
 - File existence: `test -f <path>`

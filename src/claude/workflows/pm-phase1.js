@@ -129,7 +129,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // which is exactly why the per-UC generation agent is never given this data at all (see
   // gaia-generate-requirements-use-case.md: it must not re-read req/index.md itself, to avoid
   // re-deciding which UCs exist). The host computes and appends these cross-reference lines
-  // itself, after the agent's own response, mirroring how disambiguateFileSlugs/computeDependsOnPhases
+  // itself, after the agent's own response, mirroring how applyComponentSlugs/computeDependsOnPhases
   // post-process agent/skeleton output elsewhere in this lineage.
   function parseBusinessRulesTable(indexContent) {
     const lines = indexContent.split('\n')
@@ -242,6 +242,96 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // inside the feature's own already-prefixed folder, so a second prefix would be redundant.
   const specDir = `${featureDir}/spec`
   const specIndexPath = `${specDir}/index.md`
+
+  // The permanent identity registry for Tech-Spec components, replacing fileSlug's own
+  // per-table-position disambiguation. A slug used to be disambiguated only against the OTHER
+  // slugs present in the SAME skeleton table, so the very same source file could be `App.tsx.md`
+  // in one generation and `shell-app-App.tsx.md` in the next purely because the component set
+  // around it changed — which also meant FTR-030's regen row-diffing (keyed on that slug) missed
+  // exactly when the table changed, i.e. precisely when it was supposed to help, regenerating
+  // everything and stranding the old files as orphans. Two append-only, sticky tables instead:
+  // `pathHashes` (a directory's own short hash, computed once and reused for every sibling file
+  // from that directory that ever needs disambiguating) and `components` (a filePath's own
+  // permanently-assigned slug plus bookkeeping). Neither table is ever rewritten once an entry
+  // exists — see assignComponentSlug's own comment for why that matters.
+  const manifestPath = `${specDir}/components.manifest.json`
+  function loadManifest() {
+    if (!c.exists(manifestPath)) return { pathHashes: {}, components: {} }
+    const parsed = c.json(manifestPath)
+    return { pathHashes: parsed.pathHashes || {}, components: parsed.components || {} }
+  }
+  function saveManifest(manifest) {
+    c.writeOutput(manifestPath, JSON.stringify(manifest, null, 2))
+  }
+
+  // Assigns (or reuses) one component's permanent slug. Basename-first for human readability —
+  // `App.tsx.md` reads far better than any path-derived name — falling back to a directory-level
+  // hash prefix ONLY when the basename collides with another file's ALREADY-assigned slug. The
+  // hash is computed from the component's own directory (not its full path), and cached in
+  // `pathHashes` so every other file from that same directory that ever needs disambiguating gets
+  // the SAME prefix — siblings become visually recognizable as a group (`a1b2c3d4-App.tsx.md`,
+  // `a1b2c3d4-main.tsx.md`) instead of each getting an unrelated-looking hash.
+  //
+  // Both lookups are permanent: an already-assigned slug is returned as-is, never recomputed, so a
+  // LATER file claiming the same basename can never force an EARLIER file to rename — the exact
+  // instability the old per-table disambiguation had (see the comment on loadManifest's own
+  // declaration above for the production consequence this caused). One real, accepted side
+  // effect: if the file that originally won a clean basename is later removed from the Tech-Spec,
+  // its slug is never freed — every sibling that collided with it keeps its hash prefix even
+  // though the collision is now only historical.
+  // Writes a provisional `{ slug }` entry immediately (not just returns it), so a second file with
+  // the same basename processed later in this SAME pass correctly sees the first as already taken.
+  function assignComponentSlug(manifest, filePath) {
+    const existing = manifest.components[filePath]
+    if (existing) return existing.slug
+    const basename = filePath.split('/').pop()
+    const cleanSlug = `${basename}.md`
+    const taken = Object.entries(manifest.components).some(([p, e]) => p !== filePath && e.slug === cleanSlug)
+    let slug
+    if (!taken) {
+      slug = cleanSlug
+    } else {
+      const dir = filePath.slice(0, filePath.length - basename.length - 1) || '.'
+      let dirHash = manifest.pathHashes[dir]
+      if (!dirHash) {
+        dirHash = c.hash(dir).replace(/^sha256:/, '').slice(0, 8)
+        manifest.pathHashes[dir] = dirHash
+      }
+      slug = `${dirHash}-${basename}.md`
+    }
+    manifest.components[filePath] = { slug }
+    return slug
+  }
+
+  // Rewrites every row's Spec-link in a freshly-generated skeleton to the manifest-assigned slug
+  // — never trusting whatever the agent's own response contains there (the component template's
+  // own contract already calls that link "provisional, not final" for exactly this reason: a real
+  // skeleton omitted the ".md" suffix entirely on 20 of ~61 rows). Host-computed from `filePath`
+  // alone, so a malformed, missing-suffix, or merely different-looking slug in the agent's own
+  // text is irrelevant — only well-formed `(components/...)` rows are found at all; an entirely
+  // absent Spec link is left for parseComponentsTable's own existing "malformed Spec column" error
+  // to catch later, unchanged.
+  //
+  // Operates per-LINE, not via a global string .replace() over the whole document — same real bug
+  // this function's FTR-027 predecessor (disambiguateFileSlugs) was written to avoid: when two
+  // rows share byte-identical original Spec text, a global .replace() always rewrites the FIRST
+  // occurrence, never the specific row actually being processed.
+  function applyComponentSlugs(skeletonText, manifest) {
+    const lines = skeletonText.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (!line.trim().startsWith('|')) continue
+      const cells = line.split('|').map(c => c.trim()).filter((_, idx, a) => idx > 0 && idx < a.length - 1)
+      if (cells.length < 5) continue
+      const filePath = cells[0]
+      const m = cells[4] && cells[4].match(/\(components\/([^)]+)\)/)
+      if (!m) continue // header/separator row, or a row with no Spec link at all yet
+      const slug = assignComponentSlug(manifest, filePath)
+      const escaped = m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      lines[i] = lines[i].replace(new RegExp(`components/${escaped}`, 'g'), `components/${slug}`)
+    }
+    return lines.join('\n')
+  }
 
   // Duplicated (not imported) from tech-spec-assembler.js's own export of the same name — this
   // runtime has no `require`, so getting this via another c.command round-trip would be
@@ -397,58 +487,36 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return `${base}\n\nTemplate (spec/components/{fileSlug}.md):\n${componentTemplate}`
   }
 
-  // Deterministic, host-computed — never asks the model to pick unique names (same principle
-  // as materializeIndex's detailFile/status derivations in the Work Breakdown's own skeleton,
-  // FTR-020). Rewrites any colliding fileSlug's Spec-column link in place, right-to-left
-  // prepending path segments until unique.
+  // A row's own content fingerprint — the same four fields FTR-030's row-diffing has always
+  // compared (changeType/purposeOrChange/addresses/domain), hashed instead of held onto and
+  // compared field-by-field. Stored in the manifest so the NEXT generation's diff needs nothing
+  // but this one value, not a re-parsed copy of the previous skeleton.
+  function computeRowHash(comp) {
+    return c.hash(JSON.stringify({
+      changeType: comp.changeType, purposeOrChange: comp.purposeOrChange,
+      addresses: comp.addresses, domain: comp.domain,
+    }))
+  }
+
+  // Refreshes every current row's manifest bookkeeping (slug already settled by
+  // applyComponentSlugs; this fills in rowHash and lastSeenInSkeleton) and reports, per filePath,
+  // whether its row is byte-for-byte unchanged from what the manifest held BEFORE this call — the
+  // same "did this component's own row actually change" signal FTR-030 introduced, now backed by
+  // the manifest instead of a second parse of the prior skeleton file.
   //
-  // Also enforces the ".md" suffix itself, never trusting the model to have included it. The
-  // component template's own contract calls this Spec link "provisional, not final" specifically
-  // so the host can rewrite it — originally only exercised for collisions, but a real production
-  // run showed the model omits ".md" entirely a meaningful fraction of the time (confirmed: 20 of
-  // ~61 components in one real Tech-Spec skeleton), writing e.g. `components/Settings.tsx`
-  // instead of `components/Settings.tsx.md` — the host then faithfully wrote that component's
-  // Markdown CONTENT into a file literally named `Settings.tsx`. Normalized here before the
-  // collision check runs, so two rows that only differ by their original extension (already
-  // present in the Path column) still correctly collide-and-disambiguate on the normalized slug.
-  //
-  // Operates per-LINE, not via a global string .replace() over the whole document — a real bug,
-  // found by testing two colliding entries directly: when both rows share byte-identical Spec
-  // text (the whole point of a collision), a global .replace() always rewrites the FIRST
-  // occurrence, never the specific (second, third, ...) row actually being disambiguated.
-  function disambiguateFileSlugs(skeletonText) {
-    const lines = skeletonText.split('\n')
-    const seenSlugs = new Set()
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      if (!line.trim().startsWith('|')) continue
-      const cells = line.split('|').map(c => c.trim()).filter((_, idx, a) => idx > 0 && idx < a.length - 1)
-      if (cells.length < 5) continue
-      const filePath = cells[0]
-      const m = cells[4].match(/\(components\/([^)]+)\)/)
-      if (!m) continue // header/separator row, or a row with no valid Spec link yet
-      let slug = m[1]
-      if (!slug.endsWith('.md')) {
-        const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const normalized = `${slug}.md`
-        lines[i] = lines[i].replace(new RegExp(`components/${escaped}`, 'g'), `components/${normalized}`)
-        slug = normalized
-      }
-      if (seenSlugs.has(slug)) {
-        const segments = filePath.split('/')
-        let depth = 1
-        let candidate = slug
-        while (seenSlugs.has(candidate)) {
-          depth += 1
-          candidate = segments.slice(-depth).join('-') + '.md'
-        }
-        const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        lines[i] = lines[i].replace(new RegExp(`components/${escaped}`, 'g'), `components/${candidate}`)
-        slug = candidate
-      }
-      seenSlugs.add(slug)
+  // Called unconditionally on every generateTechSpec pass (not just when the skeleton itself was
+  // regenerated), so `lastSeenInSkeleton` stays current even on a pure per-component resume pass —
+  // a component absent from this call for one or more passes becomes identifiable as orphaned
+  // (its entry's lastSeenInSkeleton stops advancing) without any extra bookkeeping of its own.
+  function updateManifestBookkeeping(manifest, components, nowIso) {
+    const rowUnchangedByPath = new Map()
+    for (const comp of components) {
+      const prior = manifest.components[comp.filePath]
+      const rowHash = computeRowHash(comp)
+      rowUnchangedByPath.set(comp.filePath, !!prior && prior.rowHash === rowHash)
+      manifest.components[comp.filePath] = { slug: comp.fileSlug, rowHash, lastSeenInSkeleton: nowIso }
     }
-    return lines.join('\n')
+    return rowUnchangedByPath
   }
 
   // forceAll: bypasses resume-by-existence entirely, re-dispatching the skeleton and every
@@ -460,28 +528,23 @@ return c.run(meta.name, featureDir, prefix, async () => {
       (!fresh(specIndexPath) || missingSections(c.read(specIndexPath), 12).length > 0)
     const regenSkeleton = forceAll || skeletonStale || !c.exists(specIndexPath)
 
-    // FTR-030: capture the OLD component rows (keyed by fileSlug — the stable per-component
-    // identity, a Spec-link target) BEFORE the skeleton is overwritten, so a NATURALLY-triggered
-    // skeleton regen (staleness/missing, never an explicit forceAll) doesn't force EVERY component
-    // to redispatch when only a FEW rows actually changed. Real incident: hand-editing 2 of ~58
-    // rows (adding a missing AC reference) triggered a full skeleton regeneration, which — with no
-    // per-row comparison — forced ALL ~88 components to redispatch even though the vast majority
-    // of rows were byte-identical to before. Deliberately NOT captured when forceAll is true: an
-    // explicit full regen (a `--force` run, or a needsTechSpecFix revision cycle) means something
-    // was flagged wrong that per-row diffing cannot see (e.g. a missing cross-reference only
-    // visible in a component's own body) — that path keeps today's existing "regenerate
-    // everything unconditionally" behavior, unchanged.
-    const oldComponentsByFileSlug = new Map()
-    if (!forceAll && regenSkeleton && c.exists(specIndexPath)) {
+    const manifest = loadManifest()
+    // Bootstrap: a project with an existing spec/index.md but no manifest yet (upgrading onto
+    // this scheme) has Spec-links assigned by the OLD per-table-position disambiguation. Adopt
+    // those slugs as-is — never recompute/rename them — so the very first run after upgrading
+    // does not rename every already-generated component file. This also covers the common
+    // resume-only pass below (no regen at all): components are read from the EXISTING file, so
+    // their current slug is simply what updateManifestBookkeeping records.
+    if (Object.keys(manifest.components).length === 0 && c.exists(specIndexPath)) {
       try {
-        for (const comp of parseComponentsTable(c.read(specIndexPath))) oldComponentsByFileSlug.set(comp.fileSlug, comp)
-      } catch (e) { /* an unparseable old skeleton has nothing worth diffing against — treat as empty */ }
+        for (const comp of parseComponentsTable(c.read(specIndexPath))) manifest.components[comp.filePath] = { slug: comp.fileSlug }
+      } catch (e) { /* an unparseable existing skeleton has nothing to adopt — start fresh */ }
     }
 
     // 1. Skeleton (no declared worker() output — host writes it itself)
     if (regenSkeleton) {
       const skeleton = await c.worker(specId, withTemplate(featurePath, 'spec/index.md', 'gaia-tech-spec-index-template.md'))
-      c.writeOutput(specIndexPath, disambiguateFileSlugs(skeleton))
+      c.writeOutput(specIndexPath, applyComponentSlugs(skeleton, manifest))
     }
 
     // 2. Structural pre-check (tech-spec-graph-checks.js, unmodified — FTR-023 — now pointed at
@@ -499,6 +562,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
 
     // 3. Per-component generation, resume-by-existence, sequential
     const components = parseComponentsTable(c.read(specIndexPath))
+    // FTR-030, manifest-backed: refreshed on EVERY pass (not just when the skeleton itself was
+    // regenerated), so lastSeenInSkeleton stays current even on a pure per-component resume —
+    // see updateManifestBookkeeping's own comment. Persisted immediately, before any worker call,
+    // so a crash mid-loop never loses slug/bookkeeping state already settled this pass.
+    const rowUnchangedByPath = updateManifestBookkeeping(manifest, components, new Date().toISOString())
+    saveManifest(manifest)
     // Read once, outside the loop — the template is identical for every component in this run.
     const componentTemplate = components.length ? readTemplate('gaia-component-template.md') : null
     for (const comp of components) {
@@ -508,10 +577,11 @@ return c.run(meta.name, featureDir, prefix, async () => {
       // NEW or actually CHANGED does. `regenSkeleton` alone used to force every component to
       // redispatch unconditionally the moment the skeleton changed at all; this narrows that to
       // rows that genuinely changed, while still regenerating any row that's new or different.
-      const oldComp = oldComponentsByFileSlug.get(comp.fileSlug)
-      const rowUnchanged = !!oldComp && oldComp.filePath === comp.filePath &&
-        oldComp.changeType === comp.changeType && oldComp.purposeOrChange === comp.purposeOrChange &&
-        oldComp.addresses === comp.addresses && oldComp.domain === comp.domain
+      // Deliberately ignored when forceAll is true: an explicit full regen (a `--force` run, or a
+      // needsTechSpecFix revision cycle) means something was flagged wrong that per-row diffing
+      // cannot see (e.g. a missing cross-reference only visible in a component's own body) — that
+      // path keeps today's existing "regenerate everything unconditionally" behavior, unchanged.
+      const rowUnchanged = !forceAll && !!rowUnchangedByPath.get(comp.filePath)
       if ((!regenSkeleton || rowUnchanged) && c.exists(compPath) && isValidComponentDetail(c.read(compPath))) continue // resume: skip, no dispatch
       // FTR-029/UC-04: validate immediately, before writing to disk and before moving to the next
       // component — a bad result otherwise silently continued through every remaining component,

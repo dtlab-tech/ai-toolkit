@@ -425,27 +425,44 @@ test('two components with colliding basenames receive distinct, deterministic fi
     return phase1Dispatch(options);
   };
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  // First occurrence keeps the original slug; the colliding second occurrence is disambiguated
-  // by prepending path segments (host-computed, deterministic — see disambiguateFileSlugs).
+  // First occurrence keeps the readable basename; the colliding second occurrence gets a
+  // directory-hash prefix (host-computed, permanent — see assignComponentSlug), recorded in the
+  // manifest rather than recomputed from table position.
   expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'index.js.md'))).toBe(true);
-  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'b-index.js.md'))).toBe(true);
+  const files = fs.readdirSync(path.join(f.dir, 'spec', 'components'));
+  const hashedFile = files.find(name => /^[0-9a-f]{8}-index\.js\.md$/.test(name));
+  expect(hashedFile).toBeDefined();
+  const manifest = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+  expect(manifest.components['src/a/index.js'].slug).toBe('index.js.md');
+  expect(manifest.components['src/b/index.js'].slug).toBe(hashedFile);
+  expect(manifest.pathHashes['src/b']).toBe(hashedFile.slice(0, 8));
   const indexDoc = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
   expect(indexDoc).toContain('src/a/index.js | example a | AC-01 | BE | [components/index.js.md](components/index.js.md)');
-  expect(indexDoc).toContain('src/b/index.js | example b | AC-01 | BE | [components/b-index.js.md](components/b-index.js.md)');
+  expect(indexDoc).toContain(`src/b/index.js | example b | AC-01 | BE | [components/${hashedFile}](components/${hashedFile})`);
   // No assembled Tech-Spec file exists anymore — read each component's own detail file directly.
   expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'index.js.md'), 'utf8')).toContain('body-of-a');
-  expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', 'b-index.js.md'), 'utf8')).toContain('body-of-b');
+  expect(fs.readFileSync(path.join(f.dir, 'spec', 'components', hashedFile), 'utf8')).toContain('body-of-b');
+
+  // Stability: a forced full regen (new skeleton call, same two file paths) must reuse the exact
+  // same slugs — the whole point of the manifest over the old per-table disambiguation, where the
+  // very same files could rename themselves on every regeneration.
+  await runWorkflow('pm-phase1', [f.feature, '--force'], { ...f.options, dispatch: jest.fn(dispatch) });
+  const manifestAfterForce = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+  expect(manifestAfterForce.components['src/a/index.js'].slug).toBe('index.js.md');
+  expect(manifestAfterForce.components['src/b/index.js'].slug).toBe(hashedFile);
 });
-// Real production bug: the component template's own Spec link is explicitly "provisional, not
-// final" so the host can rewrite it — disambiguateFileSlugs only ever did so for COLLISIONS,
-// never enforcing the ".md" suffix itself. A real Tech-Spec skeleton had the model omit ".md"
-// entirely for 20 of ~61 components (e.g. `[components/Settings.tsx](components/Settings.tsx)`),
-// so the host faithfully wrote that component's Markdown CONTENT into a file literally named
-// `Settings.tsx` — confusing at best, and indistinguishable on disk from the real source file's
-// own extension. Fixed by normalizing every slug to end in ".md" before the collision check runs.
-test('a component Spec link missing its ".md" suffix is normalized before being written to disk', async () => {
+// Real production bug (pre-manifest): the component template's own Spec link is explicitly
+// "provisional, not final" so the host can rewrite it — the old disambiguation only ever
+// normalized a missing ".md" suffix or fixed a collision, both starting from the agent's own
+// guessed text. A real Tech-Spec skeleton had the model omit ".md" entirely for 20 of ~61
+// components (e.g. `[components/Settings.tsx](components/Settings.tsx)`), so the host faithfully
+// wrote that component's Markdown CONTENT into a file literally named `Settings.tsx`. The manifest
+// makes this a non-issue by construction: the Spec link is now computed ENTIRELY from the real
+// filePath, so whatever the agent's own response contains there — missing suffix, a totally
+// different name, anything — is simply never read.
+test("the Spec link is entirely host-computed from the real file path — the agent's own guess is ignored, not merely normalized", async () => {
   const noSuffixTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
-    '| src/shell/app/src/pages/Settings/Settings.tsx | Replace strings | AC-01 | FE | [components/shell-app-Settings.tsx](components/shell-app-Settings.tsx) |\n\n' +
+    '| src/shell/app/src/pages/Settings/Settings.tsx | Replace strings | AC-01 | FE | [components/anything-the-model-guessed](components/anything-the-model-guessed) |\n\n' +
     '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
   const noSuffixSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
     const n = i + 1;
@@ -459,10 +476,11 @@ test('a component Spec link missing its ".md" suffix is normalized before being 
     return phase1Dispatch(options);
   };
   await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
-  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'shell-app-Settings.tsx'))).toBe(false);
-  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'shell-app-Settings.tsx.md'))).toBe(true);
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'anything-the-model-guessed'))).toBe(false);
+  // Basename-first, no collision for this single row — the host never saw the agent's guess at all.
+  expect(fs.existsSync(path.join(f.dir, 'spec', 'components', 'Settings.tsx.md'))).toBe(true);
   const indexDoc = fs.readFileSync(path.join(f.dir, 'spec', 'index.md'), 'utf8');
-  expect(indexDoc).toContain('[components/shell-app-Settings.tsx.md](components/shell-app-Settings.tsx.md)');
+  expect(indexDoc).toContain('[components/Settings.tsx.md](components/Settings.tsx.md)');
 });
 // Closes the gap flagged when the gaia-* templates were moved into the toolkit: the per-UC
 // generation agent is deliberately never given req/index.md's Business Rules/Acceptance
@@ -910,6 +928,112 @@ describe('FTR-033 — per-phase WBS skeleton generation', () => {
     expect(us01Calls[1].prompt).toContain('doExampleWork');
     const us02Calls = findCalls(dispatch, 'gaia-generate-work-breakdown-phase').filter(o => o.prompt.includes('"id": "US-02"'));
     expect(us02Calls).toHaveLength(1); // US-02's own call is unaffected by US-01's drill-down round
+  });
+});
+
+// Cost hardening. Measured against two real projects: a per-task call was carrying ~185 KB of
+// host-supplied context (AC-matched component bodies + every task in the feature + a full
+// AGENTS.md read), and per-phase calls — handed only Section 9 index rows — burned 36-43 turns
+// going and reading the project's real source to recover designs the Tech-Spec already stated.
+describe('prompt scoping — per-task and per-phase context is bounded by the host', () => {
+  function splitFixtures() {
+    fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-021-req'), path.join(f.dir, 'req'), { recursive: true });
+    fs.cpSync(path.join(__dirname, '..', 'fixtures', 'ftr-024-spec'), path.join(f.dir, 'spec'), { recursive: true });
+    fs.writeFileSync(path.join(f.dir, 'FTR-099-Approvals.md'),
+      '## Gate 1 — Document Approvals\n\n| Status |\n|---|\n| ✅ Approved |\n');
+  }
+  // One task NAMES src/example-be.js; both tasks cite AC-01+AC-02, so AC matching alone would
+  // pull in BOTH component bodies.
+  const twoPhaseWb = {
+    schemaVersion: 3, feature: 'FTR-099',
+    phases: [
+      { id: 'US-01', type: 'user-story', title: 'US-01 t', sourceUC: ['UC-01'], context: 'c1',
+        commit: { type: 'feat', subject: 'us01' }, taskIds: ['US-01-TASK-BE-01'] },
+      { id: 'US-02', type: 'user-story', title: 'US-02 t', sourceUC: ['UC-02'], context: 'c2',
+        commit: { type: 'feat', subject: 'us02' }, taskIds: ['US-02-TASK-BE-01'] },
+    ],
+    tasks: {
+      'US-01-TASK-BE-01': { title: 'Implement src/example-be.js', outcome: 'src/example-be.js exists',
+        domain: 'BE', agentType: 'developer-backend', dependsOn: [], acceptanceCriteria: ['AC-01'],
+        outputCount: 1, commit: { type: 'feat', subject: 'be' } },
+      'US-02-TASK-BE-01': { title: 'Second task', outcome: 'something else entirely',
+        domain: 'BE', agentType: 'developer-backend', dependsOn: [], acceptanceCriteria: ['AC-02'],
+        outputCount: 1, commit: { type: 'feat', subject: 'be2' } },
+    },
+  };
+  function capturingDispatch() {
+    return jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown') {
+        const phases = twoPhaseWb.phases.map(p => ({ id: p.id, type: p.type, title: p.title, commit: p.commit, sourceUC: p.sourceUC }));
+        return { exitCode: 0, result: { is_error: false, structured_output: { schemaVersion: 3, feature: 'FTR-099', phases }, usage: { input_tokens: 10, output_tokens: 5 } } };
+      }
+      if (name === 'gaia-generate-work-breakdown-phase') {
+        const phase = twoPhaseWb.phases.find(p => options.prompt.includes(`"id": "${p.id}"`));
+        const tasks = {}; for (const id of phase.taskIds) tasks[id] = twoPhaseWb.tasks[id];
+        return { exitCode: 0, result: { is_error: false, structured_output: { context: phase.context, tasks }, usage: { input_tokens: 10, output_tokens: 5 } } };
+      }
+      if (name === 'gaia-generate-work-breakdown-task') return success(taskDetailDoc(options.prompt.match(/"id":\s*"([^"]+)"/)[1]));
+      return { exitCode: 0, result: { is_error: false, structured_output: { valid: true, findings: [] }, usage: { input_tokens: 10, output_tokens: 5 } } };
+    });
+  }
+  const taskCalls = d => d.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown-task');
+  const phaseCalls = d => d.mock.calls.map(([o]) => o).filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown-phase');
+
+  test("a per-task prompt carries every AC-matched component as an index row, but only the body of the component the task itself names", async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const be = taskCalls(dispatch).find(o => o.prompt.includes('US-01-TASK-BE-01'));
+    expect(be.prompt).toContain('src/example-be.js'); // index row + named component
+    expect(be.prompt).toContain('doExampleWork'); // its body IS inlined
+    expect(be.prompt).not.toContain('ExampleProps'); // a sibling component's body is NOT
+  });
+
+  test('a per-task prompt scopes the sibling list to its own phase and earlier ones, never later ones', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const first = taskCalls(dispatch).find(o => o.prompt.includes('"id": "US-01-TASK-BE-01"'));
+    const second = taskCalls(dispatch).find(o => o.prompt.includes('"id": "US-02-TASK-BE-01"'));
+    expect(first.prompt).not.toContain('US-02-TASK-BE-01'); // a later phase's task is invisible
+    expect(second.prompt).toContain('US-01-TASK-BE-01'); // an earlier phase's task is visible
+  });
+
+  test('a per-phase prompt inlines the design bodies its own Acceptance Criteria cover, so the agent never has to go read the source', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const us01 = phaseCalls(dispatch).find(o => o.prompt.includes('"id": "US-01"'));
+    expect(us01.prompt).toContain('doExampleWork'); // AC-01 -> example-be.js body, inlined up front
+    expect(us01.prompt).not.toContain('ExampleProps'); // AC-02 belongs to US-02, not this phase
+  });
+
+  test("AGENTS.md's command sections are extracted and inlined; unrelated sections are not", async () => {
+    splitFixtures();
+    fs.writeFileSync(path.join(f.root, 'AGENTS.md'),
+      '# Conventions\n\n## Build commands\n\nRun `npm run build-marker`.\n\n## Team history\n\nIrrelevant narrative-marker prose.\n');
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const prompt = taskCalls(dispatch)[0].prompt;
+    expect(prompt).toContain('build-marker');
+    expect(prompt).not.toContain('narrative-marker');
+  });
+
+  test('every worker dispatch carries a runaway budget cap by default', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    for (const call of dispatch.mock.calls.map(([o]) => o)) {
+      expect(call.args).toContain('--max-budget-usd');
+    }
+  });
+
+  test('an explicit budget of 0 disables the cap rather than being rejected', async () => {
+    splitFixtures();
+    const dispatch = capturingDispatch();
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, workerMaxBudgetUsd: 0, dispatch });
+    expect(dispatch.mock.calls.map(([o]) => o)[0].args).not.toContain('--max-budget-usd');
   });
 });
 
@@ -1654,5 +1778,74 @@ describe('FTR-030 — a naturally-triggered skeleton regen only redispatches com
     const componentCalls = dispatchFn.mock.calls.map(([o]) => o)
       .filter(o => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-tech-spec-component');
     expect(componentCalls).toHaveLength(3); // --force bypasses row-diffing entirely, by design
+  });
+
+  // A project upgrading onto the manifest-backed scheme already has a spec/index.md and
+  // spec/components/*.md written by the OLD per-table-position disambiguation — slugs that may
+  // not even match the new basename-first convention. The manifest must adopt them as-is.
+  test('a project with an existing spec/ but no manifest yet adopts current slugs without renaming anything', async () => {
+    fs.mkdirSync(path.join(f.dir, 'spec', 'components'), { recursive: true });
+    fs.writeFileSync(path.join(f.dir, 'spec', 'index.md'), threeComponentSkeletonDoc('example a'));
+    for (const name of ['a.js.md', 'b.js.md', 'c.js.md']) {
+      fs.writeFileSync(path.join(f.dir, 'spec', 'components', name), componentDetail(name.replace('.md', '')));
+    }
+    expect(fs.existsSync(path.join(f.dir, 'spec', 'components.manifest.json'))).toBe(false);
+
+    const dispatch = jest.fn(phase1Dispatch); // fresh skeleton/components are never dispatched for
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+
+    const calledAgents = dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1]);
+    expect(calledAgents).not.toContain('gaia-generate-tech-spec'); // fresh, not regenerated
+    expect(calledAgents).not.toContain('gaia-generate-tech-spec-component'); // valid, not regenerated
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+    expect(manifest.components['a.js'].slug).toBe('a.js.md');
+    expect(manifest.components['b.js'].slug).toBe('b.js.md');
+    expect(manifest.components['c.js'].slug).toBe('c.js.md');
+  });
+
+  // lastSeenInSkeleton is updated for every component present in the CURRENT skeleton on every
+  // pass — a component no longer referenced simply stops advancing, without any dedicated orphan
+  // bookkeeping of its own. Not yet surfaced as a warning anywhere; this only proves the data
+  // itself is trustworthy enough that a future check could use it.
+  test("lastSeenInSkeleton advances only for components still present in the current skeleton", async () => {
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(threeComponentSkeletonDoc('example a'));
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (\w+\.js)/);
+        return success(componentDetail(match[1]));
+      }
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch) });
+    const firstPass = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+    const cLastSeenBefore = firstPass.components['c.js'].lastSeenInSkeleton;
+
+    // A naturally-triggered regen (feature.md touched, never --force) whose new skeleton drops c.js.
+    const now = new Date();
+    fs.utimesSync(f.feature, now, now);
+    const twoComponentsTable = '### New files\n| Path | Purpose | Addresses | Domain | Spec |\n|---|---|---|---|---|\n' +
+      '| a.js | example a | AC-01 | BE | [components/a.js.md](components/a.js.md) |\n' +
+      '| b.js | example b | AC-01 | BE | [components/b.js.md](components/b.js.md) |\n\n' +
+      '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
+    const twoComponentSkeletonDoc = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1;
+      return n === 9 ? `## 9. File Inventory\n\n${twoComponentsTable}` : `## ${n}. Section ${n}\n`;
+    }).join('\n');
+    const dispatch2 = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-tech-spec') return success(twoComponentSkeletonDoc);
+      if (name === 'gaia-generate-tech-spec-component') {
+        const match = options.prompt.match(/Path: (\w+\.js)/);
+        return success(componentDetail(match[1]));
+      }
+      return phase1Dispatch(options);
+    };
+    await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: jest.fn(dispatch2) });
+
+    const secondPass = JSON.parse(fs.readFileSync(path.join(f.dir, 'spec', 'components.manifest.json'), 'utf8'));
+    expect(secondPass.components['a.js'].lastSeenInSkeleton).not.toBe(firstPass.components['a.js'].lastSeenInSkeleton);
+    expect(secondPass.components['b.js'].lastSeenInSkeleton).not.toBe(firstPass.components['b.js'].lastSeenInSkeleton);
+    expect(secondPass.components['c.js'].lastSeenInSkeleton).toBe(cLastSeenBefore); // dropped — stopped advancing
   });
 });

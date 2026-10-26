@@ -312,12 +312,75 @@ function buildPhaseRequirementsExcerpt(reqIndexContent, sourceUC, reqDirArg) {
   return `${reqIndexContent}\n\n${ucBodies}`
 }
 
+// Parses req/index.md's Section 7 Acceptance Criteria table. Positional, tolerating both the
+// 3-column (ID|Criterion|Related UC) and 4-column (… |Priority) shapes this lineage has used —
+// only ID and Related UC are ever read. "All UCs" is preserved verbatim; callers treat it as
+// matching every phase.
+function parseAcTableLocal(reqIndexContent) {
+  const { start, end, lines } = _findSectionRange(reqIndexContent, 7)
+  return _parseTableRows(lines, start, end)
+    .map(cells => ({ id: cells[0], relatedUC: cells[2] || '' }))
+    .filter(row => /^AC-/.test(row.id || ''))
+}
+
+// Compact one-line-per-component index: everything Section 9's own table already says about a
+// component EXCEPT its design body. Cheap (~25 tokens/row) and always safe to inline in full —
+// it is what lets a worker know a component exists (and name it in a drill-down request) without
+// paying for its body up front.
+function buildComponentIndexRows(components) {
+  return components.map(comp =>
+    `- ${comp.filePath} (${comp.changeType}, ${comp.domain}) — addresses ${comp.addresses || '—'} — ${comp.purposeOrChange || ''}`
+  ).join('\n')
+}
+
+// Cost-hardening: a worker handed only Section 9's index rows will, given Read/Glob/Grep, go read
+// the project's REAL source tree to recover the design it was not given — confirmed against real
+// runs where per-phase calls burned 36-43 turns and $2-3 each doing exactly that, with ~80% of
+// their output tokens being exploration reasoning rather than deliverable. Inlining the component
+// DESIGN bodies the host can already identify deterministically is far cheaper than letting the
+// model rediscover them. Cap is a safety valve, not the expected case.
+const PHASE_COMPONENT_MAX = 14
+function buildPhaseComponentExcerpt(phase, components, acTable, specDirArg) {
+  const sourceUC = phase.sourceUC || []
+  const phaseAcIds = new Set(acTable
+    .filter(row => /all\s+ucs/i.test(row.relatedUC) ||
+      row.relatedUC.split(',').map(s => s.trim()).some(uc => sourceUC.includes(uc)))
+    .map(row => row.id))
+  const relevant = components
+    .filter(comp => (comp.addresses || '').split(',').map(s => s.trim()).some(ac => phaseAcIds.has(ac)))
+    .slice(0, PHASE_COMPONENT_MAX)
+  if (relevant.length === 0) return null
+  return relevant.map(comp =>
+    `### ${comp.filePath}\n\n${c.read(`${specDirArg}/components/${comp.fileSlug}`)}`).join('\n\n')
+}
+
+// Cost-hardening: AGENTS.md is read in full by several agents on EVERY call purely to recover
+// build/verification commands (26-36 KB on the two real projects measured — 7-9K tokens per call,
+// paid once per task). The host extracts just the command-bearing sections instead and inlines
+// them, which measured 87-91% smaller on both. Returns null when nothing matches, so the caller
+// can fall back to the agent's own read rather than silently supplying a conventions block that
+// omits the one command the task needed.
+const AGENTS_SECTION_RE = /(build|test|verif|command|lint|compil)/i
+function buildAgentsConventions(root) {
+  const agentsPath = `${root}/AGENTS.md`
+  if (!c.exists(agentsPath)) return null
+  const lines = c.read(agentsPath).split('\n')
+  const kept = []
+  let keeping = false
+  for (const line of lines) {
+    const heading = line.match(/^(#{2,3})\s+(.*)/)
+    if (heading) keeping = AGENTS_SECTION_RE.test(heading[2])
+    if (keeping) kept.push(line)
+  }
+  return kept.length ? kept.join('\n').trim() : null
+}
+
 // Compact prompt for the per-phase task-generation worker: this phase's own skeleton entry, its
 // scoped Requirements excerpt, the Tech-Spec skeleton, and every prior phase's own tasks as a
 // lightweight id/title/outcome/domain projection (never a later phase's tasks, which do not exist
 // yet) — mirrors buildTaskPrompt's own "siblings" list further below, same duplicate-
 // implementation-awareness purpose, one tier up.
-function buildPhaseTaskPrompt(phase, requirementsExcerpt, techSpecSkeletonText, priorTasks, drillDownText) {
+function buildPhaseTaskPrompt(phase, requirementsExcerpt, techSpecSkeletonText, priorTasks, drillDownText, componentExcerpt, conventions) {
   const priorTasksList = priorTasks.length
     ? priorTasks.map(t => `- ${t.id}: ${t.title} — ${t.outcome} (domain: ${t.domain})`).join('\n')
     : '(none — this is the first phase generated)'
@@ -327,27 +390,38 @@ function buildPhaseTaskPrompt(phase, requirementsExcerpt, techSpecSkeletonText, 
     `Tech-Spec:\n${techSpecSkeletonText}`,
     `Tasks already decided by prior phases:\n${priorTasksList}`,
   ]
+  if (conventions) parts.push(`Project build/verification conventions (from AGENTS.md — do not read that file yourself):\n${conventions}`)
+  if (componentExcerpt) parts.push(`Design detail for the components this phase's own Acceptance Criteria cover (do not go read the project's source to rediscover this):\n${componentExcerpt}`)
   if (drillDownText) parts.push(`Component detail you requested:\n${drillDownText}`)
   return parts.join('\n\n')
 }
 
-// Matches a task's own acceptanceCriteria against each component's Addresses column (the same
-// relation spec/index.md's own Section 9 table already expresses) to give the per-task worker
-// only the Tech-Spec content relevant to its own task, instead of the entire assembled spec —
-// the single largest structural token cost this feature removes. Falls back to the full
-// Components table (never zero content) when nothing matches, e.g. a purely organizational task.
+// Selects which component DESIGN BODIES a single task's worker actually needs.
+//
+// Matching purely on Acceptance Criteria (FTR-026's original rule) degrades badly on a real
+// feature: AC granularity is coarse (one real feature had 12 ACs across 51 components, with a
+// single AC cited by 14 of them), so a task citing 3 ACs pulled in 26 full design bodies —
+// measured at 106 KB average per task, 12.6 MB across one feature, for work that usually touches
+// one or two files. Narrowing to the component(s) a task actually NAMES in its own title/outcome
+// measured 11 KB average instead, and covers just over half of all tasks; the remainder fall back
+// to the AC match, capped. Section 9's index rows are always included in full regardless, so a
+// task whose real file was not matched can still see every component that exists and go read one.
+const TASK_COMPONENT_FALLBACK_MAX = 4
 function buildTaskTechSpecExcerpt(components, task, specDir, specIndexContent) {
   const acSet = new Set(task.acceptanceCriteria || [])
-  const relevant = components.filter(comp =>
+  const byAc = components.filter(comp =>
     (comp.addresses || '').split(',').map(s => s.trim()).some(acId => acSet.has(acId)))
-  if (relevant.length === 0) {
+  if (byAc.length === 0) {
     return "_No component's Addresses column cites this task's Acceptance Criteria — full " +
       'Components table below._\n\n' + specIndexContent
   }
-  return relevant.map(comp => {
-    const body = c.read(`${specDir}/components/${comp.fileSlug}`)
-    return `### ${comp.filePath}\n\n${body}`
-  }).join('\n\n')
+  const haystack = `${task.title || ''} ${task.outcome || ''}`.toLowerCase()
+  const byPath = components.filter(comp => comp.filePath && haystack.includes(comp.filePath.toLowerCase()))
+  const bodies = byPath.length ? byPath : byAc.slice(0, TASK_COMPONENT_FALLBACK_MAX)
+  const bodyText = bodies.map(comp =>
+    `### ${comp.filePath}\n\n${c.read(`${specDir}/components/${comp.fileSlug}`)}`).join('\n\n')
+  return `Every component this task's Acceptance Criteria cover (index only):\n${buildComponentIndexRows(byAc)}\n\n` +
+    `Full design detail for the component(s) this task itself names:\n${bodyText}`
 }
 
 // FTR-027: duplicates wbs-assembler.js's own _parseVerificationCommands algorithm (last
@@ -367,20 +441,30 @@ function hasVerificationCommands(content) {
 }
 
 // Compact prompt for the per-task detail-generation worker: this task's own skeleton entry,
-// the full skeleton's sibling task list (id + title + outcome only, for duplicate-
-// implementation awareness), and the Tech-Spec excerpt (FTR-026: already pre-sliced to this
-// task's own relevant component(s) by buildTaskTechSpecExcerpt, or the full legacy Tech-Spec
-// text for a feature with no spec/ directory).
-function buildTaskPrompt(index, taskId, techSpecText, taskTemplate) {
+// a sibling task list (id + title + outcome only, for duplicate-implementation awareness), and
+// the Tech-Spec excerpt (FTR-026: already pre-sliced to this task's own relevant component(s) by
+// buildTaskTechSpecExcerpt, or the full legacy Tech-Spec text for a feature with no spec/).
+//
+// Cost-hardening: the sibling list used to carry EVERY task in the feature with its full outcome
+// — 11K tokens per call on a 122-task feature, re-sent once per task, and growing quadratically
+// with feature size. Duplicate implementation is only a real risk against work that is adjacent
+// or already decided, so the list is scoped to this task's own phase plus every earlier phase;
+// a genuinely cross-phase duplicate is still caught deterministically by wb-validate.js.
+function buildTaskPrompt(index, taskId, techSpecText, taskTemplate, conventions) {
   const task = index.tasks[taskId]
+  const phaseIdx = index.phases.findIndex(p => p.taskIds.includes(taskId))
+  const inScope = new Set(index.phases.slice(0, phaseIdx + 1).flatMap(p => p.taskIds))
   const siblingList = Object.entries(index.tasks)
+    .filter(([id]) => inScope.has(id))
     .map(([id, t]) => `- ${id}: ${t.title} — ${t.outcome}`).join('\n')
-  return [
+  const parts = [
     `Task skeleton entry (restate these fields verbatim; do not re-derive them):\n${JSON.stringify({ id: taskId, ...task }, null, 2)}`,
     `Tech-Spec:\n${techSpecText}`,
-    `All tasks in this feature (for duplicate-implementation awareness):\n${siblingList}`,
-    `Template (tasks/{TASK_ID}.md):\n${taskTemplate}`,
-  ].join('\n\n')
+    `Tasks in this task's own phase and every earlier phase (for duplicate-implementation awareness):\n${siblingList}`,
+  ]
+  if (conventions) parts.push(`Project build/verification conventions (from AGENTS.md — do not read that file yourself):\n${conventions}`)
+  parts.push(`Template (tasks/{TASK_ID}.md):\n${taskTemplate}`)
+  return parts.join('\n\n')
 }
 
 const c = control
@@ -475,6 +559,13 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // work-breakdown.md's own Guidelines already produce for the phases array).
   const reqIndexContentForPhases = c.read(reqIndexPath)
   const techSpecSkeletonForPhases = hasSpec ? c.read(specIndexPath) : c.read(file('Tech-Spec.md'))
+  // Computed once, outside the loop — identical for every phase, and both are pure reads.
+  const componentsForPhases = hasSpec ? parseComponentsTableLocal(c.read(specIndexPath)) : []
+  // A Requirements document without a parseable Section 7 table costs this one optimisation, not
+  // the run: fall back to supplying no component excerpt rather than failing WBS generation.
+  let acTableForPhases = []
+  if (hasReq) { try { acTableForPhases = parseAcTableLocal(reqIndexContentForPhases) } catch (e) { acTableForPhases = [] } }
+  const conventions = buildAgentsConventions(c.root)
   const taskIdToPhase = new Map()
   for (const phase of index.phases) {
     if (phase.taskIds.length > 0) {
@@ -485,9 +576,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
       ? buildPhaseRequirementsExcerpt(reqIndexContentForPhases, phase.sourceUC, reqDir)
       : reqIndexContentForPhases
     const priorTasks = Object.entries(index.tasks).map(([id, t]) => ({ id, title: t.title, outcome: t.outcome, domain: t.domain }))
+    const componentExcerpt = hasSpec
+      ? buildPhaseComponentExcerpt(phase, componentsForPhases, acTableForPhases, specDir)
+      : null
 
     let phaseResult = await c.worker('gaia.agent.planner.work-breakdown-phase',
-      buildPhaseTaskPrompt(phase, reqExcerpt, techSpecSkeletonForPhases, priorTasks),
+      buildPhaseTaskPrompt(phase, reqExcerpt, techSpecSkeletonForPhases, priorTasks, null, componentExcerpt, conventions),
       { schema: PHASE_TASKS_SCHEMA, label: `work-breakdown-phase:${phase.id}` })
 
     // Bounded, single-round drill-down (FTR-028 precedent, reused unmodified from FTR-032's own
@@ -497,7 +591,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
       const drillDownText = buildComponentDrillDownText(phaseNeedsComponentDetail, c.read(specIndexPath), specDir)
       if (drillDownText) {
         phaseResult = await c.worker('gaia.agent.planner.work-breakdown-phase',
-          buildPhaseTaskPrompt(phase, reqExcerpt, techSpecSkeletonForPhases, priorTasks, drillDownText),
+          buildPhaseTaskPrompt(phase, reqExcerpt, techSpecSkeletonForPhases, priorTasks, drillDownText, componentExcerpt, conventions),
           { schema: PHASE_TASKS_SCHEMA, label: `work-breakdown-phase:${phase.id}:with-drilldown` })
       }
     }
@@ -548,7 +642,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
         ? buildTaskTechSpecExcerpt(components, task, specDir, c.read(specIndexPath))
         : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text
       const detail = await c.worker('gaia.agent.planner.work-breakdown-task',
-        buildTaskPrompt(index, taskId, techSpecExcerpt, taskTemplate), { label: `work-breakdown-task:${taskId}` })
+        buildTaskPrompt(index, taskId, techSpecExcerpt, taskTemplate, conventions), { label: `work-breakdown-task:${taskId}` })
       c.writeOutput(detailPath, detail)
       task.status = 'generated'
       c.writeOutput(indexPath, JSON.stringify(index, null, 2)) // persist status after each task
