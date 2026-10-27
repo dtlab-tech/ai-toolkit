@@ -36,6 +36,40 @@ test('permission denial is explicit even when the CLI claims success and keeps u
   expect(evidence().response.result.permission_denials[0].tool_name).toBe('Write');
 });
 
+// Real production evidence, twice, on two different paths: the model occasionally constructs a
+// path with a single leading backslash and no drive letter (e.g. `\AGENTS.md`, or
+// `\src\shell\app\...`), which resolves outside the project directory on Windows and is correctly
+// denied — but the agent recovers and still produces a complete, structurally valid result. The
+// unconditional check used to throw that away anyway, wasting the whole call. A denial on a
+// mutating tool (Write/Edit/Bash/...) is a different risk entirely — a near-miss on a real side
+// effect, not a missed read — and must still fail immediately regardless of the rest of the
+// response; the test above already covers that and is untouched by this change.
+test('a Read-only denial does not fail the call when the result is otherwise valid', async () => {
+  const c = createControl({ ...f.options, dispatch: async () => response({ permission_denials: [
+    { tool_name: 'Read', tool_input: { file_path: '\\src\\shell\\app\\src\\pages\\Settings\\Users\\UserDetailPage.test.tsx' } },
+  ] }) });
+  const result = await c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'));
+  expect(result).toBeDefined();
+  expect(f.entries().find(e => e.agentId).status).toBe('done');
+  expect(evidence().response.result.permission_denials[0].tool_name).toBe('Read');
+});
+
+test('a Read-only denial mixed with a mutating-tool denial still fails the call', async () => {
+  const c = createControl({ ...f.options, dispatch: async () => response({ permission_denials: [
+    { tool_name: 'Read', tool_input: { file_path: '\\AGENTS.md' } },
+    { tool_name: 'Write', tool_input: { file_path: path.join(f.dir, 'report.md') } },
+  ] }) });
+  await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'))).rejects.toThrow('Worker permission denied');
+  expect(f.entries().find(e => e.agentId).status).toBe('failed');
+});
+
+test('a Read-only denial on an otherwise-invalid result still fails — downstream validity still decides', async () => {
+  const c = createControl({ ...f.options, dispatch: async () => response({ result: '',
+    permission_denials: [{ tool_name: 'Glob', tool_input: { pattern: '\\src\\**' } }] }) });
+  await expect(c.run('pm-phase1', f.dir, 'FTR-099', () => c.worker(id, 'test'))).rejects.toThrow(/no result/i);
+  expect(f.entries().find(e => e.agentId).status).toBe('failed');
+});
+
 test('a schema worker cannot complete with an empty report field', async () => {
   const dest = path.join(f.dir, 'report.md');
   const c = createControl({ ...f.options, dispatch: async () => response({
