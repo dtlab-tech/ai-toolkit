@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.2...v0.24.3) (2026-10-27)
+
+
+### Bug Fixes
+
+* don't fail a worker call over a read-only permission denial ([1b4c521](https://github.com/dtlab-tech/ai-toolkit/commit/1b4c5217b42e9c9dcb74c9bbe60f209522644f9c))
+* **workflow-control:** don't fail a worker call over a read-only permission denial ([fb283c6](https://github.com/dtlab-tech/ai-toolkit/commit/fb283c6a0f44f56d0ca152bcf84bf81c1ca10125))
+
 ## [0.24.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.1...v0.24.2) (2026-10-26)
 
 
