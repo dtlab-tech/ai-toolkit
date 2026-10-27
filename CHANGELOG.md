@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.5](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.4...v0.24.5) (2026-10-27)
+
+
+### Bug Fixes
+
+* **pm-phase2:** run the semantic WB validator per phase ([3f279e6](https://github.com/dtlab-tech/ai-toolkit/commit/3f279e6e386eee6c86cea90caec7e5d64b6aa756))
+* **pm-phase2:** run the semantic WB validator per phase, not once over the whole breakdown ([62389cb](https://github.com/dtlab-tech/ai-toolkit/commit/62389cbb8fcf70f4019ee83ed9f8a5a99a96dd23))
+
 ## [0.24.4](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.3...v0.24.4) (2026-10-27)
 
 
