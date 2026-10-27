@@ -440,6 +440,21 @@ function hasVerificationCommands(content) {
   return FENCE_RE_LOCAL.test(verifPart)
 }
 
+// Same resume-validity role as hasVerificationCommands, for the OTHER field this agent's own
+// prompt once asked it to merely restate (removed from "already given" wording in a prior fix —
+// see gaia-generate-work-breakdown-task.md's own Estimate section) but which a task file
+// generated BEFORE that fix can still carry as a literal "—" or explanatory prose instead of a
+// number: wbs-assembler.js's own _numberOrNull throws on exactly that shape at assembly time,
+// well after the dispatch loop below would have skipped regenerating it. A task file whose
+// Estimate fields are not both plain integers is treated the same as one with zero verification
+// commands — regenerated, not skipped forever — so a stale pre-fix file self-heals on the very
+// next resume instead of requiring a hand-fix or a one-off repair script.
+function hasValidEstimate(content) {
+  const minutes = content.match(/^- \*\*Estimate — agent minutes:\*\*\s*(.*)$/m)
+  const tokens = content.match(/^- \*\*Estimate — tokens:\*\*\s*(.*)$/m)
+  return !!minutes && !!tokens && /^\d+$/.test(minutes[1].trim()) && /^\d+$/.test(tokens[1].trim())
+}
+
 // Compact prompt for the per-task detail-generation worker: this task's own skeleton entry,
 // a sibling task list (id + title + outcome only, for duplicate-implementation awareness), and
 // the Tech-Spec excerpt (FTR-026: already pre-sliced to this task's own relevant component(s) by
@@ -637,7 +652,10 @@ return c.run(meta.name, featureDir, prefix, async () => {
     for (const taskId of phase.taskIds) {
       const task = index.tasks[taskId]
       const detailPath = `${wbsDir}/${task.detailFile}`
-      if (task.status === 'generated' && c.exists(detailPath) && hasVerificationCommands(c.read(detailPath))) continue // resume: skip, no dispatch
+      if (task.status === 'generated' && c.exists(detailPath)) {
+        const existing = c.read(detailPath)
+        if (hasVerificationCommands(existing) && hasValidEstimate(existing)) continue // resume: skip, no dispatch
+      }
       const techSpecExcerpt = hasSpec
         ? buildTaskTechSpecExcerpt(components, task, specDir, c.read(specIndexPath))
         : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text
