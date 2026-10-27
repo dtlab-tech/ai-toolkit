@@ -29,8 +29,9 @@ function makeIndex(taskStatuses) {
 
 describe('pm-phase2 resume-by-status: mirror stays in sync with the real script', () => {
   test('pm-phase2.js still contains the exact resume-by-status condition the mirror replicates', () => {
+    expect(PM_PHASE2_SOURCE).toContain("if (task.status === 'generated' && c.exists(detailPath)) {");
     expect(PM_PHASE2_SOURCE).toContain(
-      "task.status === 'generated' && c.exists(detailPath) && hasVerificationCommands(c.read(detailPath))");
+      "if (hasVerificationCommands(existing) && hasValidEstimate(existing)) continue // resume: skip, no dispatch");
   });
 });
 
@@ -67,6 +68,21 @@ describe('selectPendingTaskIds()', () => {
     const index = makeIndex({ 'T-01': 'generated', 'T-02': 'generated' });
     const existing = new Set(['/wbs/tasks/T-01.md', '/wbs/tasks/T-02.md']);
     const isValidFn = p => p.endsWith('T-01.md'); // T-02's file exists but has no commands
+    const pending = selectPendingTaskIds(index, '/wbs', p => existing.has(p), isValidFn);
+    expect(pending).toEqual(['T-02']);
+  });
+
+  // Real production incident: a file written by a toolkit version predating the estimate-as-
+  // new-content prompt fix has real verification commands (so that half of isValidFn alone would
+  // wrongly call it complete) but a non-numeric Estimate — treated as pending too, same as the
+  // zero-verification-commands case above, composed via a single isValidFn standing in for the
+  // real hasVerificationCommands(x) && hasValidEstimate(x).
+  test('a "generated" task whose detail file has verification commands but a stale non-numeric Estimate is treated as pending', () => {
+    const index = makeIndex({ 'T-01': 'generated', 'T-02': 'generated' });
+    const existing = new Set(['/wbs/tasks/T-01.md', '/wbs/tasks/T-02.md']);
+    const hasCommands = () => true;
+    const hasValidEstimate = p => p.endsWith('T-01.md'); // T-02's commands are fine, estimate is stale
+    const isValidFn = p => hasCommands(p) && hasValidEstimate(p);
     const pending = selectPendingTaskIds(index, '/wbs', p => existing.has(p), isValidFn);
     expect(pending).toEqual(['T-02']);
   });
