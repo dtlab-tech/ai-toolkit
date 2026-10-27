@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.4](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.3...v0.24.4) (2026-10-27)
+
+
+### Bug Fixes
+
+* **pm-phase2:** regenerate a task whose Estimate is stale, not just missing verification commands ([a772767](https://github.com/dtlab-tech/ai-toolkit/commit/a772767a9d960bfe468829651e7ca2cbc7c6a17e))
+* regenerate a task whose Estimate is stale, not just missing verification commands ([e9d794b](https://github.com/dtlab-tech/ai-toolkit/commit/e9d794b81575c49e95d0291174964058fafd009b))
+
 ## [0.24.3](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.2...v0.24.3) (2026-10-27)
 
 
