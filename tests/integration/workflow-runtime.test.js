@@ -1039,6 +1039,43 @@ describe('prompt scoping — per-task and per-phase context is bounded by the ho
     expect(prompt).not.toContain('narrative-marker');
   });
 
+  // Real production incident: the whole-WB semantic validator received a directory path and
+  // explored it itself, hitting the 30-minute worker ceiling on a 123-task feature. It now runs
+  // once per phase, each call seeing only that phase's own task details.
+  test('the semantic validator runs once per phase, each call seeing only its own phase\'s task details', async () => {
+    splitFixtures();
+    const semanticPrompts = [];
+    const base = capturingDispatch();
+    const dispatch = jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-validate-work-breakdown-semantic') semanticPrompts.push(options.prompt);
+      return base.getMockImplementation()(options);
+    });
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    expect(semanticPrompts).toHaveLength(2);
+    const [us01, us02] = semanticPrompts;
+    expect(us01).toContain('### US-01-TASK-BE-01');
+    expect(us01).not.toContain('### US-02-TASK-BE-01');
+    expect(us01).toContain('US-02-TASK-BE-01 —'); // other phase's task appears as an index line only
+    expect(us02).toContain('### US-02-TASK-BE-01');
+    expect(us02).not.toContain('### US-01-TASK-BE-01');
+  });
+
+  test('a blocking finding in one phase fails the run and names that phase and task', async () => {
+    splitFixtures();
+    const base = capturingDispatch();
+    const dispatch = jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-validate-work-breakdown-semantic' && options.prompt.includes('Phase under review:') && options.prompt.includes('"id": "US-02"')) {
+        return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
+          structured_output: { valid: false, findings: [{ taskId: 'US-02-TASK-BE-01', type: 'hidden_multiplicity', severity: 'error', blocking: true, splitRequired: true, description: 'split it' }] } } };
+      }
+      return base.getMockImplementation()(options);
+    });
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch }))
+      .rejects.toThrow(/semantic validation failed[\s\S]*\[US-02\] US-02-TASK-BE-01: split it/);
+  });
+
   test('every worker dispatch carries a runaway budget cap by default', async () => {
     splitFixtures();
     const dispatch = capturingDispatch();

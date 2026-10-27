@@ -375,6 +375,21 @@ function buildAgentsConventions(root) {
   return kept.length ? kept.join('\n').trim() : null
 }
 
+// Per-phase semantic validation prompt. The whole-WB validator used to receive a directory path and
+// explore it itself with Read/Glob/Grep — on a 123-task feature that single unbounded turn hit the
+// 30-minute worker ceiling, the same failure mode FTR-033 removed from skeleton generation. Each
+// call now sees only its own phase's task details, a one-line index of every OTHER task (for
+// duplicate-across-phases awareness), and that phase's scoped Requirements excerpt.
+function buildSemanticPhasePrompt(phase, taskDetailsText, otherTasksText, requirementsExcerpt, reqIndexPath) {
+  return [
+    `Requirements source: ${reqIndexPath}`,
+    `Phase under review:\n${JSON.stringify({ id: phase.id, type: phase.type, title: phase.title, sourceUC: phase.sourceUC }, null, 2)}`,
+    `Requirements (scoped to this phase's own sourceUC, plus feature-wide sections):\n${requirementsExcerpt}`,
+    `Task details for THIS phase (review these):\n${taskDetailsText}`,
+    `Other tasks in the feature (id — title — outcome; for cross-phase duplicate awareness only, do not review them):\n${otherTasksText || '(none)'}`,
+  ].join('\n\n')
+}
+
 // Compact prompt for the per-phase task-generation worker: this phase's own skeleton entry, its
 // scoped Requirements excerpt, the Tech-Spec skeleton, and every prior phase's own tasks as a
 // lightweight id/title/outcome/domain projection (never a later phase's tasks, which do not exist
@@ -678,11 +693,35 @@ return c.run(meta.name, featureDir, prefix, async () => {
     if (!parsed.valid || parsed.errors.length) throw new Error('Work breakdown structural validation failed: ' + res.stdout)
     return parsed
   })
-  const semantic = await c.worker('gaia.agent.planner.validate-work-breakdown',
-    `${wbsDir}\n${reqIndexPath}`, { schema: {
-      type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array' } }, required: ['valid', 'findings'],
-    } })
-  if (!semantic.valid || semantic.findings.some(f => f.blocking)) throw new Error('Work breakdown semantic validation failed')
+  // Every phase is reviewed even after one fails, so a single run surfaces every blocking finding
+  // at once instead of making the operator fix them one resume at a time.
+  const semanticSchema = {
+    type: 'object', properties: { valid: { type: 'boolean' }, findings: { type: 'array' } }, required: ['valid', 'findings'],
+  }
+  const reqIndexForSemantic = c.read(reqIndexPath)
+  const allFindings = []
+  let semanticValid = true
+  for (const phase of index.phases) {
+    const phaseTaskIds = phase.taskIds
+    const taskDetailsText = phaseTaskIds
+      .map(taskId => `### ${taskId}\n\n${c.read(`${wbsDir}/${index.tasks[taskId].detailFile}`)}`).join('\n\n---\n\n')
+    const otherTasksText = Object.entries(index.tasks)
+      .filter(([id]) => !phaseTaskIds.includes(id))
+      .map(([id, t]) => `- ${id} — ${t.title} — ${t.outcome}`).join('\n')
+    const requirementsExcerpt = hasReq
+      ? buildPhaseRequirementsExcerpt(reqIndexForSemantic, phase.sourceUC, reqDir)
+      : reqIndexForSemantic
+    const verdict = await c.worker('gaia.agent.planner.validate-work-breakdown',
+      buildSemanticPhasePrompt(phase, taskDetailsText, otherTasksText, requirementsExcerpt, reqIndexPath),
+      { schema: semanticSchema, label: `validate-work-breakdown:${phase.id}` })
+    if (!verdict.valid) semanticValid = false
+    for (const finding of verdict.findings) allFindings.push({ ...finding, phaseId: phase.id })
+  }
+  const semantic = { valid: semanticValid, findings: allFindings }
+  if (!semantic.valid || semantic.findings.some(f => f.blocking)) {
+    const blocking = semantic.findings.filter(f => f.blocking).map(f => `[${f.phaseId}] ${f.taskId}: ${f.description}`)
+    throw new Error('Work breakdown semantic validation failed' + (blocking.length ? ':\n' + blocking.join('\n') : ''))
+  }
   // FTR-025: wb-render.js is no longer called automatically here — nothing downstream ever read
   // {PREFIX}-Work-Breakdown.md/.csv (every real consumer already reads wbs/ directly via
   // wbs-assembler.js's loadWorkBreakdown()), so this view is now produced only on demand, via

@@ -1,8 +1,8 @@
 ---
 name: gaia-validate-work-breakdown-semantic
-description: "Semantic validator for Work Breakdown JSON — analyzes task coherence, scope alignment, and estimate realism. Runs after wb-validate.js exits 0. Input: path to {PREFIX}-Work-Breakdown.json"
+description: "Semantic validator for one phase of a Work Breakdown — analyzes task coherence, scope alignment, and estimate realism. Runs once per phase after wb-validate.js exits 0. Input: the phase's inlined task details, a scoped Requirements excerpt, and an index of other tasks"
 model: sonnet
-tools: Read, Glob, Grep
+tools: Read
 ---
 
 # Validate Work Breakdown — Semantic
@@ -15,17 +15,16 @@ You do NOT repeat structural checks (schema conformance, required fields, ID for
 
 ## Input
 
-The prompt gives you two paths, one per line, in this order:
+Your prompt directly inlines everything you need — you review ONE phase per call:
 
-1. The Work Breakdown directory (the split format, FTR-020) — contains `index.json` (the
-   validated skeleton, schema v2) plus `user-stories/*.md`/`tasks/*.md` detail files. Use Glob/Read
-   to explore it as needed; do not expect a single `{PREFIX}-Work-Breakdown.json` file.
-2. The Requirements source — `req/index.md` for a feature using the split Requirements format
-   (FTR-021; User Story descriptions and Acceptance Criteria text live in its own tables there,
-   unaffected by the per-UC split), or a legacy `{PREFIX}-Requirements.md` file otherwise. Read
-   whichever path is actually given — do not assume either shape.
+1. **Requirements source path** and a **scoped Requirements excerpt** — feature-wide sections in full, plus only the use case(s) this phase realizes.
+2. **The phase under review** — its id, type, title, and `sourceUC`.
+3. **Task details for THIS phase only** — the full detail file of every task in the phase. These are what you review.
+4. **Other tasks in the feature** — a one-line index (id — title — outcome) of every task outside this phase. Use it only to recognize a duplicate of work another phase already owns; do not review those tasks.
 
-Derive the prefix from the Work Breakdown directory's own `index.json`'s `feature` field.
+Do **not** read any file yourself. Do **not** explore the filesystem. Everything you need is in your prompt, and another call reviews every other phase.
+
+Because each call sees only one phase, cross-phase concerns are out of scope for you. Judge the tasks in front of you.
 
 ---
 
@@ -98,4 +97,4 @@ Or when issues are found:
 
 ## Tool use
 
-Use `Read` to load both files. Do not write any files. Do not produce any output other than the single JSON object described above.
+None needed — everything is inlined. Do not write any files. Do not produce any output other than the single JSON object described above.
