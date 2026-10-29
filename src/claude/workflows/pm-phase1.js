@@ -55,6 +55,28 @@ return c.run(meta.name, featureDir, prefix, async () => {
     return `${prompt}\n\nTemplate (${label}):\n${readTemplate(templateFile)}`
   }
 
+  // Gaps the validator reported on the previous cycle, set only by the revision branch below
+  // before it regenerates. Without this a "revision" was a blind full regeneration from
+  // feature.md alone: the generators never saw what was wrong, so three cycles were three
+  // independent attempts at the same input and convergence depended on luck.
+  let revisionFindings = []
+  function revisionSection(findings) {
+    if (!findings.length) return ''
+    return '\n\nThe previous version of these documents was validated and these gaps were reported. ' +
+      'Resolve every one that concerns the document you are generating, and do not raise a new open ' +
+      'question for anything feature.md already decides:\n' + findings.map(f => `- ${f}`).join('\n')
+  }
+
+  // The use-case agent is told not to write the "Related Business Rules"/"Related Acceptance
+  // Criteria" lines (the host computes them from req/index.md and appends them), but it
+  // sometimes writes its own anyway — with guessed IDs and "—" for the ACs it cannot see. Appending
+  // the host's block after it left two conflicting blocks in the file. Drop anything the model
+  // wrote from its first such line onward, so exactly one host-computed block remains.
+  function stripModelCrossReferences(detail) {
+    const idx = detail.search(/^\*\*Related (?:Business Rules|Acceptance Criteria):\*\*/m)
+    return idx === -1 ? detail : detail.slice(0, idx)
+  }
+
   // Deliberately NOT file('req') — same reasoning as FTR-020's wbsDir: this is a directory
   // nested inside the feature's own already-prefixed folder, so a second prefix would be
   // redundant.
@@ -162,7 +184,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     const base = `${featurePathArg}\n\nGenerate the full detail for this use case:\n` +
       `UC ID: ${row.id}\nTitle: ${row.title}\nActor: ${row.actor}\nPriority: ${row.priority}\n\n` +
       `Full use-case index (for cross-UC awareness, do not restate):\n${compactIndex}`
-    return `${base}\n\nTemplate (req/use-cases/{UC-ID}.md):\n${ucTemplate}`
+    return `${base}\n\nTemplate (req/use-cases/{UC-ID}.md):\n${ucTemplate}${revisionSection(revisionFindings)}`
   }
 
   // forceAll: bypasses resume-by-existence entirely, re-dispatching the skeleton and every
@@ -193,7 +215,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     // 1. Skeleton (no declared worker() output — host writes it itself, mirroring FTR-020's
     // skeleton step)
     if (regenSkeleton) {
-      const skeleton = await c.worker(reqId, withTemplate(featurePath, 'req/index.md', 'gaia-requirements-index-template.md'))
+      const skeleton = await c.worker(reqId, withTemplate(featurePath, 'req/index.md', 'gaia-requirements-index-template.md') + revisionSection(revisionFindings))
       c.writeOutput(reqIndexPath, skeleton)
     }
 
@@ -231,7 +253,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
         valid = isValidUseCaseFile(detail, row.id)
       }
       if (!valid) throw new Error(`Requirements use case "${row.id}" failed structural validation after ${USE_CASE_RETRY_ATTEMPTS} attempts — missing the required "### ${row.id}: " heading`)
-      c.writeOutput(ucPath, detail.trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id))
+      c.writeOutput(ucPath, stripModelCrossReferences(detail).trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id))
     }
     // No assembly/write step here — generation only ever produces req/index.md + its per-UC
     // files. Assembly happens in-memory, on demand, at the top level below (never persisted by
@@ -484,7 +506,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     const base = `${featurePathArg}\n\nGenerate the full technical design for this component:\n` +
       `Path: ${row.filePath}\nChange: ${row.changeType}\nDomain: ${row.domain}\nAddresses: ${row.addresses}\n\n` +
       `Full component index (for cross-component awareness, do not restate):\n${compactIndex}`
-    return `${base}\n\nTemplate (spec/components/{fileSlug}.md):\n${componentTemplate}`
+    return `${base}\n\nTemplate (spec/components/{fileSlug}.md):\n${componentTemplate}${revisionSection(revisionFindings)}`
   }
 
   // A row's own content fingerprint — the same four fields FTR-030's row-diffing has always
@@ -543,7 +565,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
 
     // 1. Skeleton (no declared worker() output — host writes it itself)
     if (regenSkeleton) {
-      const skeleton = await c.worker(specId, withTemplate(featurePath, 'spec/index.md', 'gaia-tech-spec-index-template.md'))
+      const skeleton = await c.worker(specId, withTemplate(featurePath, 'spec/index.md', 'gaia-tech-spec-index-template.md') + revisionSection(revisionFindings))
       c.writeOutput(specIndexPath, applyComponentSlugs(skeleton, manifest))
     }
 
@@ -740,6 +762,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
       }
       if (cycle === 3) throw new Error('Validation gaps remain after 3 cycles')
       if (!mergedNeedsRequirementsFix && !mergedNeedsTechSpecFix) throw new Error(`Validation agent reported gaps on cycle ${cycle} but flagged neither document for revision`)
+      revisionFindings = mergedFindings
       if (mergedNeedsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }
       if (mergedNeedsTechSpecFix) { await generateTechSpec(true); assembledTechSpec = assembleTechSpec() }
     }
