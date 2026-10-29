@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.6](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.5...v0.24.6) (2026-10-29)
+
+
+### Bug Fixes
+
+* **pm-phase1:** feed validation findings back to the generators and d… ([6fcb46d](https://github.com/dtlab-tech/ai-toolkit/commit/6fcb46d4e0d6d1d9ad8e2bf97313ce23691ce665))
+* **pm-phase1:** feed validation findings back to the generators and drop duplicate Related blocks ([86d01df](https://github.com/dtlab-tech/ai-toolkit/commit/86d01dffbaccd9f5b99e3a356cd13e5d902d699b))
+* **pm-phase1:** feed validation findings back to the generators and drop duplicate Related blocks ([9411ea5](https://github.com/dtlab-tech/ai-toolkit/commit/9411ea529d8eccdc54abcd4f8f296542b73e14b9))
+
 ## [0.24.5](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.4...v0.24.5) (2026-10-27)
 
 
