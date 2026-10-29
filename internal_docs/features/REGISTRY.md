@@ -160,3 +160,107 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-018-deterministic-task-execution-checkpoints-and-resume/feature.md)
 
 ---
+
+## FTR-006 — Assessment-Aware PR Description
+**Keywords:** pr-description, assessment, INT-NNN, ASSESS-NNN, intervention-branch, pull-request
+**Status:** completed
+**Summary:** Extends `/pr-description` to recognise branches originating from the assessment pipeline (`ASSESS-NNN` / `INT-NNN` in the branch name, or no matching `FTR-XXX` folder) and build the PR description from the linked intervention document.
+→ [Detail](FTR-006-assessment-aware-pr-description/feature.md)
+
+---
+
+## FTR-020 — Work Breakdown Split Generation and Storage
+**Keywords:** work-breakdown, wbs, index.json, per-task, skeleton, split-storage
+**Status:** completed
+**Summary:** Replaces the single-shot Work Breakdown JSON with a directory format (`wbs/index.json` + one file per task), produced by a skeleton call plus one bounded call per task.
+→ [Detail](FTR-020-work-breakdown-split-generation/feature.md)
+
+---
+
+## FTR-021 — Requirements Split Generation and Storage
+**Keywords:** requirements, req, use-case, skeleton, split-storage
+**Status:** completed
+**Summary:** Replaces the single-shot Requirements document with `req/index.md` plus one file per use case, produced by a skeleton call plus one call per use case.
+→ [Detail](FTR-021-requirements-split-generation/feature.md)
+
+---
+
+## FTR-022 — AC↔Task Traceability Matrix
+**Keywords:** traceability, ac-task-matrix, coverage, deterministic-renderer
+**Status:** completed
+**Summary:** Deterministic renderer (`ac-task-matrix.js`) mapping every Acceptance Criterion to the Work Breakdown tasks and phases that cover it. No LLM calls.
+→ [Detail](FTR-022-ac-task-traceability-matrix/feature.md)
+
+---
+
+## FTR-023 — Tech-Spec AC Tagging and Coverage Matrix
+**Keywords:** tech-spec, addresses, ac-reference, file-inventory, coverage
+**Status:** completed
+**Summary:** Adds an `Addresses` column to the Tech-Spec File Inventory citing the ACs each file implements, with a deterministic check that every reference resolves.
+→ [Detail](FTR-023-tech-spec-ac-tagging-and-matrix/feature.md)
+
+---
+
+## FTR-024 — Tech-Spec Split Generation and Storage
+**Keywords:** tech-spec, spec, component, skeleton, split-storage
+**Status:** completed
+**Summary:** Replaces the single-shot Tech-Spec with `spec/index.md` (skeleton) plus one file per component, assembled back on demand.
+→ [Detail](FTR-024-tech-spec-split-generation/feature.md)
+
+---
+
+## FTR-025 — Split-Only Document Generation with On-Demand Assembly
+**Keywords:** split-only, assembly, requirements, tech-spec, on-demand
+**Status:** completed
+**Summary:** Generation writes only the split sources; the monolithic Requirements/Tech-Spec view is assembled on demand, never persisted by the pipeline.
+→ [Detail](FTR-025-split-only-generation/feature.md)
+
+---
+
+## FTR-026 — Split-Source-Native Work Breakdown Pipeline
+**Keywords:** work-breakdown, split-source, bridge, pm-phase2, coverage-matrix
+**Status:** completed
+**Summary:** Removes the transitional bridge step in `pm-phase2.js`; every downstream consumer reads the split `req/` and `spec/` sources directly.
+→ [Detail](FTR-026-split-source-native-pipeline/feature.md)
+
+---
+
+## FTR-027 — Resume-Safe Per-Item Generation
+**Keywords:** resume, per-item, idempotent, retry, file-slug
+**Status:** completed
+**Summary:** Hardens resume-by-existence so a retry never replays a broken per-item output; fixes `.md`-suffix normalization of component file slugs.
+→ [Detail](FTR-027-resume-safe-per-item-generation/feature.md)
+
+---
+
+## FTR-028 — Scalable Feature-Doc Validation
+**Keywords:** validation, gaia-validate-feature-docs, skeleton, needsComponentDetail, drill-down
+**Status:** completed
+**Summary:** The feature-doc validator receives the Tech-Spec skeleton instead of the fully assembled document; component detail is requested through a bounded drill-down.
+→ [Detail](FTR-028-scalable-feature-doc-validation/feature.md)
+
+---
+
+## FTR-029 — Pipeline Resilience Hardening (Round 2)
+**Keywords:** pm-phase1, resilience, schema-retry, fail-fast, validator-schema
+**Status:** completed
+**Summary:** Four resilience gaps in `pm-phase1` confirmed against real evidence from failed runs: schema-violation retry, fail-fast on invalid per-item results, validator schema relaxation, hardcoded template path.
+→ [Detail](FTR-029-pipeline-resilience-hardening/feature.md)
+
+---
+
+## FTR-032 — Pipeline and Executor Cost Hardening
+**Keywords:** cost, estimate, needsComponentDetail, dispatch-evidence, already-satisfied, short-circuit
+**Status:** completed
+**Summary:** Moves the per-task estimate to the detail pass, bounds WBS skeleton exploration via drill-down, persists dispatch evidence, and short-circuits tasks already satisfied before dispatch.
+→ [Detail](FTR-032-pipeline-and-executor-cost-hardening/feature.md)
+
+---
+
+## FTR-033 — Work Breakdown Per-Phase Skeleton Generation
+**Keywords:** work-breakdown, per-phase, skeleton, phase-enumeration, timeout, output-size
+**Status:** completed
+**Summary:** Splits the monolithic WBS skeleton call into a phase-enumeration call plus one bounded call per phase, with incremental persistence and phase-level resume.
+→ [Detail](FTR-033-work-breakdown-per-phase-generation/feature.md)
+
+---
