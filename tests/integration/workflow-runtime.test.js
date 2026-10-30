@@ -117,6 +117,24 @@ test('document findings trigger host revision followed by a clean structured ver
   expect(result.docs_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 });
 
+test('prefixed findings without needsRequirementsFix/needsTechSpecFix are routed by their prefix, not rejected', async () => {
+  let validations = 0;
+  const dispatch = jest.fn(async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-validate-feature-docs')) {
+      // the validator's documented output omits both flags; the prefix names the document
+      if (++validations === 1) response.result.structured_output = { valid: false, findings: ['Requirements: missing acceptance criterion'], report: '# Result\n' };
+    }
+    return response;
+  });
+  const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(result.validation.summary).toContain('clean on cycle 2');
+  expect(dispatch.mock.calls.map(([o]) => o.args[o.args.indexOf('--agent') + 1])).toEqual([
+    'gaia-generate-requirements', 'gaia-generate-requirements-use-case', 'gaia-generate-tech-spec', 'gaia-generate-tech-spec-component', 'gaia-validate-feature-docs',
+    'gaia-generate-requirements', 'gaia-generate-requirements-use-case', 'gaia-validate-feature-docs',
+  ]);
+});
+
 test('docs_digest is deterministic over the same Requirements/Tech-Spec content and changes when they do', async () => {
   const first = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
   const again = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });

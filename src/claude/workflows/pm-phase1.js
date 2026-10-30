@@ -744,8 +744,14 @@ return c.run(meta.name, featureDir, prefix, async () => {
       // now-stale self-report. The only authoritative signal for the final verdict is whether any
       // finding remains, from any source, after every check this cycle has run.
       const mergedValid = mergedFindings.length === 0
-      const mergedNeedsTechSpecFix = result.needsTechSpecFix || newFindings.some(f => f.startsWith('Tech-Spec:'))
-      const mergedNeedsRequirementsFix = result.needsRequirementsFix || newFindings.some(f => f.startsWith('Requirements:'))
+      // Routing reads the prefix of EVERY finding, the validator's own included: the validator is
+      // required to prefix each finding with the document it concerns (gaia-validate-feature-docs,
+      // output contract), and its own example verdict omits needsRequirementsFix/needsTechSpecFix
+      // altogether. Reading the prefix only on host-computed findings made a verdict with prefixed
+      // findings and no flags fail with "flagged neither document" (seen on FTR-034). A finding
+      // with no prefix and no flag still fails closed below.
+      const mergedNeedsTechSpecFix = result.needsTechSpecFix || mergedFindings.some(f => f.startsWith('Tech-Spec:'))
+      const mergedNeedsRequirementsFix = result.needsRequirementsFix || mergedFindings.some(f => f.startsWith('Requirements:'))
 
       // c.worker() already wrote result.report verbatim via its own outputs[0] contract; only
       // overwrite it when this cycle actually added findings the LLM's own report text doesn't
