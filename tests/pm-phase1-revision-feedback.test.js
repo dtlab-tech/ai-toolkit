@@ -79,6 +79,15 @@ describe('pm-phase1.js wiring', () => {
     expect(setIdx).toBeLessThan(specIdx)
   })
 
+  test('routing reads the document prefix of every finding, not only the host-computed ones', () => {
+    expect(SOURCE).toContain("result.needsTechSpecFix || mergedFindings.some(f => f.startsWith('Tech-Spec:'))")
+    expect(SOURCE).toContain("result.needsRequirementsFix || mergedFindings.some(f => f.startsWith('Requirements:'))")
+  })
+
+  test('a finding with no prefix and no flag still fails closed', () => {
+    expect(SOURCE).toContain('flagged neither document for revision')
+  })
+
   test('the use-case file is written with the model-written Related block stripped first', () => {
     expect(SOURCE).toContain('stripModelCrossReferences(detail).trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id)')
   })
