@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.7](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.6...v0.24.7) (2026-10-30)
+
+
+### Bug Fixes
+
+* **pm-phase1:** route validator findings to a document by their prefix when the flags are omitted ([7bd9a38](https://github.com/dtlab-tech/ai-toolkit/commit/7bd9a38de571c07d233a5212dfba9213a1b7d562))
+* **pm-phase1:** route validator findings to a document by their prefix when the flags are omitted ([f957d72](https://github.com/dtlab-tech/ai-toolkit/commit/f957d726294d2b563e67ba1c3f4e59f9c8d57be4))
+* **pm-phase1:** route validator findings to a document by their prefix when the flags are omitted ([e33faef](https://github.com/dtlab-tech/ai-toolkit/commit/e33faefc4488f256e42ec459cefa547f7b5efbf2))
+
 ## [0.24.6](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.5...v0.24.6) (2026-10-29)
 
 
