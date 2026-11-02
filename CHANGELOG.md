@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.8](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.7...v0.24.8) (2026-11-02)
+
+
+### Bug Fixes
+
+* **pm-phase1:** hand gaps still open after three validation cycles to Gate 1 instead of failing the run ([a57e05a](https://github.com/dtlab-tech/ai-toolkit/commit/a57e05abf61ea3c42a36a92cd190cc3d3a57a39c))
+* **pm-phase1:** hand gaps still open after three validation cycles to Gate 1 instead of failing the run ([d759efa](https://github.com/dtlab-tech/ai-toolkit/commit/d759efa9e13d464740698d3b8e01f131e91c848a))
+* **pm-phase1:** hand gaps still open after three validation cycles to Gate 1 instead of failing the run ([976aa27](https://github.com/dtlab-tech/ai-toolkit/commit/976aa2724b8e1e2e91293d88bc0581a5fef01f01))
+
 ## [0.24.7](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.6...v0.24.7) (2026-10-30)
 
 
