@@ -677,6 +677,8 @@ return c.run(meta.name, featureDir, prefix, async () => {
   let assembledRequirements = assembleRequirements()
   let assembledTechSpec = assembleTechSpec()
   let validationSummary = 'skipped (fresh)'
+  // Gaps still open after the last revision cycle, handed to Gate 1 for a human decision.
+  let openGaps = []
   if (force || changed || !fresh(file('Validation-Report'), [featurePath, reqIndexPath, specIndexPath])) {
     for (let cycle = 1; cycle <= 3; cycle++) {
       // needsRequirementsFix/needsTechSpecFix: explicit structured routing fields,
@@ -766,7 +768,17 @@ return c.run(meta.name, featureDir, prefix, async () => {
         validationSummary = `0 gaps (clean on cycle ${cycle})`
         break
       }
-      if (cycle === 3) throw new Error('Validation gaps remain after 3 cycles')
+      if (cycle === 3) {
+        // The deterministic AC<->component traceability gaps stay a hard failure: they are
+        // mechanical and the Work Breakdown relies on that mapping. What the validator judges
+        // (open design points, drill-down findings) is for a person to accept or reject, and Gate
+        // 1 is that review: regenerating again cannot decide a point feature.md leaves undecided
+        // (on FTR-034 three full runs of three cycles each never converged for that reason).
+        if (structuralFindings.length) throw new Error('Validation gaps remain after 3 cycles')
+        openGaps = mergedFindings
+        validationSummary = `${openGaps.length} open gap(s) after 3 cycles, left for Gate 1 review (see the Validation Report)`
+        break
+      }
       if (!mergedNeedsRequirementsFix && !mergedNeedsTechSpecFix) throw new Error(`Validation agent reported gaps on cycle ${cycle} but flagged neither document for revision`)
       revisionFindings = mergedFindings
       if (mergedNeedsRequirementsFix) { await generateRequirements(true); assembledRequirements = assembleRequirements() }
@@ -784,7 +796,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     prefix, feature_dir: featureDir, feature_path: featurePath,
     requirements: { path: reqIndexPath, summary: 'Requirements ready (split; req/index.md + req/use-cases/*.md)' },
     tech_spec: { path: specIndexPath, summary: 'Tech-Spec ready (split; spec/index.md + spec/components/*.md)' },
-    validation: { path: file('Validation-Report'), summary: validationSummary },
+    validation: { path: file('Validation-Report'), summary: validationSummary, open_gaps: openGaps },
     docs_digest: docsDigest,
     token_ledger: c.tokenLedger, errors: [],
   }

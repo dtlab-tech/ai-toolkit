@@ -135,6 +135,23 @@ test('prefixed findings without needsRequirementsFix/needsTechSpecFix are routed
   ]);
 });
 
+test('findings still open after the third cycle are returned for Gate 1, not thrown', async () => {
+  const dispatch = jest.fn(async options => {
+    const response = await phase1Dispatch(options);
+    if (options.args.includes('gaia-validate-feature-docs')) {
+      response.result.structured_output = { valid: false, findings: ['Requirements: open design point nobody decided'], needsRequirementsFix: true, needsTechSpecFix: false, report: '# Result\n' };
+    }
+    return response;
+  });
+  const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(result.validation.open_gaps).toEqual(['Requirements: open design point nobody decided']);
+  expect(result.validation.summary).toContain('1 open gap(s) after 3 cycles');
+  const validations = dispatch.mock.calls.filter(([o]) => o.args.includes('gaia-validate-feature-docs'));
+  expect(validations).toHaveLength(3);
+  expect(result.docs_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(f.entries().every(e => e.status === 'done')).toBe(true);
+});
+
 test('docs_digest is deterministic over the same Requirements/Tech-Spec content and changes when they do', async () => {
   const first = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
   const again = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
@@ -1376,14 +1393,16 @@ test('a missing Claude executable fails the real subprocess adapter and the owne
   await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, claudePath: path.join(f.root, 'missing-claude.exe') })).rejects.toThrow('executable not found');
   expect(f.entries()[0].status).toBe('failed');
 });
-test('repeated negative document validation never reports Gate 1 ready', async () => {
+test('repeated negative document validation is never reported as clean: its gaps are handed to Gate 1', async () => {
   const dispatch = async options => {
     const response = await phase1Dispatch(options);
     if (options.args.includes('gaia-validate-feature-docs')) response.result.structured_output = { valid: false, findings: ['Requirements incomplete'], needsRequirementsFix: true, needsTechSpecFix: false, report: '# Result\n' };
     return response;
   };
-  await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch })).rejects.toThrow('gaps remain');
-  expect(f.entries()[0].status).toBe('failed');
+  const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+  expect(result.validation.summary).not.toContain('clean');
+  expect(result.validation.summary).toContain('open gap');
+  expect(result.validation.open_gaps).toEqual(['Requirements incomplete']);
 });
 
 // FTR-023: Tech-Spec File Inventory "Addresses" column must cite only real Requirements AC IDs.
@@ -1587,7 +1606,10 @@ describe('FTR-028 — component-detail drill-down (UC-03)', () => {
       return phase1Dispatch(options);
     };
     const dispatchFn = jest.fn(dispatch);
-    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn })).rejects.toThrow('gaps remain after 3 cycles');
+    // a judgement gap, not a deterministic one: left for Gate 1 after the third cycle
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    expect(result.validation.summary).toContain('open gap');
+    expect(result.validation.open_gaps.join('\n')).toContain('component-detail check referenced a non-existent file "DoesNotExist.cs.md"');
     expect(findDrillDownCalls(dispatchFn)).toHaveLength(0);
     const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
     expect(report).toContain('component-detail check referenced a non-existent file "DoesNotExist.cs.md"');
@@ -1601,7 +1623,9 @@ describe('FTR-028 — component-detail drill-down (UC-03)', () => {
       return phase1Dispatch(options);
     };
     const dispatchFn = jest.fn(dispatch);
-    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn })).rejects.toThrow('gaps remain after 3 cycles');
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    expect(result.validation.open_gaps.join('\n')).toContain('does not document a 401 response');
+    expect(result.docs_digest).toMatch(/^sha256:[a-f0-9]{64}$/); // Gate 1 can still bind to the exact documents
     const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
     expect(report).toContain('does not document a 401 response');
   });
