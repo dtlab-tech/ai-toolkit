@@ -71,6 +71,9 @@ Extract from the result:
 - `tech_spec.path` / `tech_spec.summary` — Tech-Spec artifact path (the split `spec/index.md` by
   default) and its summary
 - `validation.summary` — validation result (gaps or clean)
+- `validation.open_gaps` — array of the validator's findings still open after the last revision
+  cycle; empty when validation was clean. Non-empty means the workflow stopped revising and left
+  these for the Gate 1 reviewer to accept, reject or send back
 - `docs_digest` — content digest binding this approval to the exact Requirements/Tech-Spec
   bytes just produced; embed verbatim into `{PREFIX}-Approvals.md` in Step 2 below
 - `token_ledger` — array of per-agent token data from phase 1
@@ -91,6 +94,11 @@ Documents generated for {PREFIX}:
   {requirements.path} — {requirements.summary}
   {tech_spec.path}    — {tech_spec.summary}
   {PREFIX}-Validation-Report.md — {validation.summary}
+
+If `validation.open_gaps` is non-empty, also list every entry verbatim under a heading
+"Open validation gaps — your decision at this gate", then continue. These are design points the
+validator could not close in three cycles. "Approve with notes" records the ones you accept in
+`{PREFIX}-Approvals.md`; "Request changes" sends them back.
 
 To view a single combined document instead of the split source files, run:
   /assemble-docs {PREFIX} [req|spec|all]

@@ -88,6 +88,18 @@ describe('pm-phase1.js wiring', () => {
     expect(SOURCE).toContain('flagged neither document for revision')
   })
 
+  test('after the third cycle only deterministic traceability gaps are a hard failure; the rest goes to Gate 1', () => {
+    expect(SOURCE).toContain("if (structuralFindings.length) throw new Error('Validation gaps remain after 3 cycles')")
+    expect(SOURCE).toContain('openGaps = mergedFindings')
+    expect(SOURCE).toContain('validation: { path: file(\'Validation-Report\'), summary: validationSummary, open_gaps: openGaps }')
+  })
+
+  test('the implement-feature skill presents the open gaps at Gate 1', () => {
+    const skill = fs.readFileSync(path.join(__dirname, '../src/claude/skills/implement-feature/SKILL.md'), 'utf8')
+    expect(skill).toContain('`validation.open_gaps`')
+    expect(skill).toContain('Open validation gaps')
+  })
+
   test('the use-case file is written with the model-written Related block stripped first', () => {
     expect(SOURCE).toContain('stripModelCrossReferences(detail).trimEnd() + ucCrossReferences(c.read(reqIndexPath), row.id)')
   })
