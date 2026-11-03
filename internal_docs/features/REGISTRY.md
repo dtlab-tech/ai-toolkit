@@ -264,3 +264,44 @@ Each entry summarises a feature for cross-reference by future features.
 → [Detail](FTR-033-work-breakdown-per-phase-generation/feature.md)
 
 ---
+
+---
+
+## FTR-034 — Feature Split for Oversized Features (Epics)
+**Keywords:** feature-split, epic, size-check, define-feature, pm-phase1, registry, configuration
+**Status:** epic
+**Summary:** Splits oversized features into child features, proposed at definition time and after Tech-Spec, with the user deciding. Split by hand into FTR-035, FTR-036 and FTR-037.
+→ [Detail](FTR-034-feature-split-epics/feature.md)
+
+---
+
+## FTR-035 — Feature Split Foundation
+**Keywords:** feature-split, configuration, new-feature-test, proposal, atomic-apply, registry, epic.md
+**Parent:** FTR-034
+**Depends on:** none
+**Status:** defined
+**Summary:** Configuration file and loader, the single new-feature test, the proposal model with its edit rules, atomic creation of an epic and its children, and the registry entries that link them.
+→ [Detail](FTR-035-feature-split-foundation/feature.md)
+
+---
+
+## FTR-036 — Feature Split Checkpoint 1: Definition
+**Keywords:** feature-split, define-feature, grilling, signals, checkpoint-1, standalone-registration
+**Parent:** FTR-034
+**Depends on:** FTR-035
+**Status:** defined
+**Summary:** Size assessment in define-feature right after grilling: proposes a split before anything is written, and registers a standalone feature when it is not split.
+→ [Detail](FTR-036-feature-split-definition-checkpoint/feature.md)
+
+---
+
+## FTR-037 — Feature Split Checkpoint 2: Measured
+**Keywords:** feature-split, pm-phase1, implement-feature, thresholds, checkpoint-2, measurement
+**Parent:** FTR-034
+**Depends on:** FTR-035
+**Status:** defined
+**Summary:** Measures use cases, acceptance criteria, components and estimated phases after Tech-Spec and proposes a split before Gate 1 when a threshold is exceeded.
+→ [Detail](FTR-037-feature-split-measured-checkpoint/feature.md)
+
+---
+
