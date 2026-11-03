@@ -89,7 +89,7 @@ describe('pm-phase1.js wiring', () => {
   })
 
   test('after the third cycle only deterministic traceability gaps are a hard failure; the rest goes to Gate 1', () => {
-    expect(SOURCE).toContain("if (structuralFindings.length) throw new Error('Validation gaps remain after 3 cycles')")
+    expect(SOURCE).toContain("c.read(specIndexPath)).length) throw new Error('Validation gaps remain after 3 cycles')")
     expect(SOURCE).toContain('openGaps = mergedFindings')
     expect(SOURCE).toContain('validation: { path: file(\'Validation-Report\'), summary: validationSummary, open_gaps: openGaps }')
   })
@@ -98,6 +98,21 @@ describe('pm-phase1.js wiring', () => {
     const skill = fs.readFileSync(path.join(__dirname, '../src/claude/skills/implement-feature/SKILL.md'), 'utf8')
     expect(skill).toContain('`validation.open_gaps`')
     expect(skill).toContain('Open validation gaps')
+  })
+
+  test('both skeletons go through writeSkeleton, which checks every section before the file is touched', () => {
+    expect(SOURCE).toContain("await writeSkeleton('Requirements', reqId,")
+    expect(SOURCE).toContain("await writeSkeleton('Tech-Spec', specId,")
+    expect(SOURCE).not.toMatch(/c\.writeOutput\(reqIndexPath, skeleton\)/)
+    expect(SOURCE).not.toMatch(/c\.writeOutput\(specIndexPath, applyComponentSlugs\(skeleton, manifest\)\)/)
+    expect(SOURCE).toContain('the existing file was left untouched')
+  })
+
+  test('the last cycle repairs a traceability gap once before treating it as a hard failure', () => {
+    const repair = SOURCE.indexOf('await generateTechSpec(true)\n          assembledTechSpec = assembleTechSpec()')
+    const recheck = SOURCE.indexOf('computeAcComponentTraceabilityGaps(c.read(reqIndexPath), c.read(specIndexPath)).length) throw new Error')
+    expect(repair).toBeGreaterThan(-1)
+    expect(recheck).toBeGreaterThan(repair)
   })
 
   test('the use-case file is written with the model-written Related block stripped first', () => {
