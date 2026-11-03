@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.24.9](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.8...v0.24.9) (2026-11-03)
+
+
+### Bug Fixes
+
+* **pm-phase1:** never overwrite a good skeleton with a non-document reply, and repair last-cycle AC traceability once ([8f2f32f](https://github.com/dtlab-tech/ai-toolkit/commit/8f2f32f1852ade4551da62cbac8bc07d8f0c2961))
+* **pm-phase1:** never overwrite a good skeleton with a non-document reply, and repair last-cycle AC traceability once ([3038efe](https://github.com/dtlab-tech/ai-toolkit/commit/3038efed641464b93da50377cd834cc1d4a85e48))
+* **pm-phase1:** never overwrite a good skeleton with a non-document reply, and repair last-cycle AC traceability once ([784f814](https://github.com/dtlab-tech/ai-toolkit/commit/784f8141fb4afdefe2b2592f9d8b57a4f41207c2))
+
 ## [0.24.8](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.7...v0.24.8) (2026-11-02)
 
 
