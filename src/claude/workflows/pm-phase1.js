@@ -39,6 +39,32 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // per-UC and per-component generation loops' own fail-fast validity check.
   const USE_CASE_RETRY_ATTEMPTS = 2
   const COMPONENT_RETRY_ATTEMPTS = 2
+  const SKELETON_RETRY_ATTEMPTS = 2
+
+  // A skeleton worker occasionally answers with a question or an apology instead of the document
+  // ("I have not generated the skeleton yet ... I'm asking here"). The skeleton was written
+  // straight onto req/index.md or spec/index.md and only checked afterwards, so one such reply
+  // destroyed the good document that was there (FTR-034, revision cycle 2). The reply is now
+  // checked for every numbered section BEFORE the target file is touched; on a bad reply the
+  // worker is asked once more, and if that fails too the run stops with the existing file intact.
+  async function writeSkeleton(label, workerId, basePrompt, sectionCount, outPath, transform) {
+    let raw
+    for (let attempt = 1; attempt <= SKELETON_RETRY_ATTEMPTS; attempt++) {
+      const prompt = attempt === 1 ? basePrompt : basePrompt +
+        '\n\nYour previous reply was not the document. This is a non-interactive run: nobody can answer a question. ' +
+        'Reply with ONLY the complete document, every numbered section included, and with no preamble. Where feature.md ' +
+        'leaves a point undecided, record it inside the document as an open question instead of asking.'
+      raw = await c.worker(workerId, prompt, attempt === 1 ? undefined : { label: `${label}:skeleton:retry:${attempt}` })
+      if (missingSections(raw, sectionCount).length === 0) {
+        c.writeOutput(outPath, transform ? transform(raw) : raw)
+        return
+      }
+    }
+    // same message the post-write completeness check has always produced (truncation guard)
+    try { assertCompleteSections(label, raw, sectionCount) } catch (e) {
+      throw new Error(`${e.message}; after ${SKELETON_RETRY_ATTEMPTS} attempts the existing file was left untouched`)
+    }
+  }
 
   // Templates live under the toolkit's own installed scripts/templates/ — outside this project
   // for a globally-installed toolkit, which a non-interactive `--print` worker invocation has no
@@ -215,8 +241,9 @@ return c.run(meta.name, featureDir, prefix, async () => {
     // 1. Skeleton (no declared worker() output — host writes it itself, mirroring FTR-020's
     // skeleton step)
     if (regenSkeleton) {
-      const skeleton = await c.worker(reqId, withTemplate(featurePath, 'req/index.md', 'gaia-requirements-index-template.md') + revisionSection(revisionFindings))
-      c.writeOutput(reqIndexPath, skeleton)
+      await writeSkeleton('Requirements', reqId,
+        withTemplate(featurePath, 'req/index.md', 'gaia-requirements-index-template.md') + revisionSection(revisionFindings),
+        9, reqIndexPath)
     }
 
     // 2. Structural self-consistency pre-check (req-skeleton-check.js, same
@@ -565,8 +592,9 @@ return c.run(meta.name, featureDir, prefix, async () => {
 
     // 1. Skeleton (no declared worker() output — host writes it itself)
     if (regenSkeleton) {
-      const skeleton = await c.worker(specId, withTemplate(featurePath, 'spec/index.md', 'gaia-tech-spec-index-template.md') + revisionSection(revisionFindings))
-      c.writeOutput(specIndexPath, applyComponentSlugs(skeleton, manifest))
+      await writeSkeleton('Tech-Spec', specId,
+        withTemplate(featurePath, 'spec/index.md', 'gaia-tech-spec-index-template.md') + revisionSection(revisionFindings),
+        12, specIndexPath, skeleton => applyComponentSlugs(skeleton, manifest))
     }
 
     // 2. Structural pre-check (tech-spec-graph-checks.js, unmodified — FTR-023 — now pointed at
@@ -769,14 +797,29 @@ return c.run(meta.name, featureDir, prefix, async () => {
         break
       }
       if (cycle === 3) {
-        // The deterministic AC<->component traceability gaps stay a hard failure: they are
-        // mechanical and the Work Breakdown relies on that mapping. What the validator judges
+        // The deterministic AC<->component traceability gaps stay a hard failure if the repair
+        // below cannot close them: they are mechanical and the Work Breakdown relies on that
+        // mapping. What the validator judges
         // (open design points, drill-down findings) is for a person to accept or reject, and Gate
         // 1 is that review: regenerating again cannot decide a point feature.md leaves undecided
         // (on FTR-034 three full runs of three cycles each never converged for that reason).
-        if (structuralFindings.length) throw new Error('Validation gaps remain after 3 cycles')
-        openGaps = mergedFindings
-        validationSummary = `${openGaps.length} open gap(s) after 3 cycles, left for Gate 1 review (see the Validation Report)`
+        //
+        // A traceability gap found on the LAST cycle used to be unrecoverable: a Requirements
+        // revision on cycle 2 can add acceptance criteria the Tech-Spec does not yet address, and
+        // that gap is only routed to a Tech-Spec revision on the cycle after. Give it one repair:
+        // regenerate the Tech-Spec once with the gaps as feedback, then re-check mechanically.
+        let repaired = false
+        if (structuralFindings.length) {
+          revisionFindings = structuralFindings
+          await generateTechSpec(true)
+          assembledTechSpec = assembleTechSpec()
+          if (computeAcComponentTraceabilityGaps(c.read(reqIndexPath), c.read(specIndexPath)).length) throw new Error('Validation gaps remain after 3 cycles')
+          repaired = true
+          c.append(file('Validation-Report'), '\n\n## Post-validation repair\nThe AC traceability findings listed above were repaired after the last validation cycle by regenerating the Tech-Spec once. The repaired Tech-Spec was checked mechanically (every AC is addressed) but was not re-validated by the validator.\n')
+        }
+        openGaps = mergedFindings.filter(f => !structuralFindings.includes(f))
+        validationSummary = `${openGaps.length} open gap(s) after 3 cycles, left for Gate 1 review (see the Validation Report)` +
+          (repaired ? '; the Tech-Spec was regenerated once to repair AC traceability and not re-validated' : '')
         break
       }
       if (!mergedNeedsRequirementsFix && !mergedNeedsTechSpecFix) throw new Error(`Validation agent reported gaps on cycle ${cycle} but flagged neither document for revision`)

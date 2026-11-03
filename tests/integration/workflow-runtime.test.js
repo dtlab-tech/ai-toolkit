@@ -152,6 +152,47 @@ test('findings still open after the third cycle are returned for Gate 1, not thr
   expect(f.entries().every(e => e.status === 'done')).toBe(true);
 });
 
+describe('a skeleton reply that is not the document never overwrites the good file', () => {
+  const CHAT_REPLY = 'I have not generated the skeleton yet. I read feature.md in full, but I have questions first. Nothing has been written.';
+  // validation cycle 1 asks for a Requirements revision; cycle 2 is clean
+  function reviseRequirementsOnce(requirementsSkeletonReplies) {
+    let validations = 0, requirementsCalls = 0;
+    return jest.fn(async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements') {
+        const reply = requirementsSkeletonReplies[requirementsCalls++];
+        return success(reply === undefined ? requirementsSkeletonDoc('revised') : reply);
+      }
+      const response = await phase1Dispatch(options);
+      if (name === 'gaia-validate-feature-docs' && ++validations === 1) {
+        response.result.structured_output = { valid: false, findings: ['Requirements: a gap'], needsRequirementsFix: true, needsTechSpecFix: false, report: '# Result\n' };
+      }
+      return response;
+    });
+  }
+
+  test('a chat reply is retried and never written to req/index.md', async () => {
+    // call 1: initial skeleton; call 2: the revision, answered with a question; call 3: its retry
+    const dispatch = reviseRequirementsOnce([requirementsSkeletonDoc(), CHAT_REPLY, requirementsSkeletonDoc('retried')]);
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch });
+    const index = fs.readFileSync(path.join(f.dir, 'req', 'index.md'), 'utf8');
+    expect(index).not.toContain('I have not generated the skeleton');
+    expect(index).toContain('retried');
+    expect(result.validation.summary).toContain('clean on cycle 2');
+    const skeletonCalls = dispatch.mock.calls.filter(([o]) => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-requirements');
+    expect(skeletonCalls).toHaveLength(3); // initial, the revision that got the chat reply, and its retry
+  });
+
+  test('two bad replies stop the run with the existing req/index.md intact', async () => {
+    const dispatch = reviseRequirementsOnce([requirementsSkeletonDoc('original'), CHAT_REPLY, CHAT_REPLY]);
+    await expect(runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch })).rejects.toThrow('the existing file was left untouched');
+    const index = fs.readFileSync(path.join(f.dir, 'req', 'index.md'), 'utf8');
+    expect(index).toContain('original');
+    expect(index).not.toContain('I have not generated the skeleton');
+    expect(f.entries()[0].status).toBe('failed');
+  });
+});
+
 test('docs_digest is deterministic over the same Requirements/Tech-Spec content and changes when they do', async () => {
   const first = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
   const again = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: phase1Dispatch });
@@ -1509,6 +1550,31 @@ describe('FTR-028 — deterministic AC<->component traceability (UC-02)', () => 
     response.result.structured_output = { valid: true, findings: [], needsRequirementsFix: false, needsTechSpecFix: false, report: '# Result\n' };
     return response;
   }
+
+  test('a traceability gap still open on the last cycle gets one Tech-Spec repair and is then re-checked mechanically', async () => {
+    let techSpecSkeletons = 0;
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-requirements') return success(requirementsTwoAcDoc());
+      if (name === 'gaia-validate-feature-docs') return cleanValidateResponse();
+      // initial generation, then the revision of cycle 1 and of cycle 2: AC-02 stays unaddressed;
+      // the fourth Tech-Spec skeleton is the post-cycle-3 repair, and it addresses both ACs
+      if (name === 'gaia-generate-tech-spec') {
+        return success(++techSpecSkeletons >= 4 ? techSpecSkeletonDoc().replace('| AC-01 | BE |', '| AC-01, AC-02 | BE |') : techSpecSkeletonDoc());
+      }
+      return phase1Dispatch(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    const result = await runWorkflow('pm-phase1', [f.feature], { ...f.options, dispatch: dispatchFn });
+    expect(techSpecSkeletons).toBe(4);
+    expect(result.validation.open_gaps).toEqual([]);
+    expect(result.validation.summary).toContain('regenerated once to repair AC traceability and not re-validated');
+    expect(result.docs_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    const report = fs.readFileSync(path.join(f.dir, 'FTR-099-Validation-Report.md'), 'utf8');
+    expect(report).toContain('Post-validation repair');
+    const validateCalls = dispatchFn.mock.calls.filter(([o]) => o.args[o.args.indexOf('--agent') + 1] === 'gaia-validate-feature-docs');
+    expect(validateCalls.length).toBe(3); // the repair is not another validation cycle
+  });
 
   test('an AC addressed by zero components produces a finding and forces needsTechSpecFix despite a clean LLM pass', async () => {
     const dispatch = async options => {
