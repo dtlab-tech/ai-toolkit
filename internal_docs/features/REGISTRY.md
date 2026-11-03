@@ -271,7 +271,7 @@ Each entry summarises a feature for cross-reference by future features.
 **Keywords:** feature-split, epic, size-check, define-feature, pm-phase1, registry, configuration
 **Status:** epic
 **Summary:** Splits oversized features into child features, proposed at definition time and after Tech-Spec, with the user deciding. Split by hand into FTR-035, FTR-036 and FTR-037.
-→ [Detail](FTR-034-feature-split-epics/feature.md)
+→ [Detail](FTR-034-feature-split-epics/epic.md)
 
 ---
 
