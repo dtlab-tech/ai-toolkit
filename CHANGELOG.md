@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.25.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.9...v0.25.0) (2026-11-04)
+
+
+### Features
+
+* **agents:** run developer agents on Haiku and the solution review on Sonnet ([8ac8262](https://github.com/dtlab-tech/ai-toolkit/commit/8ac82622b1f9ae69ad694a066944cfb594c4fadd))
+* **agents:** run developer agents on Haiku and the solution review on Sonnet ([a2a57ff](https://github.com/dtlab-tech/ai-toolkit/commit/a2a57ffafbb0e68778acd535f69a51541ed8ac6e))
+* **agents:** run developer agents on Haiku and the solution review on Sonnet ([fd9504d](https://github.com/dtlab-tech/ai-toolkit/commit/fd9504d5ae40860d89dc60ab55e6abff6e0c3404))
+
 ## [0.24.9](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.8...v0.24.9) (2026-11-03)
 
 
