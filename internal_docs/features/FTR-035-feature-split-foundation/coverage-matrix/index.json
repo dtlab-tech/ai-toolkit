@@ -1,0 +1,965 @@
+{
+  "prefix": "FTR-035",
+  "generatedAt": "2026-11-03T23:48:45.755Z",
+  "acceptanceCriteria": [
+    {
+      "id": "AC-01",
+      "criterion": "Given no project override exists and the toolkit default is readable, when `loadConfig(projectRoot)` is called, then it returns the D-02 shape with the default values and no error.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.config.json",
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-02",
+      "criterion": "Given a project override containing a subset of the D-02 keys, when it is loaded, then each omitted key keeps its toolkit default value.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.config.json",
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-03",
+      "criterion": "Given the project root has no `feature-split.config.json`, when the configuration is loaded, then no error is raised and the defaults are returned.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-04",
+      "criterion": "Given the override contains a non-integer value, a negative value, or a key outside the D-02 shape, when it is loaded, then a `FeatureSplitError` is thrown whose `key` names the offending key and whose `file` names the override, and the caller stops.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-05",
+      "criterion": "Given the override is malformed JSON or cannot be read, when it is loaded, then a `FeatureSplitError` is thrown with `file` set to the override path and `key` null, and no default-only result is returned.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-06",
+      "criterion": "Given the toolkit default is missing or unreadable, when the configuration is loaded, then an explicit `FeatureSplitError` is thrown and the caller stops.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-07",
+      "criterion": "Given a project root argument, when `loadConfig` runs, then the override is read only from `<projectRoot>/feature-split.config.json`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-02",
+        "US-01-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-08",
+      "criterion": "Given a count and a threshold, when `isOverThreshold(count, threshold)` is called, then it is true only if the count is strictly greater; given a count and a minimum, when `meetsMinimum(count, minimum)` is called, then it is true if the count is equal to or greater than the minimum.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-BE-03",
+        "US-01-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-09",
+      "criterion": "Given `ai-toolkit --local <empty dir>` is run, when the install completes, then `.claude/scripts/feature-split.config.json` exists, and the file exists in the `scripts` source directory that the installer copies.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-01"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.config.json",
+        "tests/scripts/feature-split-install.test.js"
+      ],
+      "taskIds": [
+        "US-01-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-01"
+      ]
+    },
+    {
+      "id": "AC-10",
+      "criterion": "Given a feature folder containing `{PREFIX}-Approvals.md`, a `wbs/` directory or `epic.md`, when `isNewFeature(featureDir)` runs, then it returns `{ isNew: false, reason }`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-11",
+      "criterion": "Given a feature folder containing only generated `req/` and `spec/` (including after regeneration with `--force`), when `isNewFeature` runs, then it returns `isNew: true`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-12",
+      "criterion": "Given a feature folder path that does not exist, when `isNewFeature` runs, then it returns `isNew: true`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-13",
+      "criterion": "Given an existing feature folder that cannot be read, when `isNewFeature` runs, then it throws a `FeatureSplitError` and never returns `isNew: true`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-02"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-02"
+      ]
+    },
+    {
+      "id": "AC-14",
+      "criterion": "Given children supplied to `buildProposal`, when the proposal is built, then it has exactly the D-08 shape, `source` is `definition` or `measured`, and `minChildren` equals the configured value.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-04",
+        "US-03-TASK-BE-05",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-15",
+      "criterion": "Given a child name that is empty, yields no valid folder slug, or shares a slug with another child, when the proposal is built or edited, then the child is rejected with a message naming the child.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-04",
+        "US-03-TASK-BE-06",
+        "US-03-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-16",
+      "criterion": "Given a proposal with exactly `minChildren` children, when a user edit would leave fewer, then `editProposal` refuses it and returns the proposal unchanged.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-04",
+        "US-03-TASK-BE-06",
+        "US-03-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-17",
+      "criterion": "Given the user moves `sharedFoundationOwner` away from the first child in dependency order, when `editProposal` runs, then the edit is applied and a warning is returned stating that BR-03 is broken and its consequence; the edit is not refused.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-03",
+        "US-03-TASK-BE-06",
+        "US-03-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-18",
+      "criterion": "Given children whose `dependsOn` lists leave them unordered relative to each other, when the dependency order is computed, then they keep their relative proposal order.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-02",
+        "US-03-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-19",
+      "criterion": "Given a built or edited child, when shown in the proposal, then its Summary equals its one-line purpose and its Keywords are the caller-supplied values, and both can be edited.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-05",
+        "US-03-TASK-BE-06",
+        "US-03-TASK-TEST-01",
+        "US-03-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-20",
+      "criterion": "Given a proposal the user has not confirmed, when a caller builds or edits it, then no file, folder or registry entry is written.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-03"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-03-TASK-BE-05",
+        "US-03-TASK-BE-06",
+        "US-03-TASK-TEST-01",
+        "US-03-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-03"
+      ]
+    },
+    {
+      "id": "AC-21",
+      "criterion": "Given a confirmed proposal and a parent folder with no `epic.md`, when apply completes, then `epic.md`, one folder and `feature.md` per child, and the registry entries all exist.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-11",
+        "US-04-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-22",
+      "criterion": "Given any error occurs during apply, when apply stops, then no staging directory, child folder, `epic.md` or registry change remains, and the error is reported.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-10",
+        "US-04-TASK-TEST-04"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-23",
+      "criterion": "Given a rollback that itself fails, when apply ends, then the run ends in error and reports the exact remaining paths.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-10",
+        "US-04-TASK-TEST-04"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-24",
+      "criterion": "Given a child ID whose folder or `feature.md` already exists, when apply runs, then it refuses with an error and the existing files are unchanged.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-07",
+        "US-04-TASK-BE-08",
+        "US-04-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-25",
+      "criterion": "Given children are assigned IDs, when apply runs, then each ID is the next free FTR-NNN from the union of registry entries and feature folders, is distinct from the other children and from the parent ID, and has no suffixed form.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-02",
+        "US-04-TASK-BE-07",
+        "US-04-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-26",
+      "criterion": "Given the shared foundation is not on the first child in dependency order, when apply runs, then apply proceeds and the shared-foundation row of `epic.md` records the BR-03 warning.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-04",
+        "US-04-TASK-BE-07",
+        "US-04-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-27",
+      "criterion": "Given apply completes, when `epic.md` is read, then its split table lists each child exactly once with order, dependencies, shared foundation and checkpoint (`definition`, `measured` or `late`), followed by the verbatim original feature text; no `epic.json` exists.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-04",
+        "US-04-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-28",
+      "criterion": "Given apply completes, when a child's `feature.md` is read, then it contains the title, a summary taken from its purpose line, the parent epic ID, its dependency position and sibling dependencies, and its assigned parts; shared-foundation content appears only in the first child's file.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-03",
+        "US-04-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-29",
+      "criterion": "Given apply completes, when a child's registry entry is read, then it has `Parent:` set to the epic ID, `Depends on:` set to sibling IDs (or `none` for the first child), Keywords, Status `defined`, a Summary, and a Detail link to its `feature.md`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-09",
+        "US-04-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-30",
+      "criterion": "Given apply completes, when the parent's registry entry is read, then it has been changed in place (not duplicated) to status `epic`, its Summary is the first sentence of the original Summary, its Keywords are the union of the children's Keywords, and its Detail links to `epic.md`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-09",
+        "US-04-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-31",
+      "criterion": "Given apply has written the files, when the registry is written, then it is written last by temp-and-rename, and no child is registered before `epic.md` exists.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-10",
+        "US-04-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-32",
+      "criterion": "Given the registry cannot be read or written during apply, when apply stops, then all content moved into place by the run is removed, nothing is registered, and the error is reported.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-10",
+        "US-04-TASK-TEST-04"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-33",
+      "criterion": "Given the parent folder has no registry entry, when apply runs, then it refuses before anything is staged and writes nothing.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-06",
+        "US-04-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-34",
+      "criterion": "Given the parent folder holds `epic.md` and apply is called with `--parent` for one new child, when apply completes, then the child is placed last, depends on the previous last child unless the user states another position, is recorded in `epic.md` once with checkpoint `late`, and the minimum child count is not applied.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-05",
+        "US-04-TASK-BE-08",
+        "US-04-TASK-TEST-05"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-35",
+      "criterion": "Given a late child has been applied, when the registry and folders are read, then the epic entry's Keywords include the late child's Keywords and the existing children's entries and `feature.md` files are unchanged.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-09",
+        "US-04-TASK-TEST-05"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-36",
+      "criterion": "Given apply succeeds, when `feature-split.js apply` finishes, then stdout is exactly one JSON object `{ epic, children: [{ id, dir }], registry: true }` and the exit code is 0; on a `FeatureSplitError` or operational error, the exit code is 1.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-11",
+        "US-04-TASK-BE-12",
+        "US-04-TASK-TEST-06"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-37",
+      "criterion": "Given a feature that is not split, when `register` runs with its folder and Keywords, then exactly one registry entry is created with Status `defined`, Summary equal to the first sentence of its Summary section, the supplied Keywords, and a Detail link to its `feature.md`; output is `{ id, status: \"defined\" }`.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-05"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-05-TASK-BE-01",
+        "US-05-TASK-BE-02",
+        "US-05-TASK-BE-03",
+        "US-05-TASK-TEST-01",
+        "US-05-TASK-TEST-04"
+      ],
+      "phaseIds": [
+        "US-05"
+      ]
+    },
+    {
+      "id": "AC-38",
+      "criterion": "Given a registry entry already exists for the ID, when `register` runs again, then no duplicate entry is created.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-05"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-05-TASK-BE-02",
+        "US-05-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-05"
+      ]
+    },
+    {
+      "id": "AC-39",
+      "criterion": "Given an existing registry entry for the ID whose status is neither `defined`, `completed` nor `epic`, when `register` or apply targets that ID, then the entry is left untouched, is not treated as an epic, and no duplicate is created.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04",
+        "UC-05"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-06",
+        "US-04-TASK-BE-09",
+        "US-04-TASK-TEST-02",
+        "US-04-TASK-TEST-03",
+        "US-05-TASK-BE-02",
+        "US-05-TASK-TEST-02"
+      ],
+      "phaseIds": [
+        "US-04",
+        "US-05"
+      ]
+    },
+    {
+      "id": "AC-40",
+      "criterion": "Given the registry cannot be written during `register`, when the write fails, then the previous registry file is intact, nothing is registered, and the error is reported.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-05"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-05-TASK-BE-02",
+        "US-05-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-05"
+      ]
+    },
+    {
+      "id": "AC-41",
+      "criterion": "Given a `feature.md` already exists for an ID, when apply or `register` is asked to create that ID, then the call refuses with an explicit error and the file is unchanged.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04",
+        "UC-05"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-TEST-03"
+      ],
+      "phaseIds": [
+        "US-04"
+      ]
+    },
+    {
+      "id": "AC-42",
+      "criterion": "Given the registry file does not exist, when apply or `register` runs, then the registry is created.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-04",
+        "UC-05"
+      ],
+      "techSpecFiles": [
+        "src/claude/scripts/feature-split.js",
+        "tests/scripts/feature-split.test.js"
+      ],
+      "taskIds": [
+        "US-04-TASK-BE-06",
+        "US-04-TASK-TEST-01",
+        "US-05-TASK-BE-02",
+        "US-05-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-04",
+        "US-05"
+      ]
+    },
+    {
+      "id": "AC-43",
+      "criterion": "Given a registry entry without `Parent:` or `Depends on:` lines, when a Requirements or Tech-Spec generator reads it, then it is treated as a standalone feature without error.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-06"
+      ],
+      "techSpecFiles": [
+        "tests/frontmatter/registry-reader-tolerance.test.js",
+        "src/claude/agents/gaia-generate-requirements.md",
+        "src/claude/agents/gaia-generate-tech-spec.md"
+      ],
+      "taskIds": [
+        "US-06-TASK-BE-01",
+        "US-06-TASK-BE-02",
+        "US-06-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-06"
+      ]
+    },
+    {
+      "id": "AC-44",
+      "criterion": "Given a registry entry with status `epic`, when a generator reads it, then it is recognised as an epic record and is not run as a pipeline.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-06"
+      ],
+      "techSpecFiles": [
+        "tests/frontmatter/registry-reader-tolerance.test.js",
+        "src/claude/agents/gaia-generate-requirements.md",
+        "src/claude/agents/gaia-generate-tech-spec.md"
+      ],
+      "taskIds": [
+        "US-06-TASK-BE-01",
+        "US-06-TASK-BE-02",
+        "US-06-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-06"
+      ]
+    },
+    {
+      "id": "AC-45",
+      "criterion": "Given a feature folder that holds `epic.md`, when a generator reads it, then it recognises `epic.md` as the parent record and does not generate requirements or a tech-spec for the epic itself.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-06"
+      ],
+      "techSpecFiles": [
+        "tests/frontmatter/registry-reader-tolerance.test.js",
+        "src/claude/agents/gaia-generate-requirements.md",
+        "src/claude/agents/gaia-generate-tech-spec.md"
+      ],
+      "taskIds": [
+        "US-06-TASK-BE-01",
+        "US-06-TASK-BE-02",
+        "US-06-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-06"
+      ]
+    },
+    {
+      "id": "AC-46",
+      "criterion": "Given a registry entry with a status other than `defined`, `completed` or `epic`, when a generator reads it, then the entry is skipped and is not treated as an epic.",
+      "priority": "Must",
+      "unscoped": false,
+      "relatedUCs": [
+        "UC-06"
+      ],
+      "techSpecFiles": [
+        "tests/frontmatter/registry-reader-tolerance.test.js",
+        "src/claude/agents/gaia-generate-requirements.md",
+        "src/claude/agents/gaia-generate-tech-spec.md"
+      ],
+      "taskIds": [
+        "US-06-TASK-BE-01",
+        "US-06-TASK-BE-02",
+        "US-06-TASK-TEST-01"
+      ],
+      "phaseIds": [
+        "US-06"
+      ]
+    }
+  ]
+}
