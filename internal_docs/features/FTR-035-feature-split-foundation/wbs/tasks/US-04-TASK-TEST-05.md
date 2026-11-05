@@ -132,6 +132,10 @@ Field names on the proposal (`sharedFoundationOwner`, `foundationNote`) follow t
 **Verification commands:**
 
 ```
+grep -qF "test('places the new late child last with checkpoint late'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t "late child apply"
 ```
 

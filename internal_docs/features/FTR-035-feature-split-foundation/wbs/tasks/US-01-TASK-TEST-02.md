@@ -55,6 +55,10 @@ describe('threshold comparison boundaries', () => {
 **Verification commands:**
 
 ```
+grep -qF "describe('threshold comparison boundaries'" tests/scripts/feature-split.test.js
+```
+
+```
 npm test -- --testPathPattern=feature-split.test
 ```
 

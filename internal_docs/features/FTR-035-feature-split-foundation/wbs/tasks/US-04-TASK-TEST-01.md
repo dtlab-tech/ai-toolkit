@@ -101,6 +101,10 @@ Do not write `describe`/`test` bodies that only check `result` is truthy.
 **Verification commands:**
 
 ```
+grep -qF "describe('initial apply success'" tests/scripts/feature-split.test.js
+```
+
+```
 node --check tests/scripts/feature-split.test.js
 ```
 

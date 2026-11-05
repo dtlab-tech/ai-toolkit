@@ -149,6 +149,10 @@ Verification must pass once gaps 1 and 3 are closed. Until then, the foundation 
 **Verification commands:**
 
 ```
+grep -qF "describe('apply refusal'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t "apply refusal|apply foundation warning"
 ```
 

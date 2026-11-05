@@ -113,6 +113,10 @@ Acceptance check: the excerpt gives no AC text, so the mapping of AC-10, AC-11 a
 **Verification commands:**
 
 ```
+grep -qF "describe('isNewFeature()'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t "isNewFeature"
 ```
 

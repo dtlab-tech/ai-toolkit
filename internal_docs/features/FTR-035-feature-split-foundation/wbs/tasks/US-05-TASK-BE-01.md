@@ -83,6 +83,10 @@ Keep the file's CommonJS form and Node built-ins only (D-01). Do not add a depen
 **Verification commands:**
 
 ```
+grep -q "function readFeatureForRegister(" src/claude/scripts/feature-split.js
+```
+
+```
 node --check src/claude/scripts/feature-split.js
 ```
 

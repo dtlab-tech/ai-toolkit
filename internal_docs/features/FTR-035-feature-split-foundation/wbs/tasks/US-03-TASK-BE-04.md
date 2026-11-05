@@ -75,6 +75,10 @@ Length is about 45 lines of code. No change to the exports, to `buildProposal`, 
 **Verification commands:**
 
 ```
+grep -q "function validateProposal(" src/claude/scripts/feature-split.js
+```
+
+```
 node --check src/claude/scripts/feature-split.js
 ```
 

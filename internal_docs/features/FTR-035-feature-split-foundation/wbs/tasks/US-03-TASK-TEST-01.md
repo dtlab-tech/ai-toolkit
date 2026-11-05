@@ -106,6 +106,10 @@ describe('buildProposal()', () => {
 **Verification commands:**
 
 ```
+grep -qF "describe('buildProposal()'" tests/scripts/feature-split.test.js
+```
+
+```
 npm test -- tests/scripts/feature-split.test.js
 ```
 

@@ -57,6 +57,10 @@ Scope check: the design excerpt and this task's skeleton entry fully specify the
 **Verification commands:**
 
 ```
+printf '{' | node src/claude/scripts/feature-split.js apply --features-root . --parent FTR-001 2>&1 | grep -q INVALID_PROPOSAL
+```
+
+```
 npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```
 

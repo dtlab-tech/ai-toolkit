@@ -104,6 +104,10 @@ function detectMode(parentDir, parentId) {
 **Verification commands:**
 
 ```
+grep -q "function assertProposalShape(" src/claude/scripts/feature-split.js
+```
+
+```
 node --check src/claude/scripts/feature-split.js
 ```
 

@@ -145,6 +145,10 @@ Run `npm test` after appending. If the `REGISTRY.md` format check (item 2) or th
 **Verification commands:**
 
 ```
+grep -qF "describe('apply registry entries'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t "apply registry entries"
 ```
 

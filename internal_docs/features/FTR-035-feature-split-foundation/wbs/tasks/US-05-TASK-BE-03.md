@@ -53,6 +53,10 @@ Test coverage for these cases is owned by US-05-TASK-TEST-04. The commands below
 **Verification commands:**
 
 ```
+node src/claude/scripts/feature-split.js register --features-root ./x 2>&1 | grep -q ARG_MISSING
+```
+
+```
 node --check src/claude/scripts/feature-split.js
 ```
 

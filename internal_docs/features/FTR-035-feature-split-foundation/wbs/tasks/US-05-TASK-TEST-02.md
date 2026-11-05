@@ -101,5 +101,9 @@ Length check: the test block is complete and self-contained apart from the exist
 **Verification commands:**
 
 ```
+grep -qF "describe('register idempotence and foreign status'" tests/scripts/feature-split.test.js
+```
+
+```
 npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

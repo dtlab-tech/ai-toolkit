@@ -106,5 +106,9 @@ Length check: the block above is the full addition for this task. Each case stat
 **Verification commands:**
 
 ```
+grep -qF "describe('facade apply command'" tests/scripts/feature-split.test.js
+```
+
+```
 npm test
 ```

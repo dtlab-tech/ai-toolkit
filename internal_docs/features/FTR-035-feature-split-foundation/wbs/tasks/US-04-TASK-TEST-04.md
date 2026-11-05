@@ -144,6 +144,10 @@ Length note: this block is roughly 90 lines and adds five tests. Everything else
 **Verification commands:**
 
 ```
+grep -qF "describe('apply rollback fault injection'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js --testNamePattern "apply rollback fault injection"
 ```
 

@@ -97,6 +97,10 @@ No `describe()`/`test()` block is required here, since this task's domain is BE.
 **Verification commands:**
 
 ```
+grep -q "function readConfigFile(" src/claude/scripts/feature-split.js && grep -q "function validateConfig(" src/claude/scripts/feature-split.js
+```
+
+```
 node --check src/claude/scripts/feature-split.js
 ```
 

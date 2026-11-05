@@ -133,6 +133,10 @@ Verification commands:
 **Verification commands:**
 
 ```
+grep -qF "describe('editProposal()'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t "editProposal"
 ```
 

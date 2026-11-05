@@ -110,6 +110,10 @@ Rules for the implementer:
 **Verification commands:**
 
 ```
+grep -qF "describe('register write failure (US-05-TASK-TEST-03)'" tests/scripts/feature-split.test.js
+```
+
+```
 npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```
 

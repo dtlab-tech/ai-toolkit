@@ -75,6 +75,10 @@ describe('dependency order through buildProposal', () => {
 **Verification commands:**
 
 ```
+grep -qF "describe('dependency order through buildProposal'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t "dependency order"
 ```
 

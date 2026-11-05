@@ -90,6 +90,10 @@ Estimate basis: one small test file, one installer run, and one `npm test` run. 
 **Verification commands:**
 
 ```
+grep -qF "describe('feature-split.config.json distribution (D-06)'" tests/scripts/feature-split-install.test.js
+```
+
+```
 test -f src/claude/scripts/feature-split.config.json
 ```
 

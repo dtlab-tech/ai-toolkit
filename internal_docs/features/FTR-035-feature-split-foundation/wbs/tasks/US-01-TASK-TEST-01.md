@@ -137,6 +137,10 @@ Notes on the code above:
 **Verification commands:**
 
 ```
+grep -qF "describe('loadConfig'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t loadConfig
 ```
 

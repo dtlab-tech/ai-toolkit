@@ -107,6 +107,10 @@ describe('register()', () => {
 **Verification commands:**
 
 ```
+grep -qF "describe('register()'" tests/scripts/feature-split.test.js
+```
+
+```
 npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```
 

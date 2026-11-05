@@ -97,6 +97,10 @@ Notes on the algorithm:
 **Verification commands:**
 
 ```
+grep -q "function commitStaged(" src/claude/scripts/feature-split.js
+```
+
+```
 node --check src/claude/scripts/feature-split.js
 ```
 

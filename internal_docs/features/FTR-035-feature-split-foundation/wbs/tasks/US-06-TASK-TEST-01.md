@@ -80,6 +80,10 @@ Verification: run the new file on its own first, then run the full suite, which 
 
 **Verification commands:**
 
+```
+test -f tests/frontmatter/registry-reader-tolerance.test.js
+```
+
 ```bash
 npx jest tests/frontmatter/registry-reader-tolerance.test.js
 ```

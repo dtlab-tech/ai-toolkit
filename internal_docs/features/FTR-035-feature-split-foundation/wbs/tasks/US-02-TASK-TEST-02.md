@@ -77,6 +77,10 @@ Length and scope: this is a single test in a single file. It does not change any
 **Verification commands:**
 
 ```
+grep -qF "describe('isNewFeature() on an existing but unreadable folder'" tests/scripts/feature-split.test.js
+```
+
+```
 npx jest tests/scripts/feature-split.test.js -t "EACCES"
 ```
 
