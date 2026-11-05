@@ -2923,6 +2923,13 @@ async function handleExecutorCommand(argv) {
       const maxConcurrencyRaw = getFlag('--max-concurrency');
       const taskTimeoutMsRaw  = getFlag('--task-timeout-ms');
       const agentBudgetUsdRaw = getFlag('--agent-budget-usd');
+      const reviewScopeRaw    = getFlag('--review-scope');
+      if (reviewScopeRaw !== undefined && !['task', 'phase'].includes(reviewScopeRaw)) {
+        usageError('executor start --review-scope must be "task" or "phase"'); return;
+      }
+      if (agentBudgetUsdRaw !== undefined && !(Number(agentBudgetUsdRaw) > 0)) {
+        usageError('executor start --agent-budget-usd must be a positive number'); return;
+      }
       const result = await taskExecutor.execute({
         project: projectDir,
         feature: feature,
@@ -2930,6 +2937,7 @@ async function handleExecutorCommand(argv) {
         claudePath: getFlag('--claude-path'),
         taskTimeoutMs: taskTimeoutMsRaw === undefined ? undefined : Number(taskTimeoutMsRaw),
         agentBudgetUsd: agentBudgetUsdRaw === undefined ? undefined : Number(agentBudgetUsdRaw),
+        reviewScope: reviewScopeRaw,
         fromReplanRunId: getFlag('--from-replan-run-id'),
       });
       emitSuccess(result);
