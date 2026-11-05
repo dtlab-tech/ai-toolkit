@@ -269,10 +269,58 @@ describe('runReview', () => {
         args: [
           '--print', '--output-format', 'json', '--agent', VERIFIED_IDENTITY.nativeName,
           '--no-session-persistence',
+          '--disallowedTools', 'Grep,Glob,Bash',
           '--permission-mode', 'auto',
         ],
       }));
 
+      spawnSpy.mockRestore();
+    });
+
+    test('the default review args disable the search and command tools, and only flags follow that variadic option', async () => {
+      const spawnSpy = jest.spyOn(claudeProcess, 'spawnClaudeAgent').mockResolvedValue({
+        exitCode: 0, signal: null, stdout: '', stderr: '',
+        result: { is_error: false, result: 'Verdict: PASS' },
+        parseError: null, startedAt: new Date().toISOString(), endedAt: new Date().toISOString(),
+        durationMs: 1, timedOut: false, terminationConfirmed: null,
+      });
+
+      await runReview(baseArgs({ spawnArgs: undefined, agentBudgetUsd: 2 }));
+
+      const args = spawnSpy.mock.calls[0][0].args;
+      const at = args.indexOf('--disallowedTools');
+      expect(at).toBeGreaterThan(-1);
+      expect(args[at + 1]).toBe('Grep,Glob,Bash');
+      expect(args[at + 2].startsWith('--')).toBe(true);        // nothing positional can be swallowed
+      expect(args.slice(-2)).toEqual(['--max-budget-usd', '2']); // the spend cap is really passed
+      spawnSpy.mockRestore();
+    });
+
+    test('a phase review prompt lists the phase tasks and tells the reviewer to stay inside the diff', async () => {
+      const spawnSpy = jest.spyOn(claudeProcess, 'spawnClaudeAgent').mockResolvedValue({
+        exitCode: 0, signal: null, stdout: '', stderr: '',
+        result: { is_error: false, result: 'Verdict: PASS' },
+        parseError: null, startedAt: new Date().toISOString(), endedAt: new Date().toISOString(),
+        durationMs: 1, timedOut: false, terminationConfirmed: null,
+      });
+
+      await runReview(baseArgs({
+        phase: {
+          id: 'US-04', title: 'Atomic apply',
+          tasks: [
+            { id: 'US-04-TASK-BE-01', title: 'First', outcome: 'Does the first thing', acceptanceCriteria: ['AC-01'], verificationCommands: ['npm test'], status: 'checkpointed' },
+            { id: 'US-99-TASK-BE-01', title: 'Last', outcome: 'Does the last thing', acceptanceCriteria: [], verificationCommands: [] },
+          ],
+        },
+      }));
+
+      const prompt = spawnSpy.mock.calls[0][0].prompt;
+      expect(prompt).toContain('Phase review: US-04 — Atomic apply');
+      expect(prompt).toContain('US-04-TASK-BE-01 — First [checkpointed]');
+      expect(prompt).toContain('Outcome: Does the first thing');
+      expect(prompt).toContain('Review scope (read this first)');
+      expect(prompt).toContain('Do not explore the repository');
+      expect(prompt).toContain('Attribute every finding to the task it belongs to');
       spawnSpy.mockRestore();
     });
 

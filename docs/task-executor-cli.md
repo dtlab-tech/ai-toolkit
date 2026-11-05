@@ -35,7 +35,7 @@ text-mode output in the current implementation.
 ### `start`
 
 ```bash
-ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N] [--claude-path <path>] [--task-timeout-ms <ms>] [--agent-budget-usd <amount>] [--from-replan-run-id <uuid>]
+ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N] [--claude-path <path>] [--task-timeout-ms <ms>] [--agent-budget-usd <amount>] [--review-scope task|phase] [--from-replan-run-id <uuid>]
 ```
 
 | Flag | Required | Default | Notes |
@@ -45,13 +45,45 @@ ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N
 | `--max-concurrency` | no | `1` | Forwarded to `execute()` as a Number; only `1` is currently supported (see below) |
 | `--claude-path` | no | — | Absolute path to the qualified Claude CLI executable |
 | `--task-timeout-ms` | no | — | Forwarded as a Number |
-| `--agent-budget-usd` | no | — | Forwarded as a Number; persisted into run config, not itself enforced |
+| `--agent-budget-usd` | no | — | Positive number. Spend cap for **one** Claude invocation (an implementation attempt or a review): passed to the CLI as `--max-budget-usd`, and persisted into the run config. Not a cap on the whole run |
+| `--review-scope` | no | `task` | `task` reviews every task attempt. `phase` reviews once per phase (a user story of the Work Breakdown): see "Review scope" below. Anything else is a usage error (exit 2) |
 | `--from-replan-run-id` | no | — | UUID of a prior run `replan` has already superseded; seeds its carry-over-eligible tasks straight to `checkpointed` instead of `pending` (see "Carrying forward a replan" below) |
 
 Backs `lib/task-executor/index.js`'s `execute()`. Validates gates/config, acquires the
 repo-wide execution lease for a brand-new run, builds an immutable plan snapshot from the
 feature's own `{PREFIX}-Work-Breakdown.md/.csv`, and drives a sequential (slot count 1)
 dispatch → verify → review → checkpoint loop to completion or block.
+
+#### Review scope
+
+Every task is implemented, then its own verification commands run, and it is committed (a
+checkpoint) as soon as they pass. What differs is when the review runs:
+
+- `--review-scope task` (default): the review agent reviews each task attempt that passed its
+  verification, on that attempt's own diff.
+- `--review-scope phase`: the review is deferred to the **last task of each phase to complete**,
+  which is reviewed once, on the diff of the whole phase (one labelled section per task, taken
+  from each task's own commit, plus the current uncommitted diff). The other tasks of the phase
+  record a review marked `deferred: "covered-by-phase-review"` with `reviewPassed: null` — the
+  receipt never claims a review happened — and go on to their commit, so no work is lost if
+  something goes wrong later. If the phase review fails, that last task is retried with the
+  findings in its prompt (fix forward; the earlier commits are not rewritten), within the usual
+  two attempts per task, after which it is `blocked`. A phase's last task is the one that finds
+  every other task of its phase already `checkpointed`, `integrated` or `skipped`.
+
+In both scopes the review is **targeted**: its prompt carries the task outcomes, acceptance
+criteria and verification commands, the diff (with 25 lines of context for modified files; a phase
+diff over 300,000 characters keeps the current task in full and lists the files of the omitted
+earlier sections), and an instruction to stay inside the diff and not to build or test. The review
+process runs with `--disallowedTools Grep,Glob,Bash`, so it keeps only `Read`, to open a file the
+diff names; it cannot search the repository or run commands.
+
+#### Retry feedback
+
+When an attempt fails, the next attempt of the same task receives why in its prompt: the failing
+verification commands with their exit code and output, or the review's blocking findings. The
+working tree of the failed attempt is not reset. The feedback is held in memory for the life of
+the `execute()` call.
 
 Only `maxConcurrency=1` is implemented — any other requested value is **rejected**
 (`UNSUPPORTED_CONCURRENCY`), never silently downgraded. `execute()` also refuses to run at all
