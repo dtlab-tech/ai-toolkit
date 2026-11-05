@@ -14,6 +14,30 @@ class FeatureSplitError extends Error {
 
 const UNEXPECTED_CODE = 'UNEXPECTED_ERROR';
 
+const RESERVED_DEVICE_NAMES = new Set([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+]);
+
+function invalidName(message) {
+  return new FeatureSplitError('INVALID_NAME', message, { key: null, file: null });
+}
+
+function slug(name) {
+  const raw = typeof name === 'string' ? name.trim() : '';
+  if (raw === '') throw invalidName('child name is empty');
+  if (/[\/\\]/.test(raw)) throw invalidName('child name contains a path separator');
+  if (raw.includes('..')) throw invalidName('child name contains ".."');
+  const stem = raw.split('.')[0].toUpperCase();
+  if (RESERVED_DEVICE_NAMES.has(stem)) {
+    throw invalidName(`child name "${raw}" is a reserved Windows device name`);
+  }
+  const s = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (s === '') throw invalidName('child name has no ASCII letters or digits');
+  return s;
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -55,3 +79,4 @@ if (require.main === module) run();
 module.exports.FeatureSplitError = FeatureSplitError;
 module.exports.main = main;
 module.exports.run = run;
+module.exports.slug = slug;
