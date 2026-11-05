@@ -114,6 +114,36 @@ function firstSentence(text) {
   return match ? match[0] : s;
 }
 
+function normaliseChild(c) {
+  const purpose = typeof c.purpose === 'string' ? c.purpose : '';
+  return {
+    name: c.name,
+    purpose,
+    summary: purpose,
+    keywords: Array.isArray(c.keywords) ? c.keywords : [],
+    dependsOn: Array.isArray(c.dependsOn) ? c.dependsOn : [],
+    assigned: typeof c.assigned === 'string' ? c.assigned : '',
+  };
+}
+
+function validateChildNames(children) {
+  const names = new Set(), slugs = new Set();
+  for (const c of children) {
+    const name = c.name;
+    if (typeof name !== 'string' || name.trim() === '')
+      fail('CHILD_NAME_INVALID', `Child name ${JSON.stringify(name)} is empty or not a string`, { key: String(name) });
+    let s;
+    try {
+      s = slug(name);
+    } catch (err) {
+      fail('CHILD_NAME_INVALID', `Child "${name}" does not yield a valid folder slug: ${err.message}`, { key: name });
+    }
+    if (names.has(name) || slugs.has(s))
+      fail('CHILD_NAME_DUPLICATE', `Child "${name}" duplicates slug "${s}"`, { key: name });
+    names.add(name); slugs.add(s);
+  }
+}
+
 const REGISTRY_NAME = 'REGISTRY.md';
 const ENTRY_HEADING = /^## (FTR-\d+) — (.+)$/;
 const ENTRY_SEPARATOR = /^---\s*$/;
@@ -313,6 +343,8 @@ module.exports.main = main;
 module.exports.run = run;
 module.exports.slug = slug;
 module.exports.firstSentence = firstSentence;
+module.exports.normaliseChild = normaliseChild;
+module.exports.validateChildNames = validateChildNames;
 module.exports.parseRegistry = parseRegistry;
 module.exports.readRegistry = readRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
