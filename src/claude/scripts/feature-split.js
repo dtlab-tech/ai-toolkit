@@ -78,6 +78,10 @@ function loadConfig({ projectRoot = process.cwd(), defaultFile = DEFAULT_CONFIG 
   };
 }
 
+// D-05: two named comparison rules, used by every caller
+const isOverThreshold = (count, threshold) => count > threshold;   // checkpoint 2: strictly greater
+const meetsMinimum = (count, minimum) => count >= minimum;         // checkpoint 1: at least N
+
 const UNEXPECTED_CODE = 'UNEXPECTED_ERROR';
 
 const RESERVED_DEVICE_NAMES = new Set([
@@ -276,6 +280,8 @@ if (require.main === module) run();
 
 module.exports.FeatureSplitError = FeatureSplitError;
 module.exports.loadConfig = loadConfig;
+module.exports.isOverThreshold = isOverThreshold;
+module.exports.meetsMinimum = meetsMinimum;
 module.exports.main = main;
 module.exports.run = run;
 module.exports.slug = slug;
