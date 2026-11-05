@@ -16,6 +16,8 @@ const {
   writeRegistryAtomic,
   assertNoStagingLeftovers,
   findStagingLeftovers,
+  isOverThreshold,
+  meetsMinimum,
 } = LIB;
 
 /** Runs fn and returns the thrown value, or fails the test if nothing is thrown. */
@@ -399,6 +401,28 @@ describe('loadConfig', () => {
 
     expect(loadConfig({ projectRoot: root }).minChildren).toBe(4);
     expect(loadConfig({ projectRoot: otherRoot })).toEqual(DEFAULTS);
+  });
+});
+
+describe('threshold comparison boundaries', () => {
+  describe('isOverThreshold() — strictly greater than threshold', () => {
+    test('returns false when count equals the threshold', () => {
+      expect(isOverThreshold(30, 30)).toBe(false);
+    });
+
+    test('returns true when count is one above the threshold', () => {
+      expect(isOverThreshold(31, 30)).toBe(true);
+    });
+  });
+
+  describe('meetsMinimum() — at least the minimum', () => {
+    test('returns true when count equals the minimum', () => {
+      expect(meetsMinimum(2, 2)).toBe(true);
+    });
+
+    test('returns false when count is one below the minimum', () => {
+      expect(meetsMinimum(1, 2)).toBe(false);
+    });
   });
 });
 
