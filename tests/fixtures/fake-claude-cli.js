@@ -20,6 +20,7 @@ function argValue(flag) {
 
 const mode = argValue('--mode') || 'echo-json';
 const pidFile = argValue('--pid-file');
+const logFile = argValue('--log');   // optional: append one JSON line {argv, stdin} per invocation
 
 function readStdin() {
   return new Promise((resolve) => {
@@ -34,6 +35,9 @@ function readStdin() {
 
 (async () => {
   const stdin = await readStdin();
+  if (logFile) {
+    fs.appendFileSync(logFile, JSON.stringify({ argv: process.argv.slice(2), stdin: stdin }) + '\n');
+  }
 
   switch (mode) {
     case 'echo-json': {
@@ -109,6 +113,24 @@ function readStdin() {
       process.stdout.write(JSON.stringify({
         is_error: false,
         result: 'Verdict: PASS\n\nCRITICAL (blocks merge):\n  none\n\nWARNING (should fix):\n  none\n',
+      }));
+      process.exit(0);
+      return;
+    }
+    case 'review-verdict-sequence': {
+      // --verdicts=FAIL,PASS --counter=<file>: the Nth invocation answers with the Nth verdict (the
+      // last one repeats). A FAIL carries one blocking finding so the retry feedback can be checked.
+      const verdicts = (argValue('--verdicts') || 'PASS').split(',');
+      const counterFile = argValue('--counter');
+      let i = 0;
+      try { i = parseInt(fs.readFileSync(counterFile, 'utf8'), 10) || 0; } catch (_) { i = 0; }
+      fs.writeFileSync(counterFile, String(i + 1));
+      const verdict = verdicts[Math.min(i, verdicts.length - 1)];
+      process.stdout.write(JSON.stringify({
+        is_error: false,
+        result: 'Verdict: ' + verdict + '\n\nCRITICAL (blocks merge):\n  ' +
+          (verdict === 'FAIL' ? 'T1.output.txt: the empty input case is not handled' : 'none') +
+          '\n\nWARNING (should fix):\n  none\n',
       }));
       process.exit(0);
       return;

@@ -129,6 +129,24 @@ describe('executor CLI routing', () => {
       expect(stdoutJSON()).toEqual({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
     });
 
+    test('start forwards --review-scope and rejects an invalid value or budget with exit 2 before calling execute()', async () => {
+      taskExecutor.execute.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md', '--review-scope', 'phase']);
+      expect(taskExecutor.execute.mock.calls[0][0].reviewScope).toBe('phase');
+      expect(process.exitCode).toBe(0);
+
+      taskExecutor.execute.mockClear();
+      process.exitCode = undefined;
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md', '--review-scope', 'story']);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.execute).not.toHaveBeenCalled();
+
+      process.exitCode = undefined;
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md', '--agent-budget-usd', '0']);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.execute).not.toHaveBeenCalled();
+    });
+
     test('start ignores an unrecognized --force flag (never special-cased, never forwarded)', async () => {
       taskExecutor.execute.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
       await handleExecutorCommand([
