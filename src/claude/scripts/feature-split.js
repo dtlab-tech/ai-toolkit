@@ -142,6 +142,35 @@ function writeRegistryAtomic(featuresRoot, runId, content) {
   }
 }
 
+const STAGING_PREFIX = '.split-staging-';
+const REGISTRY_TEMP_PREFIX = `${REGISTRY_NAME}.tmp-`;
+
+function findStagingLeftovers(featuresRoot) {
+  let names;
+  try {
+    names = fs.readdirSync(featuresRoot);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  return names
+    .filter(name => name.startsWith(STAGING_PREFIX) || name.startsWith(REGISTRY_TEMP_PREFIX))
+    .sort()
+    .map(name => path.join(featuresRoot, name));
+}
+
+function assertNoStagingLeftovers(featuresRoot) {
+  const leftovers = findStagingLeftovers(featuresRoot);
+  if (leftovers.length === 0) return;
+  const list = leftovers.map(p => `  ${p}`).join('\n');
+  throw new FeatureSplitError(
+    'STAGING_LEFTOVER',
+    `leftover staging paths from an earlier interrupted split were found in ${featuresRoot}; nothing was changed:\n${list}\n` +
+      'Confirm that no feature-split run is active, then remove these paths manually and run the command again.',
+    { file: null },
+  );
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -188,3 +217,5 @@ module.exports.firstSentence = firstSentence;
 module.exports.parseRegistry = parseRegistry;
 module.exports.readRegistry = readRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
+module.exports.findStagingLeftovers = findStagingLeftovers;
+module.exports.assertNoStagingLeftovers = assertNoStagingLeftovers;
