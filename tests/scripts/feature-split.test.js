@@ -566,3 +566,36 @@ function sampleEntry() {
 function writeRegistry(dir, content) {
   fs.writeFileSync(path.join(dir, 'REGISTRY.md'), content, 'utf8');
 }
+
+describe('foundationWarnings()', () => {
+  const chain = [
+    { name: 'Auth', dependsOn: [] },
+    { name: 'Billing', dependsOn: ['Auth'] },
+    { name: 'Reports', dependsOn: ['Billing'] },
+  ];
+
+  test('returns no warning when the owner is the first child and every later child depends on it', () => {
+    expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, chain)).toEqual([]);
+  });
+
+  test('returns a FOUNDATION_NOT_FIRST warning naming BR-03 when the owner is not the first child', () => {
+    const warnings = LIB.foundationWarnings({ sharedFoundationOwner: 'Billing' }, chain);
+    expect(warnings.map(w => w.code)).toEqual(['FOUNDATION_NOT_FIRST']);
+    expect(warnings[0].message).toMatch(/BR-03/);
+  });
+
+  test('returns a FOUNDATION_NOT_FIRST warning when the owner is null', () => {
+    const warnings = LIB.foundationWarnings({ sharedFoundationOwner: null }, chain);
+    expect(warnings.map(w => w.code)).toEqual(['FOUNDATION_NOT_FIRST']);
+  });
+
+  test('returns an empty list when there are no children and never throws', () => {
+    expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, [])).toEqual([]);
+    expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, undefined)).toEqual([]);
+  });
+
+  test('returns no warning for an owner that is first even when later children have no dependsOn', () => {
+    const order = [{ name: 'Auth', dependsOn: [] }, { name: 'Billing', dependsOn: [] }];
+    expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, order)).toEqual([]);
+  });
+});

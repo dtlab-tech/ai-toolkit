@@ -169,6 +169,35 @@ function dependencyOrder(children) {
   return order;
 }
 
+// BR-03 (D-10). The shared foundation belongs to the first child in dependency order.
+// Warns when the owner is not that child. Warnings only: never throws, never refuses.
+function foundationWarnings(p, order) {
+  if (!p || !Array.isArray(order) || order.length === 0) return [];
+  const owner = p.sharedFoundationOwner ?? null;
+  if (owner === order[0].name) return [];
+  return [{
+    code: 'FOUNDATION_NOT_FIRST',
+    message: `BR-03 is broken: the shared foundation is assigned to ${owner ?? 'no child'}, `
+      + `not to the first child in dependency order (${order[0].name}). Children before the owner are built `
+      + `without the foundation.`,
+  }];
+}
+
+function validateProposal(p, { checkMin = true } = {}) {
+  if (!['definition', 'measured'].includes(p.source))
+    fail('PROPOSAL_SOURCE_INVALID', 'source must be "definition" or "measured"');
+  if (checkMin && !meetsMinimum(p.children.length, p.minChildren))
+    fail('TOO_FEW_CHILDREN', `${p.children.length} children; minimum is ${p.minChildren}`);
+  validateChildNames(p.children);
+  const names = new Set(p.children.map(c => c.name));
+  for (const c of p.children) for (const d of c.dependsOn)
+    if (!names.has(d) || d === c.name)
+      fail('DEPENDS_ON_INVALID', `${c.name} depends on unknown or self child "${d}"`, { key: c.name });
+  if (p.sharedFoundationOwner !== null && !names.has(p.sharedFoundationOwner))
+    fail('OWNER_INVALID', `Shared-foundation owner "${p.sharedFoundationOwner}" is not a child`);
+  dependencyOrder(p.children);
+}
+
 const REGISTRY_NAME = 'REGISTRY.md';
 const ENTRY_HEADING = /^## (FTR-\d+) — (.+)$/;
 const ENTRY_SEPARATOR = /^---\s*$/;
@@ -371,6 +400,7 @@ module.exports.firstSentence = firstSentence;
 module.exports.normaliseChild = normaliseChild;
 module.exports.validateChildNames = validateChildNames;
 module.exports.dependencyOrder = dependencyOrder;
+module.exports.foundationWarnings = foundationWarnings;
 module.exports.parseRegistry = parseRegistry;
 module.exports.readRegistry = readRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
