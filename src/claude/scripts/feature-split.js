@@ -109,6 +109,33 @@ function readRegistry(featuresRoot) {
   return { exists: true, file, entries: parseRegistry(text) };
 }
 
+function writeRegistryAtomic(featuresRoot, runId, content) {
+  const registryPath = path.join(featuresRoot, REGISTRY_NAME);
+  if (!/^[0-9a-f]+$/i.test(String(runId))) {
+    throw new FeatureSplitError('REGISTRY_IO', `invalid run id for registry temp file: ${runId}`, { file: registryPath });
+  }
+  const tempPath = path.join(featuresRoot, `${REGISTRY_NAME}.tmp-${runId}`);
+  let created = false;
+  try {
+    fs.writeFileSync(tempPath, content, { encoding: 'utf8', flag: 'wx' });
+    created = true;
+    fs.renameSync(tempPath, registryPath);
+  } catch (err) {
+    if (created) {
+      try {
+        fs.rmSync(tempPath, { force: true });
+      } catch (_) {
+        // left for the staging leftover scan; this helper removes only the file it created
+      }
+    }
+    throw new FeatureSplitError(
+      'REGISTRY_IO',
+      `cannot write ${registryPath} (previous registry left unchanged): ${err.code || err.message}`,
+      { file: registryPath },
+    );
+  }
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -153,3 +180,4 @@ module.exports.run = run;
 module.exports.slug = slug;
 module.exports.parseRegistry = parseRegistry;
 module.exports.readRegistry = readRegistry;
+module.exports.writeRegistryAtomic = writeRegistryAtomic;
