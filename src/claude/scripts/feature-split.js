@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 
 class FeatureSplitError extends Error {
   constructor(code, message, details = {}) {
@@ -36,6 +37,76 @@ function slug(name) {
   const s = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (s === '') throw invalidName('child name has no ASCII letters or digits');
   return s;
+}
+
+const REGISTRY_NAME = 'REGISTRY.md';
+const ENTRY_HEADING = /^## (FTR-\d+) — (.+)$/;
+const ENTRY_SEPARATOR = /^---\s*$/;
+const FIELD_LINE = /^\*\*([A-Za-z ]+):\*\*\s*(.*)$/;
+const DETAIL_LINK = /^→\s*\[Detail\]\((.*)\)\s*$/;
+
+function splitList(value) {
+  if (!value || value.toLowerCase() === 'none') return [];
+  return value.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function parseEntry(id, title, lines) {
+  const fields = new Map();
+  let detail = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    const link = line.match(DETAIL_LINK);
+    if (link) {
+      detail = link[1];
+      continue;
+    }
+    const field = line.match(FIELD_LINE);
+    if (field && !fields.has(field[1])) fields.set(field[1], field[2].trim());
+  }
+  return {
+    id,
+    title,
+    keywords: splitList(fields.get('Keywords')),
+    status: fields.get('Status') || null,
+    summary: fields.get('Summary') || '',
+    detail: detail ?? fields.get('Detail') ?? null,
+    parent: fields.get('Parent') || null,
+    dependsOn: splitList(fields.get('Depends on')),
+  };
+}
+
+function parseRegistry(text) {
+  const entries = [];
+  let current = null;
+  const flush = () => {
+    if (current) entries.push(parseEntry(current.id, current.title, current.lines));
+    current = null;
+  };
+  for (const line of text.split(/\r?\n/)) {
+    const heading = line.match(ENTRY_HEADING);
+    if (heading) {
+      flush();
+      current = { id: heading[1], title: heading[2].trim(), lines: [] };
+    } else if (ENTRY_SEPARATOR.test(line)) {
+      flush();
+    } else if (current) {
+      current.lines.push(line);
+    }
+  }
+  flush();
+  return entries;
+}
+
+function readRegistry(featuresRoot) {
+  const file = path.join(featuresRoot, REGISTRY_NAME);
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return { exists: false, file, entries: [] };
+    throw new FeatureSplitError('REGISTRY_IO', `cannot read ${file} (${err.code || err.message})`, { file });
+  }
+  return { exists: true, file, entries: parseRegistry(text) };
 }
 
 function runApply(args, readStdin) {
@@ -80,3 +151,5 @@ module.exports.FeatureSplitError = FeatureSplitError;
 module.exports.main = main;
 module.exports.run = run;
 module.exports.slug = slug;
+module.exports.parseRegistry = parseRegistry;
+module.exports.readRegistry = readRegistry;
