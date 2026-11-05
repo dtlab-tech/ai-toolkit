@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.26.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.25.0...v0.26.0) (2026-11-05)
+
+
+### Features
+
+* **executor:** review once per phase (--review-scope), targeted review, retry feedback, enforced budget ([d4ff9e9](https://github.com/dtlab-tech/ai-toolkit/commit/d4ff9e9649b2e4dfd7aa435cbeb4a6fd6f73cd46))
+* **executor:** review once per phase (--review-scope), targeted review, retry feedback, enforced budget ([ba87a93](https://github.com/dtlab-tech/ai-toolkit/commit/ba87a93c4d2716b825e7f559a3b13604381dbf87))
+* **executor:** review once per phase (--review-scope), targeted review, retry feedback, enforced budget ([fad1703](https://github.com/dtlab-tech/ai-toolkit/commit/fad17031396e597003fba1f7bedb1d050cac402d))
+
 ## [0.25.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.24.9...v0.25.0) (2026-11-04)
 
 
