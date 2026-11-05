@@ -144,6 +144,31 @@ function validateChildNames(children) {
   }
 }
 
+// Stable topological sort. Among children that are ready at the same time,
+// proposal order decides (Requirements UC-03 tie-break).
+// Rejects unknown siblings and self-references (DEPENDS_ON_INVALID) and cycles (PROPOSAL_CYCLE).
+function dependencyOrder(children) {
+  const names = new Set(children.map(c => c.name));
+  for (const c of children) {
+    for (const d of c.dependsOn) {
+      if (d === c.name)
+        fail('DEPENDS_ON_INVALID', `${c.name} depends on itself`, { key: c.name });
+      if (!names.has(d))
+        fail('DEPENDS_ON_INVALID', `${c.name} depends on unknown child "${d}"`, { key: c.name });
+    }
+  }
+  const placed = new Set(), order = [], remaining = [...children];
+  while (remaining.length) {
+    // findIndex returns the first ready child in proposal order, so ties go to proposal order.
+    const i = remaining.findIndex(c => c.dependsOn.every(d => placed.has(d)));
+    if (i === -1) fail('PROPOSAL_CYCLE', 'Dependencies between children form a cycle');
+    const [next] = remaining.splice(i, 1);
+    placed.add(next.name);
+    order.push(next);
+  }
+  return order;
+}
+
 const REGISTRY_NAME = 'REGISTRY.md';
 const ENTRY_HEADING = /^## (FTR-\d+) — (.+)$/;
 const ENTRY_SEPARATOR = /^---\s*$/;
@@ -345,6 +370,7 @@ module.exports.slug = slug;
 module.exports.firstSentence = firstSentence;
 module.exports.normaliseChild = normaliseChild;
 module.exports.validateChildNames = validateChildNames;
+module.exports.dependencyOrder = dependencyOrder;
 module.exports.parseRegistry = parseRegistry;
 module.exports.readRegistry = readRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
