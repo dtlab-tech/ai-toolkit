@@ -18,6 +18,7 @@ const {
   findStagingLeftovers,
   isOverThreshold,
   meetsMinimum,
+  isNewFeature,
 } = LIB;
 
 /** Runs fn and returns the thrown value, or fails the test if nothing is thrown. */
@@ -423,6 +424,80 @@ describe('threshold comparison boundaries', () => {
     test('returns false when count is one below the minimum', () => {
       expect(meetsMinimum(1, 2)).toBe(false);
     });
+  });
+});
+
+describe('isNewFeature()', () => {
+  let tmpRoot;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-split-newfeat-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  // Folder basename is the feature prefix, e.g. FTR-035 -> FTR-035-Approvals.md
+  const makeFeatureDir = (id) => {
+    const dir = path.join(tmpRoot, id);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  };
+
+  test.each([
+    ['an Approvals.md marker file', (dir, id) =>
+      fs.writeFileSync(path.join(dir, `${id}-Approvals.md`), '# approvals')],
+    ['a wbs/ directory', (dir) =>
+      fs.mkdirSync(path.join(dir, 'wbs'))],
+    ['an epic.md file', (dir) =>
+      fs.writeFileSync(path.join(dir, 'epic.md'), '# epic')],
+  ])('returns isNew false with a non-empty reason when the folder holds %s', (_label, addMarker) => {
+    const id = 'FTR-035';
+    const dir = makeFeatureDir(id);
+    addMarker(dir, id);
+
+    const result = isNewFeature(dir);
+
+    expect(result.isNew).toBe(false);
+    expect(typeof result.reason).toBe('string');
+    expect(result.reason.length).toBeGreaterThan(0);
+  });
+
+  test('returns isNew true with a non-empty reason when the folder holds only req/ and spec/', () => {
+    const dir = makeFeatureDir('FTR-035');
+    fs.mkdirSync(path.join(dir, 'req'));
+    fs.mkdirSync(path.join(dir, 'spec'));
+
+    const result = isNewFeature(dir);
+
+    expect(result.isNew).toBe(true);
+    expect(result.reason.length).toBeGreaterThan(0);
+  });
+
+  test('returns isNew true when req/ and spec/ files were rewritten by a forced regeneration', () => {
+    const dir = makeFeatureDir('FTR-035');
+    const reqFile = path.join(dir, 'req', 'FTR-035-Requirements.md');
+    const specFile = path.join(dir, 'spec', 'index.md');
+    fs.mkdirSync(path.dirname(reqFile));
+    fs.mkdirSync(path.dirname(specFile));
+    fs.writeFileSync(reqFile, 'first generation');
+    fs.writeFileSync(specFile, 'first generation');
+    fs.writeFileSync(reqFile, 'forced regeneration');
+    fs.writeFileSync(specFile, 'forced regeneration');
+
+    const result = isNewFeature(dir);
+
+    expect(result.isNew).toBe(true);
+  });
+
+  test('returns isNew true with a non-empty reason when the feature folder does not exist', () => {
+    const missing = path.join(tmpRoot, 'FTR-999');
+
+    const result = isNewFeature(missing);
+
+    expect(result.isNew).toBe(true);
+    expect(result.reason.length).toBeGreaterThan(0);
   });
 });
 
