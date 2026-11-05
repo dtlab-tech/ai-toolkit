@@ -13,6 +13,57 @@ class FeatureSplitError extends Error {
   }
 }
 
+const CONFIG_NAME = 'feature-split.config.json';
+const DEFAULT_CONFIG = path.join(__dirname, CONFIG_NAME);
+const SHAPE = {
+  thresholds: ['useCases', 'acceptanceCriteria', 'components', 'estimatedPhases'],
+  definitionSignals: ['minActors', 'minApplications', 'minFlows'],
+};
+const TOP_KEYS = ['thresholds', 'definitionSignals', 'minChildren'];
+
+const fail = (code, message, extra) => { throw new FeatureSplitError(code, message, extra); };
+
+function readConfigFile(file, required) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT' && !required) return undefined;
+    fail(required ? 'CONFIG_DEFAULT_UNREADABLE' : 'CONFIG_OVERRIDE_UNREADABLE',
+      `Cannot read ${file} (${err.code})`, { file });
+  }
+  try { return JSON.parse(text); }
+  catch { fail('CONFIG_INVALID_JSON', `Invalid JSON in ${file}`, { file }); }
+}
+
+function checkValue(value, key, file) {
+  if (!Number.isInteger(value) || value < 0)
+    fail('CONFIG_INVALID_VALUE', `${key} in ${file} must be a non-negative integer`, { key, file });
+}
+
+function validateConfig(obj, file, partial) {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj))
+    fail('CONFIG_INVALID_VALUE', `${file} must contain a JSON object`, { file });
+  for (const k of Object.keys(obj))
+    if (!TOP_KEYS.includes(k)) fail('CONFIG_UNKNOWN_KEY', `Unknown key ${k} in ${file}`, { key: k, file });
+  for (const [section, keys] of Object.entries(SHAPE)) {
+    if (obj[section] === undefined) {
+      if (partial) continue;
+      fail('CONFIG_INVALID_VALUE', `Missing ${section} in ${file}`, { key: section, file });
+    }
+    if (obj[section] === null || typeof obj[section] !== 'object')
+      fail('CONFIG_INVALID_VALUE', `${section} must be an object in ${file}`, { key: section, file });
+    for (const k of Object.keys(obj[section]))
+      if (!keys.includes(k)) fail('CONFIG_UNKNOWN_KEY', `Unknown key ${section}.${k} in ${file}`, { key: `${section}.${k}`, file });
+    for (const k of Object.keys(obj[section])) checkValue(obj[section][k], `${section}.${k}`, file);
+    if (!partial) for (const k of keys)
+      if (obj[section][k] === undefined) fail('CONFIG_INVALID_VALUE', `Missing ${section}.${k} in ${file}`, { key: `${section}.${k}`, file });
+  }
+  if (obj.minChildren === undefined) {
+    if (!partial) fail('CONFIG_INVALID_VALUE', `Missing minChildren in ${file}`, { key: 'minChildren', file });
+  } else checkValue(obj.minChildren, 'minChildren', file);
+}
+
 const UNEXPECTED_CODE = 'UNEXPECTED_ERROR';
 
 const RESERVED_DEVICE_NAMES = new Set([
