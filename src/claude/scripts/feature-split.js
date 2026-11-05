@@ -64,6 +64,20 @@ function validateConfig(obj, file, partial) {
   } else checkValue(obj.minChildren, 'minChildren', file);
 }
 
+function loadConfig({ projectRoot = process.cwd(), defaultFile = DEFAULT_CONFIG } = {}) {
+  const base = readConfigFile(defaultFile, true);
+  validateConfig(base, defaultFile, false);
+  const overrideFile = path.join(projectRoot, CONFIG_NAME);
+  const override = readConfigFile(overrideFile, false);
+  if (override !== undefined) validateConfig(override, overrideFile, true);
+  const o = override || {};
+  return {
+    thresholds: { ...base.thresholds, ...o.thresholds },
+    definitionSignals: { ...base.definitionSignals, ...o.definitionSignals },
+    minChildren: o.minChildren !== undefined ? o.minChildren : base.minChildren,
+  };
+}
+
 const UNEXPECTED_CODE = 'UNEXPECTED_ERROR';
 
 const RESERVED_DEVICE_NAMES = new Set([
@@ -261,6 +275,7 @@ function run(argv = process.argv.slice(2)) {
 if (require.main === module) run();
 
 module.exports.FeatureSplitError = FeatureSplitError;
+module.exports.loadConfig = loadConfig;
 module.exports.main = main;
 module.exports.run = run;
 module.exports.slug = slug;
