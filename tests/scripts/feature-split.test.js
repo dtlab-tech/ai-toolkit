@@ -501,6 +501,48 @@ describe('isNewFeature()', () => {
   });
 });
 
+describe('isNewFeature() on an existing but unreadable folder', () => {
+  let tmpRoot;
+  let featureDir;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-split-test-'));
+    featureDir = path.join(tmpRoot, 'FTR-901-locked');
+    fs.mkdirSync(path.join(featureDir, 'req'), { recursive: true });
+    fs.writeFileSync(path.join(featureDir, 'req', 'requirements.md'), '# req');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('throws FEATURE_UNREADABLE and never returns isNew true when reading the folder fails with EACCES', () => {
+    const realReaddirSync = fs.readdirSync;
+    const target = path.resolve(featureDir);
+    jest.spyOn(fs, 'readdirSync').mockImplementation((p, ...rest) => {
+      if (path.resolve(String(p)) === target) {
+        const err = new Error(`EACCES: permission denied, scandir '${p}'`);
+        err.code = 'EACCES';
+        throw err;
+      }
+      return realReaddirSync(p, ...rest);
+    });
+
+    let thrown = null;
+    let result;
+    try {
+      result = isNewFeature(featureDir);
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(FeatureSplitError);
+    expect(thrown.code).toBe('FEATURE_UNREADABLE');
+    expect(result).toBeUndefined();
+  });
+});
+
 // ---------- helpers ----------
 
 function runFacade(args) {
