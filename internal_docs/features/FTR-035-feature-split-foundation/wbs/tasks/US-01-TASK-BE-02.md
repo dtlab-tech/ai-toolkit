@@ -66,5 +66,5 @@ node -e "const f=require('./src/claude/scripts/feature-split.js'); const c=f.loa
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

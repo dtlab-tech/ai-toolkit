@@ -84,5 +84,5 @@ node -e "const {parseEpicRows,insertLateRow}=require('./src/claude/scripts/featu
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

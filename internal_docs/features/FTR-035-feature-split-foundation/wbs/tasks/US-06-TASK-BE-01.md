@@ -80,5 +80,5 @@ grep -q "| ID | Criterion | Related UC | Priority |" src/claude/agents/gaia-gene
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

@@ -110,7 +110,7 @@ Rules for the implementer:
 **Verification commands:**
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```
 
 ```

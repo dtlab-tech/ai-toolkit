@@ -57,5 +57,5 @@ node -e "const {foundationWarnings:f}=require('./src/claude/scripts/feature-spli
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

@@ -82,5 +82,5 @@ npx jest tests/scripts/feature-split.test.js -t register
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

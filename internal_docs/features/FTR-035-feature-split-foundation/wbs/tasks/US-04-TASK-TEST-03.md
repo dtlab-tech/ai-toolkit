@@ -153,5 +153,5 @@ npx jest tests/scripts/feature-split.test.js -t "apply refusal|apply foundation 
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

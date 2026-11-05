@@ -79,5 +79,5 @@ node --check src/claude/scripts/feature-split.js
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

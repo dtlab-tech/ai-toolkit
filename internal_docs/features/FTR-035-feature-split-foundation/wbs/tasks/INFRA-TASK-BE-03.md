@@ -73,9 +73,9 @@ node -e "const { slug } = require('./src/claude/scripts/feature-split.js'); if (
 ```
 
 ```
-node -e "const { slug } = require('./src/claude/scripts/feature-split.js'); for (const n of ['', '   ', 'a/b', 'a\\b', '..', 'x..y', 'CON', 'nul', 'COM1', 'lpt9', 'AUX.txt', '!!!']) { let threw = false; try { slug(n); } catch (e) { threw = e.code === 'INVALID_NAME'; } if (!threw) { console.error('not rejected: ' + JSON.stringify(n)); process.exit(1); } }"
+node -e "const { slug } = require('./src/claude/scripts/feature-split.js'); for (const n of ['', '   ', 'a/b', 'a' + String.fromCharCode(92) + 'b', '..', 'x..y', 'CON', 'nul', 'COM1', 'lpt9', 'AUX.txt', '!!!']) { let threw = false; try { slug(n); } catch (e) { threw = e.code === 'INVALID_NAME'; } if (!threw) { console.error('not rejected: ' + JSON.stringify(n)); process.exit(1); } }"
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

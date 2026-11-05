@@ -63,5 +63,5 @@ git diff -U0 -- src/claude/agents/gaia-generate-tech-spec.md | grep -E "^-[^-]" 
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

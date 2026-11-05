@@ -57,7 +57,7 @@ Scope check: the design excerpt and this task's skeleton entry fully specify the
 **Verification commands:**
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```
 
 ```

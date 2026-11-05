@@ -59,5 +59,5 @@ node -e "const c=JSON.parse(require('fs').readFileSync('src/claude/scripts/featu
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

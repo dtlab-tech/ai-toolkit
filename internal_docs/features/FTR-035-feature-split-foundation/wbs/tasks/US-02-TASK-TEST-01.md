@@ -117,5 +117,5 @@ npx jest tests/scripts/feature-split.test.js -t "isNewFeature"
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

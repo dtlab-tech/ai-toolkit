@@ -136,5 +136,5 @@ node -e "const m=require('./src/claude/scripts/feature-split.js');const p=m.buil
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

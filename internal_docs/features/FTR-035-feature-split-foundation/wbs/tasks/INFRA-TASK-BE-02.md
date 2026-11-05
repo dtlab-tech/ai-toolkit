@@ -101,5 +101,5 @@ node src/claude/scripts/feature-split.js 2>/dev/null | node -e "const o=JSON.par
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

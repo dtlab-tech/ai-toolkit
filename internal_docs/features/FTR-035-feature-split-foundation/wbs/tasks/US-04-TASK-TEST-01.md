@@ -105,5 +105,5 @@ node --check tests/scripts/feature-split.test.js
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

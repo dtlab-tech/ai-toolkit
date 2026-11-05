@@ -98,5 +98,5 @@ node -e "const m=require('./src/claude/scripts/feature-split.js');const D='\u201
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

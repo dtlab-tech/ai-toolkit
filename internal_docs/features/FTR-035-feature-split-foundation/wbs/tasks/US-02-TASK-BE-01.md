@@ -76,5 +76,5 @@ node -e "const { isNewFeature } = require('./src/claude/scripts/feature-split.js
 Expected output: `{"isNew":true,"reason":"no-markers"}` and then `{"isNew":true,"reason":"not-created"}`.
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

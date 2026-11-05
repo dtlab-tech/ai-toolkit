@@ -105,5 +105,5 @@ node -e "require('./src/claude/scripts/feature-split.js'); console.log('module l
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

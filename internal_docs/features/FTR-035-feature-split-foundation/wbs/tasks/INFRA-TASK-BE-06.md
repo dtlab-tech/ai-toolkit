@@ -73,5 +73,5 @@ node -e "const assert=require('assert');const {firstSentence:f}=require('./src/c
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

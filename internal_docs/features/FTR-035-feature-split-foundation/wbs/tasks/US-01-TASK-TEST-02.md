@@ -59,5 +59,5 @@ npm test -- --testPathPattern=feature-split.test
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

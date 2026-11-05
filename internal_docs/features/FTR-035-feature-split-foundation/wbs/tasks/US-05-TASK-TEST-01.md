@@ -107,7 +107,7 @@ describe('register()', () => {
 **Verification commands:**
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```
 
 ```

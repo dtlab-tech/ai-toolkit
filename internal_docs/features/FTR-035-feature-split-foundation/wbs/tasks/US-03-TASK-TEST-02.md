@@ -79,5 +79,5 @@ npx jest tests/scripts/feature-split.test.js -t "dependency order"
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

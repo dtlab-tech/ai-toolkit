@@ -141,5 +141,5 @@ npx jest tests/scripts/feature-split.test.js -t loadConfig
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

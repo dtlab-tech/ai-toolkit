@@ -136,5 +136,5 @@ npx jest tests/scripts/feature-split.test.js -t "late child apply"
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

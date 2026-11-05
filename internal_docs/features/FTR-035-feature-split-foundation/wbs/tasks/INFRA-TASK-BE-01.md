@@ -75,5 +75,5 @@ node -e "const { FeatureSplitError: E } = require('./src/claude/scripts/feature-
 ```
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```

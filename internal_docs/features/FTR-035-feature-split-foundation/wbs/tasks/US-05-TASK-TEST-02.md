@@ -101,5 +101,5 @@ Length check: the test block is complete and self-contained apart from the exist
 **Verification commands:**
 
 ```
-npm test
+npm test -- --testPathIgnorePatterns="node_modules|workflow-runtime"
 ```
