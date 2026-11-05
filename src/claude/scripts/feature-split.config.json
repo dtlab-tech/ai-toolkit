@@ -1,0 +1,14 @@
+{
+  "thresholds": {
+    "useCases": 8,
+    "acceptanceCriteria": 15,
+    "components": 30,
+    "estimatedPhases": 6
+  },
+  "definitionSignals": {
+    "minActors": 2,
+    "minApplications": 2,
+    "minFlows": 3
+  },
+  "minChildren": 2
+}
