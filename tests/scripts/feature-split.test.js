@@ -9,6 +9,7 @@ const LIB = require('../../src/claude/scripts/feature-split');
 const FACADE = path.join(__dirname, '..', '..', 'src', 'claude', 'scripts', 'feature-split.js');
 const {
   FeatureSplitError,
+  loadConfig,
   slug,
   firstSentence,
   readRegistry,
@@ -290,6 +291,114 @@ describe('facade stdout and exit code contract', () => {
     expect(Object.keys(out.error).sort()).toEqual(['code', 'file', 'key', 'message']);
     expect(out.error.code).toEqual(expect.any(String));
     expect(out.error.message).toEqual(expect.any(String));
+  });
+});
+
+describe('loadConfig', () => {
+  const DEFAULTS = {
+    thresholds: { useCases: 8, acceptanceCriteria: 15, components: 30, estimatedPhases: 6 },
+    definitionSignals: { minActors: 2, minApplications: 2, minFlows: 3 },
+    minChildren: 2,
+  };
+  let otherRoot;
+
+  const overridePath = () => path.join(root, 'feature-split.config.json');
+  const writeOverride = (obj) => fs.writeFileSync(overridePath(), JSON.stringify(obj), 'utf8');
+
+  beforeEach(() => {
+    otherRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-split-cfg-other-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(otherRoot, { recursive: true, force: true });
+  });
+
+  test('returns exactly the default shape when no override exists', () => {
+    expect(loadConfig({ projectRoot: root })).toEqual(DEFAULTS);
+  });
+
+  test('keeps every default that a subset override does not mention', () => {
+    writeOverride({ thresholds: { useCases: 5 } });
+
+    const cfg = loadConfig({ projectRoot: root });
+
+    expect(cfg.thresholds).toEqual({ useCases: 5, acceptanceCriteria: 15, components: 30, estimatedPhases: 6 });
+    expect(cfg.definitionSignals).toEqual(DEFAULTS.definitionSignals);
+    expect(cfg.minChildren).toBe(2);
+  });
+
+  test('treats an absent override file as no error', () => {
+    expect(fs.existsSync(overridePath())).toBe(false);
+
+    expect(() => loadConfig({ projectRoot: root })).not.toThrow();
+  });
+
+  test('throws CONFIG_INVALID_VALUE naming the key for a non-integer threshold', () => {
+    writeOverride({ thresholds: { useCases: 1.5 } });
+
+    const err = thrownBy(() => loadConfig({ projectRoot: root }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('CONFIG_INVALID_VALUE');
+    expect(err.key).toBe('thresholds.useCases');
+  });
+
+  test('throws CONFIG_INVALID_VALUE naming the key for a string threshold', () => {
+    writeOverride({ thresholds: { useCases: '8' } });
+
+    const err = thrownBy(() => loadConfig({ projectRoot: root }));
+
+    expect(err.code).toBe('CONFIG_INVALID_VALUE');
+    expect(err.key).toBe('thresholds.useCases');
+  });
+
+  test('throws CONFIG_INVALID_VALUE naming the key for a negative minChildren', () => {
+    writeOverride({ minChildren: -1 });
+
+    const err = thrownBy(() => loadConfig({ projectRoot: root }));
+
+    expect(err.code).toBe('CONFIG_INVALID_VALUE');
+    expect(err.key).toBe('minChildren');
+  });
+
+  test('throws CONFIG_UNKNOWN_KEY naming the key for an unknown nested key', () => {
+    writeOverride({ thresholds: { foo: 1 } });
+
+    const err = thrownBy(() => loadConfig({ projectRoot: root }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('CONFIG_UNKNOWN_KEY');
+    expect(err.key).toBe('thresholds.foo');
+  });
+
+  test('rejects a malformed override with CONFIG_INVALID_JSON, naming the file and a null key', () => {
+    fs.writeFileSync(overridePath(), '{ not json', 'utf8');
+
+    const err = thrownBy(() => loadConfig({ projectRoot: root }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('CONFIG_INVALID_JSON');
+    expect(err.file).toBe(overridePath());
+    expect(err.key).toBeNull();
+  });
+
+  test('rejects an unreadable override with CONFIG_OVERRIDE_UNREADABLE, naming the file and a null key', () => {
+    // A directory at the override path makes readFileSync fail with a non-ENOENT error.
+    fs.mkdirSync(overridePath());
+
+    const err = thrownBy(() => loadConfig({ projectRoot: root }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('CONFIG_OVERRIDE_UNREADABLE');
+    expect(err.file).toBe(overridePath());
+    expect(err.key).toBeNull();
+  });
+
+  test('reads the override only from the projectRoot argument', () => {
+    writeOverride({ minChildren: 4 });
+
+    expect(loadConfig({ projectRoot: root }).minChildren).toBe(4);
+    expect(loadConfig({ projectRoot: otherRoot })).toEqual(DEFAULTS);
   });
 });
 
