@@ -240,6 +240,33 @@ function assertNoStagingLeftovers(featuresRoot) {
   );
 }
 
+// UC-02 (D-07): is this feature folder still new, or has it been split or worked on?
+function isNewFeature(featureDir) {
+  let entries;
+  try {
+    fs.statSync(featureDir);
+    entries = fs.readdirSync(featureDir);
+  } catch (err) {
+    if (err.code === 'ENOENT') return { isNew: true, reason: 'not-created' };
+    throw new FeatureSplitError('FEATURE_UNREADABLE',
+      `Cannot read ${featureDir} (${err.code})`, { file: featureDir });
+  }
+  const prefix = (path.basename(featureDir).match(/^[A-Z]+-\d+/) || [])[0];
+  if (entries.includes('epic.md')) return { isNew: false, reason: 'epic' };
+  if (prefix && entries.includes(`${prefix}-Approvals.md`)) return { isNew: false, reason: 'approvals' };
+  if (entries.includes('wbs')) {
+    let isDir;
+    try {
+      isDir = fs.statSync(path.join(featureDir, 'wbs')).isDirectory();
+    } catch (err) {
+      throw new FeatureSplitError('FEATURE_UNREADABLE',
+        `Cannot read ${featureDir}/wbs (${err.code})`, { file: featureDir });
+    }
+    if (isDir) return { isNew: false, reason: 'wbs' };
+  }
+  return { isNew: true, reason: 'no-markers' };
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -291,3 +318,4 @@ module.exports.readRegistry = readRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
 module.exports.findStagingLeftovers = findStagingLeftovers;
 module.exports.assertNoStagingLeftovers = assertNoStagingLeftovers;
+module.exports.isNewFeature = isNewFeature;
