@@ -39,6 +39,12 @@ function slug(name) {
   return s;
 }
 
+function firstSentence(text) {
+  const s = typeof text === 'string' ? text.trim() : '';
+  const match = s.match(/^[\s\S]*?\.(?=\s)/);
+  return match ? match[0] : s;
+}
+
 const REGISTRY_NAME = 'REGISTRY.md';
 const ENTRY_HEADING = /^## (FTR-\d+) — (.+)$/;
 const ENTRY_SEPARATOR = /^---\s*$/;
@@ -178,6 +184,7 @@ module.exports.FeatureSplitError = FeatureSplitError;
 module.exports.main = main;
 module.exports.run = run;
 module.exports.slug = slug;
+module.exports.firstSentence = firstSentence;
 module.exports.parseRegistry = parseRegistry;
 module.exports.readRegistry = readRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
