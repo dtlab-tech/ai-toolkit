@@ -1149,3 +1149,174 @@ describe('apply registry entries', () => {
     expect(epicPresentAtRegistryWrite).toEqual([true]);
   });
 });
+
+describe('apply refusal', () => {
+  const PARENT_ID = 'FTR-001';
+  const PARENT_DIR = 'FTR-001-parent';
+  const REGISTRY_WITH_PARENT = [
+    '# Feature Registry',
+    '',
+    `## ${PARENT_ID} — Parent`,
+    '**Keywords:** parent',
+    '**Status:** defined',
+    '**Summary:** Parent summary.',
+    `→ [Detail](${PARENT_DIR}/feature.md)`,
+    '---',
+    '',
+  ].join('\n');
+
+  function sampleProposal(overrides = {}) {
+    return {
+      source: 'definition',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in and sessions', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+        { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+      ],
+      sharedFoundationOwner: 'Auth',
+      foundationNote: 'Shared models',
+      minChildren: 2,
+      ...overrides,
+    };
+  }
+
+  // Returns { relativePath: content } for every file, and { relativePath: null } for every directory.
+  function snapshot(dir) {
+    const out = {};
+    const walk = (current) => {
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const full = path.join(current, entry.name);
+        const rel = path.relative(dir, full).split(path.sep).join('/');
+        if (entry.isDirectory()) {
+          out[rel] = null;
+          walk(full);
+        } else {
+          out[rel] = fs.readFileSync(full, 'utf8');
+        }
+      }
+    };
+    walk(dir);
+    return out;
+  }
+
+  let featuresRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(path.join(featuresRoot, PARENT_DIR), { recursive: true });
+    fs.writeFileSync(path.join(featuresRoot, PARENT_DIR, 'feature.md'), '# Parent\n\n## Summary\n\nParent summary.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), REGISTRY_WITH_PARENT);
+  });
+
+  test('refuses a parent with no registry entry with PARENT_NOT_REGISTERED and writes nothing', () => {
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n');
+    const before = snapshot(featuresRoot);
+
+    const err = thrownBy(() => apply({ featuresRoot, parentId: PARENT_ID, proposal: sampleProposal() }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('PARENT_NOT_REGISTERED');
+    expect(snapshot(featuresRoot)).toEqual(before);
+  });
+
+  test('refuses a leftover staging directory with STAGING_LEFTOVER and writes nothing', () => {
+    fs.mkdirSync(path.join(featuresRoot, '.split-staging-old'));
+    const before = snapshot(featuresRoot);
+
+    const err = thrownBy(() => apply({ featuresRoot, parentId: PARENT_ID, proposal: sampleProposal() }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('STAGING_LEFTOVER');
+    expect(snapshot(featuresRoot)).toEqual(before);
+  });
+
+  test('refuses a proposal with fewer children than minChildren with TOO_FEW_CHILDREN and writes nothing', () => {
+    const before = snapshot(featuresRoot);
+    const proposal = sampleProposal({ children: [sampleProposal().children[0]] });
+
+    const err = thrownBy(() => apply({ featuresRoot, parentId: PARENT_ID, proposal }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('TOO_FEW_CHILDREN');
+    expect(snapshot(featuresRoot)).toEqual(before);
+  });
+
+  test('refuses a proposal with a dependency cycle with PROPOSAL_CYCLE and writes nothing', () => {
+    const before = snapshot(featuresRoot);
+    const proposal = sampleProposal({
+      children: [
+        { ...sampleProposal().children[0], dependsOn: ['Billing'] },
+        { ...sampleProposal().children[1], dependsOn: ['Auth'] },
+      ],
+    });
+
+    const err = thrownBy(() => apply({ featuresRoot, parentId: PARENT_ID, proposal }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('PROPOSAL_CYCLE');
+    expect(snapshot(featuresRoot)).toEqual(before);
+  });
+
+  test('refuses a malformed proposal (children not an array) with INVALID_PROPOSAL and writes nothing', () => {
+    const before = snapshot(featuresRoot);
+    const proposal = sampleProposal({ children: 'not-an-array' });
+
+    const err = thrownBy(() => apply({ featuresRoot, parentId: PARENT_ID, proposal }));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('INVALID_PROPOSAL');
+    expect(snapshot(featuresRoot)).toEqual(before);
+  });
+
+  test('leaves an unrelated existing child folder and its feature.md byte-identical after a successful apply', () => {
+    const existing = path.join(featuresRoot, 'FTR-002-existing');
+    fs.mkdirSync(existing);
+    fs.writeFileSync(path.join(existing, 'feature.md'), '# Existing\n\nDo not touch.\n');
+    const before = snapshot(existing);
+
+    apply({ featuresRoot, parentId: PARENT_ID, proposal: sampleProposal(), runId: 'aabbccdd' });
+
+    expect(snapshot(existing)).toEqual(before);
+  });
+
+  // Gap: allocateIds skips every existing FTR-NNN folder prefix, so a child folder or feature.md that
+  // already exists cannot be targeted through public inputs. Needs an allocation seam from the host.
+  test.todo('refuses a child whose folder or feature.md already exists with TARGET_EXISTS and leaves it unchanged');
+});
+
+describe('apply foundation warning', () => {
+  const PARENT_ID = 'FTR-001';
+  const PARENT_DIR = 'FTR-001-parent';
+
+  test('proceeds when the foundation owner is not the first child and records BR-03 in epic.md', () => {
+    const featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(path.join(featuresRoot, PARENT_DIR), { recursive: true });
+    fs.writeFileSync(path.join(featuresRoot, PARENT_DIR, 'feature.md'), '# Parent\n\n## Summary\n\nParent summary.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), [
+      '# Feature Registry',
+      '',
+      `## ${PARENT_ID} — Parent`,
+      '**Keywords:** parent',
+      '**Status:** defined',
+      '**Summary:** Parent summary.',
+      `→ [Detail](${PARENT_DIR}/feature.md)`,
+      '---',
+      '',
+    ].join('\n'));
+    const proposal = {
+      source: 'definition',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in and sessions', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+        { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+      ],
+      sharedFoundationOwner: 'Billing',
+      foundationNote: 'Shared models',
+      minChildren: 2,
+    };
+
+    const result = apply({ featuresRoot, parentId: PARENT_ID, proposal, runId: 'aabbccdd' });
+
+    expect(result.registry).toBe(true);
+    const epic = fs.readFileSync(path.join(featuresRoot, PARENT_DIR, 'epic.md'), 'utf8');
+    expect(epic).toMatch(/BR-03/);
+  });
+});
