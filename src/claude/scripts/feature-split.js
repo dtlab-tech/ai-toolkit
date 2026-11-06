@@ -523,6 +523,30 @@ function renderChildDoc(p, ctx) {                          // D-15
 
 
 
+function renderSplitRow(r) {
+  return `| ${r.order} | ${r.id} | ${r.name} | ${r.dir} | ${r.checkpoint} | ${r.deps.join(', ') || 'none'} | ${r.owner ? 'yes' : 'no'} |`;
+}
+
+// Pure: returns epic.md text. Performs no file I/O.
+// rows: [{ order, id, name, dir, checkpoint, deps: string[], owner: boolean }]
+// warnings: output of foundationWarnings(), may be []
+// originalText: the verbatim feature.md text, appended unchanged
+function renderEpic({ parentId, title, rows, originalText, warnings = [] }) {
+  const foundation = warnings.length
+    ? warnings.map(w => w.message.replace(/\|/g, '\\|')).join(' ')
+    : 'none';
+  return [
+    `# ${title} — epic`, '',
+    '## Feature ID', parentId, '',
+    '## Split table', '',
+    '| Order | ID | Name | Dir | Checkpoint | Depends on | Shared foundation |',
+    '|---|---|---|---|---|---|---|',
+    ...rows.map(renderSplitRow),
+    `| — | — | Shared foundation | — | — | — | ${foundation} |`,
+    '', '## Original feature text', '', originalText,
+  ].join('\n');
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -579,6 +603,7 @@ module.exports.renderEntry = renderEntry;
 module.exports.findBlock = findBlock;
 module.exports.fieldOf = fieldOf;
 module.exports.setField = setField;
+module.exports.renderEpic = renderEpic;
 module.exports.renderRegistry = renderRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
 module.exports.findStagingLeftovers = findStagingLeftovers;
