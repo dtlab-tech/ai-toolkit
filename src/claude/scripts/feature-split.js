@@ -364,6 +364,58 @@ function readRegistry(featuresRoot) {
   return { exists: true, file, entries: parseRegistry(text) };
 }
 
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Builds the lines of one new registry entry, in the live REGISTRY.md layout.
+// The caller adds the '---' separator and blank lines around it.
+function renderEntry(e) {
+  const keywords = Array.isArray(e.keywords) ? e.keywords.join(', ') : e.keywords;
+  const lines = [
+    `## ${e.id} — ${e.title}`,
+    `**Keywords:** ${keywords}`,
+    `**Status:** ${e.status}`,
+    `**Summary:** ${e.summary}`,
+  ];
+  if (e.parent) {
+    const deps = e.dependsOn ?? [];
+    lines.push(`**Parent:** ${e.parent}`, `**Depends on:** ${deps.length ? deps.join(', ') : 'none'}`);
+  }
+  lines.push(`→ [Detail](${e.detail})`);
+  return lines;
+}
+
+const findBlock = (r, id) => r.blocks.find(b => b.id === id);
+
+// Returns the trimmed value of the first "**Key:**" line in the block, or null.
+function fieldOf(block, key) {
+  const re = new RegExp(`^\\*\\*${escapeRe(key)}:\\*\\*\\s*(.*)$`);
+  for (const line of block.lines) {
+    const m = line.match(re);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+// Replaces the first "**Key:**" line in place. If none exists, inserts one after the
+// block's last "**Key:**" line (or after the heading when there is none). Mutates and returns the block.
+function setField(block, key, value) {
+  const line = `**${key}:** ${value}`.trimEnd();
+  const re = new RegExp(`^\\*\\*${escapeRe(key)}:\\*\\*`);
+  const at = block.lines.findIndex(l => re.test(l));
+  if (at !== -1) {
+    block.lines[at] = line;
+    return block;
+  }
+  let last = -1;
+  block.lines.forEach((l, i) => { if (/^\*\*[^*]+:\*\*/.test(l)) last = i; });
+  block.lines.splice(last !== -1 ? last + 1 : Math.min(1, block.lines.length), 0, line);
+  return block;
+}
+
+// Joins the preserved head and every block's verbatim lines with the detected EOL.
+// Untouched blocks are emitted exactly as parsed, so they stay byte-identical.
+const renderRegistry = (r) => [...r.head, ...r.blocks.flatMap(b => b.lines)].join(r.eol);
+
 function writeRegistryAtomic(featuresRoot, runId, content) {
   const registryPath = path.join(featuresRoot, REGISTRY_NAME);
   if (!/^[0-9a-f]+$/i.test(String(runId))) {
@@ -499,6 +551,11 @@ module.exports.dependencyOrder = dependencyOrder;
 module.exports.foundationWarnings = foundationWarnings;
 module.exports.parseRegistry = parseRegistry;
 module.exports.readRegistry = readRegistry;
+module.exports.renderEntry = renderEntry;
+module.exports.findBlock = findBlock;
+module.exports.fieldOf = fieldOf;
+module.exports.setField = setField;
+module.exports.renderRegistry = renderRegistry;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
 module.exports.findStagingLeftovers = findStagingLeftovers;
 module.exports.assertNoStagingLeftovers = assertNoStagingLeftovers;
