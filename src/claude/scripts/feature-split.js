@@ -525,6 +525,53 @@ function assertNoStagingLeftovers(featuresRoot) {
   );
 }
 
+// stageFiles: [{ rel, text }] paths relative to staging
+// moves: [{ from, to }] in commit order (children, parent rollback copy and req/ spec/ backups, then epic.md)
+// Returns warning strings (empty when staging was removed). Always throws on failure before the registry commit.
+function commitStaged({ featuresRoot, staging, stageFiles, moves, registryFile, registryText, runId }) {
+  const journal = [];
+  let createdStaging = false;
+  const move = (from, to) => { fs.renameSync(from, to); journal.push({ from, to }); };
+  try {
+    fs.mkdirSync(staging);
+    createdStaging = true;
+    fs.mkdirSync(path.join(staging, 'parent-backup'));
+    for (const f of stageFiles) {
+      const full = path.join(staging, f.rel);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, f.text);
+    }
+    for (const m of moves) move(m.from, m.to);
+    writeRegistryAtomic(featuresRoot, runId, registryText);
+  } catch (cause) {
+    rollbackJournal({ journal, staging, createdStaging, registryFile, runId, cause });
+  }
+  return removeStagingAfterCommit(staging);
+}
+
+function rollbackJournal({ journal, staging, createdStaging, registryFile, runId, cause }) {
+  const stuck = [];
+  for (const step of [...journal].reverse()) {
+    try { fs.renameSync(step.to, step.from); }
+    catch { stuck.push(step.to); }
+  }
+  try { fs.rmSync(`${registryFile}.tmp-${runId}`, { force: true }); }
+  catch { /* INFRA-TASK-BE-05 already removes its temp file; the leftover scan reports any remainder */ }
+  if (stuck.length === 0 && createdStaging) {
+    try { fs.rmSync(staging, { recursive: true, force: true }); }
+    catch { stuck.push(staging); }
+  }
+  if (stuck.length)
+    throw new FeatureSplitError('ROLLBACK_FAILED',
+      `Run failed (${cause.message}); rollback left these paths: ${stuck.join(', ')}`, { file: staging });
+  throw cause;
+}
+
+function removeStagingAfterCommit(staging) {
+  try { fs.rmSync(staging, { recursive: true, force: true }); return []; }
+  catch { return [`Committed, but staging could not be removed: ${staging}`]; }
+}
+
 // UC-02 (D-07): is this feature folder still new, or has it been split or worked on?
 function isNewFeature(featureDir) {
   let entries;
