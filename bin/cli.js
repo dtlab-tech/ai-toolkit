@@ -2939,6 +2939,7 @@ async function handleExecutorCommand(argv) {
         agentBudgetUsd: agentBudgetUsdRaw === undefined ? undefined : Number(agentBudgetUsdRaw),
         reviewScope: reviewScopeRaw,
         fromReplanRunId: getFlag('--from-replan-run-id'),
+        carryOver: remaining.includes('--no-carry-over') ? false : undefined,
       });
       emitSuccess(result);
 
