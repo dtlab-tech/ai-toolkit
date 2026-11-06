@@ -29,10 +29,26 @@ available for exploring the feature's own project, just not for locating this te
 Output Structure section below summarizes it; the inlined template text is the source of truth if
 the two ever disagree.
 
+## Registry Reader Rules
+
+The registry path is supplied by the host, already resolved. Read it with the Read tool. This agent never writes the registry and never follows `Detail` links.
+
+Each entry is a `## FTR-NNN — Title` heading followed by bold-key lines: `**Keywords:**`, `**Status:**`, `**Summary:**`, `**Detail:**`, and for children `**Parent:**` and `**Depends on:**`.
+
+Apply these rules per entry:
+
+1. **`Status: epic`**: the entry is the parent record of a split. Record it as a parent in Section 8. Confirm its epic record exists with Glob `<features-root>/<ID>-*/epic.md`, where the features root is the registry file's parent directory. If none is found, note "epic FTR-NNN is registered but epic.md was not found" in Section 8 and continue. Do not generate requirements for the epic. Do not read the children's feature.md files.
+2. **`Parent:` present**: this is a child. Record the epic ID as a split relationship in Section 8. `Depends on:` lists sibling IDs; record each as a dependency. `Depends on: none` means no sibling dependency (the first child).
+3. **Neither `Parent:` nor `Depends on:` present**: a standalone entry. Read it exactly as before (Keywords, Summary, Status drive the relevance scan). Record no split relationship. Entries written before these lines existed are read this way. Their absence is not an error.
+4. **`Status` other than `defined`, `completed` or `epic`**: leave the entry untouched. It is not a relevance source, not an epic, and not reported as an error.
+5. **Malformed `Parent:` or `Depends on:` value** (unknown ID, empty value): treat the line as absent and note the malformed value in Section 8 as an assumption. Never stop generation for it.
+
+The `**Detail:**` line is ignored by this agent in all cases.
+
 ## Process
 
 1. **Read** the feature document completely
-2. **Read** `docs/features/REGISTRY.md` if it exists — scan entries for features that share keywords, entities, or actors with this feature. Note relevant relationships in Section 8 (Dependencies & Assumptions) of the output document. If no registry exists or no relevant features are found, skip silently.
+2. **Read** the registry at the path the host supplies in the dispatch prompt (resolved with `ai-toolkit resolve-features-root`). If no path is supplied or the file does not exist, skip this step silently. Scan entries for features that share keywords, entities, or actors with this feature, and apply the Registry Reader Rules below. Note relevant relationships in Section 8 (Dependencies & Assumptions) of the output document. If no relevant features are found, skip silently.
 3. **Identify** all functional areas described
 3. **Extract** actors, use cases, business rules, acceptance criteria
 4. **Organize** into a structured requirements document
