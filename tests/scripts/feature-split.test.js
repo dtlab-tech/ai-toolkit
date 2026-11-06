@@ -1004,3 +1004,148 @@ describe('initial apply success', () => {
     expect(findStagingLeftovers(featuresRoot)).toEqual([]);
   });
 });
+
+describe('apply registry entries', () => {
+  const PARENT = 'FTR-010';
+  const PARENT_DIR = 'FTR-010-login';
+  const OTHER_ENTRY = [
+    '## FTR-005 — Unrelated work',
+    '**Keywords:** misc',
+    '**Status:** in-progress',
+    '**Summary:** Unrelated work.',
+    '→ [Detail](FTR-005-unrelated/feature.md)',
+  ].join('\n');
+  const PARENT_ENTRY = [
+    `## ${PARENT} — Login`,
+    '**Keywords:** auth',
+    '**Status:** defined',
+    '**Summary:** Sign-in and sessions for users. Billing follows.',
+    `→ [Detail](${PARENT_DIR}/feature.md)`,
+  ].join('\n');
+
+  let featuresRoot;
+
+  function sampleProposal() {
+    return {
+      source: 'definition',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in and sessions', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+        { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+      ],
+      sharedFoundationOwner: 'Auth',
+      foundationNote: 'Shared models',
+      minChildren: 2,
+    };
+  }
+
+  // Returns the registry block for one ID: from its heading up to the next heading or separator.
+  function entryBlock(text, id) {
+    const start = text.indexOf(`## ${id} `);
+    if (start < 0) return null;
+    const lineEnd = text.indexOf('\n', start);
+    const next = text.slice(lineEnd).search(/\n(## FTR-|---)/);
+    return next < 0 ? text.slice(start) : text.slice(start, lineEnd + next);
+  }
+
+  function readField(block, key) {
+    const match = block.match(new RegExp(`\\*\\*${key}:\\*\\* (.*)`));
+    return match ? match[1].trim() : undefined;
+  }
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'custom-features');
+    fs.mkdirSync(path.join(featuresRoot, PARENT_DIR), { recursive: true });
+    fs.writeFileSync(path.join(featuresRoot, PARENT_DIR, 'feature.md'),
+      '# Login\n\n## Summary\n\nOriginal text.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'),
+      ['# Feature Registry', '', PARENT_ENTRY, '', '---', '', OTHER_ENTRY, ''].join('\n'));
+  });
+
+  function runApply() {
+    return apply({ featuresRoot, parentId: PARENT, proposal: sampleProposal(), runId: 'aabbccdd' });
+  }
+
+  function readRegistry() {
+    return fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+  }
+
+  test('child entry records Parent, Depends on none and a Detail link for the first child', () => {
+    const result = runApply();
+    const auth = entryBlock(readRegistry(), result.children[0].id);
+
+    expect(readField(auth, 'Parent')).toBe(PARENT);
+    expect(readField(auth, 'Depends on')).toBe('none');
+    expect(auth).toMatch(/\[Detail\]\(.*feature\.md\)/);
+  });
+
+  test('later child entry records Parent, the earlier child ID as Depends on and a Detail link', () => {
+    const result = runApply();
+    const [authId, billingId] = result.children.map((c) => c.id);
+    const billing = entryBlock(readRegistry(), billingId);
+
+    expect(readField(billing, 'Parent')).toBe(PARENT);
+    expect(readField(billing, 'Depends on')).toBe(authId);
+    expect(billing).toMatch(/\[Detail\]\(.*feature\.md\)/);
+  });
+
+  test('parent entry is changed in place to status epic', () => {
+    runApply();
+    const epic = entryBlock(readRegistry(), PARENT);
+
+    expect(readField(epic, 'Status')).toBe('epic');
+  });
+
+  test('parent entry keeps a single heading and sits before the unrelated entry', () => {
+    runApply();
+    const registry = readRegistry();
+
+    expect(registry.match(new RegExp(`^## ${PARENT} `, 'gm'))).toHaveLength(1);
+    expect(registry.indexOf(`## ${PARENT} `)).toBeLessThan(registry.indexOf('## FTR-005 '));
+  });
+
+  test('parent entry Summary is the first sentence of the original Summary', () => {
+    runApply();
+    const epic = entryBlock(readRegistry(), PARENT);
+
+    expect(readField(epic, 'Summary')).toBe('Sign-in and sessions for users.');
+  });
+
+  test('parent entry Keywords is the union of the child keywords', () => {
+    runApply();
+    const epic = entryBlock(readRegistry(), PARENT);
+
+    expect(readField(epic, 'Keywords').split(/,\s*/).sort()).toEqual(['auth', 'billing']);
+  });
+
+  test('parent entry Detail links to epic.md in the parent folder', () => {
+    runApply();
+    const epic = entryBlock(readRegistry(), PARENT);
+
+    expect(epic).toMatch(/\[Detail\]\(.*epic\.md\)/);
+  });
+
+  test('an entry with another status is left byte-identical', () => {
+    runApply();
+
+    expect(readRegistry()).toContain(OTHER_ENTRY);
+  });
+
+  test('epic.md exists in the parent folder at the moment REGISTRY.md is written', () => {
+    const realRename = fs.renameSync;
+    const epicPresentAtRegistryWrite = [];
+    const spy = jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (path.basename(to) === 'REGISTRY.md') {
+        epicPresentAtRegistryWrite.push(
+          fs.existsSync(path.join(featuresRoot, PARENT_DIR, 'epic.md')));
+      }
+      return realRename(from, to);
+    });
+    try {
+      runApply();
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(epicPresentAtRegistryWrite).toEqual([true]);
+  });
+});
