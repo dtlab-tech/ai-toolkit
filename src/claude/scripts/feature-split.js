@@ -1041,8 +1041,23 @@ function readFeatureForRegister(featureDir) {
   return { id: idMatch[1], title: title.trim(), summary: firstSentence(summary) };
 }
 
+function positionalArgs(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (!args[i].startsWith('--')) { out.push(args[i]); continue; }
+    const next = args[i + 1];
+    if (next !== undefined && !next.startsWith('--')) i++;
+  }
+  return out;
+}
+
 function runRegister(args) {
-  throw new Error('register is not implemented yet');
+  const flags = parseFlags(args);
+  const featuresRoot = required(flags, 'features-root');
+  const featureDir = positionalArgs(args)[0];
+  if (!featureDir) fail('ARG_MISSING', 'a feature directory argument is required');
+  const keywords = (flags.keywords || '').split(',').map(s => s.trim()).filter(Boolean);
+  return register({ featuresRoot, featureDir, keywords });
 }
 
 const COMMANDS = { apply: runApply, register: runRegister };
