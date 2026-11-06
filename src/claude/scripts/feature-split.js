@@ -521,10 +521,56 @@ function renderChildDoc(p, ctx) {                          // D-15
   ].join('\n');
 }
 
-
+const ORIGINAL_HEADING = '## Original feature text';
 
 function renderSplitRow(r) {
   return `| ${r.order} | ${r.id} | ${r.name} | ${r.dir} | ${r.checkpoint} | ${r.deps.join(', ') || 'none'} | ${r.owner ? 'yes' : 'no'} |`;
+}
+
+// A child row starts with a numeric Order cell. The header, the separator and the shared foundation
+// row (| — | … |) never do. Only lines above the original feature text are considered.
+function childRowIndexes(lines) {
+  const originalAt = lines.findIndex(l => l.trim() === ORIGINAL_HEADING);
+  const end = originalAt < 0 ? lines.length : originalAt;
+  const indexes = [];
+  for (let i = 0; i < end; i++) {
+    if (/^\|\s*\d+\s*\|/.test(lines[i].trim())) indexes.push(i);
+  }
+  return indexes;
+}
+
+// Returns child rows of the epic.md split table, excluding the header and the shared foundation row.
+// Rows: [{ order, id, name, dir, checkpoint, deps: string[], owner: boolean }]
+function parseEpicRows(text) {
+  const lines = text.split('\n');
+  return childRowIndexes(lines).map(i => {
+    const cells = lines[i].trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+    const [order, id, name, dir, checkpoint, depends, shared] = cells;
+    return {
+      order: parseInt(order, 10),
+      id,
+      name,
+      dir,
+      checkpoint,
+      deps: depends === 'none' || depends === '' ? [] : depends.split(',').map(d => d.trim()).filter(Boolean),
+      owner: shared === 'yes',
+    };
+  });
+}
+
+// Pure: returns epic.md text with one late row inserted after the last child row.
+// Existing rows, the shared foundation row and the original text are kept byte-for-byte.
+// row: { id, name, dir, checkpoint, deps: string[], owner: boolean }; order is always last + 1.
+function insertLateRow(text, row) {
+  const lines = text.split('\n');
+  const indexes = childRowIndexes(lines);
+  if (!indexes.length) fail('EPIC_TABLE_MISSING', 'epic.md has no child rows to insert after');
+  const order = parseEpicRows(text).reduce((max, r) => Math.max(max, r.order), 0) + 1;
+  const anchor = indexes[indexes.length - 1];
+  const cr = lines[anchor].endsWith('\r') ? '\r' : '';
+  const newLine = renderSplitRow({ ...row, order, deps: row.deps ?? [] }) + cr;
+  lines.splice(anchor + 1, 0, newLine);
+  return lines.join('\n');
 }
 
 // Pure: returns epic.md text. Performs no file I/O.
@@ -612,3 +658,5 @@ module.exports.isNewFeature = isNewFeature;
 module.exports.buildProposal = buildProposal;
 module.exports.editProposal = editProposal;
 module.exports.allocateIds = allocateIds;
+module.exports.parseEpicRows = parseEpicRows;
+module.exports.insertLateRow = insertLateRow;
