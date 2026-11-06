@@ -1765,7 +1765,7 @@ describe('facade apply command', () => {
   });
 });
 
-describe('register', () => {
+describe('register()', () => {
   const FEATURE_DIR = 'FTR-050-login';
   const REGISTRY_HEAD = [
     '## FTR-005 — Unrelated work',
