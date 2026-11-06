@@ -940,8 +940,34 @@ function apply({ featuresRoot, parentId, proposal, runId = newRunId() }) {
   };
 }
 
+function parseFlags(args) {
+  const flags = {};
+  for (let i = 0; i < args.length; i++) {
+    if (!args[i].startsWith('--')) continue;
+    const next = args[i + 1];
+    flags[args[i].slice(2)] = next === undefined || next.startsWith('--') ? '' : next;
+    if (next !== undefined && !next.startsWith('--')) i++;
+  }
+  return flags;
+}
+
+function required(flags, name) {
+  if (!flags[name]) fail('ARG_MISSING', `--${name} is required`);
+  return flags[name];
+}
+
 function runApply(args, readStdin) {
-  throw new Error('apply is not implemented yet');
+  const flags = parseFlags(args);
+  const featuresRoot = required(flags, 'features-root');
+  const parentId = required(flags, 'parent');
+  const text = readStdin();
+  let proposal;
+  try {
+    proposal = JSON.parse(text);
+  } catch {
+    fail('INVALID_PROPOSAL', 'The proposal on stdin is not valid JSON');
+  }
+  return apply({ featuresRoot, parentId, proposal });
 }
 
 function runRegister(args) {
