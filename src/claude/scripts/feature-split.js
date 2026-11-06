@@ -970,6 +970,44 @@ function runApply(args, readStdin) {
   return apply({ featuresRoot, parentId, proposal });
 }
 
+function sectionBody(text, heading) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => l.trim() === `## ${heading}`);
+  if (start === -1) return null;
+  const body = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^## /.test(line)) break;
+    body.push(line);
+  }
+  return body.join('\n').trim();
+}
+
+function readFeatureForRegister(featureDir) {
+  const dir = path.resolve(featureDir);
+  const base = path.basename(dir);
+  const idMatch = base.match(/^(FTR-\d+)/);
+  if (!idMatch) fail('FEATURE_INVALID', `Folder ${base} has no FTR-NNN prefix`, { file: dir });
+
+  if (fs.existsSync(path.join(dir, 'epic.md')))
+    fail('PARENT_INVALID', `${base} holds epic.md; it is a parent epic, not a feature`, { file: dir });
+
+  const file = path.join(dir, 'feature.md');
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    fail('FEATURE_INVALID', `Cannot read ${file} (${err.code})`, { file });
+  }
+
+  const title = (text.match(/^# (.+)$/m) || [])[1];
+  if (!title) fail('FEATURE_INVALID', `No H1 title in ${file}`, { file });
+
+  const summary = sectionBody(text, 'Summary');
+  if (summary === null) fail('FEATURE_INVALID', `No Summary section in ${file}`, { file });
+
+  return { id: idMatch[1], title: title.trim(), summary: firstSentence(summary) };
+}
+
 function runRegister(args) {
   throw new Error('register is not implemented yet');
 }
