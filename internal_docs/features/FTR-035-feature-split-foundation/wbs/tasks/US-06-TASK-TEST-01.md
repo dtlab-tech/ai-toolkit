@@ -80,7 +80,7 @@ Verification: run the new file on its own first, then run the full suite, which 
 
 **Verification commands:**
 
-```
+```bash
 test -f tests/frontmatter/registry-reader-tolerance.test.js
 ```
 

@@ -103,3 +103,7 @@ Correction made by hand to the Work Breakdown during the executor run, after it 
   result of the first assertion's input (registry up to FTR-009). For its own input (folder FTR-005, registry
   FTR-002) the correct next ID is `FTR-006`. Both executor attempts returned `FTR-006` and were blocked by the
   wrong expectation. Only the expected value changed.
+- US-06-TASK-TEST-01 (2026-11-06): the first verification command I had added used a plain code fence while the
+  task's other commands used ```bash fences. The executor's parser paired the fences wrongly and ran
+  "```bash npm test" (a bash syntax error), blocking the task twice with the work itself correct. The fence is now
+  ```bash like the others; no command changed.
