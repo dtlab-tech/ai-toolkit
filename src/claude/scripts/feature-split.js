@@ -593,6 +593,75 @@ function renderEpic({ parentId, title, rows, originalText, warnings = [] }) {
   ].join('\n');
 }
 
+// D-08 shape: structural types only. Business rules (source values, names, dependencies,
+// minChildren threshold) stay in validateProposal, which raises its own codes.
+function assertProposalShape(p) {
+  const bad = (why) => fail('INVALID_PROPOSAL', `Proposal shape invalid: ${why}`);
+  if (p === null || typeof p !== 'object' || Array.isArray(p)) bad('must be a JSON object');
+  if (!Array.isArray(p.children)) bad('children must be an array');
+  p.children.forEach((c, i) => {
+    if (c === null || typeof c !== 'object' || Array.isArray(c)) bad(`children[${i}] must be an object`);
+  });
+  if (!Number.isInteger(p.minChildren) || p.minChildren < 0) bad('minChildren must be a non-negative integer');
+  if (typeof p.foundationNote !== 'string') bad('foundationNote must be a string');
+  if (p.sharedFoundationOwner !== null && typeof p.sharedFoundationOwner !== 'string')
+    bad('sharedFoundationOwner must be a string or null');
+}
+
+// Only ENOENT and ENOTDIR mean absent; any other error propagates.
+function fileExists(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return false;
+    throw err;
+  }
+}
+
+// feature.md only -> initial; epic.md only -> late; both or neither -> PARENT_INVALID.
+function detectMode(parentDir, parentId) {
+  const hasFeature = fileExists(path.join(parentDir, 'feature.md'));
+  const hasEpic = fileExists(path.join(parentDir, 'epic.md'));
+  if (hasFeature === hasEpic)
+    fail('PARENT_INVALID', `${parentId} folder must hold exactly one of feature.md or epic.md`, { file: parentDir });
+  return hasEpic ? 'late' : 'initial';
+}
+
+// Returns the parent's feature folder (named exactly by its ID, or "<ID>-<slug>").
+// When no folder matches, returns the bare ID path, which holds neither marker file, so detectMode refuses it.
+function findParentDir(featuresRoot, parentId) {
+  let names;
+  try {
+    names = fs.readdirSync(featuresRoot);
+  } catch (err) {
+    if (err.code === 'ENOENT') names = [];
+    else throw new FeatureSplitError('FEATURE_UNREADABLE', `Cannot read ${featuresRoot} (${err.code})`, { file: featuresRoot });
+  }
+  const matches = names.filter(n => n === parentId || n.startsWith(`${parentId}-`)).sort();
+  if (matches.length > 1)
+    fail('PARENT_INVALID', `${parentId} matches more than one folder: ${matches.join(', ')}`, { file: featuresRoot });
+  return path.join(featuresRoot, matches[0] ?? parentId);
+}
+
+// Apply pre-checks. Nothing is moved, written or staged here.
+// Order: proposal shape, staging leftovers, parent registry entry, parent folder mode, status, isNewFeature.
+// Returns { mode, parentDir, parentEntry }.
+function checkApplyPreconditions({ featuresRoot, parentId, proposal }) {
+  assertProposalShape(proposal);
+  assertNoStagingLeftovers(featuresRoot);
+  const parentEntry = readRegistry(featuresRoot).entries.find(e => e.id === parentId);
+  if (!parentEntry) fail('PARENT_NOT_REGISTERED', `${parentId} has no registry entry`, { key: parentId });
+  const parentDir = findParentDir(featuresRoot, parentId);
+  const mode = detectMode(parentDir, parentId);
+  const late = mode === 'late';
+  const wantStatus = late ? 'epic' : 'defined';
+  if (parentEntry.status !== wantStatus)
+    fail('PARENT_STATUS_INVALID', `${parentId} has status ${parentEntry.status}; ${mode} mode needs ${wantStatus}`, { key: parentId });
+  if (!late && !isNewFeature(parentDir).isNew)
+    fail('PARENT_NOT_NEW', `${parentId} has approvals or a WBS`, { file: parentDir });
+  return { mode, parentDir, parentEntry };
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -660,3 +729,6 @@ module.exports.editProposal = editProposal;
 module.exports.allocateIds = allocateIds;
 module.exports.parseEpicRows = parseEpicRows;
 module.exports.insertLateRow = insertLateRow;
+module.exports.assertProposalShape = assertProposalShape;
+module.exports.detectMode = detectMode;
+module.exports.checkApplyPreconditions = checkApplyPreconditions;
