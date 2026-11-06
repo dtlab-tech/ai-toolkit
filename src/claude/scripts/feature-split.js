@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -843,6 +844,102 @@ function planLate({ featuresRoot, registry, epicText, proposal }) {
   }];
 }
 
+const newRunId = () => crypto.randomBytes(4).toString('hex');
+
+// Block-shaped registry ({ eol, head, blocks }) for the planners and buildRegistryText.
+// Splitting and re-joining with the same EOL keeps untouched lines byte-identical.
+function readRegistryBlocks(featuresRoot) {
+  const text = fs.readFileSync(path.join(featuresRoot, REGISTRY_NAME), 'utf8');
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const head = [];
+  const blocks = [];
+  let current = null;
+  for (const line of text.split(eol)) {
+    const heading = line.match(ENTRY_HEADING);
+    if (heading) {
+      current = { id: heading[1], lines: [line] };
+      blocks.push(current);
+    } else if (current) {
+      current.lines.push(line);
+    } else {
+      head.push(line);
+    }
+  }
+  return { eol, head, blocks };
+}
+
+// UC-04 apply. Pre-checks, plan, render in memory, then commit through commitStaged.
+// Returns { epic, children: [{ id, dir }], registry: true } plus warnings only when staging removal failed.
+function apply({ featuresRoot, parentId, proposal, runId = newRunId() }) {
+  const { mode, parentDir } = checkApplyPreconditions({ featuresRoot, parentId, proposal });
+  const late = mode === 'late';
+  const staging = path.join(featuresRoot, `${STAGING_PREFIX}${runId}`);
+  const registryFile = path.join(featuresRoot, REGISTRY_NAME);
+  const registry = readRegistryBlocks(featuresRoot);
+  const input = { ...proposal, children: proposal.children.map(normaliseChild) };
+
+  const epicText = late ? fs.readFileSync(path.join(parentDir, 'epic.md'), 'utf8') : null;
+  const originalFeature = late ? null : fs.readFileSync(path.join(parentDir, 'feature.md'), 'utf8');
+
+  let plan, planWarnings = [];
+  if (late) {
+    plan = planLate({ featuresRoot, registry, epicText, proposal: input });
+  } else {
+    ({ plan, warnings: planWarnings } = planInitial({ featuresRoot, registry, parentId, proposal: input }));
+  }
+
+  const total = late ? parseEpicRows(epicText).length + 1 : plan.length;
+  const childDocs = plan.map((p, i) => ({
+    dir: p.dir,
+    text: renderChildDoc(p, {
+      parentId,
+      position: late ? total : i + 1,
+      total,
+      foundationNote: input.foundationNote,
+    }),
+  }));
+  const epicOut = late
+    ? insertLateRow(epicText, plan[0])
+    : renderEpic({
+        parentId,
+        title: (originalFeature.match(/^# (.+)$/m) || [])[1] || parentId,
+        rows: plan.map((p, i) => ({
+          order: i + 1, id: p.id, name: p.name, dir: p.dir,
+          checkpoint: p.checkpoint, deps: p.deps, owner: p.owner,
+        })),
+        originalText: originalFeature,
+        warnings: planWarnings,
+      });
+  const registryText = buildRegistryText({
+    registry, parentId, parentDirName: path.basename(parentDir), plan, late,
+  });
+
+  const moves = [
+    ...plan.map(p => ({ from: path.join(staging, p.dir), to: path.join(featuresRoot, p.dir) })),
+    late
+      ? { from: path.join(parentDir, 'epic.md'), to: path.join(staging, 'epic.previous.md') }
+      : { from: path.join(parentDir, 'feature.md'), to: path.join(staging, 'feature.original.md') },
+    ...(late ? [] : ['req', 'spec']
+      .filter(name => fs.existsSync(path.join(parentDir, name)))
+      .map(name => ({ from: path.join(parentDir, name), to: path.join(staging, 'parent-backup', name) }))),
+    { from: path.join(staging, 'epic.md'), to: path.join(parentDir, 'epic.md') },
+  ];
+  const warnings = commitStaged({
+    featuresRoot, staging, runId, registryFile, registryText, moves,
+    stageFiles: [
+      ...childDocs.map(d => ({ rel: path.join(d.dir, 'feature.md'), text: d.text })),
+      { rel: 'epic.md', text: epicOut },
+    ],
+  });
+
+  return {
+    epic: parentId,
+    children: plan.map(p => ({ id: p.id, dir: p.dir })),
+    registry: true,
+    ...(warnings.length ? { warnings } : {}),
+  };
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -914,3 +1011,4 @@ module.exports.insertLateRow = insertLateRow;
 module.exports.assertProposalShape = assertProposalShape;
 module.exports.detectMode = detectMode;
 module.exports.checkApplyPreconditions = checkApplyPreconditions;
+module.exports.apply = apply;
