@@ -198,6 +198,20 @@ function validateProposal(p, { checkMin = true } = {}) {
   dependencyOrder(p.children);
 }
 
+function buildProposal({ source, children, sharedFoundationOwner, foundationNote = '', config }) {
+  const list = children.map(normaliseChild);
+  const proposal = {
+    source, children: list,
+    sharedFoundationOwner: null, foundationNote, minChildren: config.minChildren,
+  };
+  validateProposal(proposal);
+  const order = dependencyOrder(list);
+  proposal.children = order;
+  proposal.sharedFoundationOwner = sharedFoundationOwner === undefined ? order[0].name : sharedFoundationOwner;
+  validateProposal(proposal);
+  return { proposal, warnings: foundationWarnings(proposal, order) };
+}
+
 const REGISTRY_NAME = 'REGISTRY.md';
 const ENTRY_HEADING = /^## (FTR-\d+) — (.+)$/;
 const ENTRY_SEPARATOR = /^---\s*$/;
@@ -407,3 +421,4 @@ module.exports.writeRegistryAtomic = writeRegistryAtomic;
 module.exports.findStagingLeftovers = findStagingLeftovers;
 module.exports.assertNoStagingLeftovers = assertNoStagingLeftovers;
 module.exports.isNewFeature = isNewFeature;
+module.exports.buildProposal = buildProposal;
