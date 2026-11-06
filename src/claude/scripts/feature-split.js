@@ -509,6 +509,18 @@ function allocateIds(featuresRoot, registry, count) {
   return Array.from({ length: count }, () => `FTR-${String(next++).padStart(3, '0')}`);
 }
 
+function renderChildDoc(p, ctx) {                          // D-15
+  return [
+    `# ${p.name}`, '',
+    '## Feature ID', p.id, '',
+    '## Parent epic', `${ctx.parentId}. Position ${ctx.position} of ${ctx.total} in the dependency order.`, '',
+    '## Summary', p.summary, '',
+    '## Dependencies', `Depends on: ${p.deps.length ? p.deps.join(', ') : 'none'}`, '',
+    '## Assigned parts', p.assigned, '',
+    ...(p.owner ? ['## Shared foundation', ctx.foundationNote, ''] : []),
+  ].join('\n');
+}
+
 
 
 function runApply(args, readStdin) {
