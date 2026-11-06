@@ -499,6 +499,18 @@ function isNewFeature(featureDir) {
   return { isNew: true, reason: 'no-markers' };
 }
 
+// BR-02: next free IDs from the union of registry headings and feature folder prefixes.
+function allocateIds(featuresRoot, registry, count) {
+  const used = registry.blocks.map(b => b.id).filter(Boolean);
+  const dirs = fs.readdirSync(featuresRoot)
+    .map(n => (n.match(/^(FTR-\d+)/) || [])[1])
+    .filter(Boolean);
+  let next = Math.max(0, ...[...used, ...dirs].map(id => parseInt(id.slice(4), 10))) + 1;
+  return Array.from({ length: count }, () => `FTR-${String(next++).padStart(3, '0')}`);
+}
+
+
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
@@ -562,3 +574,4 @@ module.exports.assertNoStagingLeftovers = assertNoStagingLeftovers;
 module.exports.isNewFeature = isNewFeature;
 module.exports.buildProposal = buildProposal;
 module.exports.editProposal = editProposal;
+module.exports.allocateIds = allocateIds;
