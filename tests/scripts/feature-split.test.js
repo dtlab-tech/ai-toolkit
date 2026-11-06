@@ -684,3 +684,42 @@ describe('buildProposal()', () => {
     expect(listTree(root)).toEqual(before);
   });
 });
+
+describe('dependency order through buildProposal', () => {
+  const child = (name, dependsOn = []) => ({
+    name,
+    purpose: `${name} purpose`,
+    keywords: [name.toLowerCase()],
+    dependsOn,
+    assigned: `UC-${name}`,
+  });
+  const build = (children) => buildProposal({
+    source: 'definition',
+    children,
+    config: loadConfig({ projectRoot: root }),
+  });
+
+  test('children with no dependsOn keep their proposal order', () => {
+    const { proposal } = build([child('Alpha'), child('Bravo'), child('Charlie')]);
+
+    expect(proposal.children.map(c => c.name)).toEqual(['Alpha', 'Bravo', 'Charlie']);
+  });
+
+  test('the first child in proposal order is the default shared-foundation owner when no dependsOn is set', () => {
+    const { proposal } = build([child('Alpha'), child('Bravo'), child('Charlie')]);
+
+    expect(proposal.sharedFoundationOwner).toBe('Alpha');
+  });
+
+  test('a dependsOn chain reorders children ahead of a dependent child listed first', () => {
+    const { proposal } = build([child('Billing', ['Auth']), child('Auth'), child('Reports')]);
+
+    expect(proposal.children.map(c => c.name)).toEqual(['Auth', 'Billing', 'Reports']);
+  });
+
+  test('a dependsOn chain makes the dependency root the default shared-foundation owner', () => {
+    const { proposal } = build([child('Billing', ['Auth']), child('Auth'), child('Reports')]);
+
+    expect(proposal.sharedFoundationOwner).toBe('Auth');
+  });
+});
