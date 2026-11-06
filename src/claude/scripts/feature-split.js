@@ -697,6 +697,52 @@ function planInitial({ featuresRoot, registry, parentId, proposal }) {
   return { parentId, order, plan, warnings };
 }
 
+const LATE_CHILD_COUNT = 1;
+
+// Late-mode plan (D-16): exactly one child appended after the existing epic children.
+// Pure planning: reads epic.md text and the registry, never writes. minChildren is not checked.
+// Returns plan items shaped like planInitial's items, with checkpoint 'late' and owner false.
+function planLate({ featuresRoot, registry, epicText, proposal }) {
+  if (proposal.children.length !== LATE_CHILD_COUNT)
+    fail('LATE_CHILD_COUNT', `A late apply takes exactly ${LATE_CHILD_COUNT} child; got ${proposal.children.length}`);
+
+  const child = normaliseChild(proposal.children[0]);
+  // dependsOn names epic.md child rows, not siblings in this proposal, so it is cleared before validation.
+  validateProposal({ ...proposal, children: [{ ...child, dependsOn: [] }], sharedFoundationOwner: null },
+    { checkMin: false });
+
+  const rows = parseEpicRows(epicText);
+  if (rows.length === 0)
+    fail('PARENT_INVALID', 'epic.md has no child rows to place a late child after');
+
+  const byName = new Map(rows.map(r => [r.name, r]));
+  const deps = child.dependsOn.length
+    ? child.dependsOn.map(n => {
+        const row = byName.get(n);
+        if (!row) fail('UNKNOWN_DEPENDENCY', `${n} is not a child listed in epic.md`, { key: n });
+        return row.id;
+      })
+    : [rows[rows.length - 1].id];
+
+  const [id] = allocateIds(featuresRoot, registry, 1);
+  const dir = `${id}-${slug(child.name)}`;
+  const folder = path.join(featuresRoot, dir);
+  if (targetExists(folder) || targetExists(path.join(folder, 'feature.md')) || findBlock(registry, id))
+    fail('TARGET_EXISTS', `${id} already exists (folder, feature.md or registry heading)`, { file: folder });
+
+  return [{
+    name: child.name,
+    id,
+    dir,
+    summary: child.summary,
+    keywords: child.keywords,
+    assigned: child.assigned,
+    checkpoint: 'late',
+    deps,
+    owner: false,
+  }];
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
