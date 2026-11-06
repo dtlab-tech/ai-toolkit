@@ -1657,3 +1657,110 @@ describe('late child apply', () => {
     expect(result.children).toHaveLength(1);
   });
 });
+
+describe('facade apply command', () => {
+  const PARENT_ID = 'FTR-001';
+  const PARENT_DIR = 'FTR-001-parent';
+  const ORIGINAL = '# Parent\n\nSummary here. More.\n\n## Scope\n\nParent scope text.\n';
+  const REGISTRY_TEXT = [
+    '# Feature Registry',
+    '',
+    `## ${PARENT_ID} — Parent`,
+    '**Keywords:** parent',
+    '**Status:** defined',
+    '**Summary:** Summary here. More.',
+    `→ [Detail](${PARENT_DIR}/feature.md)`,
+    '---',
+    '',
+  ].join('\n');
+
+  let featuresRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    const parent = path.join(featuresRoot, PARENT_DIR);
+    fs.mkdirSync(path.join(parent, 'req'), { recursive: true });
+    fs.mkdirSync(path.join(parent, 'spec'), { recursive: true });
+    fs.writeFileSync(path.join(parent, 'feature.md'), ORIGINAL);
+    fs.writeFileSync(path.join(parent, 'req', 'index.md'), '# Requirements\n');
+    fs.writeFileSync(path.join(parent, 'spec', 'index.md'), '# Tech spec\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), REGISTRY_TEXT);
+  });
+
+  function sampleProposal(overrides = {}) {
+    return {
+      source: 'definition',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in and sessions', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+        { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+      ],
+      sharedFoundationOwner: 'Auth',
+      foundationNote: 'Shared models',
+      minChildren: 2,
+      ...overrides,
+    };
+  }
+
+  // Runs `feature-split.js apply` with the proposal piped on stdin, as the workflow does.
+  function runApplyFacade(stdin) {
+    return spawnSync(
+      process.execPath,
+      [FACADE, 'apply', '--features-root', featuresRoot, '--parent', PARENT_ID],
+      { input: stdin, encoding: 'utf8' }
+    );
+  }
+
+  test('a successful apply exits with status 0', () => {
+    const result = runApplyFacade(JSON.stringify(sampleProposal()));
+
+    expect(result.status).toBe(0);
+  });
+
+  test('a successful apply prints exactly one JSON object with epic, children and registry', () => {
+    const result = runApplyFacade(JSON.stringify(sampleProposal()));
+
+    const lines = result.stdout.trim().split(/\r?\n/);
+    expect(lines).toHaveLength(1);
+    const out = JSON.parse(lines[0]);
+    expect(Object.keys(out).sort()).toEqual(['children', 'epic', 'registry']);
+    expect(out.epic).toBe(PARENT_ID);
+    expect(out.registry).toBe(true);
+  });
+
+  test('a successful apply lists each created child with its id and dir', () => {
+    const result = runApplyFacade(JSON.stringify(sampleProposal()));
+
+    const out = JSON.parse(result.stdout);
+    expect(out.children).toHaveLength(2);
+    for (const child of out.children) {
+      expect(child).toEqual({ id: expect.any(String), dir: expect.any(String) });
+    }
+  });
+
+  test('a refused proposal exits with status 1', () => {
+    const oneChild = sampleProposal({ children: [sampleProposal().children[0]] });
+
+    const result = runApplyFacade(JSON.stringify(oneChild));
+
+    expect(result.status).toBe(1);
+  });
+
+  test('a refused proposal prints a JSON error object with a non-empty code and message', () => {
+    const oneChild = sampleProposal({ children: [sampleProposal().children[0]] });
+
+    const result = runApplyFacade(JSON.stringify(oneChild));
+
+    const out = JSON.parse(result.stdout);
+    expect(Object.keys(out)).toEqual(['error']);
+    expect(out.error.code).toEqual(expect.any(String));
+    expect(out.error.code.length).toBeGreaterThan(0);
+    expect(out.error.message.length).toBeGreaterThan(0);
+  });
+
+  test('unparseable stdin exits with status 1 and error code INVALID_PROPOSAL', () => {
+    const result = runApplyFacade('{not json');
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout).error.code).toBe('INVALID_PROPOSAL');
+  });
+});
