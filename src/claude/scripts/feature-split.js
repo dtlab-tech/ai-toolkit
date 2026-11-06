@@ -662,6 +662,41 @@ function checkApplyPreconditions({ featuresRoot, parentId, proposal }) {
   return { mode, parentDir, parentEntry };
 }
 
+// Internal helper, not exported. Pure planning: reads the features root and never writes.
+function targetExists(file) {
+  try { fs.lstatSync(file); return true; }
+  catch (err) {
+    if (err.code === 'ENOENT') return false;
+    fail('FEATURE_UNREADABLE', `Cannot inspect ${file} (${err.code})`, { file });
+  }
+}
+
+// Initial-mode plan. Refusal only for TARGET_EXISTS; BR-03 is a warning, never a refusal.
+function planInitial({ featuresRoot, registry, parentId, proposal }) {
+  validateProposal(proposal);
+  const order = dependencyOrder(proposal.children);
+  const warnings = foundationWarnings(proposal, order);
+  const ids = allocateIds(featuresRoot, registry, order.length);
+  const idOf = new Map(order.map((c, i) => [c.name, ids[i]]));
+  const plan = order.map((c, i) => ({
+    name: c.name,
+    id: ids[i],
+    dir: `${ids[i]}-${slug(c.name)}`,
+    summary: c.summary,
+    keywords: c.keywords,
+    assigned: c.assigned,
+    checkpoint: proposal.source,
+    deps: c.dependsOn.map(d => idOf.get(d)),
+    owner: c.name === proposal.sharedFoundationOwner,
+  }));
+  for (const p of plan) {
+    const folder = path.join(featuresRoot, p.dir);
+    if (targetExists(folder) || targetExists(path.join(folder, 'feature.md')) || findBlock(registry, p.id))
+      fail('TARGET_EXISTS', `${p.id} already exists (folder, feature.md or registry heading)`, { file: folder });
+  }
+  return { parentId, order, plan, warnings };
+}
+
 function runApply(args, readStdin) {
   throw new Error('apply is not implemented yet');
 }
