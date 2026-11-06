@@ -1320,3 +1320,144 @@ describe('apply foundation warning', () => {
     expect(epic).toMatch(/BR-03/);
   });
 });
+
+describe('apply rollback fault injection', () => {
+  const PARENT_ID = 'FTR-007';
+  const PARENT_DIR = 'FTR-007-checkout';
+  const RUN_ID = 'aabbccdd';
+  const REGISTRY_WITH_PARENT = [
+    '## FTR-007 — Checkout',
+    '',
+    '**Keywords:** checkout, payments',
+    '**Status:** defined',
+    '**Summary:** Checkout flow. Covers cart and payment.',
+    '→ [Detail](FTR-007-checkout/feature.md)',
+    '',
+    '---',
+    '',
+  ].join('\n');
+
+  const realRenameSync = fs.renameSync;
+  const realRmSync = fs.rmSync;
+  let featuresRoot, parentDir;
+
+  function sampleProposal() {
+    return {
+      source: 'definition',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in and sessions', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+        { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+      ],
+      sharedFoundationOwner: 'Auth',
+      foundationNote: 'Shared models',
+      minChildren: 2,
+    };
+  }
+
+  function runApply() {
+    return apply({ featuresRoot, parentId: PARENT_ID, proposal: sampleProposal(), runId: RUN_ID });
+  }
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'custom-features');
+    parentDir = path.join(featuresRoot, PARENT_DIR);
+    fs.mkdirSync(parentDir, { recursive: true });
+    fs.writeFileSync(path.join(parentDir, 'feature.md'), '# Checkout\n\nOriginal text.\n');
+    fs.mkdirSync(path.join(parentDir, 'req'));
+    fs.writeFileSync(path.join(parentDir, 'req', 'a.md'), 'generated requirements\n');
+    fs.mkdirSync(path.join(parentDir, 'spec'));
+    fs.writeFileSync(path.join(parentDir, 'spec', 'b.md'), 'generated tech spec\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), REGISTRY_WITH_PARENT);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // Maps every file (content) and directory (null) under dir, keyed by relative path.
+  function snapshot(dir) {
+    const out = {};
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        const rel = path.relative(dir, p);
+        if (e.isDirectory()) { out[rel + '/'] = null; walk(p); }
+        else out[rel] = fs.readFileSync(p, 'utf8');
+      }
+    };
+    walk(dir);
+    return out;
+  }
+
+  // Makes fs.renameSync throw EPERM for calls matching shouldFail; other calls pass through.
+  function injectRenameFailure(shouldFail) {
+    jest.spyOn(fs, 'renameSync').mockImplementation((src, dest) => {
+      if (shouldFail(String(src), String(dest))) {
+        const err = new Error('injected EPERM');
+        err.code = 'EPERM';
+        throw err;
+      }
+      return realRenameSync(src, dest);
+    });
+  }
+
+  const faultPoints = [
+    ['child move', (s, d) => d.startsWith(featuresRoot) && path.basename(d).startsWith('FTR-008')],
+    ['parent req/ backup move', (s) => s === path.join(parentDir, 'req')],
+    ['feature.md move', (s) => s === path.join(parentDir, 'feature.md')],
+    ['epic.md move', (s, d) => path.basename(d) === 'epic.md'],
+    ['registry write', (s, d) => path.basename(d) === 'REGISTRY.md'],
+  ];
+
+  test.each(faultPoints)('restores tree and registry with no staging or temp file when the %s rename fails', (_name, shouldFail) => {
+    const before = snapshot(featuresRoot);
+    injectRenameFailure(shouldFail);
+
+    thrownBy(() => runApply());
+
+    jest.restoreAllMocks();
+    expect(snapshot(featuresRoot)).toEqual(before);
+    expect(findStagingLeftovers(featuresRoot)).toEqual([]);
+  });
+
+  test('reports ROLLBACK_FAILED listing the remaining paths when a reverse rename fails', () => {
+    let epicMoveFailed = false;
+    injectRenameFailure((s, d) => {
+      if (path.basename(d) === 'epic.md') { epicMoveFailed = true; return true; }
+      // Once the epic move has failed, reversing the already-moved child also fails.
+      return epicMoveFailed && s.startsWith(featuresRoot) && path.basename(s).startsWith('FTR-008');
+    });
+
+    const err = thrownBy(() => runApply());
+
+    jest.restoreAllMocks();
+    const remaining = fs.readdirSync(featuresRoot).filter(n => n.startsWith('FTR-008'));
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('ROLLBACK_FAILED');
+    expect(remaining.length).toBeGreaterThan(0);
+    for (const name of remaining) {
+      expect(err.message).toContain(name);
+    }
+  });
+
+  test('keeps the split and returns a warnings entry when staging removal fails after commit', () => {
+    const stagingName = `.split-staging-${RUN_ID}`;
+    jest.spyOn(fs, 'rmSync').mockImplementation((p, opts) => {
+      if (path.basename(String(p)) === stagingName) {
+        const err = new Error('injected EBUSY');
+        err.code = 'EBUSY';
+        throw err;
+      }
+      return realRmSync(p, opts);
+    });
+
+    const result = runApply();
+
+    jest.restoreAllMocks();
+    expect(result.warnings).toEqual([expect.stringContaining(stagingName)]);
+    expect(fs.existsSync(path.join(featuresRoot, 'FTR-008-auth', 'feature.md'))).toBe(true);
+    expect(fs.existsSync(path.join(featuresRoot, 'FTR-009-billing', 'feature.md'))).toBe(true);
+    expect(fs.existsSync(path.join(parentDir, 'epic.md'))).toBe(true);
+    expect(fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8')).toContain('## FTR-008 — Auth');
+  });
+});
