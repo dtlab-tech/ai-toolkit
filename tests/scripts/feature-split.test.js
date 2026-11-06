@@ -1461,3 +1461,199 @@ describe('apply rollback fault injection', () => {
     expect(fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8')).toContain('## FTR-008 — Auth');
   });
 });
+
+describe('late child apply', () => {
+  const PARENT_ID = 'FTR-010';
+  const PARENT_DIR = 'FTR-010-login';
+  const EPIC = [
+    '# Login — epic',
+    '',
+    '## Feature ID',
+    PARENT_ID,
+    '',
+    '## Split table',
+    '',
+    '| Order | ID | Name | Dir | Checkpoint | Depends on | Shared foundation |',
+    '|---|---|---|---|---|---|---|',
+    '| 1 | FTR-011 | Auth | FTR-011-auth | definition | none | yes |',
+    '| 2 | FTR-012 | Billing | FTR-012-billing | definition | FTR-011 | no |',
+    '| — | — | Shared foundation | — | — | — | Shared models |',
+    '',
+    '## Original feature text',
+    '',
+    '# Login',
+    '',
+    'Sign-in and billing.',
+    '',
+  ].join('\n');
+  const REGISTRY_TEXT = [
+    '# Feature Registry',
+    '',
+    '## FTR-010 — Login',
+    '**Keywords:** auth, billing',
+    '**Status:** epic',
+    '**Summary:** Sign-in and billing.',
+    `→ [Detail](${PARENT_DIR}/epic.md)`,
+    '---',
+    '',
+    '## FTR-011 — Auth',
+    '**Keywords:** auth',
+    '**Status:** defined',
+    '**Summary:** Sign-in and sessions.',
+    '**Parent:** FTR-010',
+    '**Depends on:** none',
+    '→ [Detail](FTR-011-auth/feature.md)',
+    '---',
+    '',
+    '## FTR-012 — Billing',
+    '**Keywords:** billing',
+    '**Status:** defined',
+    '**Summary:** Invoices.',
+    '**Parent:** FTR-010',
+    '**Depends on:** FTR-011',
+    '→ [Detail](FTR-012-billing/feature.md)',
+    '---',
+    '',
+  ].join('\n');
+
+  function lateProposal(overrides = {}) {
+    return {
+      source: 'definition',
+      children: [
+        { name: 'Reports', purpose: 'Monthly reports', keywords: ['reports'], dependsOn: [], assigned: 'UC-05' },
+      ],
+      sharedFoundationOwner: null,
+      foundationNote: '',
+      minChildren: 2,
+      ...overrides,
+    };
+  }
+
+  function twoLateChildren() {
+    return lateProposal({
+      children: [
+        { name: 'Reports', purpose: 'Monthly reports', keywords: ['reports'], dependsOn: [], assigned: 'UC-05' },
+        { name: 'Exports', purpose: 'CSV exports', keywords: ['exports'], dependsOn: [], assigned: 'UC-06' },
+      ],
+    });
+  }
+
+  // Returns { relativePath: content } for every file, and { relativePath: null } for every directory.
+  function snapshot(dir) {
+    const out = {};
+    const walk = (current) => {
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const full = path.join(current, entry.name);
+        const rel = path.relative(dir, full).split(path.sep).join('/');
+        if (entry.isDirectory()) {
+          out[rel] = null;
+          walk(full);
+        } else {
+          out[rel] = fs.readFileSync(full, 'utf8');
+        }
+      }
+    };
+    walk(dir);
+    return out;
+  }
+
+  // Returns the registry block for one ID: from its heading up to the next separator.
+  function entryBlock(text, id) {
+    const start = text.indexOf(`## ${id} `);
+    if (start < 0) return null;
+    const end = text.indexOf('\n---', start);
+    return end < 0 ? text.slice(start) : text.slice(start, end);
+  }
+
+  function readField(block, key) {
+    const match = block.match(new RegExp(`\\*\\*${key}:\\*\\* (.*)`));
+    return match ? match[1].trim() : undefined;
+  }
+
+  let featuresRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(path.join(featuresRoot, PARENT_DIR), { recursive: true });
+    fs.mkdirSync(path.join(featuresRoot, 'FTR-011-auth'));
+    fs.mkdirSync(path.join(featuresRoot, 'FTR-012-billing'));
+    fs.writeFileSync(path.join(featuresRoot, PARENT_DIR, 'epic.md'), EPIC);
+    fs.writeFileSync(path.join(featuresRoot, 'FTR-011-auth', 'feature.md'), '# Auth\n\nSign-in.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'FTR-012-billing', 'feature.md'), '# Billing\n\nInvoices.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), REGISTRY_TEXT);
+  });
+
+  function runLateApply(proposal = lateProposal()) {
+    return apply({ featuresRoot, parentId: PARENT_ID, proposal, runId: 'aabbccdd' });
+  }
+
+  function readEpic() {
+    return fs.readFileSync(path.join(featuresRoot, PARENT_DIR, 'epic.md'), 'utf8');
+  }
+
+  function readRegistry() {
+    return fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+  }
+
+  test('places the new late child last with checkpoint late', () => {
+    const result = runLateApply();
+    const newRow = readEpic().split('\n').find((line) => line.startsWith(`| 3 | ${result.children[0].id} |`));
+
+    expect(newRow).toMatch(/^\| 3 \| FTR-013 \| Reports \| FTR-013-reports \| late \|/);
+  });
+
+  test('defaults the new late child dependency to the previous last child', () => {
+    runLateApply();
+    const newRow = readEpic().split('\n').find((line) => line.startsWith('| 3 | FTR-013 |'));
+
+    expect(newRow).toMatch(/\| late \| FTR-012 \| no \|$/);
+  });
+
+  test('keeps the existing epic child rows byte-identical', () => {
+    const isChildRow = (line) => /^\| [12] \| FTR-01[12] \|/.test(line);
+    const before = EPIC.split('\n').filter(isChildRow);
+    runLateApply();
+    const after = readEpic().split('\n').filter(isChildRow);
+
+    expect(after).toEqual(before);
+  });
+
+  test('epic Keywords include the new child Keywords', () => {
+    runLateApply();
+    const parent = entryBlock(readRegistry(), PARENT_ID);
+
+    expect(readField(parent, 'Keywords').split(/,\s*/).sort()).toEqual(['auth', 'billing', 'reports']);
+  });
+
+  test('leaves the existing child registry entries and feature.md files unchanged', () => {
+    const readChildren = () => ({
+      authEntry: entryBlock(readRegistry(), 'FTR-011'),
+      billingEntry: entryBlock(readRegistry(), 'FTR-012'),
+      authDoc: fs.readFileSync(path.join(featuresRoot, 'FTR-011-auth', 'feature.md'), 'utf8'),
+      billingDoc: fs.readFileSync(path.join(featuresRoot, 'FTR-012-billing', 'feature.md'), 'utf8'),
+    });
+    const before = readChildren();
+    runLateApply();
+
+    expect(readChildren()).toEqual(before);
+  });
+
+  test('rejects a late proposal with two children with LATE_CHILD_COUNT', () => {
+    const err = thrownBy(() => runLateApply(twoLateChildren()));
+
+    expect(err.code).toBe('LATE_CHILD_COUNT');
+  });
+
+  test('writes nothing when a late proposal with two children is rejected', () => {
+    const before = snapshot(featuresRoot);
+    thrownBy(() => runLateApply(twoLateChildren()));
+
+    expect(snapshot(featuresRoot)).toEqual(before);
+  });
+
+  test('does not apply minChildren to a late proposal with one child', () => {
+    const result = runLateApply(lateProposal({ minChildren: 2 }));
+
+    expect(result.children).toHaveLength(1);
+  });
+});
