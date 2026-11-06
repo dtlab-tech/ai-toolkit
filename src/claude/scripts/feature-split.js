@@ -940,6 +940,39 @@ function apply({ featuresRoot, parentId, proposal, runId = newRunId() }) {
   };
 }
 
+// UC-05 register (D-20, D-21). Appends one defined entry for a standalone feature. An existing entry
+// with status defined, completed or epic is returned unchanged. Any other status raises REGISTRY_STATUS.
+// A missing registry is created. The write is temp-and-rename, so a failure leaves the old file intact.
+function register({ featuresRoot, featureDir, keywords = [], runId = newRunId() }) {
+  const { id, title, summary } = readFeatureForRegister(featureDir);
+  const registryFile = path.join(featuresRoot, REGISTRY_NAME);
+  let reg;
+  try {
+    reg = readRegistryBlocks(featuresRoot);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw new FeatureSplitError('REGISTRY_IO', `cannot read ${registryFile} (${err.code || err.message})`, { file: registryFile });
+    reg = { eol: '\n', head: [], blocks: [] };
+  }
+
+  const existing = findBlock(reg, id);
+  if (existing) {
+    const status = fieldOf(existing, 'Status');
+    if (['defined', 'completed', 'epic'].includes(status)) return { id, status };
+    fail('REGISTRY_STATUS', `${id} is registered with status "${status}"; register does not change it`, { key: id, file: registryFile });
+  }
+
+  const last = reg.blocks.length ? reg.blocks[reg.blocks.length - 1].lines : reg.head;
+  const tail = last[last.length - 1];
+  const lead = tail === undefined || tail.trim() === '' ? [] : [''];
+  const rel = path.relative(featuresRoot, path.resolve(featureDir)).split(path.sep).join('/');
+  reg.blocks.push({ id, lines: [...lead, ...renderEntry({
+    id, title, keywords, status: 'defined', summary,
+    detail: `./${rel}/feature.md`,
+  }), '', '---'] });
+  writeRegistryAtomic(featuresRoot, runId, renderRegistry(reg));
+  return { id, status: 'defined' };
+}
+
 function parseFlags(args) {
   const flags = {};
   for (let i = 0; i < args.length; i++) {
@@ -1076,3 +1109,4 @@ module.exports.assertProposalShape = assertProposalShape;
 module.exports.detectMode = detectMode;
 module.exports.checkApplyPreconditions = checkApplyPreconditions;
 module.exports.apply = apply;
+module.exports.register = register;

@@ -1764,3 +1764,166 @@ describe('facade apply command', () => {
     expect(JSON.parse(result.stdout).error.code).toBe('INVALID_PROPOSAL');
   });
 });
+
+describe('register', () => {
+  const FEATURE_DIR = 'FTR-050-login';
+  const REGISTRY_HEAD = [
+    '## FTR-005 — Unrelated work',
+    '**Keywords:** misc',
+    '**Status:** in-progress',
+    '**Summary:** Unrelated work.',
+    '→ [Detail](FTR-005-unrelated/feature.md)',
+    '',
+    '---',
+    '',
+  ].join('\n');
+
+  let featuresRoot;
+  let featureDir;
+  let registryFile;
+
+  function writeFeature(text) {
+    fs.mkdirSync(featureDir, { recursive: true });
+    fs.writeFileSync(path.join(featureDir, 'feature.md'), text);
+  }
+
+  function writeRegistry(text) {
+    fs.writeFileSync(registryFile, text);
+  }
+
+  const FEATURE_TEXT = [
+    '# Login',
+    '',
+    '## Summary',
+    'Sign-in and sessions for users. Billing follows.',
+    '',
+    '## Scope',
+    'Details.',
+    '',
+  ].join('\n');
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(featuresRoot);
+    featureDir = path.join(featuresRoot, FEATURE_DIR);
+    registryFile = path.join(featuresRoot, 'REGISTRY.md');
+    writeFeature(FEATURE_TEXT);
+  });
+
+  test('appends one defined entry with first-sentence summary, keywords and feature.md detail link', () => {
+    writeRegistry(REGISTRY_HEAD);
+
+    const result = LIB.register({ featuresRoot, featureDir, keywords: ['auth', 'login'] });
+
+    expect(result).toEqual({ id: 'FTR-050', status: 'defined' });
+    const text = fs.readFileSync(registryFile, 'utf8');
+    expect(text.startsWith(REGISTRY_HEAD)).toBe(true);
+    expect(text.slice(REGISTRY_HEAD.length)).toBe([
+      '',
+      '## FTR-050 — Login',
+      '**Keywords:** auth, login',
+      '**Status:** defined',
+      '**Summary:** Sign-in and sessions for users.',
+      '→ [Detail](./FTR-050-login/feature.md)',
+      '',
+      '---',
+    ].join('\n'));
+  });
+
+  test('writes no Parent or Depends on line for a standalone entry', () => {
+    writeRegistry(REGISTRY_HEAD);
+
+    LIB.register({ featuresRoot, featureDir, keywords: ['auth'] });
+
+    const text = fs.readFileSync(registryFile, 'utf8');
+    expect(text).not.toMatch(/\*\*Parent:\*\*/);
+    expect(text).not.toMatch(/\*\*Depends on:\*\*/);
+  });
+
+  test('creates REGISTRY.md when it is missing', () => {
+    expect(fs.existsSync(registryFile)).toBe(false);
+
+    const result = LIB.register({ featuresRoot, featureDir, keywords: ['auth'] });
+
+    expect(result).toEqual({ id: 'FTR-050', status: 'defined' });
+    const entries = LIB.parseRegistry(fs.readFileSync(registryFile, 'utf8'));
+    expect(entries.map(e => [e.id, e.status])).toEqual([['FTR-050', 'defined']]);
+  });
+
+  test('leaves the registry file byte-identical when the entry already exists with status defined', () => {
+    const existing = [
+      '## FTR-050 — Login',
+      '**Keywords:** auth',
+      '**Status:** defined',
+      '**Summary:** Sign-in.',
+      '→ [Detail](./FTR-050-login/feature.md)',
+      '',
+      '---',
+      '',
+    ].join('\n');
+    writeRegistry(existing);
+
+    const result = LIB.register({ featuresRoot, featureDir, keywords: ['other'] });
+
+    expect(result).toEqual({ id: 'FTR-050', status: 'defined' });
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(existing);
+  });
+
+  test.each(['completed', 'epic'])('returns the existing %s status without writing or duplicating', (status) => {
+    const existing = [
+      '## FTR-050 — Login',
+      '**Keywords:** auth',
+      `**Status:** ${status}`,
+      '**Summary:** Sign-in.',
+      '→ [Detail](./FTR-050-login/feature.md)',
+      '',
+      '---',
+      '',
+    ].join('\n');
+    writeRegistry(existing);
+
+    const result = LIB.register({ featuresRoot, featureDir, keywords: ['auth'] });
+
+    expect(result).toEqual({ id: 'FTR-050', status });
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(existing);
+  });
+
+  test('throws REGISTRY_STATUS and leaves the entry untouched for any other status', () => {
+    const existing = [
+      '## FTR-050 — Login',
+      '**Keywords:** auth',
+      '**Status:** in-progress',
+      '**Summary:** Sign-in.',
+      '→ [Detail](./FTR-050-login/feature.md)',
+      '',
+      '---',
+      '',
+    ].join('\n');
+    writeRegistry(existing);
+
+    const err = thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords: ['auth'] }));
+
+    expect(err.code).toBe('REGISTRY_STATUS');
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(existing);
+  });
+
+  test('keeps the previous registry and reports REGISTRY_IO when the temp-and-rename write fails', () => {
+    writeRegistry(REGISTRY_HEAD);
+    fs.mkdirSync(path.join(featuresRoot, 'REGISTRY.md.tmp-abcd1234'));
+
+    const err = thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords: ['auth'], runId: 'abcd1234' }));
+
+    expect(err.code).toBe('REGISTRY_IO');
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(REGISTRY_HEAD);
+  });
+
+  test('refuses an epic folder with PARENT_INVALID and writes nothing', () => {
+    writeRegistry(REGISTRY_HEAD);
+    fs.writeFileSync(path.join(featureDir, 'epic.md'), '# Login — epic\n');
+
+    const err = thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords: ['auth'] }));
+
+    expect(err.code).toBe('PARENT_INVALID');
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(REGISTRY_HEAD);
+  });
+});
