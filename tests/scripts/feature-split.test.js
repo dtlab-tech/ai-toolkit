@@ -723,3 +723,117 @@ describe('dependency order through buildProposal', () => {
     expect(proposal.sharedFoundationOwner).toBe('Auth');
   });
 });
+
+describe('editProposal()', () => {
+  const child = (name, extra = {}) => ({
+    name,
+    purpose: `${name} purpose`,
+    keywords: [name.toLowerCase()],
+    dependsOn: [],
+    assigned: `UC-${name}`,
+    ...extra,
+  });
+  const build = (children) => LIB.buildProposal({
+    source: 'definition',
+    children,
+    config: loadConfig({ projectRoot: root }),
+  }).proposal;
+  // Auth <- Billing <- Reports; Auth owns the shared foundation.
+  const twoChildren = () => build([child('Auth'), child('Billing', { dependsOn: ['Auth'] })]);
+  const threeChildren = () => build([
+    child('Auth'),
+    child('Billing', { dependsOn: ['Auth'] }),
+    child('Reports', { dependsOn: ['Billing'] }),
+  ]);
+  const findChild = (proposal, name) => proposal.children.find(c => c.name === name);
+
+  test('refuses removing a child that leaves fewer than minChildren and leaves the proposal unchanged', () => {
+    const proposal = twoChildren();
+    const before = structuredClone(proposal);
+
+    expect(() => LIB.editProposal(proposal, { type: 'remove', name: 'Billing' }))
+      .toThrow(FeatureSplitError);
+    expect(proposal).toEqual(before);
+  });
+
+  test('refuses removing a child that a sibling still depends on and leaves the proposal unchanged', () => {
+    const proposal = threeChildren();
+    const before = structuredClone(proposal);
+
+    expect(() => LIB.editProposal(proposal, { type: 'remove', name: 'Billing' }))
+      .toThrow(FeatureSplitError);
+    expect(proposal).toEqual(before);
+  });
+
+  test('accepts a merge, joins the purposes with " / " and makes the keywords the union', () => {
+    const proposal = threeChildren();
+    const billing = findChild(proposal, 'Billing');
+    const reports = findChild(proposal, 'Reports');
+
+    const { proposal: merged } = LIB.editProposal(proposal, {
+      type: 'merge', names: ['Billing', 'Reports'], into: 'Billing',
+    });
+
+    const result = findChild(merged, 'Billing');
+    expect(merged.children.map(c => c.name)).toEqual(['Auth', 'Billing']);
+    expect(result.purpose).toBe(`${billing.purpose} / ${reports.purpose}`);
+    expect([...result.keywords].sort())
+      .toEqual([...new Set([...billing.keywords, ...reports.keywords])].sort());
+  });
+
+  test('rename updates the dependsOn references and the shared-foundation owner', () => {
+    const proposal = twoChildren();
+
+    const { proposal: renamed } = LIB.editProposal(proposal, { type: 'rename', from: 'Auth', to: 'Identity' });
+
+    expect(findChild(renamed, 'Billing').dependsOn).toEqual(['Identity']);
+    expect(renamed.sharedFoundationOwner).toBe('Identity');
+  });
+
+  test('moving the shared-foundation owner is not refused and returns a BR-03 warning object', () => {
+    const proposal = threeChildren();
+
+    const { proposal: moved, warnings } = LIB.editProposal(proposal, { type: 'owner', name: 'Billing' });
+
+    expect(moved.sharedFoundationOwner).toBe('Billing');
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        code: 'FOUNDATION_NOT_FIRST',
+        message: expect.stringMatching(/BR-03/),
+      }),
+    ]);
+  });
+
+  test('purpose and keywords are editable with set', () => {
+    const proposal = twoChildren();
+
+    const first = LIB.editProposal(proposal, { type: 'set', name: 'Auth', field: 'purpose', value: 'Login and MFA' });
+    const second = LIB.editProposal(first.proposal, {
+      type: 'set', name: 'Auth', field: 'keywords', value: ['auth', 'mfa'],
+    });
+
+    const auth = findChild(second.proposal, 'Auth');
+    expect(auth.purpose).toBe('Login and MFA');
+    expect(auth.keywords).toEqual(['auth', 'mfa']);
+  });
+
+  test('writes no files and leaves the project tree unchanged', () => {
+    fs.writeFileSync(path.join(root, 'marker.txt'), 'x', 'utf8');
+    const snapshot = () => fs.readdirSync(root, { recursive: true }).sort();
+    const writers = ['writeFileSync', 'appendFileSync', 'mkdirSync', 'renameSync', 'rmSync', 'unlinkSync', 'copyFileSync']
+      .map(name => jest.spyOn(fs, name));
+    const before = snapshot();
+
+    let writeCalls;
+    try {
+      LIB.editProposal(twoChildren(), { type: 'set', name: 'Auth', field: 'purpose', value: 'New' });
+    } finally {
+      // Read the call counts before restoring: mockRestore clears recorded calls.
+      writeCalls = writers.map(spy => spy.mock.calls.length);
+      writers.forEach(spy => spy.mockRestore());
+    }
+
+    expect(snapshot()).toEqual(before);
+    expect(writeCalls).toEqual(writers.map(() => 0));
+  });
+});
