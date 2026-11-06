@@ -94,3 +94,12 @@ Approved with notes:
 | 1 | Approved with notes | 2026-11-03 | "Approve with notes — proceed to Work Breakdown." followed by the notes recorded above, verbatim |
 | 2 | Amendment | 2026-11-04 | Gap 9 decision replaced: parent req/ and spec/ are moved into a temporary backup during the split and deleted after it (see the Amendment section) |
 | 3 | Gate 2 approved with notes | 2026-11-04 | "Approve with notes — start implementation." followed by the notes recorded in the Gate 2 section, verbatim |
+
+## Amendment 2026-11-06
+
+Correction made by hand to the Work Breakdown during the executor run, after it blocked a task:
+
+- US-04-TASK-BE-02: the third assertion of the second verification command expected `FTR-010`, which is the
+  result of the first assertion's input (registry up to FTR-009). For its own input (folder FTR-005, registry
+  FTR-002) the correct next ID is `FTR-006`. Both executor attempts returned `FTR-006` and were blocked by the
+  wrong expectation. Only the expected value changed.

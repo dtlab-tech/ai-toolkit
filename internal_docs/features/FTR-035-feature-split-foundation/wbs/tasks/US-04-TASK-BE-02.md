@@ -49,5 +49,5 @@ node --check src/claude/scripts/feature-split.js
 ```
 
 ```
-node -e "const fs=require('fs'),os=require('os'),path=require('path'),assert=require('assert');const {allocateIds}=require('./src/claude/scripts/feature-split.js');const root=fs.mkdtempSync(path.join(os.tmpdir(),'alloc-'));fs.mkdirSync(path.join(root,'FTR-005-x'));assert.deepStrictEqual(allocateIds(root,{blocks:[{id:'FTR-009'}]},2),['FTR-010','FTR-011']);assert.deepStrictEqual(allocateIds(fs.mkdtempSync(path.join(os.tmpdir(),'alloc-')),{blocks:[]},1),['FTR-001']);assert.deepStrictEqual(allocateIds(root,{blocks:[{id:'FTR-002'}]},1),['FTR-010']);console.log('allocateIds ok');"
+node -e "const fs=require('fs'),os=require('os'),path=require('path'),assert=require('assert');const {allocateIds}=require('./src/claude/scripts/feature-split.js');const root=fs.mkdtempSync(path.join(os.tmpdir(),'alloc-'));fs.mkdirSync(path.join(root,'FTR-005-x'));assert.deepStrictEqual(allocateIds(root,{blocks:[{id:'FTR-009'}]},2),['FTR-010','FTR-011']);assert.deepStrictEqual(allocateIds(fs.mkdtempSync(path.join(os.tmpdir(),'alloc-')),{blocks:[]},1),['FTR-001']);assert.deepStrictEqual(allocateIds(root,{blocks:[{id:'FTR-002'}]},1),['FTR-006']);console.log('allocateIds ok');"
 ```
