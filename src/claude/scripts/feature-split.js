@@ -212,6 +212,88 @@ function buildProposal({ source, children, sharedFoundationOwner, foundationNote
   return { proposal, warnings: foundationWarnings(proposal, order) };
 }
 
+// Edits work on a copy, so a refused edit leaves the caller's proposal unchanged (D-09).
+// op.type: rename | set | reorder | owner | add | remove | merge
+// Returns { proposal, warnings }. Throws FeatureSplitError on refusal. Writes no file.
+function editProposal(proposal, op) {
+  if (!op || typeof op !== 'object') fail('EDIT_UNKNOWN', 'An edit must be an object with a type');
+  const next = JSON.parse(JSON.stringify(proposal));
+  const byName = (n) => {
+    const c = next.children.find(x => x.name === n);
+    if (!c) fail('CHILD_NOT_FOUND', `No child named "${n}"`, { key: String(n) });
+    return c;
+  };
+  const relink = (from, to) => {
+    for (const c of next.children)
+      c.dependsOn = [...new Set(c.dependsOn.map(d => d === from ? to : d))].filter(d => d !== c.name);
+    if (next.sharedFoundationOwner === from) next.sharedFoundationOwner = to;
+  };
+  switch (op.type) {
+    case 'rename':
+      byName(op.from).name = op.to;
+      relink(op.from, op.to);
+      break;
+    case 'set': {
+      if (!['purpose', 'summary', 'keywords', 'assigned', 'dependsOn'].includes(op.field))
+        fail('EDIT_FIELD_INVALID', `Field ${op.field} cannot be edited`, { key: String(op.field) });
+      const isList = op.field === 'keywords' || op.field === 'dependsOn';
+      const valid = isList
+        ? Array.isArray(op.value) && op.value.every(v => typeof v === 'string')
+        : typeof op.value === 'string';
+      if (!valid)
+        fail('EDIT_VALUE_INVALID', `${op.field} must be ${isList ? 'an array of strings' : 'a string'}`, { key: op.field });
+      byName(op.name)[op.field] = op.value;
+      break;
+    }
+    case 'reorder': {
+      const names = Array.isArray(op.names) ? op.names : [];
+      const have = next.children.map(c => c.name).sort();
+      const want = [...names].sort();
+      if (want.length !== have.length || want.some((n, i) => n !== have[i]))
+        fail('REORDER_NOT_PERMUTATION', 'reorder must list every child exactly once');
+      next.children = names.map(byName);
+      break;
+    }
+    case 'owner':
+      next.sharedFoundationOwner = op.name ?? null;
+      break;
+    case 'add':
+      if (!op.child || typeof op.child !== 'object')
+        fail('EDIT_VALUE_INVALID', 'add needs a child object');
+      next.children.push(normaliseChild(op.child));
+      break;
+    case 'remove':
+      byName(op.name);
+      next.children = next.children.filter(c => c.name !== op.name);
+      if (next.sharedFoundationOwner === op.name) next.sharedFoundationOwner = null;
+      break;
+    case 'merge': {
+      if (!Array.isArray(op.names) || op.names.length === 0 || new Set(op.names).size !== op.names.length)
+        fail('EDIT_VALUE_INVALID', 'merge needs a non-empty list of distinct child names');
+      if (typeof op.into !== 'string')
+        fail('EDIT_VALUE_INVALID', 'merge needs a string name for the merged child');
+      const group = op.names.map(byName);
+      const joined = group.map(c => c.purpose).filter(Boolean).join(' / ');
+      const merged = {
+        name: op.into, purpose: joined, summary: joined,
+        keywords: [...new Set(group.flatMap(c => c.keywords))],
+        dependsOn: [...new Set(group.flatMap(c => c.dependsOn))].filter(d => !op.names.includes(d)),
+        assigned: group.map(c => c.assigned).filter(Boolean).join('; '),
+      };
+      const at = next.children.findIndex(c => op.names.includes(c.name));
+      next.children = next.children.filter(c => !op.names.includes(c.name));
+      next.children.splice(at, 0, merged);
+      for (const n of op.names) if (n !== op.into) relink(n, op.into);
+      break;
+    }
+    default:
+      fail('EDIT_UNKNOWN', `Unknown edit ${op.type}`);
+  }
+  // A remove never rewrites dependsOn: a sibling that still names the removed child is refused here.
+  validateProposal(next);
+  return { proposal: next, warnings: foundationWarnings(next, dependencyOrder(next.children)) };
+}
+
 const REGISTRY_NAME = 'REGISTRY.md';
 const ENTRY_HEADING = /^## (FTR-\d+) — (.+)$/;
 const ENTRY_SEPARATOR = /^---\s*$/;
@@ -422,3 +504,4 @@ module.exports.findStagingLeftovers = findStagingLeftovers;
 module.exports.assertNoStagingLeftovers = assertNoStagingLeftovers;
 module.exports.isNewFeature = isNewFeature;
 module.exports.buildProposal = buildProposal;
+module.exports.editProposal = editProposal;
