@@ -2018,3 +2018,73 @@ describe('register idempotence and foreign status', () => {
     expect(text.match(/^## FTR-010 /gm)).toHaveLength(1);
   });
 });
+
+describe('register write failure (US-05-TASK-TEST-03)', () => {
+  const FEATURE_DIR = 'FTR-050-login';
+  const REGISTRY_HEAD = [
+    '## FTR-005 — Unrelated work',
+    '**Keywords:** misc',
+    '**Status:** in-progress',
+    '**Summary:** Unrelated work.',
+    '→ [Detail](FTR-005-unrelated/feature.md)',
+    '',
+    '---',
+    '',
+  ].join('\n');
+  const RUN_ID = 'abcd1234';
+
+  let featuresRoot;
+  let featureDir;
+  let registryFile;
+  let thrown;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(featuresRoot);
+    featureDir = path.join(featuresRoot, FEATURE_DIR);
+    registryFile = path.join(featuresRoot, 'REGISTRY.md');
+    fs.mkdirSync(featureDir);
+    fs.writeFileSync(path.join(featureDir, 'feature.md'), '# Login\n\n## Summary\nSign-in for users.\n', 'utf8');
+    fs.writeFileSync(registryFile, REGISTRY_HEAD, 'utf8');
+
+    // Fail only the temp-to-REGISTRY.md rename; the temp file is still created first, so cleanup is exercised.
+    const realRenameSync = fs.renameSync;
+    const spy = jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (path.basename(to) === 'REGISTRY.md') {
+        const err = new Error('injected EPERM');
+        err.code = 'EPERM';
+        throw err;
+      }
+      return realRenameSync(from, to);
+    });
+    try {
+      LIB.register({ featuresRoot, featureDir, keywords: ['auth'], runId: RUN_ID });
+      thrown = null;
+    } catch (err) {
+      thrown = err;
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('reports REGISTRY_IO as a FeatureSplitError when the registry rename fails', () => {
+    expect(thrown).toBeInstanceOf(FeatureSplitError);
+    expect(thrown.code).toBe('REGISTRY_IO');
+  });
+
+  test('leaves the previous REGISTRY.md byte-identical', () => {
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(REGISTRY_HEAD);
+  });
+
+  test('leaves no REGISTRY.md temp file behind', () => {
+    const leftovers = fs.readdirSync(featuresRoot).filter(name => name.startsWith('REGISTRY.md.tmp-'));
+
+    expect(leftovers).toEqual([]);
+  });
+
+  test('registers nothing for the feature', () => {
+    const ids = LIB.parseRegistry(fs.readFileSync(registryFile, 'utf8')).map(e => e.id);
+
+    expect(ids).not.toContain('FTR-050');
+  });
+});
