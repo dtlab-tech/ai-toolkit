@@ -416,6 +416,59 @@ function setField(block, key, value) {
 // Untouched blocks are emitted exactly as parsed, so they stay byte-identical.
 const renderRegistry = (r) => [...r.head, ...r.blocks.flatMap(b => b.lines)].join(r.eol);
 
+const splitKeywords = (text) => (text || '').split(/,\s*/).map(s => s.trim()).filter(Boolean);
+const uniq = (xs) => [...new Set(xs)];
+
+// Replaces the block's "→ [Detail](...)" line in place, or appends one. A "**Detail:**" line
+// would leave the old link in place, and parseEntry reads the arrow form first.
+function setDetailLink(block, target) {
+  const line = `→ [Detail](${target})`;
+  const at = block.lines.findIndex(l => DETAIL_LINK.test(l.trim()));
+  if (at !== -1) block.lines[at] = line;
+  else block.lines.push(line);
+  return block;
+}
+
+// Pure: returns the full REGISTRY.md text with the apply changes applied. Performs no file I/O.
+// registry: block-shaped registry ({ eol, head, blocks }); not mutated
+// plan:     [{ id, name, keywords, summary, dir, deps }] in dependency order; deps are sibling IDs
+// late:     true for late mode (one child, existing epic)
+function buildRegistryText({ registry, parentId, parentDirName, plan, late }) {
+  const reg = JSON.parse(JSON.stringify(registry));
+  const parent = findBlock(reg, parentId);
+  if (!parent) fail('PARENT_NOT_REGISTERED', `${parentId} has no registry entry`, { key: parentId });
+
+  // Initial mode: union over the new children. Late mode: union over every existing child entry
+  // of the parent, plus the new child.
+  const existingChildKeywords = late
+    ? reg.blocks
+        .filter(b => b.id && fieldOf(b, 'Parent') === parentId)
+        .flatMap(b => splitKeywords(fieldOf(b, 'Keywords')))
+    : [];
+  setField(parent, 'Keywords',
+    uniq([...existingChildKeywords, ...plan.flatMap(p => p.keywords)]).join(', '));
+
+  if (!late) {
+    setField(parent, 'Status', 'epic');
+    setField(parent, 'Summary', firstSentence(fieldOf(parent, 'Summary') || ''));
+    setDetailLink(parent, `./${parentDirName}/epic.md`);
+  }
+
+  for (const p of plan) {
+    if (findBlock(reg, p.id)) continue;
+    const last = reg.blocks.length ? reg.blocks[reg.blocks.length - 1].lines : reg.head;
+    const tail = last[last.length - 1];
+    const lead = tail === undefined || tail.trim() === '' ? [] : [''];
+    reg.blocks.push({ id: p.id, lines: [...lead, ...renderEntry({
+      id: p.id, title: p.name, keywords: p.keywords, status: 'defined',
+      summary: firstSentence(p.summary),
+      detail: `./${p.dir}/feature.md`,
+      parent: parentId, dependsOn: p.deps,
+    }), '', '---'] });
+  }
+  return renderRegistry(reg);
+}
+
 function writeRegistryAtomic(featuresRoot, runId, content) {
   const registryPath = path.join(featuresRoot, REGISTRY_NAME);
   if (!/^[0-9a-f]+$/i.test(String(runId))) {
@@ -801,6 +854,7 @@ module.exports.fieldOf = fieldOf;
 module.exports.setField = setField;
 module.exports.renderEpic = renderEpic;
 module.exports.renderRegistry = renderRegistry;
+module.exports.buildRegistryText = buildRegistryText;
 module.exports.writeRegistryAtomic = writeRegistryAtomic;
 module.exports.findStagingLeftovers = findStagingLeftovers;
 module.exports.assertNoStagingLeftovers = assertNoStagingLeftovers;
