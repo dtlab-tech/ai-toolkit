@@ -19,6 +19,7 @@ const {
   isOverThreshold,
   meetsMinimum,
   isNewFeature,
+  buildProposal,
 } = LIB;
 
 /** Runs fn and returns the thrown value, or fails the test if nothing is thrown. */
@@ -597,5 +598,89 @@ describe('foundationWarnings()', () => {
   test('returns no warning for an owner that is first even when later children have no dependsOn', () => {
     const order = [{ name: 'Auth', dependsOn: [] }, { name: 'Billing', dependsOn: [] }];
     expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, order)).toEqual([]);
+  });
+});
+
+describe('buildProposal()', () => {
+  const listTree = (dir) => fs.readdirSync(dir, { recursive: true }).sort();
+  const child = (name, extra = {}) => ({
+    name,
+    purpose: `${name} purpose`,
+    keywords: [name.toLowerCase()],
+    dependsOn: [],
+    assigned: 'UC-01',
+    ...extra,
+  });
+  // buildProposal takes a loaded config; a project override is read by loadConfig, not by buildProposal.
+  const build = (children, extra = {}) =>
+    buildProposal({ source: 'definition', children, config: loadConfig({ projectRoot: root }), ...extra });
+
+  test('returns the D-08 proposal shape with minChildren 2 from the default config', () => {
+    const { proposal } = build([child('Auth'), child('Billing')]);
+
+    expect(Object.keys(proposal).sort())
+      .toEqual(['children', 'foundationNote', 'minChildren', 'sharedFoundationOwner', 'source']);
+    expect(proposal.minChildren).toBe(2);
+    expect(proposal.source).toBe('definition');
+  });
+
+  test('uses minChildren from the loaded project override instead of the default', () => {
+    fs.writeFileSync(path.join(root, 'feature-split.config.json'), JSON.stringify({ minChildren: 3 }));
+
+    const err = thrownBy(() => build([child('Auth'), child('Billing')]));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('TOO_FEW_CHILDREN');
+  });
+
+  test('sets summary equal to purpose and keeps the caller keywords', () => {
+    const { proposal } = build([
+      child('Auth', { purpose: 'Sign-in and sessions', keywords: ['auth', 'login'] }),
+      child('Billing'),
+    ]);
+
+    expect(proposal.children[0].summary).toBe('Sign-in and sessions');
+    expect(proposal.children[0].keywords).toEqual(['auth', 'login']);
+  });
+
+  test('rejects a reserved device name and names the child in the message', () => {
+    const err = thrownBy(() => build([child('CON'), child('Billing')]));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('CHILD_NAME_INVALID');
+    expect(err.message).toMatch(/CON/);
+  });
+
+  test('rejects a duplicate slug and names the child in the message', () => {
+    const err = thrownBy(() => build([child('Auth'), child('Auth')]));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('CHILD_NAME_DUPLICATE');
+    expect(err.message).toMatch(/Auth/);
+  });
+
+  test('rejects a proposal with fewer children than minChildren', () => {
+    const err = thrownBy(() => build([child('Auth')]));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('TOO_FEW_CHILDREN');
+  });
+
+  test('rejects a dependency cycle', () => {
+    const err = thrownBy(() => build([
+      child('Auth', { dependsOn: ['Billing'] }),
+      child('Billing', { dependsOn: ['Auth'] }),
+    ]));
+
+    expect(err).toBeInstanceOf(FeatureSplitError);
+    expect(err.code).toBe('PROPOSAL_CYCLE');
+  });
+
+  test('writes no files under the project root', () => {
+    const before = listTree(root);
+
+    build([child('Auth'), child('Billing')]);
+
+    expect(listTree(root)).toEqual(before);
   });
 });
