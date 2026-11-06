@@ -1927,3 +1927,94 @@ describe('register()', () => {
     expect(fs.readFileSync(registryFile, 'utf8')).toBe(REGISTRY_HEAD);
   });
 });
+
+describe('register idempotence and foreign status', () => {
+  const FEATURE_DIR = 'FTR-010-login';
+  const FEATURE_TEXT = [
+    '# Login',
+    '',
+    '## Summary',
+    'Sign-in flow. Uses sessions.',
+    '',
+    '## Scope',
+    'Details.',
+    '',
+  ].join('\n');
+
+  let featuresRoot;
+  let featureDir;
+  let registryFile;
+
+  function writeRegistry(text) {
+    fs.writeFileSync(registryFile, text, 'utf8');
+  }
+
+  function registryEntry(status) {
+    return [
+      '## FTR-010 — Login',
+      '**Keywords:** auth',
+      `**Status:** ${status}`,
+      '**Summary:** Sign-in flow.',
+      '→ [Detail](./FTR-010-login/feature.md)',
+      '',
+      '---',
+      '',
+    ].join('\n');
+  }
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(featuresRoot);
+    featureDir = path.join(featuresRoot, FEATURE_DIR);
+    registryFile = path.join(featuresRoot, 'REGISTRY.md');
+    fs.mkdirSync(featureDir);
+    fs.writeFileSync(path.join(featureDir, 'feature.md'), FEATURE_TEXT, 'utf8');
+  });
+
+  test('second register run returns defined and leaves the registry byte-identical with one entry', () => {
+    const first = LIB.register({ featuresRoot, featureDir, keywords: ['auth'] });
+    const afterFirst = fs.readFileSync(registryFile, 'utf8');
+
+    const second = LIB.register({ featuresRoot, featureDir, keywords: ['auth'] });
+    const afterSecond = fs.readFileSync(registryFile, 'utf8');
+
+    expect(first).toEqual({ id: 'FTR-010', status: 'defined' });
+    expect(second).toEqual({ id: 'FTR-010', status: 'defined' });
+    expect(afterSecond).toBe(afterFirst);
+    expect(afterSecond.match(/^## FTR-010 /gm)).toHaveLength(1);
+  });
+
+  test.each(['completed', 'epic'])('existing %s entry is returned with its own status, stays byte-identical and gets no duplicate', (status) => {
+    const existing = registryEntry(status);
+    writeRegistry(existing);
+
+    const result = LIB.register({ featuresRoot, featureDir, keywords: ['auth'] });
+
+    expect(result).toEqual({ id: 'FTR-010', status });
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(existing);
+    expect(existing.match(/^## FTR-010 /gm)).toHaveLength(1);
+  });
+
+  test('existing entry with a foreign status is refused with REGISTRY_STATUS and stays byte-identical', () => {
+    const existing = registryEntry('in-progress');
+    writeRegistry(existing);
+
+    const err = thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords: ['auth'] }));
+
+    expect(err).toBeInstanceOf(LIB.FeatureSplitError);
+    expect(err.code).toBe('REGISTRY_STATUS');
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(existing);
+  });
+
+  test('existing entry with a foreign status is not treated as an epic and gets no duplicate', () => {
+    const existing = registryEntry('in-progress');
+    writeRegistry(existing);
+
+    thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords: ['auth'] }));
+
+    const text = fs.readFileSync(registryFile, 'utf8');
+    expect(text).toBe(existing);
+    expect(text).not.toMatch(/\*\*Status:\*\* epic/);
+    expect(text.match(/^## FTR-010 /gm)).toHaveLength(1);
+  });
+});
