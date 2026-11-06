@@ -2088,3 +2088,60 @@ describe('register write failure (US-05-TASK-TEST-03)', () => {
     expect(ids).not.toContain('FTR-050');
   });
 });
+
+describe('facade register command (stdout and exit contract, US-05-TASK-TEST-04)', () => {
+  let featuresRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'internal_docs', 'features');
+    fs.mkdirSync(featuresRoot, { recursive: true });
+  });
+
+  test('a successful register exits with status 0', () => {
+    const featureDir = path.join(featuresRoot, 'FTR-001-login');
+    fs.mkdirSync(featureDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(featureDir, 'feature.md'),
+      '# Login\n\n## Summary\n\nUsers sign in. Sessions expire.\n',
+      'utf8'
+    );
+
+    const result = runFacade(['register', '--features-root', featuresRoot, featureDir, '--keywords', 'auth,login']);
+
+    expect(result.status).toBe(0);
+  });
+
+  test('a successful register prints exactly one JSON object { id, status: "defined" }', () => {
+    const featureDir = path.join(featuresRoot, 'FTR-001-login');
+    fs.mkdirSync(featureDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(featureDir, 'feature.md'),
+      '# Login\n\n## Summary\n\nUsers sign in. Sessions expire.\n',
+      'utf8'
+    );
+
+    const result = runFacade(['register', '--features-root', featuresRoot, featureDir, '--keywords', 'auth,login']);
+
+    // JSON.parse on the whole trimmed stdout throws if more than one object or any extra line was printed.
+    expect(JSON.parse(result.stdout.trim())).toEqual({ id: 'FTR-001', status: 'defined' });
+  });
+
+  test('a register with a missing feature.md exits with status 1', () => {
+    const featureDir = path.join(featuresRoot, 'FTR-002-empty');
+    fs.mkdirSync(featureDir, { recursive: true }); // no feature.md
+
+    const result = runFacade(['register', '--features-root', featuresRoot, featureDir]);
+
+    expect(result.status).toBe(1);
+  });
+
+  test('a register with a missing feature.md prints a JSON error object with code FEATURE_INVALID', () => {
+    const featureDir = path.join(featuresRoot, 'FTR-002-empty');
+    fs.mkdirSync(featureDir, { recursive: true }); // no feature.md
+
+    const result = runFacade(['register', '--features-root', featuresRoot, featureDir]);
+
+    // Checks the error code only, not the message text.
+    expect(JSON.parse(result.stdout.trim()).error.code).toBe('FEATURE_INVALID');
+  });
+});
