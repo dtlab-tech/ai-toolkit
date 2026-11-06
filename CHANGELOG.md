@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.26.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.26.0...v0.26.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **executor:** carry over tasks already completed by an earlier run ([8371e67](https://github.com/dtlab-tech/ai-toolkit/commit/8371e67583f97e996d92e966858c9b2d6214c646))
+* **executor:** carry over tasks already completed by an earlier run ([56bffd7](https://github.com/dtlab-tech/ai-toolkit/commit/56bffd70b2c8425e1a11b8514fb7f8be14d57363))
+* **executor:** carry over tasks already completed by an earlier run of the feature ([e505617](https://github.com/dtlab-tech/ai-toolkit/commit/e505617bdbbf080d3b578cb1bd7e80f1fc67d971))
+
 ## [0.26.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.25.0...v0.26.0) (2026-11-05)
 
 
