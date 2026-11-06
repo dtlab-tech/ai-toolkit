@@ -47,12 +47,24 @@ ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N
 | `--task-timeout-ms` | no | — | Forwarded as a Number |
 | `--agent-budget-usd` | no | — | Positive number. Spend cap for **one** Claude invocation (an implementation attempt or a review): passed to the CLI as `--max-budget-usd`, and persisted into the run config. Not a cap on the whole run |
 | `--review-scope` | no | `task` | `task` reviews every task attempt. `phase` reviews once per phase (a user story of the Work Breakdown): see "Review scope" below. Anything else is a usage error (exit 2) |
+| `--no-carry-over` | no | off | Disables the automatic carry-over (see "Automatic carry-over" below) |
 | `--from-replan-run-id` | no | — | UUID of a prior run `replan` has already superseded; seeds its carry-over-eligible tasks straight to `checkpointed` instead of `pending` (see "Carrying forward a replan" below) |
 
 Backs `lib/task-executor/index.js`'s `execute()`. Validates gates/config, acquires the
 repo-wide execution lease for a brand-new run, builds an immutable plan snapshot from the
 feature's own `{PREFIX}-Work-Breakdown.md/.csv`, and drives a sequential (slot count 1)
 dispatch → verify → review → checkpoint loop to completion or block.
+
+#### Automatic carry-over
+
+A new run does not redo work an earlier run of the same feature already finished. For every task, the
+executor looks at the earlier runs (newest first): if the task was `checkpointed` there, and its
+commit is still an ancestor of the branch being executed, the task starts as `checkpointed` with that
+commit recorded (`terminalReason: carried-over-from-prior-run:<runId>:<taskId>#<attempt>`). It is not
+dispatched and its verification commands are not run again, and the phase review sees its commit. Only
+a real 40-hex commit that is reachable counts; blocked, skipped or pending tasks never carry over.
+Pass `--no-carry-over` to re-check everything. A task whose definition changed since it was done is
+still carried over: use `--no-carry-over` (or `replan`) in that case.
 
 #### Review scope
 
