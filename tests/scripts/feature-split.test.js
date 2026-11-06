@@ -20,6 +20,7 @@ const {
   meetsMinimum,
   isNewFeature,
   buildProposal,
+  apply,
 } = LIB;
 
 /** Runs fn and returns the thrown value, or fails the test if nothing is thrown. */
@@ -835,5 +836,171 @@ describe('editProposal()', () => {
 
     expect(snapshot()).toEqual(before);
     expect(writeCalls).toEqual(writers.map(() => 0));
+  });
+});
+
+describe('initial apply success', () => {
+  const PARENT_ID = 'FTR-005';
+  const PARENT_DIR = 'FTR-005-parent';
+  const ORIGINAL = '# Parent\n\nSummary here. More.\n\n## Scope\n\nParent scope text.\n';
+  const REGISTRY_TEXT = [
+    '# Feature Registry',
+    '',
+    '## FTR-005 — Parent',
+    '**Keywords:** parent',
+    '**Status:** defined',
+    '**Summary:** Summary here. More.',
+    '→ [Detail](FTR-005-parent/feature.md)',
+    '---',
+    '',
+    '## FTR-004 — Unrelated',
+    '**Keywords:** other',
+    '**Status:** completed',
+    '**Summary:** Unrelated feature.',
+    '→ [Detail](FTR-004-unrelated/feature.md)',
+    '---',
+    '',
+  ].join('\n');
+
+  function sampleProposal(overrides = {}) {
+    return {
+      source: 'definition',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in and sessions', keywords: ['auth'], dependsOn: [], assigned: 'UC-01, UC-02' },
+        { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-03' },
+      ],
+      sharedFoundationOwner: 'Auth',
+      foundationNote: 'Shared models',
+      minChildren: 2,
+      ...overrides,
+    };
+  }
+
+  // Builds featuresRoot with a defined parent (feature.md, req/, spec/), a registry,
+  // and a stray folder FTR-007-old that must push allocation past 7.
+  function setupInitialFixture() {
+    const featuresRoot = path.join(root, 'features');
+    const parent = path.join(featuresRoot, PARENT_DIR);
+    fs.mkdirSync(path.join(parent, 'req'), { recursive: true });
+    fs.mkdirSync(path.join(parent, 'spec'), { recursive: true });
+    fs.mkdirSync(path.join(featuresRoot, 'FTR-007-old'));
+    fs.writeFileSync(path.join(parent, 'feature.md'), ORIGINAL);
+    fs.writeFileSync(path.join(parent, 'req', 'index.md'), '# Requirements\n');
+    fs.writeFileSync(path.join(parent, 'spec', 'index.md'), '# Tech spec\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), REGISTRY_TEXT);
+    return { featuresRoot, parent };
+  }
+
+  function runInitialApply(featuresRoot, proposal = sampleProposal()) {
+    return apply({ featuresRoot, parentId: PARENT_ID, proposal, runId: 'aabbccdd' });
+  }
+
+  // Matches only the row whose ID cell is the child ID; "Depends on" cells also name IDs.
+  function splitRowsFor(epic, id) {
+    const idCell = new RegExp(`^\\|\\s*\\d+\\s*\\|\\s*${id}\\s*\\|`);
+    return epic.split('\n').filter((line) => idCell.test(line));
+  }
+
+  test('epic.md lists each child exactly once in the split table', () => {
+    const { featuresRoot, parent } = setupInitialFixture();
+    const result = runInitialApply(featuresRoot);
+    const epic = fs.readFileSync(path.join(parent, 'epic.md'), 'utf8');
+
+    for (const child of result.children) {
+      expect(splitRowsFor(epic, child.id)).toHaveLength(1);
+    }
+  });
+
+  test('epic.md records the definition checkpoint on each child row', () => {
+    const { featuresRoot, parent } = setupInitialFixture();
+    const result = runInitialApply(featuresRoot);
+    const epic = fs.readFileSync(path.join(parent, 'epic.md'), 'utf8');
+
+    for (const child of result.children) {
+      expect(splitRowsFor(epic, child.id)[0]).toMatch(/\|\s*definition\s*\|/);
+    }
+  });
+
+  test('epic.md ends with the original feature text verbatim', () => {
+    const { featuresRoot, parent } = setupInitialFixture();
+    runInitialApply(featuresRoot);
+    const epic = fs.readFileSync(path.join(parent, 'epic.md'), 'utf8');
+
+    expect(epic.endsWith(ORIGINAL)).toBe(true);
+  });
+
+  test('does not write epic.json next to epic.md', () => {
+    const { featuresRoot, parent } = setupInitialFixture();
+    runInitialApply(featuresRoot);
+
+    expect(fs.existsSync(path.join(parent, 'epic.json'))).toBe(false);
+  });
+
+  test('creates each child folder as a sibling under featuresRoot', () => {
+    const { featuresRoot } = setupInitialFixture();
+    const result = runInitialApply(featuresRoot);
+
+    for (const child of result.children) {
+      expect(fs.existsSync(path.join(featuresRoot, child.dir, 'feature.md'))).toBe(true);
+    }
+  });
+
+  test('child feature.md carries its ID, parent epic and purpose-based summary', () => {
+    const { featuresRoot } = setupInitialFixture();
+    const [auth] = runInitialApply(featuresRoot).children;
+    const text = fs.readFileSync(path.join(featuresRoot, auth.dir, 'feature.md'), 'utf8');
+
+    expect(text).toContain('# Auth');
+    expect(text).toContain(`## Feature ID\n${auth.id}`);
+    expect(text).toContain(PARENT_ID);
+    expect(text).toContain('Sign-in and sessions');
+  });
+
+  test('later child feature.md lists the earlier child as its only dependency', () => {
+    const { featuresRoot } = setupInitialFixture();
+    const [, billing] = runInitialApply(featuresRoot).children;
+    const text = fs.readFileSync(path.join(featuresRoot, billing.dir, 'feature.md'), 'utf8');
+
+    expect(text).toContain('Depends on: FTR-008');
+  });
+
+  test('shared foundation content appears in the first child feature.md only', () => {
+    const { featuresRoot } = setupInitialFixture();
+    const [auth, billing] = runInitialApply(featuresRoot).children;
+    const authText = fs.readFileSync(path.join(featuresRoot, auth.dir, 'feature.md'), 'utf8');
+    const billingText = fs.readFileSync(path.join(featuresRoot, billing.dir, 'feature.md'), 'utf8');
+
+    expect(authText).toContain('Shared models');
+    expect(billingText).not.toContain('Shared models');
+  });
+
+  test('allocates the next IDs after the highest registry heading and folder prefix', () => {
+    const { featuresRoot } = setupInitialFixture();
+    const result = runInitialApply(featuresRoot);
+
+    expect(result.children.map((c) => c.id)).toEqual(['FTR-008', 'FTR-009']);
+  });
+
+  test('registers each new child in REGISTRY.md under its allocated ID', () => {
+    const { featuresRoot } = setupInitialFixture();
+    runInitialApply(featuresRoot);
+    const registry = fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+
+    expect(registry).toContain('## FTR-008 — Auth');
+    expect(registry).toContain('## FTR-009 — Billing');
+  });
+
+  test('parent folder ends with epic.md only after req/ and spec/ are moved and removed', () => {
+    const { featuresRoot, parent } = setupInitialFixture();
+    runInitialApply(featuresRoot);
+
+    expect(fs.readdirSync(parent)).toEqual(['epic.md']);
+  });
+
+  test('leaves no staging directory under featuresRoot after a successful apply', () => {
+    const { featuresRoot } = setupInitialFixture();
+    runInitialApply(featuresRoot);
+
+    expect(findStagingLeftovers(featuresRoot)).toEqual([]);
   });
 });
