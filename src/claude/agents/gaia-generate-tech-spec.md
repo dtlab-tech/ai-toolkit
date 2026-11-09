@@ -55,7 +55,7 @@ The tech spec MUST use the project's actual stack and patterns. Do not assume an
 3a. **Apply the registry reader rules** to each entry of `REGISTRY.md` you read in step 3:
     - `Status: epic` → the entry is a **parent record**. Use its Summary as context only.
       Never generate a Tech-Spec skeleton for an epic, and never list its children as
-      components of this feature. If its folder holds no `epic.md`, that is an error: stop and
+      components of this feature. If its folder (`<features-root>/<ID>` or `<features-root>/<ID>-*`) holds no `epic.md`, that is an error: stop and
       report it through the Clarification Protocol (Gate 1 decision).
     - Entry has `Parent: FTR-NNN` → it is a **child** of that epic. Record the parent ID.
     - Entry has `Depends on:` → record the sibling IDs. The value `none` means no sibling dependency.

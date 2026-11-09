@@ -2260,6 +2260,40 @@ describe('review fixes: sanitised text, late proposal, purpose edit, line ending
     }
   });
 
+  test('a summary edit survives apply: the registry entry and the child document carry it', () => {
+    const { featuresRoot } = setupFixture();
+    const { proposal } = LIB.buildProposal({ source: 'definition', children: twoChildren(), config: { minChildren: 2 } });
+    const edited = LIB.editProposal(proposal, { type: 'set', name: 'Auth', field: 'summary', value: 'EDITED SUMMARY.' }).proposal;
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: edited });
+    expect(readRegistry(featuresRoot).entries.find(e => e.title === 'Auth').summary).toBe('EDITED SUMMARY.');
+    const doc = fs.readFileSync(path.join(featuresRoot, 'FTR-002-auth', 'feature.md'), 'utf8');
+    expect(doc).toMatch(/EDITED SUMMARY\./);
+  });
+
+  test('a child with a summary and no purpose keeps its summary through apply', () => {
+    const { featuresRoot } = setupFixture();
+    const children = twoChildren();
+    delete children[0].purpose;
+    children[0].summary = 'Only a summary.';
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposalOf(children) });
+    expect(readRegistry(featuresRoot).entries.find(e => e.title === 'Auth').summary).toBe('Only a summary.');
+  });
+
+  test('FOUNDATION_NOT_DEPENDED_ON reaches the epic.md shared-foundation row on one line with 7 cells', () => {
+    const { featuresRoot, parent } = setupFixture();
+    const children = [
+      { name: 'Auth', purpose: 'Sign-in', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+      { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: [], assigned: 'UC-02' },
+    ];
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposalOf(children) });
+    const epic = fs.readFileSync(path.join(parent, 'epic.md'), 'utf8');
+    const row = epic.split('\n').find(l => l.startsWith('| — | — | Shared foundation'));
+    expect(row).toMatch(/BR-03/);
+    expect(row).toMatch(/Billing/);
+    expect(row.replace(/^\||\|$/g, '').split(/(?<!\\)\|/)).toHaveLength(7);
+    expect(LIB.parseEpicRows(epic).map(r => r.name)).toEqual(['Auth', 'Billing']);
+  });
+
   test('W2: editing the purpose edits the summary that apply and the registry use', () => {
     const { proposal } = LIB.buildProposal({ source: 'definition', children: twoChildren(), config: { minChildren: 2 } });
     const edited = LIB.editProposal(proposal, { type: 'set', name: 'Auth', field: 'purpose', value: 'New purpose' }).proposal;

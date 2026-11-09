@@ -122,7 +122,7 @@ function normaliseChild(c) {
   return {
     name: c.name,
     purpose,
-    summary: purpose,
+    summary: typeof c.summary === 'string' && c.summary !== '' ? c.summary : purpose,
     keywords: Array.isArray(c.keywords) ? c.keywords : [],
     dependsOn: Array.isArray(c.dependsOn) ? c.dependsOn : [],
     assigned: typeof c.assigned === 'string' ? c.assigned : '',
@@ -799,7 +799,8 @@ function findParentDir(featuresRoot, parentId) {
 }
 
 // Apply pre-checks. Nothing is moved, written or staged here.
-// Order: proposal shape, staging leftovers, parent registry entry, parent folder mode, status, isNewFeature.
+// Order: children shape, staging leftovers, parent registry entry, parent folder mode, the rest of the shape
+// (minChildren, foundationNote, owner: initial mode only, so the mode must be known), status, isNewFeature.
 // Returns { mode, parentDir, parentEntry }.
 function checkApplyPreconditions({ featuresRoot, parentId, proposal }) {
   assertProposalShape(proposal, { late: true });   // children only; the rest depends on the mode
