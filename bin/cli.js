@@ -2955,6 +2955,22 @@ async function handleExecutorCommand(argv) {
       const result = await taskExecutor.diagnose({ project: projectDir, runId: runId });
       emitSuccess(result);
 
+    } else if (subcommand === 'report') {
+      // Writes <PREFIX>-Token-Estimate.md and <PREFIX>-executor-ledger.json into the feature folder from the
+      // evidence of every run of the feature (the evidence lives in .git and is otherwise never committed).
+      const feature = getFlag('--feature');
+      if (!feature) { usageError('executor report requires --feature'); return; }
+      const featureDir = path.dirname(path.resolve(projectDir, feature));
+      const prefixMatch = path.basename(featureDir).match(/([A-Z]+-\d+)/);
+      if (!prefixMatch) { usageError('executor report: cannot derive a PREFIX from "' + featureDir + '"'); return; }
+      const result = require('../lib/task-executor/report').writeActualsReports({
+        executionRoot: _executorExecutionRoot(projectDir),
+        featureId: prefixMatch[1],
+        featureDir: featureDir,
+        projectDir: projectDir,
+      });
+      emitSuccess(result);
+
     } else if (subcommand === 'stop') {
       const runId = getFlag('--run-id');
       if (!runId) { usageError('executor stop requires --run-id'); return; }

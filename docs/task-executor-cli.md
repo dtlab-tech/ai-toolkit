@@ -179,6 +179,23 @@ propagate unmodified (exit 4 / exit 1 respectively). An unreadable or unparseabl
 pricing file throws `LEDGER_READ_FAILED`/`LEDGER_CORRUPTED`/`PRICING_READ_FAILED`/
 `PRICING_CORRUPTED` (exit 1) rather than silently reporting a partial or zeroed-out total.
 
+### `report`
+
+```bash
+ai-toolkit executor report --project . --feature <path-to-feature.md>
+```
+
+Writes the measured actuals of a feature into its own folder:
+
+- `<PREFIX>-Token-Estimate.md`: totals (calls, input, output and cache tokens, cost in USD and EUR, agent time) for the documentation workflows, the developer agents and the phase reviews, then by executor run, by phase, attempts per task and the phase review verdicts.
+- `<PREFIX>-executor-ledger.json`: one compact row per executor call (run, task, attempt, kind, agent, model, tokens, cost, duration, started at, whether usage was returned). It holds no prompt and no output.
+
+Why it exists: the executor keeps its evidence and run ledgers under `<git common dir>/ai-toolkit/execution/`, inside `.git`, so they are never committed and exist on one clone only. The command aggregates **every** run of the feature (also paused, superseded or blocked ones) and the evidence of its documentation workflows, and writes the result where the other documents of the feature are, so it can be committed.
+
+Costs are the `costUSD` the Claude CLI reported for each call (list price). A call that returned no usage is counted and adds no cost; it is never turned into a measured zero. If the evidence of a documentation workflow run is no longer on disk, the file says so.
+
+`executor start` runs the same report by itself when a run ends or pauses (best effort: a failure never changes the run's result). It is not written while a task is running, so it never dirties the working tree under a task. Run the command by hand after a crash, or to refresh the files. A missing `--feature` is a usage error (exit 2).
+
 ### `diagnose`
 
 ```bash
