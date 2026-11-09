@@ -1,0 +1,30 @@
+{
+  "pathHashes": {},
+  "components": {
+    "tests/cli/define-feature-checkpoint-text.test.js": {
+      "slug": "define-feature-checkpoint-text.test.js.md",
+      "rowHash": "sha256:4cfb0d446d4a3f692b50860ee60c162460a20d4ef89014cab5059c20ca68972c",
+      "lastSeenInSkeleton": "2026-11-09T17:01:47.954Z"
+    },
+    "src/claude/scripts/feature-split.js": {
+      "slug": "feature-split.js.md",
+      "rowHash": "sha256:2112bf2d9322cdad6a9b88bbb0d3b9ac4169d1b2a95773c21e673996c5865290",
+      "lastSeenInSkeleton": "2026-11-09T17:01:47.954Z"
+    },
+    "src/claude/agents/gaia-define-feature.md": {
+      "slug": "gaia-define-feature.md.md",
+      "rowHash": "sha256:42aaff9a2e26aca6975e5c4173c8e330e2ba934c8efd70b530168df317116b2d",
+      "lastSeenInSkeleton": "2026-11-09T17:01:47.954Z"
+    },
+    "src/claude/skills/define-feature/SKILL.md": {
+      "slug": "SKILL.md.md",
+      "rowHash": "sha256:f547fbd27654aa05051b12f107188cfae767e804d89a50142a96d77ce3603b3e",
+      "lastSeenInSkeleton": "2026-11-09T17:01:47.954Z"
+    },
+    "tests/scripts/feature-split.test.js": {
+      "slug": "feature-split.test.js.md",
+      "rowHash": "sha256:a21f5fbd672e8fdb1a69f99a7af340d646b033c869ee4d62746749074004b8bc",
+      "lastSeenInSkeleton": "2026-11-09T17:01:47.954Z"
+    }
+  }
+}
