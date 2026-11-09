@@ -25,7 +25,7 @@ const RULES = [
   {
     id: 'standalone',
     description: 'an entry with neither Parent: nor Depends on: is standalone (AC-43)',
-    pattern: /(neither|lacks both)\s+`?Parent:`?\s+(nor|and)\s+`?Depends on:`?[^\n]*standalone|(neither|lacks both)\s+`?Parent:`?\s+(nor|and)\s+`?Depends on:`?/i,
+    pattern: /(neither|lacks both)\s+`?Parent:`?\s+(nor|and)\s+`?Depends on:`?[^\n]*standalone/i,
   },
   {
     id: 'epic-status',
@@ -34,8 +34,23 @@ const RULES = [
   },
   {
     id: 'epic-md',
-    description: 'epic.md is recognised as the parent record (AC-45)',
-    pattern: /epic\.md/i,
+    description: 'a feature folder that holds epic.md is recognised as the parent record (AC-45)',
+    pattern: /folder (holds|contains) `epic\.md`[^\n]*parent record/i,
+  },
+  {
+    id: 'epic-without-epic-md',
+    description: 'Status: epic without an epic.md is an error and generation stops (Gate 1 gap 13)',
+    pattern: /error[^\n]*epic\.md[^\n]*not found|holds no `epic\.md`[^\n]*error/i,
+  },
+  {
+    id: 'unreadable-registry',
+    description: 'a registry that exists but cannot be read is an error and generation stops (Gate 1 gap 13)',
+    pattern: /cannot be read[^\n]*error|error[^\n]*cannot be read/i,
+  },
+  {
+    id: 'parent-without-depends-on',
+    description: 'a Parent: line without Depends on: is a child with no recorded dependencies (Gate 1 gap 13)',
+    pattern: /`Parent:` line without a `Depends on:` line is a child with no recorded dependencies/i,
   },
   {
     id: 'depends-none',
@@ -59,6 +74,14 @@ function readAgent(file) {
 }
 
 describe('Registry reader tolerance in generator agents', () => {
+  for (const file of GENERATORS) {
+    test(`${file} derives the registry path from the features root, never from a hard-coded docs/features path (BR-14)`, () => {
+      const text = readAgent(file);
+      expect(text).not.toMatch(/docs\/features\/REGISTRY\.md/);
+      expect(text).toMatch(/features root/i);
+    });
+  }
+
   for (const file of GENERATORS) {
     describe(file, () => {
       let text;
