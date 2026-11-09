@@ -1,4 +1,40 @@
 ## 0.1.4 (2026-07-21)
+## [0.27.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.26.1...v0.27.0) (2026-11-09)
+
+
+### Features
+
+* add apply proposal shape check and mode detection (US-04-TASK-BE-06) ([84df799](https://github.com/dtlab-tech/ai-toolkit/commit/84df799f90405dd39be22917a248afce2fe0e9f3))
+* add apply registry content builder ([06e2c22](https://github.com/dtlab-tech/ai-toolkit/commit/06e2c220fb8bdbee4dab3c66054ccc0cc46b447e))
+* add buildProposal ([b41a6eb](https://github.com/dtlab-tech/ai-toolkit/commit/b41a6eb10169152de64f5512a5118b00d43ff29c))
+* add child feature.md renderer (US-04-TASK-BE-03) ([2e1f718](https://github.com/dtlab-tech/ai-toolkit/commit/2e1f7189629de2b44cde0319c0e070edd1cf2732))
+* add editProposal ([17e0b11](https://github.com/dtlab-tech/ai-toolkit/commit/17e0b1107a6fda75f78eef192c79dfef5dd57891))
+* add epic.md renderer with split table (US-04-TASK-BE-04) ([d178521](https://github.com/dtlab-tech/ai-toolkit/commit/d1785210d73ce67cde2977acbda70363bba26649))
+* add epic.md row parser and late row insertion (US-04-TASK-BE-05) ([550b401](https://github.com/dtlab-tech/ai-toolkit/commit/550b401acccc9e2c21565fa586351fe3e7c53b0f))
+* add feature.md reader for register ([ded8686](https://github.com/dtlab-tech/ai-toolkit/commit/ded8686e510f1903c62f3ee7604d331dab466e9f))
+* add initial split apply plan builder ([325eea9](https://github.com/dtlab-tech/ai-toolkit/commit/325eea93d401abe081456a2f6182b17753bf0806))
+* add late child apply plan builder ([8319309](https://github.com/dtlab-tech/ai-toolkit/commit/83193091c30bff07a4d7bf2fd74bfb6bfb73983f))
+* add next-free child ID allocation helper (US-04-TASK-BE-02) ([af8ee3e](https://github.com/dtlab-tech/ai-toolkit/commit/af8ee3ee9c16430f5e6a714bb7bb5723d1e00157))
+* add register function for standalone features ([4879ff8](https://github.com/dtlab-tech/ai-toolkit/commit/4879ff87f2fc9efb7c68130628c928b20a4c1df7))
+* add registry entry render and field edit helpers ([186f7cf](https://github.com/dtlab-tech/ai-toolkit/commit/186f7cf7c18aa53e920263fd79b151235f900fb1))
+* add registry reader rules to requirements generator agent ([f2c44a6](https://github.com/dtlab-tech/ai-toolkit/commit/f2c44a64ad4ef15f15f33b0f9bda16c444dee2de))
+* add registry reader rules to tech-spec generator agent ([69d300e](https://github.com/dtlab-tech/ai-toolkit/commit/69d300e737b0b24cdd69e9da7dfd80cee9877207))
+* add staged move and rollback engine ([01d5aeb](https://github.com/dtlab-tech/ai-toolkit/commit/01d5aeb0c33f28c75832fcf046a20ee783373df7))
+* connect apply command to facade ([6ed2eaa](https://github.com/dtlab-tech/ai-toolkit/commit/6ed2eaa2693e0fedb2a4a27ef0cdebbc2de486e9))
+* **feature-split:** feature split foundation (FTR-035) ([43bafbb](https://github.com/dtlab-tech/ai-toolkit/commit/43bafbb570b451080fbe410ef31e593f005a6a34))
+* **feature-split:** feature split foundation (FTR-035) ([ed43d14](https://github.com/dtlab-tech/ai-toolkit/commit/ed43d14ae8f017c8692c7e6bd792e7b5ca48735a))
+* wire apply orchestration ([ac225dd](https://github.com/dtlab-tech/ai-toolkit/commit/ac225ddd548fda0a295c55a580b19e30f60cb6a7))
+* wire facade register command ([f131292](https://github.com/dtlab-tech/ai-toolkit/commit/f131292e71631f075a32b0236d2e51ffa646803c))
+
+
+### Bug Fixes
+
+* **agents:** registry reader rules of the generators follow the Gate 1 decisions ([34156c4](https://github.com/dtlab-tech/ai-toolkit/commit/34156c477c05e3b727702a7b7ea52cf4406800ab))
+* **feature-split:** fix the findings of the final FTR-035 review ([16544fe](https://github.com/dtlab-tech/ai-toolkit/commit/16544fee4df98e89616a135b22288125a161d655))
+* **feature-split:** keep a child's summary through apply; agents find the epic folder by ID or ID-slug ([126c37a](https://github.com/dtlab-tech/ai-toolkit/commit/126c37ab626a52d3e323e57af4fa16aa027c7ca1))
+* **feature-split:** refine the remaining review warnings ([d0ffdf4](https://github.com/dtlab-tech/ai-toolkit/commit/d0ffdf44e3afd9fe816aa911ba3ff27bd9ff1195))
+* **test:** give workflow-runtime tests a 60 s timeout ([cccf4b3](https://github.com/dtlab-tech/ai-toolkit/commit/cccf4b331968244326046832967ee7aca8f25d04))
+
 ## [0.26.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.26.0...v0.26.1) (2026-11-06)
 
 
