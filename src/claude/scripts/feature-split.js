@@ -116,6 +116,8 @@ function firstSentence(text) {
 }
 
 function normaliseChild(c) {
+  if (c === null || typeof c !== 'object' || Array.isArray(c))
+    fail('INVALID_PROPOSAL', 'Proposal shape invalid: a child must be an object');
   const purpose = typeof c.purpose === 'string' ? c.purpose : '';
   return {
     name: c.name,
@@ -133,6 +135,8 @@ function validateChildNames(children) {
     const name = c.name;
     if (typeof name !== 'string' || name.trim() === '')
       fail('CHILD_NAME_INVALID', `Child name ${JSON.stringify(name)} is empty or not a string`, { key: String(name) });
+    if (/[\r\n|]/.test(name))
+      fail('CHILD_NAME_INVALID', `Child name ${JSON.stringify(name)} contains a line break or "|"`, { key: name });
     let s;
     try {
       s = slug(name);
@@ -172,16 +176,47 @@ function dependencyOrder(children) {
 
 // BR-03 (D-10). The shared foundation belongs to the first child in dependency order.
 // Warns when the owner is not that child. Warnings only: never throws, never refuses.
+// It also warns (FOUNDATION_NOT_DEPENDED_ON) for every child after the owner that does not depend on the
+// owner, directly or through a chain of dependsOn (Gate 1 gap 10, Gate 2 note).
+function dependsOnTransitively(order, child, ownerName) {
+  const byName = new Map(order.map(c => [c.name, c]));
+  const seen = new Set();
+  const stack = [...(child.dependsOn || [])];
+  while (stack.length) {
+    const name = stack.pop();
+    if (name === ownerName) return true;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const next = byName.get(name);
+    if (next) stack.push(...(next.dependsOn || []));
+  }
+  return false;
+}
+
 function foundationWarnings(p, order) {
   if (!p || !Array.isArray(order) || order.length === 0) return [];
   const owner = p.sharedFoundationOwner ?? null;
-  if (owner === order[0].name) return [];
-  return [{
-    code: 'FOUNDATION_NOT_FIRST',
-    message: `BR-03 is broken: the shared foundation is assigned to ${owner ?? 'no child'}, `
-      + `not to the first child in dependency order (${order[0].name}). Children before the owner are built `
-      + `without the foundation.`,
-  }];
+  const warnings = [];
+  if (owner !== order[0].name) {
+    warnings.push({
+      code: 'FOUNDATION_NOT_FIRST',
+      message: `BR-03 is broken: the shared foundation is assigned to ${owner ?? 'no child'}, `
+        + `not to the first child in dependency order (${order[0].name}). Children before the owner are built `
+        + `without the foundation.`,
+    });
+  }
+  const at = order.findIndex(c => c.name === owner);
+  if (at !== -1) {
+    const missing = order.slice(at + 1).filter(c => !dependsOnTransitively(order, c, owner)).map(c => c.name);
+    if (missing.length) {
+      warnings.push({
+        code: 'FOUNDATION_NOT_DEPENDED_ON',
+        message: `BR-03 is broken: ${missing.join(', ')} come after the shared-foundation owner ${owner} `
+          + `but do not depend on it, directly or through a chain of dependencies.`,
+      });
+    }
+  }
+  return warnings;
 }
 
 function validateProposal(p, { checkMin = true } = {}) {
@@ -200,6 +235,9 @@ function validateProposal(p, { checkMin = true } = {}) {
 }
 
 function buildProposal({ source, children, sharedFoundationOwner, foundationNote = '', config }) {
+  if (!Array.isArray(children)) fail('INVALID_PROPOSAL', 'Proposal shape invalid: children must be an array');
+  if (!config || !Number.isInteger(config.minChildren))
+    fail('INVALID_PROPOSAL', 'Proposal shape invalid: config.minChildren must be an integer');
   const list = children.map(normaliseChild);
   const proposal = {
     source, children: list,
@@ -244,6 +282,7 @@ function editProposal(proposal, op) {
       if (!valid)
         fail('EDIT_VALUE_INVALID', `${op.field} must be ${isList ? 'an array of strings' : 'a string'}`, { key: op.field });
       byName(op.name)[op.field] = op.value;
+      if (op.field === 'purpose') byName(op.name).summary = op.value;   // apply, the registry and the child doc use summary
       break;
     }
     case 'reorder': {
@@ -369,13 +408,15 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Builds the lines of one new registry entry, in the live REGISTRY.md layout.
 // The caller adds the '---' separator and blank lines around it.
+const oneLine = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
+
 function renderEntry(e) {
-  const keywords = Array.isArray(e.keywords) ? e.keywords.join(', ') : e.keywords;
+  const keywords = oneLine(Array.isArray(e.keywords) ? e.keywords.join(', ') : e.keywords);
   const lines = [
-    `## ${e.id} — ${e.title}`,
+    `## ${e.id} — ${oneLine(e.title)}`,
     `**Keywords:** ${keywords}`,
     `**Status:** ${e.status}`,
-    `**Summary:** ${e.summary}`,
+    `**Summary:** ${oneLine(e.summary)}`,
   ];
   if (e.parent) {
     const deps = e.dependsOn ?? [];
@@ -646,6 +687,8 @@ function parseEpicRows(text) {
   const lines = text.split('\n');
   return childRowIndexes(lines).map(i => {
     const cells = lines[i].trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+    if (cells.length !== 7)
+      fail('EPIC_TABLE_INVALID', `epic.md split table row has ${cells.length} cells instead of 7: ${lines[i].trim()}`, { key: cells[1] ?? null });
     const [order, id, name, dir, checkpoint, depends, shared] = cells;
     return {
       order: parseInt(order, 10),
@@ -696,13 +739,24 @@ function renderEpic({ parentId, title, rows, originalText, warnings = [] }) {
 
 // D-08 shape: structural types only. Business rules (source values, names, dependencies,
 // minChildren threshold) stay in validateProposal, which raises its own codes.
-function assertProposalShape(p) {
+// late: a late child takes no minChildren, foundationNote or owner (UC-04 A1), so only the children are checked.
+function assertProposalShape(p, { late = false } = {}) {
   const bad = (why) => fail('INVALID_PROPOSAL', `Proposal shape invalid: ${why}`);
   if (p === null || typeof p !== 'object' || Array.isArray(p)) bad('must be a JSON object');
   if (!Array.isArray(p.children)) bad('children must be an array');
+  const stringList = (value, label, noComma) => {
+    if (value === undefined) return;
+    if (!Array.isArray(value) || value.some(v => typeof v !== 'string')) bad(`${label} must be an array of strings`);
+    if (value.some(v => /[\r\n]/.test(v) || (noComma && v.includes(',')))) bad(`${label} must not hold a line break${noComma ? ' or comma' : ''}`);
+  };
   p.children.forEach((c, i) => {
     if (c === null || typeof c !== 'object' || Array.isArray(c)) bad(`children[${i}] must be an object`);
+    stringList(c.keywords, `children[${i}].keywords`, true);
+    stringList(c.dependsOn, `children[${i}].dependsOn`, false);
+    for (const field of ['purpose', 'summary', 'assigned'])
+      if (c[field] !== undefined && typeof c[field] !== 'string') bad(`children[${i}].${field} must be a string`);
   });
+  if (late) return;
   if (!Number.isInteger(p.minChildren) || p.minChildren < 0) bad('minChildren must be a non-negative integer');
   if (typeof p.foundationNote !== 'string') bad('foundationNote must be a string');
   if (p.sharedFoundationOwner !== null && typeof p.sharedFoundationOwner !== 'string')
@@ -748,13 +802,14 @@ function findParentDir(featuresRoot, parentId) {
 // Order: proposal shape, staging leftovers, parent registry entry, parent folder mode, status, isNewFeature.
 // Returns { mode, parentDir, parentEntry }.
 function checkApplyPreconditions({ featuresRoot, parentId, proposal }) {
-  assertProposalShape(proposal);
+  assertProposalShape(proposal, { late: true });   // children only; the rest depends on the mode
   assertNoStagingLeftovers(featuresRoot);
   const parentEntry = readRegistry(featuresRoot).entries.find(e => e.id === parentId);
   if (!parentEntry) fail('PARENT_NOT_REGISTERED', `${parentId} has no registry entry`, { key: parentId });
   const parentDir = findParentDir(featuresRoot, parentId);
   const mode = detectMode(parentDir, parentId);
   const late = mode === 'late';
+  if (!late) assertProposalShape(proposal);
   const wantStatus = late ? 'epic' : 'defined';
   if (parentEntry.status !== wantStatus)
     fail('PARENT_STATUS_INVALID', `${parentId} has status ${parentEntry.status}; ${mode} mode needs ${wantStatus}`, { key: parentId });
@@ -809,7 +864,7 @@ function planLate({ featuresRoot, registry, epicText, proposal }) {
 
   const child = normaliseChild(proposal.children[0]);
   // dependsOn names epic.md child rows, not siblings in this proposal, so it is cleared before validation.
-  validateProposal({ ...proposal, children: [{ ...child, dependsOn: [] }], sharedFoundationOwner: null },
+  validateProposal({ ...proposal, source: 'definition', children: [{ ...child, dependsOn: [] }], sharedFoundationOwner: null },
     { checkMin: false });
 
   const rows = parseEpicRows(epicText);
@@ -854,7 +909,7 @@ function readRegistryBlocks(featuresRoot) {
   const head = [];
   const blocks = [];
   let current = null;
-  for (const line of text.split(eol)) {
+  for (const line of text.split(/\r?\n/)) {
     const heading = line.match(ENTRY_HEADING);
     if (heading) {
       current = { id: heading[1], lines: [line] };

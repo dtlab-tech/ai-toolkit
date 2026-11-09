@@ -596,9 +596,45 @@ describe('foundationWarnings()', () => {
     expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, undefined)).toEqual([]);
   });
 
-  test('returns no warning for an owner that is first even when later children have no dependsOn', () => {
-    const order = [{ name: 'Auth', dependsOn: [] }, { name: 'Billing', dependsOn: [] }];
+  test('warns FOUNDATION_NOT_DEPENDED_ON for a later child that does not depend on the owner (BR-03, Gate 2)', () => {
+    const order = [{ name: 'Auth', dependsOn: [] }, { name: 'Billing', dependsOn: [] }, { name: 'Reports', dependsOn: ['Auth'] }];
+    const warnings = LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, order);
+    expect(warnings.map(w => w.code)).toEqual(['FOUNDATION_NOT_DEPENDED_ON']);
+    expect(warnings[0].message).toMatch(/BR-03/);
+    expect(warnings[0].message).toMatch(/Billing/);
+    expect(warnings[0].message).not.toMatch(/Reports/);
+  });
+
+  test('a child that reaches the owner only through a chain of dependsOn needs no warning', () => {
+    expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, chain)).toEqual([]);
+  });
+
+  test('every later child depending on the owner directly gives no warning', () => {
+    const order = [{ name: 'Auth', dependsOn: [] }, { name: 'B', dependsOn: ['Auth'] }, { name: 'C', dependsOn: ['Auth'] }];
     expect(LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, order)).toEqual([]);
+  });
+
+  test('a cycle-free chain that ends in a child without the owner is warned about, and the walk terminates', () => {
+    const order = [{ name: 'Auth', dependsOn: [] }, { name: 'B', dependsOn: [] }, { name: 'C', dependsOn: ['B'] }];
+    const warnings = LIB.foundationWarnings({ sharedFoundationOwner: 'Auth' }, order);
+    expect(warnings[0].message).toMatch(/B, C/);
+  });
+
+  test('an owner that is not first gets both warnings, the second naming only children after the owner', () => {
+    const order = [{ name: 'Auth', dependsOn: [] }, { name: 'Billing', dependsOn: ['Auth'] }, { name: 'Reports', dependsOn: [] }];
+    const warnings = LIB.foundationWarnings({ sharedFoundationOwner: 'Billing' }, order);
+    expect(warnings.map(w => w.code)).toEqual(['FOUNDATION_NOT_FIRST', 'FOUNDATION_NOT_DEPENDED_ON']);
+    expect(warnings[1].message).toMatch(/Reports/);
+    expect(warnings[1].message).not.toMatch(/Auth, /);
+  });
+
+  test('buildProposal with the default owner warns when a later child has no dependency on it', () => {
+    const { warnings } = LIB.buildProposal({
+      source: 'definition',
+      children: [{ name: 'A' }, { name: 'B' }, { name: 'C', dependsOn: ['A'] }],
+      config: { minChildren: 2 },
+    });
+    expect(warnings.map(w => w.code)).toEqual(['FOUNDATION_NOT_DEPENDED_ON']);
   });
 });
 
@@ -2143,5 +2179,109 @@ describe('facade register command (stdout and exit contract, US-05-TASK-TEST-04)
 
     // Checks the error code only, not the message text.
     expect(JSON.parse(result.stdout.trim()).error.code).toBe('FEATURE_INVALID');
+  });
+});
+
+describe('review fixes: sanitised text, late proposal, purpose edit, line endings, boundary types', () => {
+  const REGISTRY = [
+    '# Feature Registry',
+    '',
+    '## FTR-001 — Big',
+    '**Keywords:** big',
+    '**Status:** defined',
+    '**Summary:** A big feature.',
+    '→ [Detail](FTR-001-big/feature.md)',
+    '---',
+    '',
+  ].join('\n');
+
+  function setupFixture(registryText = REGISTRY) {
+    const featuresRoot = path.join(root, 'features');
+    const parent = path.join(featuresRoot, 'FTR-001-big');
+    fs.mkdirSync(parent, { recursive: true });
+    fs.writeFileSync(path.join(parent, 'feature.md'), '# Big\n\nA big feature.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), registryText);
+    return { featuresRoot, parent };
+  }
+
+  const proposalOf = (children, overrides = {}) => ({
+    source: 'definition', children, sharedFoundationOwner: children[0].name, foundationNote: 'Shared', minChildren: 2, ...overrides,
+  });
+  const twoChildren = (first = {}) => [
+    { name: 'Auth', purpose: 'Sign-in', keywords: ['auth'], dependsOn: [], assigned: 'UC-01', ...first },
+    { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+  ];
+
+  test('C2: a child name with a line break or "|" is refused and nothing is written', () => {
+    for (const name of ['B | x\n**Parent:** FTR-099', 'B|x', 'B\nx']) {
+      const { featuresRoot } = setupFixture();
+      const before = fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+      const children = twoChildren({ name });
+      children[1].dependsOn = [];
+      const err = thrownBy(() => apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposalOf(children) }));
+      expect(err.code).toBe('CHILD_NAME_INVALID');
+      expect(fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8')).toBe(before);
+      fs.rmSync(featuresRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('C2: a multi-line purpose becomes a one-line registry Summary and no field line can be injected', () => {
+    const { featuresRoot } = setupFixture();
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22',
+      proposal: proposalOf(twoChildren({ purpose: 'First line\n**Parent:** FTR-099\nthird' })) });
+    const text = fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+    expect(text).not.toMatch(/^\*\*Parent:\*\* FTR-099/m);
+    const child = readRegistry(featuresRoot).entries.find(e => e.title === 'Auth');
+    expect(child.parent).toBe('FTR-001');
+    expect(child.summary).toBe('First line **Parent:** FTR-099 third');
+  });
+
+  test('C2: a keyword with a comma or a line break, or that is not a string, is INVALID_PROPOSAL', () => {
+    const { featuresRoot } = setupFixture();
+    for (const keywords of [['a,b'], ['a\nb'], [42], 'auth']) {
+      const err = thrownBy(() => apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposalOf(twoChildren({ keywords })) }));
+      expect(err.code).toBe('INVALID_PROPOSAL');
+    }
+  });
+
+  test('C2: parseEpicRows on a short row throws EPIC_TABLE_INVALID instead of a TypeError', () => {
+    const text = ['## Split table', '| 1 | FTR-002 | Auth |', '', '## Original feature text', ''].join('\n');
+    expect(thrownBy(() => LIB.parseEpicRows(text)).code).toBe('EPIC_TABLE_INVALID');
+  });
+
+  test('W9: a null child, a non-string purpose and a non-array dependsOn are INVALID_PROPOSAL', () => {
+    expect(thrownBy(() => LIB.buildProposal({ source: 'definition', children: [null], config: { minChildren: 1 } })).code).toBe('INVALID_PROPOSAL');
+    expect(thrownBy(() => LIB.buildProposal({ source: 'definition', children: 'x', config: { minChildren: 1 } })).code).toBe('INVALID_PROPOSAL');
+    expect(thrownBy(() => LIB.buildProposal({ source: 'definition', children: [{ name: 'A' }] })).code).toBe('INVALID_PROPOSAL');
+    const { featuresRoot } = setupFixture();
+    for (const bad of [{ purpose: 7 }, { dependsOn: 'Auth' }, { assigned: {} }]) {
+      const err = thrownBy(() => apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposalOf(twoChildren(bad)) }));
+      expect(err.code).toBe('INVALID_PROPOSAL');
+    }
+  });
+
+  test('W2: editing the purpose edits the summary that apply and the registry use', () => {
+    const { proposal } = LIB.buildProposal({ source: 'definition', children: twoChildren(), config: { minChildren: 2 } });
+    const edited = LIB.editProposal(proposal, { type: 'set', name: 'Auth', field: 'purpose', value: 'New purpose' }).proposal;
+    const auth = edited.children.find(c => c.name === 'Auth');
+    expect(auth.purpose).toBe('New purpose');
+    expect(auth.summary).toBe('New purpose');
+  });
+
+  test('W8: a registry that mixes LF and CRLF line endings still applies', () => {
+    const mixed = REGISTRY.replace('**Status:** defined', '**Status:** defined\r');
+    const { featuresRoot } = setupFixture(mixed);
+    const result = apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposalOf(twoChildren()) });
+    expect(result.registry).toBe(true);
+    expect(readRegistry(featuresRoot).entries.map(e => e.id)).toEqual(['FTR-001', 'FTR-002', 'FTR-003']);
+  });
+
+  test('W1: a late proposal needs neither minChildren nor source', () => {
+    const { featuresRoot } = setupFixture();
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposalOf(twoChildren()) });
+    const late = { children: [{ name: 'Reports', purpose: 'Reports', keywords: ['reports'], dependsOn: [], assigned: 'UC-09' }] };
+    const result = apply({ featuresRoot, parentId: 'FTR-001', runId: 'cc33dd44', proposal: late });
+    expect(result.children).toHaveLength(1);
+    expect(readRegistry(featuresRoot).entries.map(e => e.title)).toContain('Reports');
   });
 });
