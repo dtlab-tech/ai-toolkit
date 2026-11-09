@@ -2765,3 +2765,126 @@ describe('check-definition errors and facade dispatch', () => {
     });
   });
 });
+
+describe('validate-proposal', () => {
+  const child = (name, extra = {}) => ({
+    name,
+    purpose: `${name} purpose`,
+    keywords: [name.toLowerCase()],
+    dependsOn: [],
+    assigned: `UC-${name}`,
+    ...extra,
+  });
+  // Auth <- Billing; Auth owns the shared foundation.
+  const proposal = () => LIB.buildProposal({
+    source: 'definition',
+    children: [child('Auth'), child('Billing', { dependsOn: ['Auth'] })],
+    config: loadConfig({ projectRoot: root }),
+  }).proposal;
+
+  let featuresRoot;
+
+  // Recursive, sorted listing of every path with the content of each file.
+  function snapshotTree(dir) {
+    const entries = [];
+    const walk = (current) => {
+      const dirents = fs.readdirSync(current, { withFileTypes: true })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      for (const e of dirents) {
+        const p = path.join(current, e.name);
+        const rel = path.relative(dir, p);
+        if (e.isDirectory()) {
+          entries.push(rel + '/');
+          walk(p);
+        } else {
+          entries.push(`${rel}\n${fs.readFileSync(p, 'utf8')}`);
+        }
+      }
+    };
+    walk(dir);
+    return entries;
+  }
+
+  // Calls main() the way the facade does, with stdinText as the only stdin content.
+  function runMain(stdinText) {
+    return LIB.main(['validate-proposal', '--features-root', featuresRoot], () => stdinText);
+  }
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(path.join(featuresRoot, 'FTR-001-parent'), { recursive: true });
+    fs.writeFileSync(path.join(featuresRoot, 'FTR-001-parent', 'feature.md'), '# Parent\n\n## Summary\n\nParent summary.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n\n');
+  });
+
+  test('exits with code 0 for a valid edit', () => {
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' } };
+
+    const { exitCode } = runMain(JSON.stringify(payload));
+
+    expect(exitCode).toBe(0);
+  });
+
+  test('returns the revised proposal with the edit applied and no violations for a valid edit', () => {
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' } };
+
+    const { payload: result } = runMain(JSON.stringify(payload));
+
+    expect(result.violations).toEqual([]);
+    expect(result.proposal.children.find(c => c.name === 'Billing').purpose).toBe('Invoices and refunds');
+  });
+
+  test('reports a dependency cycle as a violation with exit code 0', () => {
+    // Auth already depends on nothing; making Auth depend on Billing closes the loop Billing -> Auth -> Billing.
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Auth', field: 'dependsOn', value: ['Billing'] } };
+
+    const { exitCode, payload: result } = runMain(JSON.stringify(payload));
+
+    expect(exitCode).toBe(0);
+    expect(result.violations.map(v => v.code)).toContain('PROPOSAL_CYCLE');
+  });
+
+  test('returns the original proposal unchanged when the edit is refused', () => {
+    const original = proposal();
+    const payload = { proposal: original, edit: { type: 'set', name: 'Auth', field: 'dependsOn', value: ['Billing'] } };
+
+    const { payload: result } = runMain(JSON.stringify(payload));
+
+    expect(result.proposal).toEqual(original);
+  });
+
+  test('returns a foundation warning and no violation when the owner is moved off the first child', () => {
+    const payload = { proposal: proposal(), edit: { type: 'owner', name: 'Billing' } };
+
+    const { exitCode, payload: result } = runMain(JSON.stringify(payload));
+
+    expect(exitCode).toBe(0);
+    expect(result.violations).toEqual([]);
+    expect(result.foundationWarnings.map(w => w.code)).toContain('FOUNDATION_NOT_FIRST');
+  });
+
+  test('exits with code 1 and error code INVALID_PROPOSAL for a malformed stdin payload', () => {
+    const { exitCode, payload: result } = runMain('not json');
+
+    expect(exitCode).toBe(1);
+    expect(result.error.code).toBe('INVALID_PROPOSAL');
+  });
+
+  test('leaves the features root unchanged after a valid edit', () => {
+    const before = snapshotTree(featuresRoot);
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' } };
+
+    runMain(JSON.stringify(payload));
+
+    expect(snapshotTree(featuresRoot)).toEqual(before);
+  });
+
+  test('leaves the features root unchanged after a refused edit', () => {
+    const before = snapshotTree(featuresRoot);
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Auth', field: 'dependsOn', value: ['Billing'] } };
+
+    runMain(JSON.stringify(payload));
+
+    expect(snapshotTree(featuresRoot)).toEqual(before);
+  });
+});
