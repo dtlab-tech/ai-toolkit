@@ -2672,3 +2672,96 @@ describe('check-definition', () => {
     expect(snapshotFeaturesRoot()).toBe(before);
   });
 });
+
+describe('check-definition errors and facade dispatch', () => {
+  const FEATURE_ID = 'FTR-900';
+  const VALID_RECORD = {
+    actors: ['Customer', 'Admin'],
+    applications: ['web', 'api'],
+    flows: [{ name: 'Sign up', reason: 'independent' }],
+  };
+
+  let featuresRoot;
+  let projectRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    projectRoot = path.join(root, 'project');
+    fs.mkdirSync(path.join(featuresRoot, 'FTR-900-sample'), { recursive: true });
+    fs.mkdirSync(projectRoot, { recursive: true });
+  });
+
+  // Calls main() the way the facade does, with stdinText as the only stdin content.
+  function runMain(argv, stdinText) {
+    return LIB.main(argv, () => stdinText);
+  }
+
+  function checkArgv(featureId = FEATURE_ID) {
+    return ['check-definition', '--features-root', featuresRoot, '--feature-id', featureId, '--project', projectRoot];
+  }
+
+  describe('RECORD_INVALID for stdin that is not a JSON object', () => {
+    test.each([
+      ['non-JSON text', 'not json'],
+      ['null', 'null'],
+      ['an array', '[]'],
+      ['a string', '"text"'],
+    ])('exits with code 1 for %s', (_label, stdin) => {
+      const { exitCode } = runMain(checkArgv(), stdin);
+      expect(exitCode).toBe(1);
+    });
+
+    test.each([
+      ['non-JSON text', 'not json'],
+      ['null', 'null'],
+      ['an array', '[]'],
+      ['a string', '"text"'],
+    ])('raises RECORD_INVALID for %s', (_label, stdin) => {
+      const { payload } = runMain(checkArgv(), stdin);
+      expect(payload.error.code).toBe('RECORD_INVALID');
+    });
+  });
+
+  describe('FEATURE_INVALID for a malformed feature id', () => {
+    test.each(['ftr-900', 'FTR900', '../FTR-900', 'FTR-9x'])(
+      'exits with code 1 for id %s',
+      (id) => {
+        const { exitCode } = runMain(checkArgv(id), JSON.stringify(VALID_RECORD));
+        expect(exitCode).toBe(1);
+      }
+    );
+
+    test.each(['ftr-900', 'FTR900', '../FTR-900', 'FTR-9x'])(
+      'raises FEATURE_INVALID for id %s',
+      (id) => {
+        const { payload } = runMain(checkArgv(id), JSON.stringify(VALID_RECORD));
+        expect(payload.error.code).toBe('FEATURE_INVALID');
+      }
+    );
+
+    test.each(['ftr-900', 'FTR900', '../FTR-900', 'FTR-9x'])(
+      'creates nothing in the features root for id %s',
+      (id) => {
+        runMain(checkArgv(id), JSON.stringify(VALID_RECORD));
+        expect(fs.readdirSync(featuresRoot)).toEqual(['FTR-900-sample']);
+      }
+    );
+  });
+
+  describe('facade dispatch', () => {
+    test('check-definition exits with code 0 for a valid record', () => {
+      const { exitCode } = runMain(checkArgv(), JSON.stringify(VALID_RECORD));
+      expect(exitCode).toBe(0);
+    });
+
+    test('check-definition returns a status in its payload for a valid record', () => {
+      const { payload } = runMain(checkArgv(), JSON.stringify(VALID_RECORD));
+      expect(payload.status).toBe('flagged');
+    });
+
+    test('the unknown-command error message lists check-definition', () => {
+      const { payload } = runMain(['no-such-command'], '');
+      expect(payload.error.message).toContain('check-definition');
+    });
+  });
+});
