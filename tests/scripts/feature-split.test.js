@@ -2498,3 +2498,177 @@ describe('refinement of the review warnings', () => {
     }
   });
 });
+
+describe('check-definition', () => {
+  const crypto = require('crypto');
+  const FLAGGED = {
+    actors: ['Customer', 'Admin'],
+    applications: ['web', 'api'],
+    flows: [{ name: 'Sign up', reason: 'independent' }, { name: 'Pay', reason: 'independent' }, { name: 'Refund', reason: 'independent' }],
+  };
+  const ZERO = { actors: [], applications: [], flows: [] };
+
+  let featuresRoot;
+  let projectRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    projectRoot = path.join(root, 'project');
+    fs.mkdirSync(featuresRoot, { recursive: true });
+    fs.mkdirSync(projectRoot, { recursive: true });
+  });
+
+  // Creates <featuresRoot>/<folder>/ with the given files (name -> text).
+  function makeFeatureFolder(folder, files = {}) {
+    const dir = path.join(featuresRoot, folder);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text);
+    return dir;
+  }
+
+  // Returns a jest mock for readRecord that yields the record as JSON text, so tests can assert on reads.
+  function recordReader(record) {
+    return jest.fn(() => JSON.stringify(record));
+  }
+
+  function check(featureId, record, { reader = recordReader(record), project = projectRoot } = {}) {
+    return LIB.checkDefinition({ featuresRoot, featureId, readRecord: reader, projectRoot: project });
+  }
+
+  // Hashes every file under featuresRoot so a test can prove a call wrote nothing.
+  function snapshotFeaturesRoot() {
+    const out = {};
+    const walk = (dir) => {
+      for (const name of fs.readdirSync(dir).sort()) {
+        const full = path.join(dir, name);
+        if (fs.statSync(full).isDirectory()) walk(full);
+        else out[path.relative(featuresRoot, full)] = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+      }
+    };
+    if (fs.existsSync(featuresRoot)) walk(featuresRoot);
+    return JSON.stringify(out);
+  }
+
+  describe('skip behaviour (feature is not new)', () => {
+    test('returns skipped without reading stdin when the folder holds epic.md', () => {
+      makeFeatureFolder('FTR-034-parent', { 'epic.md': '# epic' });
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-034', FLAGGED, { reader }).status).toBe('skipped');
+      expect(reader).not.toHaveBeenCalled();
+    });
+
+    test('returns skipped without reading stdin when the folder holds FTR-NNN-Approvals.md', () => {
+      makeFeatureFolder('FTR-035-x', { 'FTR-035-Approvals.md': '# approvals' });
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-035', FLAGGED, { reader }).status).toBe('skipped');
+      expect(reader).not.toHaveBeenCalled();
+    });
+
+    test('returns skipped without reading stdin when the folder holds a wbs directory', () => {
+      const dir = makeFeatureFolder('FTR-036-y');
+      fs.mkdirSync(path.join(dir, 'wbs'));
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-036', FLAGGED, { reader }).status).toBe('skipped');
+      expect(reader).not.toHaveBeenCalled();
+    });
+
+    test('a wbs entry that is a file, not a directory, does not make the feature non-new', () => {
+      makeFeatureFolder('FTR-037-z', { wbs: 'not a directory' });
+      expect(check('FTR-037', FLAGGED).status).toBe('flagged');
+    });
+  });
+
+  describe('new-folder cases (evaluated)', () => {
+    test('a missing feature folder is treated as new and the record is evaluated', () => {
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-040', FLAGGED, { reader }).status).toBe('flagged');
+      expect(reader).toHaveBeenCalledTimes(1);
+    });
+
+    test('an existing empty feature folder is treated as new and the record is evaluated', () => {
+      makeFeatureFolder('FTR-041-empty');
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-041', FLAGGED, { reader }).status).toBe('flagged');
+      expect(reader).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('signal boundaries (default config minimums: actors 2, applications 2, flows 3)', () => {
+    test('actors one below minActors does not flag', () => {
+      const out = check('FTR-050', { ...ZERO, actors: ['Customer'] });
+      expect(out.signals.actors).toEqual({ count: 1, minimum: 2, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('actors exactly at minActors flags', () => {
+      const out = check('FTR-051', { ...ZERO, actors: ['Customer', 'Admin'] });
+      expect(out.signals.actors.met).toBe(true);
+      expect(out.status).toBe('flagged');
+    });
+
+    test('applications one below minApplications does not flag', () => {
+      const out = check('FTR-052', { ...ZERO, applications: ['web'] });
+      expect(out.signals.applications).toEqual({ count: 1, minimum: 2, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('applications exactly at minApplications flags', () => {
+      const out = check('FTR-053', { ...ZERO, applications: ['web', 'api'] });
+      expect(out.signals.applications.met).toBe(true);
+      expect(out.status).toBe('flagged');
+    });
+
+    test('two flows, one below minFlows, does not flag', () => {
+      const out = check('FTR-054', { ...ZERO, flows: FLAGGED.flows.slice(0, 2) });
+      expect(out.signals.flows).toEqual({ count: 2, minimum: 3, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('three flows, exactly at minFlows, flags', () => {
+      const out = check('FTR-055', { ...ZERO, flows: FLAGGED.flows });
+      expect(out.signals.flows.met).toBe(true);
+      expect(out.status).toBe('flagged');
+    });
+  });
+
+  test('a record with every signal below its minimum is not flagged', () => {
+    const out = check('FTR-060', { ...ZERO, actors: ['Customer'], applications: ['web'], flows: [{ name: 'Only', reason: 'x' }] });
+    expect(out.status).toBe('not-flagged');
+  });
+
+  describe('unevaluated signals', () => {
+    test('a null actors field is reported as unevaluated and does not raise the flag', () => {
+      const out = check('FTR-070', { actors: null, applications: ['web'], flows: [] });
+      expect(out.unevaluated).toEqual(['actors']);
+      expect(out.signals.actors).toEqual({ count: null, minimum: 2, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('a missing applications field is unevaluated while a met actors signal still flags', () => {
+      const out = check('FTR-071', { actors: ['Customer', 'Admin'], flows: [] });
+      expect(out.unevaluated).toEqual(['applications']);
+      expect(out.status).toBe('flagged');
+    });
+  });
+
+  test('a project config override of minActors changes the flag decision', () => {
+    fs.writeFileSync(path.join(projectRoot, 'feature-split.config.json'), JSON.stringify({ definitionSignals: { minActors: 3 } }));
+    const out = check('FTR-080', { ...ZERO, actors: ['Customer', 'Admin'] });
+    expect(out.signals.actors).toEqual({ count: 2, minimum: 3, met: false });
+    expect(out.status).toBe('not-flagged');
+  });
+
+  test('a skipped call leaves the features root unchanged', () => {
+    makeFeatureFolder('FTR-090-done', { 'epic.md': '# epic' });
+    const before = snapshotFeaturesRoot();
+    check('FTR-090', FLAGGED);
+    expect(snapshotFeaturesRoot()).toBe(before);
+  });
+
+  test('an evaluated call leaves the features root unchanged', () => {
+    makeFeatureFolder('FTR-091-new', { 'feature.md': '# New\n' });
+    const before = snapshotFeaturesRoot();
+    check('FTR-091', FLAGGED);
+    expect(snapshotFeaturesRoot()).toBe(before);
+  });
+});
