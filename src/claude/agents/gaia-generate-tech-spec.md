@@ -61,6 +61,7 @@ The tech spec MUST use the project's actual stack and patterns. Do not assume an
     - Entry has `Depends on:` → record the sibling IDs. The value `none` means no sibling dependency.
       A `Parent:` line without a `Depends on:` line is a child with no recorded dependencies.
     - Entry lacks both `Parent:` and `Depends on:` → **standalone**. Behave exactly as before this change.
+      A feature with no registry entry at all is standalone too.
     - Any other `Status` value → leave the entry untouched. It is not an epic, not a parent, and not a dependency.
     - The Detail link (`→ [Detail](path)`, or an older `**Detail:**` line) → ignored. It is never parsed as a dependency or a parent.
     - Feature folder contains `epic.md` → it is a **parent record** (BR-05). Do not run this
@@ -68,8 +69,8 @@ The tech spec MUST use the project's actual stack and patterns. Do not assume an
     Use recorded parent and sibling IDs only in Section 5 (External Integrations) or Section 12
     (Risks & Mitigations), as already described in step 3 for shared dependencies.
 4. **Explore** the existing codebase areas affected (models, controllers/handlers, pages, services)
-4. **Design** the technical solution aligned with existing patterns from AGENTS.md
-5. **Return** the skeleton as your final response — every section except each component's own design detail. You do not have a Write tool; the host persists your response to `spec/index.md` verbatim. Do not attempt to write any file yourself, and do not write a component's Backend/Frontend/External-Integration/Testing detail inline — list it in Section 9's index table only.
+5. **Design** the technical solution aligned with existing patterns from AGENTS.md
+6. **Return** the skeleton as your final response — every section except each component's own design detail. You do not have a Write tool; the host persists your response to `spec/index.md` verbatim. Do not attempt to write any file yourself, and do not write a component's Backend/Frontend/External-Integration/Testing detail inline — list it in Section 9's index table only.
 
 ## Output Filename (for your reference only — you do not write this file)
 

@@ -119,12 +119,13 @@ function normaliseChild(c) {
   if (c === null || typeof c !== 'object' || Array.isArray(c))
     fail('INVALID_PROPOSAL', 'Proposal shape invalid: a child must be an object');
   const purpose = typeof c.purpose === 'string' ? c.purpose : '';
+  const trimmed = (v) => (typeof v === 'string' ? v.trim() : v);
   return {
-    name: c.name,
+    name: trimmed(c.name),
     purpose,
     summary: typeof c.summary === 'string' && c.summary !== '' ? c.summary : purpose,
     keywords: Array.isArray(c.keywords) ? c.keywords : [],
-    dependsOn: Array.isArray(c.dependsOn) ? c.dependsOn : [],
+    dependsOn: Array.isArray(c.dependsOn) ? c.dependsOn.map(trimmed) : [],
     assigned: typeof c.assigned === 'string' ? c.assigned : '',
   };
 }
@@ -467,7 +468,12 @@ function setDetailLink(block, target) {
   const line = `→ [Detail](${target})`;
   const at = block.lines.findIndex(l => DETAIL_LINK.test(l.trim()));
   if (at !== -1) block.lines[at] = line;
-  else block.lines.push(line);
+  else {
+    // Insert after the last content line, before the trailing blank lines and the '---' separator.
+    let end = block.lines.length;
+    while (end > 1 && (block.lines[end - 1].trim() === '' || ENTRY_SEPARATOR.test(block.lines[end - 1]))) end--;
+    block.lines.splice(end, 0, line);
+  }
   return block;
 }
 
@@ -492,10 +498,13 @@ function buildRegistryText({ registry, parentId, parentDirName, plan, late }) {
 
   if (!late) {
     setField(parent, 'Status', 'epic');
-    setField(parent, 'Summary', firstSentence(fieldOf(parent, 'Summary') || ''));
+    const parentSummary = fieldOf(parent, 'Summary');
+    if (parentSummary !== null) setField(parent, 'Summary', firstSentence(parentSummary));
     setDetailLink(parent, `./${parentDirName}/epic.md`);
   }
 
+  const origLast = reg.blocks.length ? reg.blocks[reg.blocks.length - 1].lines : reg.head;
+  const endsWithEol = origLast[origLast.length - 1] === '';
   for (const p of plan) {
     if (findBlock(reg, p.id)) continue;
     const last = reg.blocks.length ? reg.blocks[reg.blocks.length - 1].lines : reg.head;
@@ -507,6 +516,10 @@ function buildRegistryText({ registry, parentId, parentDirName, plan, late }) {
       detail: `./${p.dir}/feature.md`,
       parent: parentId, dependsOn: p.deps,
     }), '', '---'] });
+  }
+  if (endsWithEol && reg.blocks.length) {
+    const lastBlock = reg.blocks[reg.blocks.length - 1].lines;
+    if (lastBlock[lastBlock.length - 1] !== '') lastBlock.push('');
   }
   return renderRegistry(reg);
 }
@@ -652,13 +665,14 @@ function allocateIds(featuresRoot, registry, count) {
 }
 
 function renderChildDoc(p, ctx) {                          // D-15
+  const assigned = String(p.assigned ?? '').replace(/^(\s*)#/gm, '$1\\#');   // no heading can be forged from the text
   return [
-    `# ${p.name}`, '',
+    `# ${oneLine(p.name)}`, '',
     '## Feature ID', p.id, '',
     '## Parent epic', `${ctx.parentId}. Position ${ctx.position} of ${ctx.total} in the dependency order.`, '',
-    '## Summary', p.summary, '',
+    '## Summary', oneLine(p.summary), '',
     '## Dependencies', `Depends on: ${p.deps.length ? p.deps.join(', ') : 'none'}`, '',
-    '## Assigned parts', p.assigned, '',
+    '## Assigned parts', assigned, '',
     ...(p.owner ? ['## Shared foundation', ctx.foundationNote, ''] : []),
   ].join('\n');
 }
@@ -1006,6 +1020,7 @@ function register({ featuresRoot, featureDir, keywords = [], runId = newRunId() 
   try {
     reg = readRegistryBlocks(featuresRoot);
   } catch (err) {
+    if (err instanceof FeatureSplitError) throw err;
     if (err.code !== 'ENOENT') throw new FeatureSplitError('REGISTRY_IO', `cannot read ${registryFile} (${err.code || err.message})`, { file: registryFile });
     reg = { eol: '\n', head: [], blocks: [] };
   }
@@ -1017,24 +1032,38 @@ function register({ featuresRoot, featureDir, keywords = [], runId = newRunId() 
     fail('REGISTRY_STATUS', `${id} is registered with status "${status}"; register does not change it`, { key: id, file: registryFile });
   }
 
+  const cleanKeywords = Array.isArray(keywords) ? keywords.filter(k => typeof k === 'string' && k.trim() !== '') : [];
+  if (cleanKeywords.length === 0)
+    fail('FEATURE_INVALID', 'register needs at least one keyword (--keywords)', { key: id });
+  const relative = path.relative(path.resolve(featuresRoot), path.resolve(featureDir));
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative))
+    fail('FEATURE_INVALID', `${featureDir} is not inside the features root ${featuresRoot}`, { file: featureDir });
+
   const last = reg.blocks.length ? reg.blocks[reg.blocks.length - 1].lines : reg.head;
   const tail = last[last.length - 1];
   const lead = tail === undefined || tail.trim() === '' ? [] : [''];
-  const rel = path.relative(featuresRoot, path.resolve(featureDir)).split(path.sep).join('/');
+  const endsWithEol = tail === '';
+  const rel = relative.split(path.sep).join('/');
   reg.blocks.push({ id, lines: [...lead, ...renderEntry({
-    id, title, keywords, status: 'defined', summary,
+    id, title, keywords: cleanKeywords, status: 'defined', summary,
     detail: `./${rel}/feature.md`,
-  }), '', '---'] });
+  }), '', '---', ...(endsWithEol ? [''] : [])] });
   writeRegistryAtomic(featuresRoot, runId, renderRegistry(reg));
   return { id, status: 'defined' };
 }
 
+// A value is the token after the flag, unless that token is another flag. A repeated --keywords is merged.
+// "--" ends the flags: every token after it is positional. Put the feature directory before the flags,
+// or after "--", so that a flag with a missing value cannot swallow it.
 function parseFlags(args) {
   const flags = {};
   for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--') break;
     if (!args[i].startsWith('--')) continue;
+    const name = args[i].slice(2);
     const next = args[i + 1];
-    flags[args[i].slice(2)] = next === undefined || next.startsWith('--') ? '' : next;
+    const value = next === undefined || next.startsWith('--') ? '' : next;
+    flags[name] = name === 'keywords' && flags[name] ? `${flags[name]},${value}` : value;
     if (next !== undefined && !next.startsWith('--')) i++;
   }
   return flags;
@@ -1092,7 +1121,7 @@ function readFeatureForRegister(featureDir) {
   if (!title) fail('FEATURE_INVALID', `No H1 title in ${file}`, { file });
 
   const summary = sectionBody(text, 'Summary');
-  if (summary === null) fail('FEATURE_INVALID', `No Summary section in ${file}`, { file });
+  if (summary === null || summary === '') fail('FEATURE_INVALID', `No Summary section, or an empty one, in ${file}`, { file });
 
   return { id: idMatch[1], title: title.trim(), summary: firstSentence(summary) };
 }
@@ -1100,6 +1129,7 @@ function readFeatureForRegister(featureDir) {
 function positionalArgs(args) {
   const out = [];
   for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--') { out.push(...args.slice(i + 1)); break; }
     if (!args[i].startsWith('--')) { out.push(args[i]); continue; }
     const next = args[i + 1];
     if (next !== undefined && !next.startsWith('--')) i++;
@@ -1180,4 +1210,8 @@ module.exports.assertProposalShape = assertProposalShape;
 module.exports.detectMode = detectMode;
 module.exports.checkApplyPreconditions = checkApplyPreconditions;
 module.exports.apply = apply;
+module.exports.renderChildDoc = renderChildDoc;
+module.exports.setDetailLink = setDetailLink;
+module.exports.planInitial = planInitial;
+module.exports.planLate = planLate;
 module.exports.register = register;

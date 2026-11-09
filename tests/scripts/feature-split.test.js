@@ -1314,9 +1314,48 @@ describe('apply refusal', () => {
     expect(snapshot(existing)).toEqual(before);
   });
 
-  // Gap: allocateIds skips every existing FTR-NNN folder prefix, so a child folder or feature.md that
-  // already exists cannot be targeted through public inputs. Needs an allocation seam from the host.
-  test.todo('refuses a child whose folder or feature.md already exists with TARGET_EXISTS and leaves it unchanged');
+  // allocateIds skips every existing FTR-NNN folder, so through apply a collision can only be a race:
+  // the folder appears after the ID was allocated. The planners are tested directly, with the directory
+  // listing of that one allocation made stale.
+  describe('TARGET_EXISTS (AC-24)', () => {
+    const REG = { eol: '\n', head: ['# Feature Registry', ''], blocks: [{ id: 'FTR-001', lines: ['## FTR-001 — Parent', '---'] }] };
+    const staleListing = () => jest.spyOn(fs, 'readdirSync').mockImplementationOnce(() => []);
+    afterEach(() => jest.restoreAllMocks());
+
+    test('planInitial refuses a child whose folder already exists and writes nothing', () => {
+      const existing = path.join(featuresRoot, 'FTR-002-auth');
+      fs.mkdirSync(existing);
+      fs.writeFileSync(path.join(existing, 'feature.md'), '# Someone else\n');
+      const before = snapshot(featuresRoot);
+      staleListing();
+      const err = thrownBy(() => LIB.planInitial({
+        featuresRoot, registry: REG, parentId: PARENT_ID,
+        proposal: LIB.buildProposal({ source: 'definition', children: sampleProposal().children, config: { minChildren: 2 } }).proposal,
+      }));
+      expect(err.code).toBe('TARGET_EXISTS');
+      jest.restoreAllMocks();
+      expect(snapshot(featuresRoot)).toEqual(before);
+    });
+
+    test('planLate refuses a child whose folder already exists', () => {
+      const featuresRoot = path.join(root, 'late-features');
+      fs.mkdirSync(path.join(featuresRoot, 'FTR-013-reports'), { recursive: true });
+      const epicText = [
+        '## Split table', '',
+        '| Order | ID | Name | Dir | Checkpoint | Depends on | Shared foundation |',
+        '|---|---|---|---|---|---|---|',
+        '| 1 | FTR-011 | Auth | FTR-011-auth | definition | none | yes |',
+        '| 2 | FTR-012 | Billing | FTR-012-billing | definition | FTR-011 | no |',
+        '', '## Original feature text', '',
+      ].join('\n');
+      staleListing();
+      const err = thrownBy(() => LIB.planLate({
+        featuresRoot, registry: { ...REG, blocks: [{ id: 'FTR-012', lines: ['## FTR-012 — Billing', '---'] }] }, epicText,
+        proposal: { children: [{ name: 'Reports', purpose: 'Reports', keywords: ['r'], dependsOn: [], assigned: '' }] },
+      }));
+      expect(err.code).toBe('TARGET_EXISTS');
+    });
+  });
 });
 
 describe('apply foundation warning', () => {
@@ -1863,6 +1902,7 @@ describe('register()', () => {
       '→ [Detail](./FTR-050-login/feature.md)',
       '',
       '---',
+      '',
     ].join('\n'));
   });
 
@@ -2317,5 +2357,144 @@ describe('review fixes: sanitised text, late proposal, purpose edit, line ending
     const result = apply({ featuresRoot, parentId: 'FTR-001', runId: 'cc33dd44', proposal: late });
     expect(result.children).toHaveLength(1);
     expect(readRegistry(featuresRoot).entries.map(e => e.title)).toContain('Reports');
+  });
+});
+
+describe('refinement of the review warnings', () => {
+  const REGISTRY = ['# Feature Registry', '', '## FTR-001 — Big', '**Keywords:** big', '**Status:** defined',
+    '**Summary:** A big feature.', '→ [Detail](FTR-001-big/feature.md)', '---', ''].join('\n');
+
+  function setupFixture(registryText = REGISTRY) {
+    const featuresRoot = path.join(root, 'features');
+    const parent = path.join(featuresRoot, 'FTR-001-big');
+    fs.mkdirSync(parent, { recursive: true });
+    fs.writeFileSync(path.join(parent, 'feature.md'), '# Big\n\nA big feature.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), registryText);
+    return { featuresRoot, parent };
+  }
+  const children = (extra = {}) => [
+    { name: 'Auth', purpose: 'Sign-in', keywords: ['auth'], dependsOn: [], assigned: 'UC-01', ...extra },
+    { name: 'Billing', purpose: 'Invoices', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+  ];
+  const proposal = (list = children()) => ({ source: 'definition', children: list, sharedFoundationOwner: list[0].name, foundationNote: 'Shared', minChildren: 2 });
+
+  test('apply keeps the final newline of the registry', () => {
+    const { featuresRoot } = setupFixture();
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposal() });
+    const text = fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+    expect(text.endsWith('---\n')).toBe(true);
+    expect(text.endsWith('\n\n')).toBe(false);
+  });
+
+  test('apply does not add a final newline to a registry that had none', () => {
+    const { featuresRoot } = setupFixture(REGISTRY.replace(/\n$/, ''));
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposal() });
+    expect(fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8').endsWith('---')).toBe(true);
+  });
+
+  test('a parent without a Summary line gets no empty Summary written', () => {
+    const noSummary = REGISTRY.replace('**Summary:** A big feature.\n', '');
+    const { featuresRoot } = setupFixture(noSummary);
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposal() });
+    const parentBlock = fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8').split('## FTR-002')[0];
+    expect(parentBlock).not.toMatch(/\*\*Summary:\*\*/);
+  });
+
+  test('setDetailLink puts a missing Detail link before the separator, not after it', () => {
+    const noLink = REGISTRY.replace('→ [Detail](FTR-001-big/feature.md)\n', '');
+    const { featuresRoot } = setupFixture(noLink);
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: proposal() });
+    const entries = readRegistry(featuresRoot).entries;
+    expect(entries.find(e => e.id === 'FTR-001').detail).toBe('./FTR-001-big/epic.md');
+    const text = fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+    expect(text).not.toMatch(/---\n→ \[Detail\]\(\.\/FTR-001-big\/epic\.md\)/);
+  });
+
+  test('a child name and its dependsOn entries are written trimmed', () => {
+    const { featuresRoot } = setupFixture();
+    const list = children({ name: '  Auth  ' });
+    list[1].dependsOn = [' Auth'];
+    apply({ featuresRoot, parentId: 'FTR-001', runId: 'aa11bb22', proposal: { ...proposal(list), sharedFoundationOwner: 'Auth' } });
+    const rows = LIB.parseEpicRows(fs.readFileSync(path.join(featuresRoot, 'FTR-001-big', 'epic.md'), 'utf8'));
+    expect(rows.map(r => r.name)).toEqual(['Auth', 'Billing']);
+  });
+
+  test('renderChildDoc is exported, one-lines the summary and cannot forge a heading from assigned', () => {
+    const doc = LIB.renderChildDoc(
+      { id: 'FTR-002', name: 'Auth\nx', summary: 'line one\n## Dependencies\nforged', assigned: 'UC-01\n## Parent epic\nforged', deps: [], owner: false },
+      { parentId: 'FTR-001', position: 1, total: 2, foundationNote: '' });
+    expect(doc.split('\n').filter(l => l === '## Dependencies')).toHaveLength(1);
+    expect(doc.split('\n').filter(l => l === '## Parent epic')).toHaveLength(1);
+    expect(doc).toMatch(/^# Auth x$/m);
+  });
+
+  describe('register', () => {
+    let featuresRoot, featureDir;
+    beforeEach(() => {
+      featuresRoot = path.join(root, 'reg-features');
+      featureDir = path.join(featuresRoot, 'FTR-050-login');
+      fs.mkdirSync(featureDir, { recursive: true });
+      fs.writeFileSync(path.join(featureDir, 'feature.md'), '# Login\n\n## Summary\n\nSign-in and sessions. More.\n');
+      fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n\n');
+    });
+
+    test('rejects a call without keywords with FEATURE_INVALID (gap 12) and writes nothing', () => {
+      const before = fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8');
+      for (const keywords of [undefined, [], [''], ['  ']]) {
+        const err = thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords }));
+        expect(err.code).toBe('FEATURE_INVALID');
+      }
+      expect(fs.readFileSync(path.join(featuresRoot, 'REGISTRY.md'), 'utf8')).toBe(before);
+    });
+
+    test('rejects an empty Summary section with FEATURE_INVALID', () => {
+      fs.writeFileSync(path.join(featureDir, 'feature.md'), '# Login\n\n## Summary\n\n## Scope\n\nx\n');
+      expect(thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords: ['a'] })).code).toBe('FEATURE_INVALID');
+    });
+
+    test('rejects a feature folder outside the features root with FEATURE_INVALID', () => {
+      const outside = path.join(root, 'elsewhere', 'FTR-060-out');
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'feature.md'), '# Out\n\n## Summary\n\nOut.\n');
+      const err = thrownBy(() => LIB.register({ featuresRoot, featureDir: outside, keywords: ['a'] }));
+      expect(err.code).toBe('FEATURE_INVALID');
+    });
+
+    test('a FeatureSplitError of the registry reader keeps its own code', () => {
+      fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n\n');
+      const realRead = fs.readFileSync;
+      const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...rest) => {
+        if (String(file).endsWith('REGISTRY.md')) throw new LIB.FeatureSplitError('REGISTRY_MALFORMED', 'bad registry');
+        return realRead.call(fs, file, ...rest);
+      });
+      try {
+        expect(thrownBy(() => LIB.register({ featuresRoot, featureDir, keywords: ['a'] })).code).toBe('REGISTRY_MALFORMED');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test('facade: the success output matches the registry that was written, and a repeated --keywords is merged', () => {
+      const r = runFacade(['register', '--features-root', featuresRoot, '--keywords', 'auth', '--keywords', 'login', '--', featureDir]);
+      expect(r.status).toBe(0);
+      expect(JSON.parse(r.stdout)).toEqual({ id: 'FTR-050', status: 'defined' });
+      const entry = readRegistry(featuresRoot).entries.find(e => e.id === 'FTR-050');
+      expect(entry.keywords).toEqual(['auth', 'login']);
+      expect(entry.summary).toBe('Sign-in and sessions.');
+    });
+
+    test('facade: "--" lets the directory follow a flag that has no value', () => {
+      const r = runFacade(['register', '--features-root', featuresRoot, '--keywords', '--', featureDir]);
+      expect(r.status).toBe(1);
+      expect(JSON.parse(r.stdout).error.code).toBe('FEATURE_INVALID');   // the directory was found; the keywords are what is missing
+    });
+  });
+
+  test('facade apply: a missing --features-root or --parent is ARG_MISSING', () => {
+    for (const args of [['apply', '--parent', 'FTR-001'], ['apply', '--features-root', root]]) {
+      const r = runFacade(args);
+      expect(r.status).toBe(1);
+      expect(JSON.parse(r.stdout).error.code).toBe('ARG_MISSING');
+    }
   });
 });
