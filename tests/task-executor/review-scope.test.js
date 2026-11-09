@@ -196,6 +196,18 @@ describe('execute(): --review-scope and retry feedback', () => {
     expect(readLog(revLog)[0].stdin).toContain('Review scope (read this first)');
   });
 
+  test('a finished run writes the measured actuals next to the feature documents', async () => {
+    const result = await run('phase', 'PASS');
+    expect(result.runStatus).toBe('completed');
+    const estimate = path.join(featureDir, 'FTR-902-Token-Estimate.md');
+    const ledgerFile = path.join(featureDir, 'FTR-902-executor-ledger.json');
+    expect(fs.existsSync(estimate)).toBe(true);
+    expect(fs.readFileSync(estimate, 'utf8')).toMatch(/Token Estimate — FTR-902/);
+    const calls = JSON.parse(fs.readFileSync(ledgerFile, 'utf8')).calls;
+    expect(calls.filter(c => c.kind === 'implementation')).toHaveLength(5);
+    expect(calls.filter(c => c.kind === 'review')).toHaveLength(2);
+  });
+
   test("'phase': a failed phase review retries the last task with the findings, and the earlier tasks stay committed", async () => {
     const result = await run('phase', 'FAIL,PASS');
 

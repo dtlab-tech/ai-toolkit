@@ -320,6 +320,8 @@ grouping model is permitted.
 
 ## Step 7 — Complete Token Estimate file
 
+**Preferred:** run `ai-toolkit executor report --project . --feature <path-to-feature.md>`. It writes `{PREFIX}-Token-Estimate.md` (measured totals for documentation, developer agents and reviews, by run, by phase, with attempts per task) and `{PREFIX}-executor-ledger.json` (one compact row per executor call) from the evidence of every run of the feature. The executor also does this by itself when a run ends or pauses. When the command succeeds, the file is complete: read it back for Step 8 and skip the manual procedure below. The manual procedure is the fallback when the command fails.
+
 Phases 1 and 2 return JSON token_ledger entries from measured worker subprocess usage. They do not return a workflow subagent usage block. Missing measurements stay unavailable. For phase 3 use the executor:
 
 ```bash
