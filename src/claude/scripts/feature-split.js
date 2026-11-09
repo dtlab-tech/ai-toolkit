@@ -1211,7 +1211,37 @@ function runCheckDefinition(args, readStdin) {
   });
 }
 
-const COMMANDS = { apply: runApply, register: runRegister, 'check-definition': runCheckDefinition };
+// Read-only. A refused edit is a normal answer (exit 0) with the original proposal and a violation.
+function runValidateProposal(_args, readStdin) {
+  let payload;
+  try {
+    payload = JSON.parse(readStdin());
+  } catch {
+    fail('INVALID_PROPOSAL', 'The payload on stdin is not valid JSON');
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !payload.proposal)
+    fail('INVALID_PROPOSAL', 'The payload must be an object with "proposal" and "edit"');
+  const { proposal, edit } = payload;
+  assertProposalShape(proposal);
+  try {
+    const { proposal: revised, warnings } = editProposal(proposal, edit);
+    return { proposal: revised, violations: [], foundationWarnings: warnings };
+  } catch (err) {
+    if (!(err instanceof FeatureSplitError)) throw err;
+    return {
+      proposal,
+      violations: [{ code: err.code, key: err.key, message: err.message }],
+      foundationWarnings: foundationWarnings(proposal, dependencyOrder(proposal.children)),
+    };
+  }
+}
+
+const COMMANDS = {
+  apply: runApply,
+  register: runRegister,
+  'check-definition': runCheckDefinition,
+  'validate-proposal': runValidateProposal,
+};
 
 function errorPayload(err) {
   if (err instanceof FeatureSplitError) {
@@ -1224,7 +1254,7 @@ function main(argv, readStdin) {
   const [command, ...rest] = argv;
   try {
     if (!command || !Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
-      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register or check-definition`);
+      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register, check-definition or validate-proposal`);
     }
     return { exitCode: 0, payload: COMMANDS[command](rest, readStdin) };
   } catch (err) {
@@ -1284,3 +1314,4 @@ module.exports.parseGrillingRecord = parseGrillingRecord;
 module.exports.evaluateDefinition = evaluateDefinition;
 module.exports.checkDefinition = checkDefinition;
 module.exports.runCheckDefinition = runCheckDefinition;
+module.exports.runValidateProposal = runValidateProposal;
