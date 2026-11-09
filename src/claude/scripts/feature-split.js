@@ -1146,6 +1146,49 @@ function runRegister(args) {
   return register({ featuresRoot, featureDir, keywords });
 }
 
+// D-03 signal keys mapped to their definitionSignals minimum keys (feature-split.config.json).
+const GRILLING_SIGNALS = [
+  { key: 'actors', minKey: 'minActors' },
+  { key: 'applications', minKey: 'minApplications' },
+  { key: 'flows', minKey: 'minFlows' },
+];
+
+// Parses the grilling record from stdin text. Throws RECORD_INVALID only at the top level.
+// Field-level problems are handled by evaluateDefinition.
+function parseGrillingRecord(text) {
+  let record;
+  try {
+    record = JSON.parse(text);
+  } catch {
+    fail('RECORD_INVALID', 'The grilling record on stdin is not valid JSON');
+  }
+  if (record === null || typeof record !== 'object' || Array.isArray(record))
+    fail('RECORD_INVALID', 'The grilling record must be a JSON object');
+  return record;
+}
+
+// Pure: no I/O. definitionSignals is config.definitionSignals as returned by loadConfig.
+// Returns { status: 'flagged' | 'not-flagged', signals, flows, unevaluated }.
+// A signal whose field is missing, null or not an array is unevaluated. It never raises the flag.
+// A signal raises the flag when meetsMinimum(count, minimum) holds for at least one signal (D-05, at least N).
+function evaluateDefinition(record, definitionSignals) {
+  const signals = {};
+  const unevaluated = [];
+  for (const { key, minKey } of GRILLING_SIGNALS) {
+    const minimum = definitionSignals[minKey];
+    const value = record[key];
+    if (!Array.isArray(value)) {
+      unevaluated.push(key);
+      signals[key] = { count: null, minimum, met: false };
+      continue;
+    }
+    signals[key] = { count: value.length, minimum, met: meetsMinimum(value.length, minimum) };
+  }
+  const flows = Array.isArray(record.flows) ? record.flows : [];
+  const flagged = Object.values(signals).some(s => s.met);
+  return { status: flagged ? 'flagged' : 'not-flagged', signals, flows, unevaluated };
+}
+
 const COMMANDS = { apply: runApply, register: runRegister };
 
 function errorPayload(err) {
@@ -1215,3 +1258,5 @@ module.exports.setDetailLink = setDetailLink;
 module.exports.planInitial = planInitial;
 module.exports.planLate = planLate;
 module.exports.register = register;
+module.exports.parseGrillingRecord = parseGrillingRecord;
+module.exports.evaluateDefinition = evaluateDefinition;
