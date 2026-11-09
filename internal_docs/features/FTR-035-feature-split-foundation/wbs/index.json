@@ -1,0 +1,1293 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-035",
+  "phases": [
+    {
+      "id": "INFRA",
+      "type": "infrastructure",
+      "title": "Shared infrastructure setup: default configuration file, feature-split.js skeleton with FeatureSplitError and facade contract, slug rule, registry read and temp-and-rename write helpers, staging leftover scan",
+      "commit": {
+        "type": "feat",
+        "subject": "feature-split shared infrastructure"
+      },
+      "sourceUC": [],
+      "detailFile": "user-stories/INFRA.md",
+      "taskIds": [
+        "INFRA-TASK-INFRA-01",
+        "INFRA-TASK-BE-01",
+        "INFRA-TASK-BE-02",
+        "INFRA-TASK-BE-03",
+        "INFRA-TASK-BE-04",
+        "INFRA-TASK-BE-05",
+        "INFRA-TASK-BE-06",
+        "INFRA-TASK-BE-07",
+        "INFRA-TASK-TEST-01"
+      ]
+    },
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "title": "As a calling feature script, I want to load the merged configuration with validation so that thresholds are never hard-coded",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-01 load configuration"
+      },
+      "sourceUC": [
+        "UC-01"
+      ],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02",
+        "US-01-TASK-BE-03",
+        "US-01-TASK-TEST-01",
+        "US-01-TASK-TEST-02",
+        "US-01-TASK-TEST-03"
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "title": "As a calling feature script, I want a single new-feature test so that both checkpoints decide newness the same way",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-02 isNewFeature"
+      },
+      "sourceUC": [
+        "UC-02"
+      ],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-TEST-01",
+        "US-02-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "title": "As a user, I want to build and edit a split proposal with warnings so that I can review it before anything is applied",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-03 build and edit proposal"
+      },
+      "sourceUC": [
+        "UC-03"
+      ],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-02",
+        "US-03-TASK-BE-03",
+        "US-03-TASK-BE-04",
+        "US-03-TASK-BE-05",
+        "US-03-TASK-BE-06",
+        "US-03-TASK-TEST-01",
+        "US-03-TASK-TEST-02",
+        "US-03-TASK-TEST-03"
+      ]
+    },
+    {
+      "id": "US-04",
+      "type": "user-story",
+      "title": "As a user, I want a confirmed split applied atomically, as an initial split or a late child, so that the epic record, child folders and registry stay consistent",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-04 atomic apply"
+      },
+      "sourceUC": [
+        "UC-04"
+      ],
+      "detailFile": "user-stories/US-04.md",
+      "taskIds": [
+        "US-04-TASK-BE-01",
+        "US-04-TASK-BE-02",
+        "US-04-TASK-BE-03",
+        "US-04-TASK-BE-04",
+        "US-04-TASK-BE-05",
+        "US-04-TASK-BE-06",
+        "US-04-TASK-BE-07",
+        "US-04-TASK-BE-08",
+        "US-04-TASK-BE-09",
+        "US-04-TASK-BE-10",
+        "US-04-TASK-BE-11",
+        "US-04-TASK-BE-12",
+        "US-04-TASK-TEST-01",
+        "US-04-TASK-TEST-02",
+        "US-04-TASK-TEST-03",
+        "US-04-TASK-TEST-04",
+        "US-04-TASK-TEST-05",
+        "US-04-TASK-TEST-06"
+      ]
+    },
+    {
+      "id": "US-05",
+      "type": "user-story",
+      "title": "As a calling feature script, I want to register a standalone feature in the registry so that it is recorded once as defined",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-05 register standalone feature"
+      },
+      "sourceUC": [
+        "UC-05"
+      ],
+      "detailFile": "user-stories/US-05.md",
+      "taskIds": [
+        "US-05-TASK-BE-01",
+        "US-05-TASK-BE-02",
+        "US-05-TASK-BE-03",
+        "US-05-TASK-TEST-01",
+        "US-05-TASK-TEST-02",
+        "US-05-TASK-TEST-03",
+        "US-05-TASK-TEST-04"
+      ]
+    },
+    {
+      "id": "US-06",
+      "type": "user-story",
+      "title": "As a Requirements or Tech-Spec generator agent, I want to read child and epic registry entries and epic.md so that standalone, child and epic features are classified correctly",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-06 generator registry reader tolerance"
+      },
+      "sourceUC": [
+        "UC-06"
+      ],
+      "detailFile": "user-stories/US-06.md",
+      "taskIds": [
+        "US-06-TASK-BE-01",
+        "US-06-TASK-BE-02",
+        "US-06-TASK-TEST-01"
+      ]
+    }
+  ],
+  "tasks": {
+    "INFRA-TASK-INFRA-01": {
+      "title": "Create toolkit default feature-split configuration file",
+      "outcome": "src/claude/scripts/feature-split.config.json exists in the D-02 shape with thresholds (useCases 8, acceptanceCriteria 15, components 30, estimatedPhases 6), definitionSignals (minActors 2, minApplications 2, minFlows 3) and minChildren 2.",
+      "domain": "INFRA",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add default feature-split configuration file"
+      },
+      "detailFile": "tasks/INFRA-TASK-INFRA-01.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-01": {
+      "title": "Create feature-split.js skeleton with FeatureSplitError class",
+      "outcome": "src/claude/scripts/feature-split.js exists with 'use strict', a FeatureSplitError class exposing code, key (nullable) and file (nullable) and an exports object that includes FeatureSplitError.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split.js skeleton and FeatureSplitError"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-02": {
+      "title": "Add facade entry point with single-JSON stdout and exit contract",
+      "outcome": "feature-split.js has a main facade that dispatches the apply and register commands, prints exactly one JSON object on stdout, exits 0 on success, and on FeatureSplitError or operational error prints { error: { code, key, file, message } } and exits 1.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split facade stdout and exit contract"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-03": {
+      "title": "Add folder slug rule function",
+      "outcome": "feature-split.js exports a slug function that turns a child name into a valid folder slug and rejects empty names, path separators, '..' and Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) by throwing FeatureSplitError INVALID_NAME.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split slug rule"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-04": {
+      "title": "Add registry read and entry parse helper",
+      "outcome": "feature-split.js has a helper that reads <features root>/REGISTRY.md (returning an empty registry when the file is missing) and parses entries in the '## FTR-NNN — Title' format with Keywords, Status, Summary, Parent, Depends on and Detail lines separated by '---'; an unreadable file throws FeatureSplitError REGISTRY_IO.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split registry read helper"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-05": {
+      "title": "Add registry temp-and-rename write helper",
+      "outcome": "feature-split.js has a helper that writes new registry content to REGISTRY.md.tmp-<run id> and renames it over REGISTRY.md, removing the temp file and throwing FeatureSplitError REGISTRY_IO on failure while leaving the previous registry intact.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split registry atomic write helper"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-06": {
+      "title": "Add first-sentence summary helper",
+      "outcome": "feature-split.js exports a helper that returns the text up to the first period followed by whitespace from a Summary string.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split first-sentence helper"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-06.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-07": {
+      "title": "Add staging leftover scan helper",
+      "outcome": "feature-split.js has a helper that scans the features root for .split-staging-* directories and REGISTRY.md.tmp-* files and throws FeatureSplitError STAGING_LEFTOVER listing the exact paths and manual-removal guidance, removing nothing.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split staging leftover scan"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-07.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-TEST-01": {
+      "title": "Add tests for infrastructure helpers and facade contract",
+      "outcome": "tests/scripts/feature-split.test.js exists with passing tests for FeatureSplitError fields, the slug rule, registry read, registry temp-and-rename write, first-sentence helper, staging leftover scan and the facade stdout and exit code contract, and npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "INFRA-TASK-BE-02",
+        "INFRA-TASK-BE-03",
+        "INFRA-TASK-BE-04",
+        "INFRA-TASK-BE-05",
+        "INFRA-TASK-BE-06",
+        "INFRA-TASK-BE-07"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add feature-split infrastructure tests"
+      },
+      "detailFile": "tasks/INFRA-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-01": {
+      "title": "Add config file reader and validator helpers",
+      "outcome": "feature-split.js has readConfigFile and validateConfig helpers that read a JSON config file and check it against the D-02 shape. They raise FeatureSplitError for a missing or unreadable default, malformed JSON, an unknown key, and a non-integer or negative value. Each error names the key and the file where applicable.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01",
+        "INFRA-TASK-INFRA-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-04",
+        "AC-05",
+        "AC-06"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature-split config reader and validator"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-02": {
+      "title": "Add loadConfig with default and override merge",
+      "outcome": "feature-split.js exports loadConfig({ projectRoot }). It loads the toolkit default, reads the override only from <projectRoot>/feature-split.config.json, and treats an absent override as no error. It overlays the override leaf by leaf, so omitted keys keep their defaults, and returns the full D-02 shape.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-07"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add loadConfig merging default and project override"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-03": {
+      "title": "Add isOverThreshold and meetsMinimum comparison functions",
+      "outcome": "feature-split.js exports isOverThreshold(count, threshold), which is true only when count is strictly greater, and meetsMinimum(count, minimum), which is true when count is equal to or greater than the minimum.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add threshold comparison functions"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Add loadConfig tests to feature-split test file",
+      "outcome": "tests/scripts/feature-split.test.js contains passing tests for loadConfig. They cover defaults only, subset overlay, absent override, invalid values and unknown keys, a malformed override (CONFIG_INVALID_JSON) and an unreadable override (CONFIG_OVERRIDE_UNREADABLE), each naming the file with a null key, and reading the override from the projectRoot argument. The missing toolkit default (AC-06) is covered by US-01-TASK-BE-01, not here. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-02",
+        "INFRA-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-07"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add loadConfig tests"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-02": {
+      "title": "Add comparison function tests to feature-split test file",
+      "outcome": "tests/scripts/feature-split.test.js contains passing tests for the isOverThreshold boundary (30,30 false; 31,30 true) and the meetsMinimum boundary (2,2 true; 1,2 false). npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-03",
+        "INFRA-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add threshold comparison tests"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-03": {
+      "title": "Add installer placement test for default config",
+      "outcome": "tests/scripts/feature-split-install.test.js exists with passing checks. They confirm the default config file exists in src/claude/scripts and that ai-toolkit --local on an empty directory places it, byte-identical, at .claude/scripts/feature-split.config.json. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "INFRA-TASK-INFRA-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-09"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add config install placement test"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-03.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Add isNewFeature with marker checks and unreadable-folder error",
+      "outcome": "feature-split.js exports isNewFeature(featureDir). It returns { isNew: true, reason } for a missing folder, and { isNew: false, reason } when the folder holds {PREFIX}-Approvals.md, a wbs directory or epic.md. It returns { isNew: true, reason } when no marker is found, ignoring req/ and spec/. It throws FeatureSplitError FEATURE_UNREADABLE for an existing folder that cannot be read.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-13"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add isNewFeature new-feature test"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Add isNewFeature marker and missing-folder tests",
+      "outcome": "tests/scripts/feature-split.test.js contains passing tests for isNewFeature. They cover Approvals.md, wbs directory and epic.md each returning isNew false with a non-empty reason, a folder with only req/ and spec/ (including rewritten files) returning isNew true, and a missing folder returning isNew true. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01",
+        "INFRA-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add isNewFeature marker tests"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-02": {
+      "title": "Add isNewFeature unreadable-folder test",
+      "outcome": "tests/scripts/feature-split.test.js contains a passing test that makes reading an existing feature folder fail with EACCES and asserts FeatureSplitError FEATURE_UNREADABLE is thrown and isNew true is never returned. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01",
+        "INFRA-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-13"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add isNewFeature unreadable folder test"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Add child normalisation and child name validation",
+      "outcome": "feature-split.js has a normaliseChild helper that sets summary equal to purpose and defaults keywords, dependsOn and assigned. It also has a name validation step that uses the slug rule to reject empty or non-string names and duplicate slugs with a FeatureSplitError that names the child.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01",
+        "INFRA-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-15",
+        "AC-19"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add child normalisation and name validation"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-02": {
+      "title": "Add dependency validation and stable dependency order",
+      "outcome": "feature-split.js has a dependencyOrder function that does a stable topological sort by dependsOn with proposal-order tie-break. It rejects unknown siblings and self-references, and it raises a FeatureSplitError on a dependency cycle.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add stable dependency ordering for proposal children"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-03": {
+      "title": "Add shared-foundation warning check",
+      "outcome": "feature-split.js has a foundationWarnings function that returns a BR-03 warning, stating its consequence, when sharedFoundationOwner is not the first child in dependency order. It returns an empty list otherwise and never throws.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-17"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add shared-foundation BR-03 warning check"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-04": {
+      "title": "Add validateProposal with source and minChildren checks",
+      "outcome": "feature-split.js has a validateProposal function that checks source is definition or measured, child count against minChildren, names, dependsOn, owner and cycles. It raises a FeatureSplitError on failure.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-02",
+        "US-01-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-14",
+        "AC-15",
+        "AC-16"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add proposal validation with minChildren check"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-05": {
+      "title": "Add and export buildProposal",
+      "outcome": "feature-split.js exports buildProposal, which returns { proposal, warnings } in the D-08 shape with minChildren from the config. It defaults the owner to the first child in dependency order, keeps caller-supplied keywords, and writes no file.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-03",
+        "US-03-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-14",
+        "AC-19",
+        "AC-20"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add buildProposal"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-06": {
+      "title": "Add and export editProposal",
+      "outcome": "feature-split.js exports editProposal, which applies rename, set, reorder, owner, add, remove and merge edits to a copy and re-validates it. A refused edit leaves the caller's proposal unchanged, and a moved owner returns a warning without being refused. A merged child's purpose and summary are the merged children's purposes joined with ' / ', and its Keywords are their union. A remove never rewrites dependsOn: if a sibling still depends on the removed child, the edit is refused. Purpose, summary and keywords are editable, and no file is written.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-05"
+      ],
+      "acceptanceCriteria": [
+        "AC-15",
+        "AC-16",
+        "AC-17",
+        "AC-19",
+        "AC-20"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add editProposal"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-06.md",
+      "status": "generated"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Add buildProposal tests",
+      "outcome": "tests/scripts/feature-split.test.js contains passing tests for buildProposal. They cover the D-08 shape and minChildren from the config, summary equal to purpose with caller keywords kept, invalid or duplicate slug rejection naming the child, too few children, a dependency cycle, and no files written. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-05"
+      ],
+      "acceptanceCriteria": [
+        "AC-14",
+        "AC-15",
+        "AC-19",
+        "AC-20"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add buildProposal tests"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-03-TASK-TEST-02": {
+      "title": "Add dependency order tests",
+      "outcome": "tests/scripts/feature-split.test.js contains passing tests showing that buildProposal keeps the proposal's child order and defaults the shared-foundation owner to the first child in dependency order: with no dependsOn it is the first child, and a dependsOn chain overrides the proposal order. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-05"
+      ],
+      "acceptanceCriteria": [
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add dependency order tests"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-03-TASK-TEST-03": {
+      "title": "Add editProposal tests",
+      "outcome": "tests/scripts/feature-split.test.js contains passing tests for editProposal, called with one op object and returning { proposal, warnings }. They cover a refused edit below minChildren leaving the proposal unchanged, a remove refused while a sibling still depends on the child, an accepted merge whose purpose joins the purposes with ' / ' and whose Keywords are the union, rename updating references, a moved owner returning a BR-03 warning object without refusal, editable purpose and keywords, and no files written. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-16",
+        "AC-17",
+        "AC-19",
+        "AC-20"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add editProposal tests"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-03.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-01": {
+      "title": "Add registry render and field edit helpers",
+      "outcome": "feature-split.js has helpers to render a registry entry in the '## FTR-NNN — Title' format with Parent and Depends on lines and a Detail link, to find an entry by ID, to read a field, to set or insert a field in place, and to render the whole registry. Untouched entries stay byte-identical.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-29",
+        "AC-30",
+        "AC-39"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add registry entry render and field edit helpers"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-02": {
+      "title": "Add next-free child ID allocation helper",
+      "outcome": "feature-split.js has an allocateIds helper that returns the requested number of FTR-NNN IDs, one above the highest number found in the union of registry headings and feature folder names, with three-digit padding.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-25"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add child ID allocation helper"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-03": {
+      "title": "Add child feature.md renderer",
+      "outcome": "feature-split.js has a renderChildDoc helper that outputs a child feature.md with title, summary from the purpose line, parent epic ID, dependency position, sibling dependencies (none for the first child) and assigned parts. The shared-foundation section is included only for the foundation owner.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-28"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add child feature document renderer"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-04": {
+      "title": "Add epic.md renderer with split table",
+      "outcome": "feature-split.js has a renderEpic helper that outputs epic.md with a split table (order, ID, name, dependencies, checkpoint, and a shared-foundation row carrying the BR-03 warning or none) and the verbatim original feature text as a trailing section. It does not create epic.json.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-26",
+        "AC-27"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add epic record renderer"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-05": {
+      "title": "Add epic.md row parser and late row insertion",
+      "outcome": "feature-split.js has a parseEpicRows helper that reads the child rows from an existing epic.md split table. It also has an insertLateRow helper that returns epic.md text with one new late row after the last child row, leaving the existing rows, the foundation row and the original text unchanged.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-04-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-34"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add epic row parser and late row insert"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-06": {
+      "title": "Add apply proposal shape check and mode detection",
+      "outcome": "feature-split.js has apply pre-checks that validate the proposal D-08 shape (INVALID_PROPOSAL) and select initial or late mode from the parent folder (feature.md versus epic.md). Both files present or neither present gives PARENT_INVALID. The checks also cover the leftover staging scan, a missing parent registry entry (nothing staged), registry status (defined for initial, epic for late) and isNewFeature. There is no refusal for generated req/ and spec/ in the parent: they do not make it non-new, and US-04-TASK-BE-10 moves them into a temporary backup during the split.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-07",
+        "US-02-TASK-BE-01",
+        "US-04-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-33",
+        "AC-39",
+        "AC-42"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add apply pre-checks and mode detection"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-06.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-07": {
+      "title": "Add initial-mode apply plan builder",
+      "outcome": "feature-split.js has a planInitial helper that validates the proposal with validateProposal, computes dependency order and the BR-03 foundation warning without refusing, assigns IDs in dependency order, builds folder names and sibling dependency IDs, and refuses with TARGET_EXISTS if any ID folder, feature.md or registry heading already exists.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-04-TASK-BE-02",
+        "US-04-TASK-BE-06",
+        "US-03-TASK-BE-02",
+        "US-03-TASK-BE-03",
+        "US-03-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-24",
+        "AC-25",
+        "AC-26"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add initial split apply plan builder"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-07.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-08": {
+      "title": "Add late-mode apply plan builder",
+      "outcome": "feature-split.js has a planLate helper that requires exactly one child (LATE_CHILD_COUNT) and skips the minChildren check. It maps dependsOn to existing epic children from epic.md (UNKNOWN_DEPENDENCY otherwise), defaults to the previous last child, assigns the ID, sets the checkpoint to late and refuses with TARGET_EXISTS if the ID already exists.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-04-TASK-BE-05",
+        "US-04-TASK-BE-06",
+        "US-04-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-34",
+        "AC-24"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add late child apply plan builder"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-08.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-09": {
+      "title": "Add apply registry content builder",
+      "outcome": "feature-split.js has a buildRegistryText helper that appends one defined entry per child with Parent, Depends on and a Detail link to its feature.md, without duplicating existing IDs. In initial mode it changes the parent entry in place to epic with the first-sentence Summary, the union of Keywords and a Detail link to epic.md. In late mode it recomputes the epic Keywords as the union over all children and leaves the Summary and the existing child entries unchanged.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-04-TASK-BE-01",
+        "INFRA-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-29",
+        "AC-30",
+        "AC-35",
+        "AC-39"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add apply registry content builder"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-09.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-10": {
+      "title": "Add staged move journal and rollback engine",
+      "outcome": "feature-split.js has a commit routine that stages child folders, the new epic.md and the parent rollback copy under .split-staging-<run id>. In initial mode the parent's generated req/ and spec/ folders, when present, are moved into .split-staging-<run id>/parent-backup/ before epic.md is moved in. It moves everything with same-volume renames, journals each move, and writes the registry last with the temp-and-rename helper. On any failure it replays the journal in reverse, which restores req/ and spec/ in place, removes the staging directory and the temp file, and leaves the registry unchanged. If a reverse rename fails it keeps the staging directory and throws ROLLBACK_FAILED listing the remaining paths. After a successful commit it removes the staging directory and with it the backup; if that removal fails it returns a warning and does not undo the split.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-05"
+      ],
+      "acceptanceCriteria": [
+        "AC-22",
+        "AC-23",
+        "AC-31",
+        "AC-32"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add staged move and rollback engine"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-10.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-11": {
+      "title": "Wire and export apply orchestration",
+      "outcome": "feature-split.js exports apply({ featuresRoot, parentId, proposal }). It runs the pre-checks of US-04-TASK-BE-06, builds the plan for the selected mode, renders the documents and the registry text, calls the commit routine of US-04-TASK-BE-10, which removes staging, and returns { epic, children: [{ id, dir }], registry: true }, plus a warnings array only when removing staging failed.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-04-TASK-BE-03",
+        "US-04-TASK-BE-04",
+        "US-04-TASK-BE-07",
+        "US-04-TASK-BE-08",
+        "US-04-TASK-BE-09",
+        "US-04-TASK-BE-10"
+      ],
+      "acceptanceCriteria": [
+        "AC-21",
+        "AC-36"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "wire apply orchestration"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-11.md",
+      "status": "generated"
+    },
+    "US-04-TASK-BE-12": {
+      "title": "Connect facade apply command to proposal stdin",
+      "outcome": "The facade apply command requires --features-root and --parent, reads the proposal JSON from stdin (invalid JSON gives INVALID_PROPOSAL) and calls apply. It prints the single result object on exit 0, or the error object on exit 1.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-04-TASK-BE-11",
+        "INFRA-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-36"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "connect apply command to facade"
+      },
+      "detailFile": "tasks/US-04-TASK-BE-12.md",
+      "status": "generated"
+    },
+    "US-04-TASK-TEST-01": {
+      "title": "Add initial split apply success tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests, using temp fixtures, for an initial apply. They cover epic.md (split table once per child, checkpoint, verbatim trailing original text, no epic.json), child folders and feature.md content including foundation only in the first child, ID allocation across registry and folders, and the parent folder ending with epic.md only after its generated req/ and spec/ were moved into the backup and removed with staging. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-11"
+      ],
+      "acceptanceCriteria": [
+        "AC-21",
+        "AC-25",
+        "AC-27",
+        "AC-28",
+        "AC-42"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add initial split apply tests"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-04-TASK-TEST-02": {
+      "title": "Add apply registry entry tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests for the registry after apply. They cover child Parent, Depends on (none for the first child) and Detail, the parent entry changed in place to epic with its Summary, Keywords union and epic.md Detail, an entry with another status left byte-identical, and epic.md existing when the registry is written. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-11"
+      ],
+      "acceptanceCriteria": [
+        "AC-29",
+        "AC-30",
+        "AC-31",
+        "AC-39"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add apply registry entry tests"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-04-TASK-TEST-03": {
+      "title": "Add apply refusal and foundation warning tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests showing apply writes nothing and reports an error for a parent with no registry entry, an existing child folder or feature.md that stays unchanged, a leftover staging directory, and invalid proposals. It also has a test that a foundation not on the first child proceeds and records the BR-03 warning in epic.md. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-11"
+      ],
+      "acceptanceCriteria": [
+        "AC-24",
+        "AC-26",
+        "AC-33",
+        "AC-39",
+        "AC-41"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add apply refusal tests"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-03.md",
+      "status": "generated"
+    },
+    "US-04-TASK-TEST-04": {
+      "title": "Add apply rollback fault injection tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests that inject fs.renameSync failures at the child move, the parent req/ backup move, the feature.md move, the epic.md move and the registry write steps. Each shows the tree and registry restored, including the parent's req/ and spec/ folders byte for byte, with no staging or temp file left. A further test makes a reverse rename fail and asserts ROLLBACK_FAILED lists the remaining paths. A last test makes the staging removal fail after a successful commit and asserts that the split stands and apply returns a warnings entry. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-11"
+      ],
+      "acceptanceCriteria": [
+        "AC-22",
+        "AC-23",
+        "AC-32"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add apply rollback tests"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-04.md",
+      "status": "generated"
+    },
+    "US-04-TASK-TEST-05": {
+      "title": "Add late child apply tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests for a late apply. The child is placed last with checkpoint late and a default dependency on the previous last child. A late proposal with two children is rejected, and minChildren is not applied. The epic Keywords include the new child's Keywords, and the existing child entries and feature.md files are unchanged. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-11"
+      ],
+      "acceptanceCriteria": [
+        "AC-34",
+        "AC-35"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add late child apply tests"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-05.md",
+      "status": "generated"
+    },
+    "US-04-TASK-TEST-06": {
+      "title": "Add facade apply stdout and exit tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests that run the apply command with the proposal on stdin. Success prints exactly one JSON object { epic, children: [{ id, dir }], registry: true } with exit 0. A FeatureSplitError exits 1 with a JSON error object. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-04-TASK-BE-12"
+      ],
+      "acceptanceCriteria": [
+        "AC-36"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add facade apply contract tests"
+      },
+      "detailFile": "tasks/US-04-TASK-TEST-06.md",
+      "status": "generated"
+    },
+    "US-05-TASK-BE-01": {
+      "title": "Add feature.md reader for register",
+      "outcome": "feature-split.js has a readFeatureForRegister helper that reads <featureDir>/feature.md and returns the feature ID (from the FTR-NNN folder prefix), the title (first H1) and the first sentence of the Summary section. It throws FeatureSplitError FEATURE_INVALID when feature.md is missing, unreadable, or has no Summary section, and PARENT_INVALID when epic.md is present in the folder.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01",
+        "INFRA-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-37"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add feature.md reader for register"
+      },
+      "detailFile": "tasks/US-05-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-05-TASK-BE-02": {
+      "title": "Add and export register function",
+      "outcome": "feature-split.js exports register({ featuresRoot, featureDir, keywords }). It reads the registry and appends one defined entry (caller Keywords, first-sentence Summary, Detail link to feature.md, no Parent or Depends on lines). It creates the registry if missing and writes it by temp-and-rename. For an existing entry with status defined, completed or epic it returns { id, status } with that status without writing, so register exits 0 and never adds a duplicate. For an entry with any other status it throws REGISTRY_STATUS and leaves the entry untouched.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-05-TASK-BE-01",
+        "INFRA-TASK-BE-04",
+        "INFRA-TASK-BE-05",
+        "US-04-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-37",
+        "AC-38",
+        "AC-39",
+        "AC-40",
+        "AC-42"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add register function for standalone features"
+      },
+      "detailFile": "tasks/US-05-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-05-TASK-BE-03": {
+      "title": "Wire facade register command",
+      "outcome": "The facade register command requires --features-root and a feature directory argument, parses --keywords as a comma list, and reports ARG_MISSING when either argument is absent. The one-JSON-object stdout and the exit 0 or 1 contract, and the dispatch of register, are inherited from INFRA-TASK-BE-02 and are not re-implemented here.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-05-TASK-BE-02",
+        "INFRA-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-37"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "wire facade register command"
+      },
+      "detailFile": "tasks/US-05-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-05-TASK-TEST-01": {
+      "title": "Add register success and registry-creation tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests, using temp fixtures, for register. One test shows a standalone feature gets exactly one defined entry with the first-sentence Summary, the supplied Keywords, a Detail link to feature.md, and no Parent or Depends on lines, and that the result is { id, status: 'defined' }. Another shows a missing REGISTRY.md is created. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-05-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-37",
+        "AC-42"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add register success and registry creation tests"
+      },
+      "detailFile": "tasks/US-05-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-05-TASK-TEST-02": {
+      "title": "Add register idempotence and foreign status tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests showing a second register run creates no duplicate entry, and that an existing completed or epic entry is returned with its own status, stays byte-identical and gets no duplicate. They also show an existing entry with a status other than defined, completed or epic stays byte-identical, is not treated as an epic, is refused with REGISTRY_STATUS, and gets no duplicate. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-05-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-38",
+        "AC-39"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add register idempotence and status tests"
+      },
+      "detailFile": "tasks/US-05-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-05-TASK-TEST-03": {
+      "title": "Add register write-failure test",
+      "outcome": "tests/scripts/feature-split.test.js has a passing test that injects an fs.renameSync failure during register. It asserts the previous REGISTRY.md is byte-identical, no temp file remains, nothing is registered, and a FeatureSplitError REGISTRY_IO is reported. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-05-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-40"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add register write failure test"
+      },
+      "detailFile": "tasks/US-05-TASK-TEST-03.md",
+      "status": "generated"
+    },
+    "US-05-TASK-TEST-04": {
+      "title": "Add facade register stdout and exit tests",
+      "outcome": "tests/scripts/feature-split.test.js has passing tests that run the register command through the facade. Success prints exactly one JSON object { id, status: 'defined' } with exit 0. A missing feature.md exits 1 with a JSON error object. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-05-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-37"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add facade register stdout and exit tests"
+      },
+      "detailFile": "tasks/US-05-TASK-TEST-04.md",
+      "status": "generated"
+    },
+    "US-06-TASK-BE-01": {
+      "title": "Add registry reader rules to requirements generator agent",
+      "outcome": "src/claude/agents/gaia-generate-requirements.md has a Registry Reader Rules section, and Process step 2 reads the registry from the host-supplied path. The rules cover standalone entries with no Parent: or Depends on:, Status epic as a parent record, epic.md recognition with no epic requirements generated, Depends on: none, and skipping entries with any other status. The Detail line is ignored and the output structure is unchanged.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-43",
+        "AC-44",
+        "AC-45",
+        "AC-46"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add registry reader rules to requirements generator agent"
+      },
+      "detailFile": "tasks/US-06-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-06-TASK-BE-02": {
+      "title": "Add registry reader rules to tech-spec generator agent",
+      "outcome": "src/claude/agents/gaia-generate-tech-spec.md has a registry reader rules subsection 3a inside Process step 3, before step 4. It covers standalone entries, Status epic as a parent record, a folder holding epic.md as a parent record with no skeleton generated, Depends on: none, skipping entries with any other status, and ignoring the Detail line. The output structure and the Section 9 column contract are unchanged.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-43",
+        "AC-44",
+        "AC-45",
+        "AC-46"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add registry reader rules to tech-spec generator agent"
+      },
+      "detailFile": "tasks/US-06-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-06-TASK-TEST-01": {
+      "title": "Add registry reader tolerance test for generator agents",
+      "outcome": "tests/frontmatter/registry-reader-tolerance.test.js exists with one passing test per generator file and rule. The rules are standalone entry, epic status, epic.md recognition, Depends on: none, skipping other statuses and ignoring Detail. Both gaia-generate-requirements.md and gaia-generate-tech-spec.md are checked. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-06-TASK-BE-01",
+        "US-06-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-43",
+        "AC-44",
+        "AC-45",
+        "AC-46"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add registry reader tolerance test for generator agents"
+      },
+      "detailFile": "tasks/US-06-TASK-TEST-01.md",
+      "status": "generated"
+    }
+  }
+}

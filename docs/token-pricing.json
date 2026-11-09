@@ -1,21 +1,21 @@
 {
-  "_comment": "Anthropic API pricing (USD per 1M tokens). Update when prices change. EUR conversion uses the rate below.",
-  "_source": "https://www.anthropic.com/pricing — last updated 2026-07-31",
+  "_comment": "Anthropic API pricing (USD per 1M tokens). Update when prices change. EUR conversion uses the rate below. Aliases haiku/sonnet/opus map to the 5.5 generation (haiku verified from worker modelUsage: claude-haiku-5-5). Haiku 5.5 uses the 'prompts up to 100,000 tokens' tier ($0.50 / $2.50 above it).",
+  "_source": "https://platform.claude.com/docs/en/about-claude/pricing — last updated 2026-10-29",
   "_split": "No per-agent input/output breakdown available in the ledger. Assume 80% input / 20% output as a reasonable approximation.",
   "usd_to_eur": 0.92,
   "usd_to_eur_date": "2026-07-31",
   "models": {
     "haiku": {
-      "input_per_1m_usd": 0.80,
-      "output_per_1m_usd": 4.00
+      "input_per_1m_usd": 0.10,
+      "output_per_1m_usd": 0.50
     },
     "sonnet": {
-      "input_per_1m_usd": 3.00,
-      "output_per_1m_usd": 15.00
+      "input_per_1m_usd": 2.00,
+      "output_per_1m_usd": 10.00
     },
     "opus": {
-      "input_per_1m_usd": 15.00,
-      "output_per_1m_usd": 75.00
+      "input_per_1m_usd": 4.00,
+      "output_per_1m_usd": 20.00
     }
   }
 }

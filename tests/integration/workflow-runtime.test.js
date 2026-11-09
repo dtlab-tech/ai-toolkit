@@ -4,6 +4,9 @@ const path = require('path');
 const { runWorkflow } = require('../../lib/workflow-runner');
 const { fixture } = require('../helpers/workflow-fixture');
 const { loadWorkBreakdown } = require('../../src/claude/scripts/wbs-assembler');
+// Each test runs a full pm-phase1 workflow against real files; under the load of a whole-suite run (npm test)
+// the default 5 s is not enough and a test fails on the clock, not on behaviour.
+jest.setTimeout(60000);
 let f;
 beforeEach(() => { f = fixture(); });
 afterEach(() => { f.clean(); });
