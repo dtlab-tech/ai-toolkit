@@ -1,4 +1,13 @@
 ## 0.1.4 (2026-07-21)
+## [0.27.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.27.0...v0.27.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **executor:** write the measured actuals next to the feature documents ([e53fefd](https://github.com/dtlab-tech/ai-toolkit/commit/e53fefd81a7d67304818066d19aae3014af243dc))
+* **executor:** write the measured actuals next to the feature documents ([5eff7dd](https://github.com/dtlab-tech/ai-toolkit/commit/5eff7dd25d2cd6069d751824c1f2c26a158ec125))
+* **executor:** write the measured actuals next to the feature documents ([7ee1722](https://github.com/dtlab-tech/ai-toolkit/commit/7ee1722c69a89b01caa83dcb346eb5ae9497377f))
+
 ## [0.27.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.26.1...v0.27.0) (2026-11-09)
 
 
