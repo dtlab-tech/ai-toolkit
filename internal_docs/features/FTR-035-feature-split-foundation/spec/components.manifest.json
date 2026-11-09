@@ -1,0 +1,40 @@
+{
+  "pathHashes": {},
+  "components": {
+    "src/claude/scripts/feature-split.config.json": {
+      "slug": "feature-split.config.json.md",
+      "rowHash": "sha256:59d50e7323f4be149a707b1ff499e574552419d621773a23ec071d4388a1623a",
+      "lastSeenInSkeleton": "2026-11-03T22:32:51.632Z"
+    },
+    "src/claude/scripts/feature-split.js": {
+      "slug": "feature-split.js.md",
+      "rowHash": "sha256:55d817cf0f316d2a44d37389091223954ddc8abe9b0f5dbc255f8dfab380a020",
+      "lastSeenInSkeleton": "2026-11-03T22:32:51.632Z"
+    },
+    "tests/scripts/feature-split.test.js": {
+      "slug": "feature-split.test.js.md",
+      "rowHash": "sha256:d90e2b739573310499cc7562dba958c1701f62d9d4b884721be05cfec73801d0",
+      "lastSeenInSkeleton": "2026-11-03T22:32:51.632Z"
+    },
+    "tests/scripts/feature-split-install.test.js": {
+      "slug": "feature-split-install.test.js.md",
+      "rowHash": "sha256:4f8c3758939201d5294267be2bb7a0eecebf7e053edce028bdecb62e36044547",
+      "lastSeenInSkeleton": "2026-11-03T22:32:51.632Z"
+    },
+    "src/claude/agents/gaia-generate-requirements.md": {
+      "slug": "gaia-generate-requirements.md.md",
+      "rowHash": "sha256:2b0618a9dc8ef56c4285c2ace54d0567712ef7ef297d307be95827fcd5ef388c",
+      "lastSeenInSkeleton": "2026-11-03T22:32:51.632Z"
+    },
+    "src/claude/agents/gaia-generate-tech-spec.md": {
+      "slug": "gaia-generate-tech-spec.md.md",
+      "rowHash": "sha256:ccd833e2fb4d9653e9942a92ab72ed9b4a6678c0f5155d8c37041d4e634919db",
+      "lastSeenInSkeleton": "2026-11-03T22:32:51.632Z"
+    },
+    "tests/frontmatter/registry-reader-tolerance.test.js": {
+      "slug": "registry-reader-tolerance.test.js.md",
+      "rowHash": "sha256:9382ca358c1e36fccb415f4ea7ec28788b41a7580a4fce4adc390a76b9b85df6",
+      "lastSeenInSkeleton": "2026-11-03T22:32:51.632Z"
+    }
+  }
+}

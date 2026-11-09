@@ -51,10 +51,26 @@ The tech spec MUST use the project's actual stack and patterns. Do not assume an
 1. **Read** the feature document completely
 2. **Read** `req/index.md` if it exists (for traceability) — the AC table and Use Case index it
    needs already live there, untouched by the per-UC split (FTR-021)
-3. **Read** `docs/features/REGISTRY.md` if it exists — identify features that touch the same entities, endpoints, or services as this feature. Note architectural dependencies and integration points in Section 5 (External Integrations) or Section 12 (Risks & Mitigations) of the output document. If a prior feature introduced shared infrastructure this feature reuses (e.g. auth middleware, base service, shared DTO), reference it explicitly.
+3. **Read** the registry (the registry is `REGISTRY.md` in the features root, which is the directory that contains the folder holding `feature.md` (one level above that folder), unless the host supplies another path in the dispatch prompt) if it exists. If it exists but cannot be read, that is an error: stop and report it through the Clarification Protocol. Then identify features that touch the same entities, endpoints, or services as this feature. Note architectural dependencies and integration points in Section 5 (External Integrations) or Section 12 (Risks & Mitigations) of the output document. If a prior feature introduced shared infrastructure this feature reuses (e.g. auth middleware, base service, shared DTO), reference it explicitly.
+3a. **Apply the registry reader rules** to each entry of `REGISTRY.md` you read in step 3:
+    - `Status: epic` → the entry is a **parent record**. Use its Summary as context only.
+      Never generate a Tech-Spec skeleton for an epic, and never list its children as
+      components of this feature. If its folder (`<features-root>/<ID>` or `<features-root>/<ID>-*`) holds no `epic.md`, that is an error: stop and
+      report it through the Clarification Protocol (Gate 1 decision).
+    - Entry has `Parent: FTR-NNN` → it is a **child** of that epic. Record the parent ID.
+    - Entry has `Depends on:` → record the sibling IDs. The value `none` means no sibling dependency.
+      A `Parent:` line without a `Depends on:` line is a child with no recorded dependencies.
+    - Entry lacks both `Parent:` and `Depends on:` → **standalone**. Behave exactly as before this change.
+      A feature with no registry entry at all is standalone too.
+    - Any other `Status` value → leave the entry untouched. It is not an epic, not a parent, and not a dependency.
+    - The Detail link (`→ [Detail](path)`, or an older `**Detail:**` line) → ignored. It is never parsed as a dependency or a parent.
+    - Feature folder contains `epic.md` → it is a **parent record** (BR-05). Do not run this
+      pipeline for it. Report that through the Clarification Protocol.
+    Use recorded parent and sibling IDs only in Section 5 (External Integrations) or Section 12
+    (Risks & Mitigations), as already described in step 3 for shared dependencies.
 4. **Explore** the existing codebase areas affected (models, controllers/handlers, pages, services)
-4. **Design** the technical solution aligned with existing patterns from AGENTS.md
-5. **Return** the skeleton as your final response — every section except each component's own design detail. You do not have a Write tool; the host persists your response to `spec/index.md` verbatim. Do not attempt to write any file yourself, and do not write a component's Backend/Frontend/External-Integration/Testing detail inline — list it in Section 9's index table only.
+5. **Design** the technical solution aligned with existing patterns from AGENTS.md
+6. **Return** the skeleton as your final response — every section except each component's own design detail. You do not have a Write tool; the host persists your response to `spec/index.md` verbatim. Do not attempt to write any file yourself, and do not write a component's Backend/Frontend/External-Integration/Testing detail inline — list it in Section 9's index table only.
 
 ## Output Filename (for your reference only — you do not write this file)
 
