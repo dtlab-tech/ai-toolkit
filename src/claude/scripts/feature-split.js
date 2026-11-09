@@ -1189,7 +1189,29 @@ function evaluateDefinition(record, definitionSignals) {
   return { status: flagged ? 'flagged' : 'not-flagged', signals, flows, unevaluated };
 }
 
-const COMMANDS = { apply: runApply, register: runRegister };
+// D-04: the record is read only when the feature is new, so a skipped check never touches stdin.
+function checkDefinition({ featuresRoot, featureId, readRecord, projectRoot = process.cwd() }) {
+  if (!/^FTR-\d+$/.test(featureId ?? ''))
+    fail('FEATURE_INVALID', `${featureId} is not an FTR-NNN id`, { key: featureId ?? null });
+  const featureDir = findParentDir(featuresRoot, featureId);
+  if (!isNewFeature(featureDir).isNew)
+    return { status: 'skipped', signals: {}, flows: [], unevaluated: [] };
+  const { definitionSignals } = loadConfig({ projectRoot });
+  const record = parseGrillingRecord(readRecord());
+  return evaluateDefinition(record, definitionSignals);
+}
+
+function runCheckDefinition(args, readStdin) {
+  const flags = parseFlags(args);
+  return checkDefinition({
+    featuresRoot: required(flags, 'features-root'),
+    featureId: required(flags, 'feature-id'),
+    projectRoot: flags.project || process.cwd(),
+    readRecord: readStdin,
+  });
+}
+
+const COMMANDS = { apply: runApply, register: runRegister, 'check-definition': runCheckDefinition };
 
 function errorPayload(err) {
   if (err instanceof FeatureSplitError) {
@@ -1202,7 +1224,7 @@ function main(argv, readStdin) {
   const [command, ...rest] = argv;
   try {
     if (!command || !Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
-      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply or register`);
+      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register or check-definition`);
     }
     return { exitCode: 0, payload: COMMANDS[command](rest, readStdin) };
   } catch (err) {
@@ -1260,3 +1282,5 @@ module.exports.planLate = planLate;
 module.exports.register = register;
 module.exports.parseGrillingRecord = parseGrillingRecord;
 module.exports.evaluateDefinition = evaluateDefinition;
+module.exports.checkDefinition = checkDefinition;
+module.exports.runCheckDefinition = runCheckDefinition;
