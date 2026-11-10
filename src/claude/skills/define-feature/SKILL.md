@@ -21,7 +21,7 @@ This skill never writes files and never runs `check-definition` or `apply` itsel
 
 - **DONE**: relay the written `feature.md` path or the created children, then stop. If the agent lists unevaluated signals, relay each one as described under "Unevaluated signals" below.
 - **ERROR**: this covers a failed `ai-toolkit resolve-features-root` call and a `RECORD_INVALID` result. Relay the reason, state that nothing was written, and stop. Do not retry and do not continue to another phase.
-- **CHECKPOINT: split-proposal**: present the proposal view below. The agent has ended its turn and has written nothing. Stop after presenting the view. Collecting the decision is a separate step.
+- **CHECKPOINT: split-proposal**: present the proposal view below. The agent has ended its turn and has written nothing. Present the proposal view, then collect the user's decision as described under "Decision round".
 
 ## Grilling record
 
@@ -37,6 +37,41 @@ When a CHECKPOINT arrives, parse its `feature_id`, `record`, `check` and `propos
 4. **Order**: the dependency order from `proposal.order`.
 5. **Shared parts**: the grilling answers assigned to the first child, from `proposal.shared_first_child`.
 6. **Unevaluated signals**: every name in `check.unevaluated`, each with the statement that this signal could not be evaluated and so did not count toward the split threshold.
+
+## Decision round
+
+After the proposal view, ask the user once, in the main loop, to choose one option:
+
+- `accept`: the proposal is confirmed as shown.
+- `edit`: the user gives free-text edits to names, purposes, dependency order, shared parts, Summary or Keywords.
+- `reject`: continue as one standalone feature.
+
+The user's decision is the only trigger for a write. Nothing is written before accept or reject. The skill never writes files and never runs `check-definition` or `apply` itself. The decision is collected in the main loop, and the agent is never asked for it.
+
+Re-invoke the agent with this decision block. The `record` and `proposal` values come from the CHECKPOINT block held in main-loop context, not from disk:
+
+```
+Mode: define
+CHECKPOINT: decision
+feature_id: {FTR-XXX}
+decision: accept | edit | reject
+record: <unchanged JSON from the PROPOSAL block>
+proposal: <unchanged, or with the user's edits applied>
+edits: "<user's free-text edits>"    # only when decision = edit
+```
+
+Routing per decision:
+
+- **accept**: re-invoke with `decision: accept` and the proposal unchanged. Relay the DONE result. An ERROR is handled as under "Handling the agent's return".
+- **reject**: re-invoke with `decision: reject`. Relay the DONE result and state that the feature continues as one standalone feature. Relay the sentence "Checkpoint 2 remains available for this feature." unchanged when the result contains it.
+- **edit**: re-invoke with `decision: edit`, the `edits` text, and the proposal unchanged. The agent returns a revised CHECKPOINT block with `violations` and `foundationWarnings`. Report each violation. Show the foundation warning from the returned block for each entry in `foundationWarnings`. Then re-present the revised proposal with the proposal view and return to this decision round. The next decision carries the revised `proposal`. Repeat until the user chooses accept or reject. Edit rounds write nothing.
+
+## Non-flagged result
+
+When the spawn returns with no CHECKPOINT block, status `skipped` or `not-flagged`, no proposal is shown.
+
+- **`skipped`**: relay the agent's stop reason and stop. Show no Keywords prompt.
+- **`not-flagged`**: show the Keywords prompt that the agent returns, with the derived Keywords as an editable item. Collect the confirmed keywords in the main loop and pass them back as `confirmed_keywords: "<k1,k2>"`. The name must be aligned with US-02-TASK-BE-01 before implementation. Also name each `unevaluated` signal, as described under "Unevaluated signals".
 
 ## Unevaluated signals
 
