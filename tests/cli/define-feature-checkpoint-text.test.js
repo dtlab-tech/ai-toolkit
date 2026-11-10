@@ -485,7 +485,7 @@ describe('block contract between the agent and the skill', () => {
     const skillBlock = fenceAfter(skill.slice(skill.indexOf('## Decision round')), 'CHECKPOINT: decision\nfeature_id');
     expect(keysOf(skillBlock)).toEqual(expected);
     const agentBlock = fenceAfter(contract, 'CHECKPOINT: decision\nfeature_id');
-    for (const key of expected) expect(agentBlock).toContain(key);
+    expect(keysOf(agentBlock)).toEqual(expected);
   });
 
   test('the proposal example of the agent is an object that apply and validate-proposal accept', () => {
@@ -557,5 +557,65 @@ describe('refinements pinned to the step they belong to', () => {
     expect(bare).toEqual([]);
     expect(agent).not.toMatch(/<<'JSON'/);
     expect(agent).toMatch(/<<'FEATURE_SPLIT_JSON'/);
+  });
+});
+
+describe('state a re-invocation relies on (review of the contract)', () => {
+  const contract = agent.slice(agent.indexOf('### Block contract'), agent.indexOf('### Late-child steps'));
+  const template = agent.slice(agent.indexOf('### feature.md template'), agent.indexOf('## Phase 5'));
+  const snake = (heading) => heading.replace(/\s*\(.*\)\s*$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const sections = [...template.matchAll(/^## (.+)$/gm)].map(m => snake(m[1]));
+
+  test('every key of the answers example is a section of the feature.md template', () => {
+    const phase3a = agent.slice(agent.indexOf('## Phase 3a'), agent.indexOf('## Phase 4'));
+    const line = phase3a.split('\n').map(l => l.trim()).find(l => l.startsWith('answers: {'));
+    const keys = Object.keys(JSON.parse(line.slice('answers: '.length)));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) expect(sections).toContain(key);
+    // and every template section but Feature ID and Summary has a key
+    expect(keys.sort()).toEqual(sections.filter(s => s !== 'feature_id' && s !== 'summary').sort());
+  });
+
+  test('the Summary of the parent is the confirmed parent_summary, and a reject does not ask for it again', () => {
+    expect(agent).toMatch(/The first sentence of the Summary section is `parent_summary` of the decision block/);
+    expect(agent).toMatch(/`parent_summary` and `parent_keywords` of the decision block are the Summary and Keywords the user already confirmed: use them, skip steps 2 and 3, and do not ask again/);
+  });
+
+  test('a parent Summary or Keywords edit is not an op; the returned block takes both from the decision block', () => {
+    expect(agent).toMatch(/A change to the parent Summary or Keywords is not an op and never goes to `validate-proposal`/);
+    expect(agent).toMatch(/every key taken from the decision block \(so the user's `parent_summary` and `parent_keywords` carry over\)/);
+  });
+
+  test('apply_failed carries the same two lists as the partial-apply error block, as arrays', () => {
+    const errorBlock = agent.slice(agent.indexOf('ERROR: partial-apply\n'), agent.indexOf('d. Options, as handled'));
+    for (const key of ['created_children', 'staging_leftover']) {
+      expect(errorBlock).toContain(key + ': [');
+      expect(contract).toContain('"' + key + '"');
+    }
+    expect(errorBlock).toMatch(/error_code:/);
+    expect(errorBlock).not.toMatch(/or "none"/);
+    expect(skill).toMatch(/an empty list means none/);
+  });
+
+  test('a refusal that a retry cannot change offers only edit and reject, in the agent and in the skill', () => {
+    expect(agent).toMatch(/the last line of the block is `options: edit \| reject` and `retry` is not offered/);
+    expect(skill).toMatch(/When the block's `options` line is `edit \| reject`/);
+  });
+
+  test('every stop returns an error block, with a code for each stop that has no script error', () => {
+    expect(contract).toMatch(/Every `STOP` of this agent ends with the error block/);
+    for (const code of ['ROOT_UNRESOLVED', 'FEATURE_EXISTS', 'STAGING_LEFTOVER', 'ID_TAKEN', 'EPIC_NOT_FOUND', 'EPIC_STATUS_INVALID', 'CHILD_EXISTS', 'REGISTER_FAILED'])
+      expect(contract).toContain(code);
+  });
+
+  test('commands use literal values, not shell variables a re-invoked agent does not have', () => {
+    expect(contract).toMatch(/Shell variables do not persist between calls and a re-invoked agent has none/);
+  });
+
+  test('the late-child blocks use the same key style as the define blocks', () => {
+    const late = agent.slice(agent.indexOf('### L7. Decision'));
+    expect(late).toMatch(/`foundation_warnings`/);
+    expect(skill).not.toMatch(/foundationWarnings\` and/);
+    expect(skill).toMatch(/epic_id: \{epicId\}\ndecision: accept/);
   });
 });

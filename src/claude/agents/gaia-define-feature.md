@@ -73,9 +73,12 @@ foundation_warnings: [{"code","message"}]       # only after an edit
 `proposal` is the object that `validate-proposal` and `apply` accept, written as one JSON line:
 `{"source":"definition","minChildren":<check.minChildren>,"foundationNote":"<text>","sharedFoundationOwner":"<name of the first child>","children":[{"name","purpose","summary","keywords":[],"dependsOn":[],"assigned":"<assigned parts>"}]}`.
 The children are listed in dependency order. The first child has `dependsOn: []`. The shared parts go into the first
-child's `assigned` and are described in `foundationNote`. `answers` has one key per section of the feature.md template
-below (the section name in snake_case), each a short text or an array of short items, and nothing else: it is the
-only content Phase 4 may use on a re-invocation.
+child's `assigned` and are described in `foundationNote`. `answers` has one key per section of the feature.md template below
+except Feature ID and Summary: `problem_statement`, `actors`, `core_flow`, `out_of_scope`, `edge_cases_and_error_scenarios`, `data_model`,
+`roles_and_permissions`, `acceptance_criteria`, `mvp_vs_deferred`, `open_questions`, `dependencies_and_assumptions`. Each is a short
+text or an array of short items; a section nothing was elicited for is the empty string, and Phase 4 writes "N/A" there and
+never invents content. The Feature ID section is `feature_id`, and the first sentence of the Summary section is `parent_summary`.
+`answers` is the only content Phase 4 may use on a re-invocation.
 
 **3. `CHECKPOINT: decision` (skill to agent).** The first line is `Mode: define`.
 
@@ -84,7 +87,14 @@ Mode: define
 CHECKPOINT: decision
 feature_id: {PREFIX}
 decision: accept | edit | reject | retry
-title, feature_dir, features_root, parent_summary, parent_keywords, answers, record, proposal
+title: {echoed}
+feature_dir: {echoed}
+features_root: {echoed}
+parent_summary: {confirmed or edited by the user}
+parent_keywords: {JSON array, confirmed or edited by the user}
+answers: {echoed}
+record: {echoed}
+proposal: {the current proposal, one JSON line}
 edits: "<free text>"                                                        # only when decision = edit
 apply_failed: {"created_children":[...],"staging_leftover":[...]}           # only after a partial apply
 ```
@@ -99,6 +109,8 @@ apply_failed: {"created_children":[...],"staging_leftover":[...]}           # on
   `nothing_written: true | false` (the error code is the `code` of the script's error JSON, or a short code of this
   agent such as `ROOT_UNRESOLVED` or `FEATURE_EXISTS`). `ERROR: partial-apply` keeps its own fields (Phase 4, split branch);
 - a final report whose last line is `DONE`.
+
+Every `STOP` of this agent ends with the error block, never with free text alone. Codes for the stops without a script error: `ROOT_UNRESOLVED` (Phase 1a), `FEATURE_EXISTS` (the BR-04 guard), `STAGING_LEFTOVER` (the leftover check), `ID_TAKEN` (the ID re-scan), `EPIC_NOT_FOUND`, `EPIC_STATUS_INVALID` and `CHILD_EXISTS` (late-child L2 to L4), and `REGISTER_FAILED` (`register` exited non-zero after `feature.md` was written: `nothing_written: false`, plus `feature_path: {path}`; nothing is deleted, the user fixes the cause and runs `register` by hand). Shell variables do not persist between calls and a re-invoked agent has none: substitute the literal values of `features_root`, `feature_dir` and `feature_id` into every command.
 
 ### Late-child steps
 
@@ -165,7 +177,7 @@ Write nothing in this mode before the explicit accept: no `mkdir`, no `feature.m
 
 ### L7. Decision
 
-Entered only on a late-child re-invocation that carries `decision`, `epicId`, and the one-child `proposal.child` from L6. Phases 1 to 4 do not run. Each decision below is exclusive.
+Entered only on a late-child re-invocation that carries `decision`, `epic_id`, and the one-child `proposal.child` from L6. Phases 1 to 4 do not run. Each decision below is exclusive.
 
 **Decision `accept`**
 
@@ -193,7 +205,7 @@ Entered only on a late-child re-invocation that carries `decision`, `epicId`, an
    In late mode the only ops are `rename` and `set` of `purpose`, `summary` or `keywords`. A request to move the child or change its dependency is not an op: say that a late child is always placed last, after the epic's last child.
 2. If exit != 0: STOP, report the error. Write nothing.
 3. Parse the single JSON line: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`). Report every violation and every foundation warning. A refused edit is a violation, not a failure.
-4. Return a revised `CHECKPOINT: late-child-proposal` block (same format as L6) with the revised child, `depends_on` restored to the previous last child, and the `violations` and `foundationWarnings`.
+4. Return a revised `CHECKPOINT: late-child-proposal` block (same format as L6) with the revised child, `depends_on` restored to the previous last child, and the `violations` and `foundation_warnings`.
 5. STOP. Write no file, create no folder, open no ledger entry, call no `register` and no `apply`. Nothing changes until the user sends a new explicit accept.
 
 **Decision `reject`**
@@ -479,7 +491,7 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
      features_root: {featuresRoot}
      parent_summary: {one sentence}
      parent_keywords: ["k1","k2"]
-     answers: {"problem":"","objective":"","actors":[],"flows":[],"rules":[],"acceptance":[],"out_of_scope":[],"open_questions":[]}
+     answers: {"problem_statement":"","actors":[],"core_flow":[],"out_of_scope":[],"edge_cases_and_error_scenarios":[],"data_model":"","roles_and_permissions":[],"acceptance_criteria":[],"mvp_vs_deferred":"","open_questions":[],"dependencies_and_assumptions":[]}
      record: {"actors":[...],"applications":[...],"flows":[{"name":"","reason":""}]}
      check: {"status":"flagged","signals":{...},"flows":[...],"unevaluated":[...],"minChildren":2}
      proposal: {"source":"definition","minChildren":2,"foundationNote":"","sharedFoundationOwner":"","children":[{"name":"","purpose":"","summary":"","keywords":[],"dependsOn":[],"assigned":""}]}
@@ -504,7 +516,7 @@ Used only on a checkpoint re-invocation (see "Input modes").
 **Decision `edit`** — the user changed the proposal at the checkpoint. Input: the decision block of "Block contract" with `decision: edit` and `edits`.
 
 1. Do NOT re-run grilling and do NOT re-run the definition check. Write nothing: no `mkdir`, no `feature.md`, no ledger entry, no `register`, no `apply`.
-2. Translate each user edit into one structured op: `rename` `{ from, to }`; `set` `{ name, field, value }` (field: `purpose`, `summary`, `keywords`, `assigned`, `dependsOn`); `reorder` `{ names }`; `owner` `{ name }`; `add` `{ child }`; `remove` `{ name }`; `merge` `{ names, into }`. An edit that fits none of these is not applied; report it to the user.
+2. Translate each user edit into one structured op: `rename` `{ from, to }`; `set` `{ name, field, value }` (field: `purpose`, `summary`, `keywords`, `assigned`, `dependsOn`); `reorder` `{ names }`; `owner` `{ name }`; `add` `{ child }`; `remove` `{ name }`; `merge` `{ names, into }`. An edit that fits none of these is not applied; report it to the user. A change to the parent Summary or Keywords is not an op and never goes to `validate-proposal`: take it into `parent_summary` (one sentence) or `parent_keywords` (no comma or line break in a keyword) of the block you return.
 3. Send one op per call, chaining the returned `proposal` into the next call. A refused op leaves the proposal unchanged, so continue with the remaining ops from that point:
    ```bash
    cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
@@ -514,7 +526,7 @@ Used only on a checkpoint re-invocation (see "Input modes").
 4. If exit != 0: STOP. Report the error. Write nothing.
 5. Parse the single JSON line per call: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`).
 6. Report every violation and every foundation warning to the user. Violations cover: names empty, duplicated, or with a line break or `|`; `dependsOn` naming an unlisted child, a child naming itself, or forming a cycle; an owner that is not a child; fewer children than `minChildren`; keywords with a comma or a line break; and any other shape `apply` would refuse. A refused edit is shown as a violation, not as a failure.
-7. Return a new `CHECKPOINT: split-proposal` block (same format as Phase 3a) with every key unchanged except `proposal` (revised), `violations` and `foundation_warnings`.
+7. Return a new `CHECKPOINT: split-proposal` block (same format as Phase 3a) with every key taken from the decision block (so the user's `parent_summary` and `parent_keywords` carry over) except `proposal` (revised), `violations` and `foundation_warnings`; a parent edit of step 2 replaces its key.
 8. STOP. Write no file, create no folder, open no ledger entry, call no `register` and no `apply`. Nothing changes until the user sends a new explicit accept. A new accept runs the Phase 4 split branch on the revised proposal. If the edit input carries `apply_failed` (the edit follows a failed apply), that new accept is sent as `decision: retry` and runs "Phase 4 — split branch (retry)" instead.
 
 ```text
@@ -525,7 +537,7 @@ reject  -> discard the proposal and all edits (they are not used anywhere);
 
 #### Phase 4 — standalone branch
 
-Reached from `not-flagged` (Phase 3a) and from checkpoint decision `reject`. `skipped` stops in Phase 3a and never reaches this branch. Nothing is written before step 1 (BR-04 guard) passes. Run the steps in order.
+Reached from `not-flagged` (Phase 3a) and from checkpoint decision `reject`. `skipped` stops in Phase 3a and never reaches this branch. Nothing is written before step 1 (BR-04 guard) passes. Run the steps in order. When this branch is reached from checkpoint decision `reject`, `parent_summary` and `parent_keywords` of the decision block are the Summary and Keywords the user already confirmed: use them, skip steps 2 and 3, and do not ask again.
 
 1. **BR-04 guard (first, before anything else):**
    ```bash
@@ -561,7 +573,7 @@ Entered only when the re-invocation carries decision = accept. Record and propos
 
 2. **Leftover check:** if any entry matching `.split-staging-*` exists directly under `{featuresRoot}` -> STOP, report the leftover path, and run no apply. Later applies stay blocked until the leftover is cleared (Tech-Spec §12).
 
-3. **Write the parent:** run Mode write steps 1–2 (create the feature directory, open the ledger entry). Then write `{featureDir}/feature.md` with the existing feature.md template, unchanged. Summary = first sentence of the parent Summary section. Keywords = `parent_keywords` of the decision block, as confirmed or edited by the user.
+3. **Write the parent:** run Mode write steps 1–2 (create the feature directory, open the ledger entry). Then write `{featureDir}/feature.md` with the existing feature.md template, unchanged. The first sentence of the Summary section is `parent_summary` of the decision block, as confirmed or edited by the user (`register` reads that sentence). Keywords = `parent_keywords` of the decision block, as confirmed or edited by the user.
 
 4. **Register the parent with status defined, BEFORE apply:**
    ```bash
@@ -592,8 +604,9 @@ Entered only when the re-invocation carries decision = accept. Record and propos
         ERROR: partial-apply
         feature_id: {PREFIX}
         parent: {PREFIX} (feature.md written, registered as status defined)
-        created_children: [<paths or ids from step a>, or "none"]
-        staging_leftover: [<.split-staging-* entries from step b>, or "none"]
+        created_children: [<paths or ids from step a>]              # [] when none
+        staging_leftover: [<.split-staging-* entries from step b>]  # [] when none
+        error_code: <the code of apply's error JSON, or UNKNOWN>
         reason: <apply error text, first line>
         options: retry | edit | reject
         ```
@@ -603,6 +616,7 @@ Entered only when the re-invocation carries decision = accept. Record and propos
         - `edit` -> return to the proposal: validate per BE-04 and return a new CHECKPOINT. The accept that
           follows is sent as `decision: retry`, not `accept` (see "Phase 4 — split branch (retry)").
         - `reject` -> "Phase 4 — split branch (reject after a failed apply)".
+     e. When `error_code` is a refusal that a retry cannot change (`INVALID_PROPOSAL`, `TOO_FEW_CHILDREN`, `CHILD_NAME_INVALID`, `CHILD_NAME_DUPLICATE`, `DEPENDS_ON_INVALID`, `OWNER_INVALID`, `PROPOSAL_CYCLE`, `PROPOSAL_SOURCE_INVALID`, `PARENT_NOT_REGISTERED`, `PARENT_STATUS_INVALID`, `PARENT_NOT_NEW`, `PARENT_INVALID`), the last line of the block is `options: edit | reject` and `retry` is not offered.
 
 Rules for every path after a failed apply:
 - The no-overwrite guard (BR-04) applies to a first accept only. `retry`, an accept after an edit that follows a

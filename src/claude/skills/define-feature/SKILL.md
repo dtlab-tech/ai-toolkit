@@ -77,7 +77,7 @@ Re-invoke the agent in late-child mode. The `Mode:` line is the first line. Ther
 ```text
 Mode: late-child
 CHECKPOINT: decision
-epicId: {epicId}
+epic_id: {epicId}
 decision: accept | edit | reject
 proposal: child: {"name":"...","purpose":"...","summary":"...","keywords":[...]}    # unchanged, or with the user's Summary and Keywords edits
 depends_on: [<the previous last child, from the latest late-child-proposal block>]    # shown to the user; the agent re-reads it at accept
@@ -87,7 +87,7 @@ edits: "<user's free-text edits>"    # only when decision = edit
 Routing per decision:
 
 1. **accept**: re-invoke with `decision: accept` and the proposal unchanged. The agent runs `apply --parent {epicId}` with the one child. On DONE, relay the created child path and child ID, then stop. The skill never calls `register` for a late child. On an error, relay the apply error text as reported and stop. Offer no retry, edit or reject choice, because the partial-apply offer applies to the define path only.
-2. **edit**: re-invoke with `decision: edit`, the `edits` text and the proposal as held. The agent validates the edit and returns a revised LATE_PROPOSAL with `violations` and `foundationWarnings`. Report each violation and each foundation warning, then re-present the revised proposal and ask again. Edits require a new explicit accept. Edit rounds write nothing.
+2. **edit**: re-invoke with `decision: edit`, the `edits` text and the proposal as held. The agent validates the edit and returns a revised LATE_PROPOSAL with `violations` and `foundation_warnings`. Report each violation and each foundation warning, then re-present the revised proposal and ask again. Edits require a new explicit accept. Edit rounds write nothing.
 3. **reject**: re-invoke with `decision: reject`. The agent writes nothing and reports "no child created". Relay that result and stop. There is no standalone fallback: do not offer a standalone feature or any other alternative.
 
 The skill never writes files and never runs `check-definition`, `apply` or `register` itself. The epic and its registry entry are unchanged unless `apply` succeeds on accept, and `register` is not called for a late child in any case.
@@ -106,9 +106,9 @@ This skill never writes files and never runs `check-definition` or `apply` itsel
 
 When the agent returns `ERROR: partial-apply`, the parent `feature.md` is already written and registered as `defined`, and some children may already exist. Hold the block's `feature_id`, `created_children`, `staging_leftover` and `reason` in main-loop context, together with the `record` and `proposal`. Like the grilling record, keep them in memory only.
 
-1. Relay the block: the `created_children` list (or "none"), the `staging_leftover` list (or "none"), and the `reason`. Do not delete any listed child or leftover.
+1. Relay the block: the `created_children` list, the `staging_leftover` list (an empty list means none), the `error_code` and the `reason`. Do not delete any listed child or leftover.
 2. If `staging_leftover` is not "none", state that the `.split-staging-*` leftover blocks later applies until it is resolved. A retry stops without running `apply` while the leftover exists.
-3. Offer the user one choice of `retry`, `edit` or `reject`:
+3. Offer the user one choice of `retry`, `edit` or `reject`. When the block's `options` line is `edit | reject` (a refusal that a retry cannot change), offer only those two and never send `retry`:
    - **retry**: send `decision: retry` with `apply_failed`, the unchanged `record` and `proposal`. The agent skips the parent write and `register`, and runs the leftover check before `apply`.
    - **edit**: send `decision: edit` with `apply_failed` and the user's `edits`. The agent returns a revised CHECKPOINT, which is presented under the proposal view. The next decision is then sent as `retry`, carrying `apply_failed`.
    - **reject**: send `decision: reject` with `apply_failed`. The feature stays a standalone feature, already registered as `defined`. The agent writes nothing. Relay the result and the created children and leftover as reported.
@@ -128,7 +128,7 @@ When a CHECKPOINT arrives, parse its keys `feature_id`, `title`, `feature_dir`, 
 4. **Order**: the order of `proposal.children`; each child's `dependsOn` names the children it waits for.
 5. **Shared parts**: `proposal.foundationNote` and the first child's `assigned` text, owned by `proposal.sharedFoundationOwner`.
 6. **Unevaluated signals**: every name in `check.unevaluated`, each with the statement that this signal could not be evaluated and so did not count toward the split threshold.
-7. **Parent**: `parent_summary` and `parent_keywords` as editable items; they are registered with the parent if the split is accepted. After an edit, also each entry of `violations` and `foundation_warnings`.
+7. **Parent**: `parent_summary` and `parent_keywords` as editable items; they are registered with the parent if the split is accepted. A change the user makes to them goes into `parent_summary` or `parent_keywords` of the next decision block. After an edit, also each entry of `violations` and `foundation_warnings`.
 
 ## Decision round
 

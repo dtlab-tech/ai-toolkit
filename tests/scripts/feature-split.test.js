@@ -2983,14 +2983,21 @@ describe('FTR-036 review fixes: record validation, features root, validate-propo
       }
     });
 
-    test('the documented CHECKPOINT proposal is accepted by validate-proposal and by apply (the contract)', () => {
+    test('the proposal example written in the agent is accepted by validate-proposal and by apply (the contract)', () => {
+      const agentText = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'claude', 'agents', 'gaia-define-feature.md'), 'utf8');
+      const phase3a = agentText.slice(agentText.indexOf('## Phase 3a'), agentText.indexOf('## Phase 4'));
+      const line = phase3a.split('\n').map(l => l.trim()).find(l => l.startsWith('proposal: {"source"'));
+      const example = JSON.parse(line.slice('proposal: '.length));
+      // fill the example the way the agent does: two children, the first one owns the shared foundation
+      const first = { ...example.children[0], name: 'Auth', purpose: 'Sign-in', summary: 'Sign-in.', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' };
+      const second = { ...first, name: 'Billing', purpose: 'Invoices', summary: 'Invoices.', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' };
+      const filled = { ...example, minChildren: 2, foundationNote: 'Shared models', sharedFoundationOwner: 'Auth', children: [first, second] };
       const featuresRoot = path.join(root, 'contract');
       const parent = path.join(featuresRoot, 'FTR-060-big');
       fs.mkdirSync(parent, { recursive: true });
       fs.writeFileSync(path.join(parent, 'feature.md'), '# Big\n\n## Summary\n\nA big feature.\n');
       fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n\n## FTR-060 — Big\n**Keywords:** big\n**Status:** defined\n**Summary:** A big feature.\n→ [Detail](FTR-060-big/feature.md)\n---\n');
-      const block = proposal();
-      const v = validate(block, { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' });
+      const v = validate(filled, { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' });
       expect(v.exitCode).toBe(0);
       expect(v.payload.violations).toEqual([]);
       const applied = apply({ featuresRoot, parentId: 'FTR-060', proposal: v.payload.proposal, runId: 'aabbccdd' });
