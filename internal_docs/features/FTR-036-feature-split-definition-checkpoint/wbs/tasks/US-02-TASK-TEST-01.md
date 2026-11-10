@@ -79,7 +79,13 @@ Two cautions for whoever runs this:
 - The `Phase 4` slice assumes the heading text `Phase 4` exists. US-01-TASK-TEST-01 already asserts it, so a failure there surfaces first.
 - The `edit` anchor is a bare word and is weak on its own. It is kept because the outcome names the partial-failure options. If it passes on prose that is not the recovery offer, tighten it to the sentence BE-05 actually writes.
 
+**Describe title (required).** Name the describe block of this task exactly `agent write mode and recovery text` so that the first verification command can find it. The test file already exists (US-01 tasks created it), so a check on the file alone is satisfied before this task is done.
+
 **Verification commands:**
+
+```
+grep -qF "describe('agent write mode and recovery text'" tests/cli/define-feature-checkpoint-text.test.js
+```
 
 ```
 test -f tests/cli/define-feature-checkpoint-text.test.js
