@@ -2870,22 +2870,27 @@ describe('validate-proposal', () => {
     expect(result.error.code).toBe('INVALID_PROPOSAL');
   });
 
-  test('leaves the features root unchanged after a valid edit', () => {
-    const before = snapshotTree(featuresRoot);
+  // The command ignores --features-root, so comparing a directory snapshot before and after could never fail.
+  // What matters is that it never writes: every fs call that changes the disk is spied on.
+  const WRITERS = ['writeFileSync', 'appendFileSync', 'mkdirSync', 'renameSync', 'rmSync', 'unlinkSync', 'copyFileSync', 'rmdirSync'];
+  const writesDuring = (fn) => {
+    const spies = WRITERS.map(name => jest.spyOn(fs, name).mockImplementation(() => { throw new Error('unexpected write: ' + name); }));
+    try { fn(); } finally { spies.forEach(spy => spy.mockRestore()); }
+    return spies.reduce((total, spy) => total + spy.mock.calls.length, 0);
+  };
+
+  test('writes nothing to disk for a valid edit', () => {
     const payload = { proposal: proposal(), edit: { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' } };
-
-    runMain(JSON.stringify(payload));
-
-    expect(snapshotTree(featuresRoot)).toEqual(before);
+    expect(writesDuring(() => runMain(JSON.stringify(payload)))).toBe(0);
   });
 
-  test('leaves the features root unchanged after a refused edit', () => {
-    const before = snapshotTree(featuresRoot);
+  test('writes nothing to disk for a refused edit', () => {
     const payload = { proposal: proposal(), edit: { type: 'set', name: 'Auth', field: 'dependsOn', value: ['Billing'] } };
+    expect(writesDuring(() => runMain(JSON.stringify(payload)))).toBe(0);
+  });
 
-    runMain(JSON.stringify(payload));
-
-    expect(snapshotTree(featuresRoot)).toEqual(before);
+  test('the write spy really fails when something writes (the check is not vacuous)', () => {
+    expect(() => writesDuring(() => fs.writeFileSync(path.join(root, 'x.txt'), 'x'))).toThrow(/unexpected write/);
   });
 });
 
