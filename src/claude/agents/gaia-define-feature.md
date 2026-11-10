@@ -108,25 +108,19 @@ Ask the user: **"What is the name of this feature?"** (short, descriptive, in th
 
 Example: "Supplier Onboarding" → `FTR-003-supplier-onboarding`
 
-### 1d. Create feature directory and open ledger entry
+### 1d. Resolve the feature directory path (path only — no writes)
 
-Once you know the PREFIX (from 1b) and the feature slug (from 1c), do the following **before asking any grilling questions**:
+Once you know the PREFIX (from 1b) and the feature slug (from 1c), resolve the path **before asking any grilling questions**. Nothing is written to disk in this phase:
 
 1. Compute `featureDir` using the captured `featuresRoot`:
    - `featureDir` = `{featuresRoot}/{PREFIX}-{slug}` (e.g. `{featuresRoot}/FTR-003-supplier-onboarding`)
-   - This path is also the `--dir` value for every `ai-toolkit ledger` call that follows.
+   - This path is the `--dir` value for every `ai-toolkit ledger` call made in mode write.
 
-2. Create the feature directory via Bash:
-   ```bash
-   mkdir -p "{featureDir}"
-   ```
+2. Do **not** create the feature directory in this phase.
 
-3. Open the ledger entry via the facade. Run the following command via Bash (quote the `--dir` path to handle spaces):
-   ```bash
-   ai-toolkit ledger open --dir "{featureDir}" --prefix {PREFIX} --agent define-feature:define --phase define --model sonnet --attempt 1
-   ```
+3. Do **not** open the ledger entry in this phase. The grilling record is held in memory only: no file is written during grilling, and nothing is created before the user confirms.
 
-The ledger now records that the define-feature agent is running. Proceed to Phase 2.
+The folder creation and the ledger open are performed in mode write only, after the user decision (see "Mode write" in Phase 4). Proceed to Phase 2.
 
 ---
 
@@ -248,6 +242,22 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
 Synthesize all answers into a structured `feature.md` file.
 
+### Mode write (runs only after the user decision)
+
+Mode write is the only point where anything is created on disk. It runs only after the user has confirmed the definition. Before the user confirms, nothing is created: no feature folder, no ledger entry, no `feature.md`.
+
+1. Create the feature directory (no `-p`, so an existing folder fails instead of being silently reused):
+   ```bash
+   mkdir "{featureDir}"
+   ```
+
+2. Open the ledger entry via the facade. Run the following command via Bash (quote the `--dir` path to handle spaces):
+   ```bash
+   ai-toolkit ledger open --dir "{featureDir}" --prefix {PREFIX} --agent define-feature:define --phase define --model sonnet --attempt 1
+   ```
+
+3. Continue with the writes below (`feature.md`, then the ledger close in 4b).
+
 ### Output path
 
 ```
@@ -256,7 +266,7 @@ Synthesize all answers into a structured `feature.md` file.
 
 Example: `{featuresRoot}/FTR-003-supplier-onboarding/feature.md`
 
-The directory was created in Phase 1d using `featuresRoot`. If for any reason it doesn't exist, create it now using the same `featuresRoot` path — do not substitute a different root.
+The directory is created in mode write (see above) using the same `featuresRoot` path — do not substitute a different root.
 
 ### feature.md template
 
