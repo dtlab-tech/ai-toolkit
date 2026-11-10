@@ -26,11 +26,14 @@ If a source reference is given, your job is to **ingest it, pre-fill the feature
 ### Input modes
 
 - **Checkpoint re-invocation**: the skill passes
-  `checkpoint: { decision: "accept" | "edit" | "reject", proposal: {...}, record: {...} }`.
+  `checkpoint: { decision: "accept" | "edit" | "reject" | "retry", proposal: {...}, record: {...} }`.
   The agent does not re-run grilling or `check-definition`.
-  - decision `reject`: discard the proposal and any user edits to it, then go to
-    "Phase 4 — standalone branch". Do not validate the proposal and do not write
-    any split file.
+  - decision `reject`: discard the proposal and any user edits to it. If the checkpoint carries no
+    `apply_failed`, go to "Phase 4 — standalone branch". Do not validate the proposal and do not write
+    any split file. If it carries `apply_failed`, go to "Phase 4 — split branch (reject after a failed apply)".
+  - decision `retry`: explicit state, never `accept`. The skill sends it for the user's retry choice, and for an
+    accept that follows an edit made after a failed apply. It carries `apply_failed: { created_children, staging_leftover }`
+    from the last ERROR block. Go to "Phase 4 — split branch (retry)".
 
 ---
 
@@ -335,7 +338,7 @@ Used only on a checkpoint re-invocation (see "Input modes").
 5. Parse the single JSON line per call: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`).
 6. Report every violation and every foundation warning to the user. Violations cover: names empty or duplicated; `dependsOn` naming an unlisted child or forming a cycle; a shared part not assigned to exactly one child. A refused edit is shown as a violation, not as a failure.
 7. Return a new `CHECKPOINT: split-proposal` block (same format as Phase 3a) with the revised proposal, the same `record`, the `violations` and the `foundationWarnings`. Keep the `feature_id`.
-8. STOP. Write no file, create no folder, open no ledger entry, call no `register` and no `apply`. Nothing changes until the user sends a new explicit accept. A new accept runs the Phase 4 split branch on the revised proposal.
+8. STOP. Write no file, create no folder, open no ledger entry, call no `register` and no `apply`. Nothing changes until the user sends a new explicit accept. A new accept runs the Phase 4 split branch on the revised proposal. If the edit input carries `apply_failed` (the edit follows a failed apply), that new accept is sent as `decision: retry` and runs "Phase 4 — split branch (retry)" instead.
 
 ```text
 reject  -> discard the proposal and all edits (they are not used anywhere);
@@ -400,10 +403,47 @@ Entered only when the re-invocation carries decision = accept. Record and propos
 
 6. **Outcome:**
    - Success -> close the ledger entry (4b), then Phase 5 with the created children listed.
-   - Failure -> return an ERROR block listing the children already created (parsed from apply output) and any `.split-staging-*` leftover. Offer:
-     - retry (back to step 2),
-     - edit (back to the proposal),
-     - reject (the parent continues as a standalone feature, already registered; created children are reported and not deleted by this agent).
+   - Failure (apply exits non-zero):
+     a. Parse from apply output: the child folders already created (paths or ids as printed by apply).
+        If the output does not list them, run a read-only listing of `{featuresRoot}` for child folders
+        of `{PREFIX}` and report that listing; do not guess.
+     b. Check for a leftover: any `.split-staging-*` entry under `{featuresRoot}`.
+     c. Return exactly this block and STOP (end the turn, write nothing further). The block is the only
+        output on failure: no free text beyond the `reason` line.
+
+        ```text
+        ERROR: partial-apply
+        feature_id: {PREFIX}
+        parent: {PREFIX} (feature.md written, registered as status defined)
+        created_children: [<paths or ids from step a>, or "none"]
+        staging_leftover: [<.split-staging-* entries from step b>, or "none"]
+        reason: <apply error text, first line>
+        options: retry | edit | reject
+        ```
+
+     d. Options, as handled when the skill re-invokes the agent:
+        - `retry` -> "Phase 4 — split branch (retry)".
+        - `edit` -> return to the proposal: validate per BE-04 and return a new CHECKPOINT. The accept that
+          follows is sent as `decision: retry`, not `accept` (see "Phase 4 — split branch (retry)").
+        - `reject` -> "Phase 4 — split branch (reject after a failed apply)".
+
+Rules for every path after a failed apply:
+- The no-overwrite guard (BR-04) applies to a first accept only. `retry`, an accept after an edit that follows a
+  failed apply, and `reject` after a failed apply never rewrite the parent and never call `register` again.
+- Later applies are blocked while any `.split-staging-*` entry exists. The retry path goes through the leftover check, never around it.
+- Nothing is rolled back by this agent. Created children and any leftover are reported, not deleted.
+
+#### Phase 4 — split branch (retry)
+
+Entered on `decision: retry`. The parent feature.md and its registry entry already exist from the first attempt.
+
+1. Skip the BR-04 existence guard, split branch step 3 (parent write) and step 4 (`register`). Do not run them on this path.
+2. Run the leftover check (split branch step 2). If a `.split-staging-*` entry still exists: STOP, report it, and run no apply.
+3. Otherwise run split branch step 5 with the proposal from the checkpoint (the revised proposal when the retry follows an edit), then step 6 for the outcome. On success, close the ledger entry that the first attempt opened (4b); do not open it again.
+
+#### Phase 4 — split branch (reject after a failed apply)
+
+Entered on `decision: reject` with `apply_failed`. The parent stays a standalone feature, already written and registered as `defined`. The standalone branch is not re-entered, so nothing is written or registered a second time. Do not delete any child folder or `.split-staging-*` entry. Write nothing. Report that {PREFIX} continues as a standalone feature, list `created_children` and `staging_leftover` as they were given, and end the turn.
 
 ### Mode write (runs only after the user decision)
 
