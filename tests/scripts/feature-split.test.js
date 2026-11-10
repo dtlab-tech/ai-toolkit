@@ -2888,3 +2888,134 @@ describe('validate-proposal', () => {
     expect(snapshotTree(featuresRoot)).toEqual(before);
   });
 });
+
+describe('FTR-036 review fixes: record validation, features root, validate-proposal envelope', () => {
+  const mainWith = (argv, payload) => LIB.main(argv, () => (typeof payload === 'string' ? payload : JSON.stringify(payload)));
+  const check = (record, rootArg) => {
+    fs.mkdirSync(path.join(root, 'features'), { recursive: true });
+    return mainWith(['check-definition', '--features-root', rootArg ?? path.join(root, 'features'), '--feature-id', 'FTR-050'], record);
+  };
+
+  describe('check-definition', () => {
+    test('a signal that is null or missing is unevaluated; the call succeeds', () => {
+      const r = check({ actors: null, flows: [] });
+      expect(r.exitCode).toBe(0);
+      expect(r.payload.unevaluated).toEqual(['actors', 'applications']);
+    });
+
+    test('a non-null value that is not an array is RECORD_INVALID (Gate 1 decision 3)', () => {
+      for (const record of [{ actors: 'two' }, { applications: 5 }, { flows: { a: 1 } }, { actors: true }]) {
+        const r = check(record);
+        expect(r.exitCode).toBe(1);
+        expect(r.payload.error.code).toBe('RECORD_INVALID');
+      }
+    });
+
+    test('a blank or non-string name is RECORD_INVALID, so [null, null] cannot raise the flag', () => {
+      for (const record of [{ actors: [null, null] }, { actors: ['a', ''] }, { applications: ['  '] }, { actors: [1, 2] }]) {
+        expect(check(record).payload.error.code).toBe('RECORD_INVALID');
+      }
+    });
+
+    test('a flow must be { name, reason } with a non-empty name', () => {
+      for (const flows of [[1, null, 'x'], [{ name: '', reason: 'r' }], [{ name: 'a' }], [{ name: 'a', reason: 3 }], [['a', 'b']]]) {
+        expect(check({ flows }).payload.error.code).toBe('RECORD_INVALID');
+      }
+      expect(check({ flows: [{ name: 'Sign up', reason: 'new user' }] }).exitCode).toBe(0);
+    });
+
+    test('a features root that does not exist is FEATURES_ROOT_INVALID', () => {
+      const r = check({ actors: [] }, path.join(root, 'nonexist'));
+      expect(r.exitCode).toBe(1);
+      expect(r.payload.error.code).toBe('FEATURES_ROOT_INVALID');
+    });
+
+    test('the result carries the configured minChildren, which the proposal needs', () => {
+      expect(check({ actors: ['a', 'b'] }).payload.minChildren).toBe(2);
+    });
+  });
+
+  describe('validate-proposal', () => {
+    const proposal = (extra = {}) => ({
+      source: 'definition', minChildren: 2, foundationNote: 'Shared models', sharedFoundationOwner: 'Auth',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in', summary: 'Sign-in.', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+        { name: 'Billing', purpose: 'Invoices', summary: 'Invoices.', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+      ],
+      ...extra,
+    });
+    const validate = (p, edit, mode) => mainWith(['validate-proposal'], { proposal: p, edit, ...(mode ? { mode } : {}) });
+
+    test('children without dependsOn are normalised, so an edit works instead of throwing', () => {
+      const bare = proposal();
+      bare.children.forEach(c => delete c.dependsOn);
+      const r = validate(bare, { type: 'rename', from: 'Auth', to: 'Identity' });
+      expect(r.exitCode).toBe(0);
+      expect(r.payload.violations).toEqual([]);
+      expect(r.payload.proposal.children.map(c => c.name)).toEqual(['Identity', 'Billing']);
+    });
+
+    test('a refused edit on a proposal without dependsOn is a violation, not a crash', () => {
+      const bare = proposal();
+      bare.children.forEach(c => delete c.dependsOn);
+      const r = validate(bare, { type: 'rename', from: 'Nobody', to: 'X' });
+      expect(r.exitCode).toBe(0);
+      expect(r.payload.violations[0].code).toBe('CHILD_NOT_FOUND');
+      expect(r.payload.violations[0].key).toBe('Nobody');
+    });
+
+    test('a violation without a key reports key null', () => {
+      const r = validate(proposal(), { type: 'bogus' });
+      expect(r.payload.violations[0]).toEqual(expect.objectContaining({ code: 'EDIT_UNKNOWN', key: null }));
+    });
+
+    test('an edit that apply would refuse is refused here too (keywords with a comma or a line break)', () => {
+      const r = validate(proposal(), { type: 'set', name: 'Auth', field: 'keywords', value: ['a,b', 'x\ny'] });
+      expect(r.payload.violations[0].code).toBe('INVALID_PROPOSAL');
+      expect(r.payload.proposal.children[0].keywords).toEqual(['auth']);
+    });
+
+    test('an edit that is missing or not an object is INVALID_PROPOSAL', () => {
+      for (const edit of [undefined, null, 'rename', [1]]) {
+        const r = mainWith(['validate-proposal'], { proposal: proposal(), edit });
+        expect(r.exitCode).toBe(1);
+        expect(r.payload.error.code).toBe('INVALID_PROPOSAL');
+      }
+    });
+
+    test('the documented CHECKPOINT proposal is accepted by validate-proposal and by apply (the contract)', () => {
+      const featuresRoot = path.join(root, 'contract');
+      const parent = path.join(featuresRoot, 'FTR-060-big');
+      fs.mkdirSync(parent, { recursive: true });
+      fs.writeFileSync(path.join(parent, 'feature.md'), '# Big\n\n## Summary\n\nA big feature.\n');
+      fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n\n## FTR-060 — Big\n**Keywords:** big\n**Status:** defined\n**Summary:** A big feature.\n→ [Detail](FTR-060-big/feature.md)\n---\n');
+      const block = proposal();
+      const v = validate(block, { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' });
+      expect(v.exitCode).toBe(0);
+      expect(v.payload.violations).toEqual([]);
+      const applied = apply({ featuresRoot, parentId: 'FTR-060', proposal: v.payload.proposal, runId: 'aabbccdd' });
+      expect(applied.children).toHaveLength(2);
+    });
+
+    test('initial mode still warns when there is no shared-foundation owner', () => {
+      const r = validate(proposal({ sharedFoundationOwner: null }), { type: 'set', name: 'Auth', field: 'purpose', value: 'x' });
+      expect(r.payload.foundationWarnings.map(w => w.code)).toContain('FOUNDATION_NOT_FIRST');
+    });
+
+    test('late mode: no BR-03 warning, and a second child is refused as LATE_CHILD_COUNT', () => {
+      const late = { source: 'definition', minChildren: 0, foundationNote: '', sharedFoundationOwner: null,
+        children: [{ name: 'Reports', purpose: 'Reports', summary: 'Reports.', keywords: ['r'], dependsOn: [] }] };
+      const ok = validate(late, { type: 'set', name: 'Reports', field: 'summary', value: 'Monthly reports.' }, 'late');
+      expect(ok.payload.violations).toEqual([]);
+      expect(ok.payload.foundationWarnings).toEqual([]);
+      const two = validate(late, { type: 'add', child: { name: 'Extra', purpose: 'e', keywords: [] } }, 'late');
+      expect(two.payload.violations[0].code).toBe('LATE_CHILD_COUNT');
+      expect(two.payload.proposal.children).toHaveLength(1);
+    });
+
+    test('mode must be initial or late', () => {
+      const r = mainWith(['validate-proposal'], { proposal: proposal(), edit: { type: 'reorder', names: ['Auth', 'Billing'] }, mode: 'later' });
+      expect(r.payload.error.code).toBe('INVALID_PROPOSAL');
+    });
+  });
+});

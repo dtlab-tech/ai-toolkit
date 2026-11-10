@@ -1169,7 +1169,8 @@ function parseGrillingRecord(text) {
 
 // Pure: no I/O. definitionSignals is config.definitionSignals as returned by loadConfig.
 // Returns { status: 'flagged' | 'not-flagged', signals, flows, unevaluated }.
-// A signal whose field is missing, null or not an array is unevaluated. It never raises the flag.
+// A signal whose field is missing or null is unevaluated and never raises the flag. Any other non-array value, a blank
+// name, or a flow that is not { name, reason } is RECORD_INVALID (Gate 1 decision 3).
 // A signal raises the flag when meetsMinimum(count, minimum) holds for at least one signal (D-05, at least N).
 function evaluateDefinition(record, definitionSignals) {
   const signals = {};
@@ -1177,11 +1178,22 @@ function evaluateDefinition(record, definitionSignals) {
   for (const { key, minKey } of GRILLING_SIGNALS) {
     const minimum = definitionSignals[minKey];
     const value = record[key];
-    if (!Array.isArray(value)) {
+    if (value === undefined || value === null) {          // not elicited, or explicitly unevaluated (Gate 1 decision 3)
       unevaluated.push(key);
       signals[key] = { count: null, minimum, met: false };
       continue;
     }
+    if (!Array.isArray(value))
+      fail('RECORD_INVALID', `"${key}" must be an array or null; got ${typeof value}`, { key });
+    value.forEach((item, i) => {
+      if (key === 'flows') {
+        if (item === null || typeof item !== 'object' || Array.isArray(item)
+          || typeof item.name !== 'string' || item.name.trim() === '' || typeof item.reason !== 'string')
+          fail('RECORD_INVALID', `flows[${i}] must be { "name": non-empty string, "reason": string }`, { key });
+      } else if (typeof item !== 'string' || item.trim() === '') {
+        fail('RECORD_INVALID', `${key}[${i}] must be a non-empty string`, { key });
+      }
+    });
     signals[key] = { count: value.length, minimum, met: meetsMinimum(value.length, minimum) };
   }
   const flows = Array.isArray(record.flows) ? record.flows : [];
@@ -1193,12 +1205,16 @@ function evaluateDefinition(record, definitionSignals) {
 function checkDefinition({ featuresRoot, featureId, readRecord, projectRoot = process.cwd() }) {
   if (!/^FTR-\d+$/.test(featureId ?? ''))
     fail('FEATURE_INVALID', `${featureId} is not an FTR-NNN id`, { key: featureId ?? null });
+  let rootStat = null;
+  try { rootStat = fs.statSync(featuresRoot); } catch (_) { /* reported below */ }
+  if (!rootStat || !rootStat.isDirectory())
+    fail('FEATURES_ROOT_INVALID', `${featuresRoot} is not an existing directory`, { file: featuresRoot });
   const featureDir = findParentDir(featuresRoot, featureId);
   if (!isNewFeature(featureDir).isNew)
     return { status: 'skipped', signals: {}, flows: [], unevaluated: [] };
-  const { definitionSignals } = loadConfig({ projectRoot });
+  const { definitionSignals, minChildren } = loadConfig({ projectRoot });
   const record = parseGrillingRecord(readRecord());
-  return evaluateDefinition(record, definitionSignals);
+  return { ...evaluateDefinition(record, definitionSignals), minChildren };
 }
 
 function runCheckDefinition(args, readStdin) {
@@ -1212,26 +1228,41 @@ function runCheckDefinition(args, readStdin) {
 }
 
 // Read-only. A refused edit is a normal answer (exit 0) with the original proposal and a violation.
+// Payload: { proposal, edit, mode? }. mode 'late' checks the revised proposal as apply checks a late child: exactly one
+// child, no minChildren, owner or foundation note, and no BR-03 warning (a late child has no shared foundation).
 function runValidateProposal(_args, readStdin) {
+  const text = readStdin();
   let payload;
   try {
-    payload = JSON.parse(readStdin());
+    payload = JSON.parse(text);
   } catch {
     fail('INVALID_PROPOSAL', 'The payload on stdin is not valid JSON');
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !payload.proposal)
     fail('INVALID_PROPOSAL', 'The payload must be an object with "proposal" and "edit"');
-  const { proposal, edit } = payload;
-  assertProposalShape(proposal);
+  if (payload.edit === null || typeof payload.edit !== 'object' || Array.isArray(payload.edit))
+    fail('INVALID_PROPOSAL', 'The payload "edit" must be an object with a type');
+  if (payload.mode !== undefined && payload.mode !== 'initial' && payload.mode !== 'late')
+    fail('INVALID_PROPOSAL', 'The payload "mode" must be "initial" or "late"');
+  const late = payload.mode === 'late';
+  assertProposalShape(payload.proposal, { late });
+  const proposal = { ...payload.proposal, children: payload.proposal.children.map(normaliseChild) };
+  const warningsOf = (p) => {
+    if (late) return [];
+    try { return foundationWarnings(p, dependencyOrder(p.children)); } catch (_) { return []; }
+  };
   try {
-    const { proposal: revised, warnings } = editProposal(proposal, edit);
-    return { proposal: revised, violations: [], foundationWarnings: warnings };
+    const { proposal: revised, warnings } = editProposal(proposal, payload.edit);
+    assertProposalShape(revised, { late });
+    if (late && revised.children.length !== LATE_CHILD_COUNT)
+      fail('LATE_CHILD_COUNT', `A late proposal takes exactly ${LATE_CHILD_COUNT} child; the edit leaves ${revised.children.length}`);
+    return { proposal: revised, violations: [], foundationWarnings: late ? [] : warnings };
   } catch (err) {
     if (!(err instanceof FeatureSplitError)) throw err;
     return {
       proposal,
-      violations: [{ code: err.code, key: err.key, message: err.message }],
-      foundationWarnings: foundationWarnings(proposal, dependencyOrder(proposal.children)),
+      violations: [{ code: err.code, key: err.key ?? null, message: err.message }],
+      foundationWarnings: warningsOf(proposal),
     };
   }
 }
