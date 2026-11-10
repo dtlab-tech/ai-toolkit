@@ -524,3 +524,38 @@ describe('block contract between the agent and the skill', () => {
     expect(skill).toMatch(/depends_on: \[<the previous last child/);
   });
 });
+
+describe('refinements pinned to the step they belong to', () => {
+  const late = agent.slice(agent.indexOf('### L4.') > 0 ? agent.indexOf('**L4.') : 0, agent.indexOf('### L7. Decision'));
+  const l4 = late.slice(late.indexOf('**L4.'), late.indexOf('**L5.'));
+  const l6 = late.slice(late.indexOf('**L6.'));
+
+  test('L4 spells out the slug rule and matches the Dir column of table rows only', () => {
+    expect(l4).toMatch(/every run of characters outside `a-z` and `0-9` becomes one hyphen/);
+    expect(l4).toMatch(/\^\\\|\.\*\\\| FTR-\[0-9\]\+-\{slug\} \\\|/);
+    expect(l4).toMatch(/table rows only, never the prose/);
+    expect(l4).not.toMatch(/grep -n -i/);
+  });
+
+  test('L6 names the cell that gives the previous last child and stops when the table has no child row', () => {
+    expect(l6).toMatch(/\*\*Name\*\* cell \(third column\)/);
+    expect(l6).toMatch(/no child row, STOP/);
+  });
+
+  test('the skill states the accept order: parent write, register defined, then apply --parent', () => {
+    expect(skill).toMatch(/writes the parent `feature\.md`, registers it with status `defined`, then runs `apply --parent`, in that order/);
+  });
+
+  test('reject after a failed apply closes the ledger and emits the checkpoint-2 sentence', () => {
+    const reject = agent.slice(agent.indexOf('#### Phase 4 — split branch (reject after a failed apply)'), agent.indexOf('### Mode write'));
+    expect(reject).toMatch(/Close the ledger entry that the first attempt opened \(4b\)/);
+    expect(reject).toMatch(/Checkpoint 2 remains available for this feature\./);
+  });
+
+  test('every script call goes through "ai-toolkit run-asset" and no heredoc ends on a plain JSON line', () => {
+    const bare = agent.split('\n').filter(l => /run-asset scripts\//.test(l) && !/ai-toolkit run-asset scripts\//.test(l));
+    expect(bare).toEqual([]);
+    expect(agent).not.toMatch(/<<'JSON'/);
+    expect(agent).toMatch(/<<'FEATURE_SPLIT_JSON'/);
+  });
+});

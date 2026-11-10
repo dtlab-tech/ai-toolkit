@@ -161,7 +161,7 @@ apply_failed: <held from the last ERROR: partial-apply block>    # only after a 
 
 Routing per decision:
 
-- **accept**: re-invoke with `decision: accept` and the proposal unchanged. Relay the DONE result. An ERROR is handled as under "Handling the agent's return". If `apply_failed` is held, send `decision: retry` instead, as under "Partial apply failure".
+- **accept**: re-invoke with `decision: accept` and the proposal unchanged. The agent writes the parent `feature.md`, registers it with status `defined`, then runs `apply --parent`, in that order, and returns DONE. Relay the DONE result. An ERROR is handled as under "Handling the agent's return". If `apply_failed` is held, send `decision: retry` instead, as under "Partial apply failure".
 - **retry**: only after a partial apply failure. Re-invoke with `decision: retry`, `apply_failed` and the unchanged proposal. Relay the DONE result. A new ERROR: partial-apply is handled under "Partial apply failure".
 - **reject**: re-invoke with `decision: reject`, including `apply_failed` when it is held. Relay the DONE result and state that the feature continues as one standalone feature. Relay the sentence "Checkpoint 2 remains available for this feature." unchanged when the result contains it.
 - **edit**: re-invoke with `decision: edit`, the `edits` text, and the proposal unchanged. The agent returns a revised CHECKPOINT block with `violations` and `foundation_warnings`. Report each violation. Show the foundation warning from the returned block for each entry in `foundation_warnings`. Then re-present the revised proposal with the proposal view and return to this decision round. The next decision carries the revised `proposal`. Repeat until the user chooses accept or reject. Edit rounds write nothing.

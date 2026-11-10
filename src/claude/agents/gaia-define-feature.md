@@ -129,12 +129,12 @@ Read `{featuresRoot}/REGISTRY.md`, find the entry whose heading starts with `## 
 
 **L4. Duplicate check (BR-04)**
 
-The child's slug is derived from `childTitle` with the same rule `feature-split.js` uses for child folders (`slug()`), so the child folder is `{ID}-{slug}` under `{featuresRoot}`. Before anything else, check both possible occurrences:
+The child's slug is derived from `childTitle` with the rule of `slug()` in `feature-split.js`: lowercase, every run of characters outside `a-z` and `0-9` becomes one hyphen, hyphens at both ends are dropped. The child folder is `{ID}-{slug}` under `{featuresRoot}`. Before anything else, check both possible occurrences:
 ```bash
 test -d "{featuresRoot}" && ls -d "{featuresRoot}"/FTR-[0-9]*-"{slug}" 2>/dev/null
-test -f "{epicFolder}/epic.md" && grep -n -i -- "{slug}" "{epicFolder}/epic.md"
+test -f "{epicFolder}/epic.md" && grep -n -E -- "^\|.*\| FTR-[0-9]+-{slug} \|" "{epicFolder}/epic.md"
 ```
-- If any folder `{featuresRoot}/FTR-*-{slug}` exists, or `{epicFolder}/epic.md` already has a child row for `{slug}`: report the existing path, say the child already exists, and STOP. Do not overwrite, do not run `apply`, write nothing.
+- If any folder `{featuresRoot}/FTR-*-{slug}` exists, or a row of the split table of `{epicFolder}/epic.md` has `FTR-{n}-{slug}` in its **Dir** column (the grep matches table rows only, never the prose of the epic): report the existing path, say the child already exists, and STOP. Do not overwrite, do not run `apply`, write nothing.
 - Otherwise continue to L5. The check runs before any proposal is built.
 
 **L5. Derive Summary and Keywords (AC-19, late-path refinement of D-07)**
@@ -149,7 +149,7 @@ The late path has no grilling round, so grilling answers are not an input. Draft
 Show the proposal as readable text, mirroring the Phase 3a flagged proposal, for one child:
 - child name and one-line purpose
 - `summary` and `keywords`, marked as editable items
-- placed last, depending on the epic's current last child (the last row of `{epicFolder}/epic.md`). No other `dependsOn` is supplied.
+- placed last, depending on the epic's current last child: the **Name** cell (third column) of the last child row of the split table in `{epicFolder}/epic.md`. `apply` accepts exactly that name in `dependsOn`. If the table has no child row, STOP and report that the epic has no child to follow; create nothing. No other `dependsOn` is supplied.
 - a request for an explicit accept, edit, or reject
 
 Then end the turn with this block as the final output and enter no further step:
@@ -173,9 +173,9 @@ Entered only on a late-child re-invocation that carries `decision`, `epicId`, an
 2. Leftover check: any `.split-staging-*` entry directly under `{featuresRoot}` -> STOP, report the leftover path, run no apply (Tech-Spec §12).
 3. Build the one-child payload in memory: `{ "children": [ { "name", "purpose", "summary", "keywords", "dependsOn": ["{previous last child name}"] } ] }`. The child is placed last. Pipe it on stdin; never write it to a file:
    ```bash
-   cat <<'JSON' | run-asset scripts/feature-split.js --project "<projectRoot>" -- apply --features-root "$featuresRoot" --parent "{epicId}"
+   cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- apply --features-root "$featuresRoot" --parent "{epicId}"
    { "children": [ { "name": "...", "purpose": "...", "summary": "...", "keywords": ["..."], "dependsOn": ["..."] } ] }
-   JSON
+   FEATURE_SPLIT_JSON
    ```
 4. If exit != 0: report apply's error text verbatim. STOP. Do not call `register`.
 5. If exit = 0: parse the single JSON line. `children[0].id` is the child ID and `children[0].dir` is its folder name under `{featuresRoot}`. Report the created child path (`{featuresRoot}/{dir}`) and the child ID to the user, then finish with DONE.
@@ -185,9 +185,9 @@ Entered only on a late-child re-invocation that carries `decision`, `epicId`, an
 
 1. Validate the edit with `validate-proposal`. Write nothing:
    ```bash
-   cat <<'JSON' | run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
+   cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
    { "mode": "late", "proposal": { "source": "definition", "minChildren": 0, "foundationNote": "", "sharedFoundationOwner": null, "children": [ <the child, dependsOn []> ] }, "edit": <one op JSON> }
-   JSON
+   FEATURE_SPLIT_JSON
    ```
    `dependsOn` stays `[]` in this envelope. The previous last child is an `epic.md` row, not a proposal child, so the validator would reject it.
    In late mode the only ops are `rename` and `set` of `purpose`, `summary` or `keywords`. A request to move the child or change its dependency is not an op: say that a late child is always placed last, after the epic's last child.
@@ -431,10 +431,10 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
 3. **Pipe the record on stdin** to the read-only `check-definition` command, through `run-asset`. `<projectRoot>` is the project root (the agent's working directory):
    ```bash
-   cat <<'JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- \
+   cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- \
        check-definition --features-root "$featuresRoot" --feature-id "$PREFIX"
    <record as JSON>
-   JSON
+   FEATURE_SPLIT_JSON
    ```
 
 4. If the exit code is non-zero (the script prints the error JSON, with its `code`, on stdout, for example `RECORD_INVALID` or `FEATURES_ROOT_INVALID`): STOP. Write nothing. Return `ERROR: <code>` with `nothing_written: true`. Do not continue to Phase 4.
@@ -507,9 +507,9 @@ Used only on a checkpoint re-invocation (see "Input modes").
 2. Translate each user edit into one structured op: `rename` `{ from, to }`; `set` `{ name, field, value }` (field: `purpose`, `summary`, `keywords`, `assigned`, `dependsOn`); `reorder` `{ names }`; `owner` `{ name }`; `add` `{ child }`; `remove` `{ name }`; `merge` `{ names, into }`. An edit that fits none of these is not applied; report it to the user.
 3. Send one op per call, chaining the returned `proposal` into the next call. A refused op leaves the proposal unchanged, so continue with the remaining ops from that point:
    ```bash
-   cat <<'JSON' | run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
+   cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
    { "proposal": <current proposal JSON>, "edit": <one op JSON> }
-   JSON
+   FEATURE_SPLIT_JSON
    ```
 4. If exit != 0: STOP. Report the error. Write nothing.
 5. Parse the single JSON line per call: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`).
@@ -545,7 +545,7 @@ Reached from `not-flagged` (Phase 3a) and from checkpoint decision `reject`. `sk
 
 6. **Register** the feature (standalone, status `defined`):
    ```bash
-   run-asset scripts/feature-split.js --project "<projectRoot>" -- register --features-root "$featuresRoot" "{featureDir}" --keywords "<k1,k2,...>"
+   ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- register --features-root "$featuresRoot" "{featureDir}" --keywords "<k1,k2,...>"
    ```
    The keywords value is comma-separated with no spaces around the commas. On non-zero exit: report the error and STOP. Do not delete the written `feature.md` and do not invent cleanup.
 
@@ -572,10 +572,10 @@ Entered only when the re-invocation carries decision = accept. Record and propos
 
 5. **Apply the accepted proposal, passed on stdin:**
    ```bash
-   cat <<'JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- \
+   cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- \
        apply --parent "$PREFIX" --features-root "$featuresRoot"
    <the `proposal` value of the decision block, unchanged>
-   JSON
+   FEATURE_SPLIT_JSON
    ```
 
 6. **Outcome:**
@@ -609,6 +609,7 @@ Rules for every path after a failed apply:
   failed apply, and `reject` after a failed apply never rewrite the parent and never call `register` again.
 - Later applies are blocked while any `.split-staging-*` entry exists. The retry path goes through the leftover check, never around it.
 - Nothing is rolled back by this agent. Created children and any leftover are reported, not deleted.
+- The ledger entry opened by the first attempt stays open while the user decides (retry and edit reuse it); the final success (4b) or the final reject closes it.
 
 #### Phase 4 — split branch (retry)
 
@@ -620,7 +621,7 @@ Entered on `decision: retry`. The parent feature.md and its registry entry alrea
 
 #### Phase 4 — split branch (reject after a failed apply)
 
-Entered on `decision: reject` with `apply_failed`. The parent stays a standalone feature, already written and registered as `defined`. The standalone branch is not re-entered, so nothing is written or registered a second time. Do not delete any child folder or `.split-staging-*` entry. Write nothing. Report that {PREFIX} continues as a standalone feature, list `created_children` and `staging_leftover` as they were given, and end the turn.
+Entered on `decision: reject` with `apply_failed`. The parent stays a standalone feature, already written and registered as `defined`. The standalone branch is not re-entered, so nothing is written or registered a second time. Do not delete any child folder or `.split-staging-*` entry. Write no file. Close the ledger entry that the first attempt opened (4b). Report that {PREFIX} continues as a standalone feature, list `created_children` and `staging_leftover` as they were given, include this sentence verbatim: "Checkpoint 2 remains available for this feature." and end the turn with `DONE`.
 
 ### Mode write (runs only after the user decision)
 
