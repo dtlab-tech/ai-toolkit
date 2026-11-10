@@ -15,6 +15,44 @@ prompt: |
 
 The agent runs Phase 0 (context ingestion) first — it reads AGENTS.md, the source reference, existing feature docs, and the relevant code, then pre-fills a draft and grills ONLY on the genuine gaps. Do not add instructions telling it to skip discovery.
 
+## Late-child route (`--epic`)
+
+Route a request to late-child mode when it names an existing epic with `--epic <FTR-ID>`:
+
+```text
+route(user_request):
+  if request contains --epic <FTR-ID>:
+      mode = "late-child"          # epic ID named by the user
+  elif request is ambiguous between a new feature and a late child:
+      ask user: "new feature, or add a missing child to an existing epic?"   # no spawn yet
+  else:
+      mode = "define"
+```
+
+In late-child mode there is no grilling round. Before any spawn, ask the user two questions in the main loop, one at a time:
+
+1. the child title (a short name for the new child), stored as `childTitle`
+2. the child purpose (one line), stored as `childPurpose`
+
+Do not ask grilling questions on this path. Then spawn the agent with this prompt. The `Mode:` line is the first line:
+
+```text
+Mode: late-child
+epicId: {{FTR-ID from --epic}}
+childTitle: {{childTitle}}
+childPurpose: {{childPurpose}}
+Start the feature definition session.
+Source reference (may be empty): {{user arguments verbatim}}
+```
+
+The agent resolves the features root with `ai-toolkit resolve-features-root` and performs the epic lookup. No path is hard-coded in this skill. Relay the agent's report on each refusal:
+
+- A missing epic (no folder under the features root named by the ID, or by the ID and a hyphen, that contains `epic.md`) creates nothing.
+- An epic whose registry status is not `epic` is refused and creates nothing. There is no standalone fallback.
+- If the child's `feature.md` already exists, the agent reports it and stops. Nothing is overwritten.
+
+This skill never writes files and never runs `check-definition`, `apply`, or `register` itself.
+
 ## Handling the agent's return
 
 This skill never writes files and never runs `check-definition` or `apply` itself. The agent resolves the features root with `ai-toolkit resolve-features-root` and performs every write.
