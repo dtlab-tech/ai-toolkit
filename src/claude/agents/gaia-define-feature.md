@@ -308,6 +308,34 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
 Synthesize all answers into a structured `feature.md` file.
 
+#### Phase 4 — standalone branch
+
+Reached from `not-flagged` (Phase 3a) and from `reject` (checkpoint re-invocation). `skipped` stops in Phase 3a and never reaches this branch. Run the steps in order.
+
+1. **BR-04 guard (first, before anything else):**
+   ```bash
+   test -e "{featureDir}/feature.md"
+   ```
+   If the command succeeds: STOP. Report: "{featureDir}/feature.md already exists; refusing to overwrite (BR-04)." Write nothing. Do not open the ledger. Do not call `register`.
+
+2. **Derive** (in memory only):
+   - `Summary` = one paragraph drafted from the problem and objective. Its first sentence is the value shown to the user.
+   - `Keywords` = comma-separated terms drawn from the feature title and main terms. At least one keyword is required.
+
+3. **Confirm** with `AskUserQuestion`: show the Summary first sentence and the Keywords. The user confirms or edits either value; edited values replace the derived ones. Nothing is created or written before this answer.
+
+4. **Mode write steps 1–2** (create the feature directory, open the ledger entry), as defined in "Mode write" below.
+
+5. Write {featureDir}/feature.md using the feature.md template below, unchanged. The first sentence of the Summary section must be the confirmed Summary, because `register` reads that sentence from `feature.md`.
+
+6. **Register** the feature (standalone, status `defined`):
+   ```bash
+   run-asset scripts/feature-split.js --project "<projectRoot>" -- register --features-root "$featuresRoot" "{featureDir}" --keywords "<k1,k2,...>"
+   ```
+   The keywords value is comma-separated with no spaces around the commas. On non-zero exit: report the error and STOP. Do not delete the written `feature.md` and do not invent cleanup.
+
+7. Continue to step 4b (ledger close) and Phase 5 (standalone summary).
+
 ### Mode write (runs only after the user decision)
 
 Mode write is the only point where anything is created on disk. It runs only after the user has confirmed the definition. Before the user confirms, nothing is created: no feature folder, no ledger entry, no `feature.md`.
