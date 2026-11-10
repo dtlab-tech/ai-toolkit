@@ -321,6 +321,22 @@ Synthesize all answers into a structured `feature.md` file.
 
 Used only on a checkpoint re-invocation (see "Input modes").
 
+**Decision `edit`** — the user changed the proposal at the checkpoint. Input: `checkpoint: { decision: "edit", proposal: {...}, record: {...}, edits: "<user free text>" }`.
+
+1. Do NOT re-run grilling and do NOT re-run the definition check. Write nothing: no `mkdir`, no `feature.md`, no ledger entry, no `register`, no `apply`.
+2. Translate each user edit into one structured op: `rename` `{ from, to }`; `set` `{ name, field, value }` (field: `purpose`, `summary`, `keywords`, `assigned`, `dependsOn`); `reorder` `{ names }`; `owner` `{ name }`; `add` `{ child }`; `remove` `{ name }`; `merge` `{ names, into }`. An edit that fits none of these is not applied; report it to the user.
+3. Send one op per call, chaining the returned `proposal` into the next call. A refused op leaves the proposal unchanged, so continue with the remaining ops from that point:
+   ```bash
+   cat <<'JSON' | run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
+   { "proposal": <current proposal JSON>, "edit": <one op JSON> }
+   JSON
+   ```
+4. If exit != 0: STOP. Report the error. Write nothing.
+5. Parse the single JSON line per call: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`).
+6. Report every violation and every foundation warning to the user. Violations cover: names empty or duplicated; `dependsOn` naming an unlisted child or forming a cycle; a shared part not assigned to exactly one child. A refused edit is shown as a violation, not as a failure.
+7. Return a new `CHECKPOINT: split-proposal` block (same format as Phase 3a) with the revised proposal, the same `record`, the `violations` and the `foundationWarnings`. Keep the `feature_id`.
+8. STOP. Write no file, create no folder, open no ledger entry, call no `register` and no `apply`. Nothing changes until the user sends a new explicit accept. A new accept runs the Phase 4 split branch on the revised proposal.
+
 ```text
 reject  -> discard the proposal and all edits (they are not used anywhere);
            Phase 4 standalone (D-05); the standalone branch derives its
