@@ -238,6 +238,34 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
 ---
 
+## Phase 3a — size checkpoint
+
+1. **Root:** use `$featuresRoot` from Phase 1a. If it is empty or resolution failed (`ai-toolkit resolve-features-root` did not return a path), STOP. Report the error. Write nothing.
+
+2. **Build the grilling record in memory only.** Never write it to disk.
+   ```json
+   {
+     "actors":       [ "<actor name>", ... ],
+     "applications": [ "<application name>", ... ],
+     "flows":        [ { "name": "<flow>", "reason": "<one line>" }, ... ]
+   }
+   ```
+   Omit any key the grilling did not elicit (for example `applications` when no applications were named, or `actors` for an internal/technical feature). `check-definition` then reports that signal under `unevaluated` instead of counting it as zero.
+
+3. **Pipe the record on stdin** to the read-only `check-definition` command, through `run-asset`. `<projectRoot>` is the project root (the agent's working directory):
+   ```bash
+   cat <<'JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- \
+       check-definition --features-root "$featuresRoot" --feature-id "$PREFIX"
+   <record as JSON>
+   JSON
+   ```
+
+4. If the exit code is non-zero, or stderr contains `RECORD_INVALID`: STOP. Report the error. Write nothing. Do not continue to Phase 4.
+
+5. Otherwise keep the parsed result `{ status, signals, flows, unevaluated }` for the branching that follows. Do not write `feature.md` here, and do not create the feature folder or open the ledger entry.
+
+---
+
 ## Phase 4 — Write feature.md
 
 Synthesize all answers into a structured `feature.md` file.
