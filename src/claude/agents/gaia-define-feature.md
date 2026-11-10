@@ -276,6 +276,32 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
    - **`"not-flagged"`**: for each name in `result.unevaluated`, report: "{name} could not be evaluated, so it did not count toward the split threshold." Then report: "The feature is below the split threshold. Continuing as a standalone feature." Continue to Phase 4 as standalone. Do not show a proposal.
 
+   - **`"flagged"`**: the feature is new and at least one signal reached its minimum. Propose a split. Write nothing in this branch: no `mkdir`, no `feature.md`, no ledger entry, no `register`, no `apply`. The record stays in memory only (D-03).
+     a. Build the proposal from `result` and the in-memory record:
+        - `signals`: copy `result.signals` (count and minimum for each of actors, applications, flows).
+        - `flows`: copy `result.flows` (each flow name with its one-line reason).
+        - `children`: one entry per child, each `{ "name", "purpose", "summary", "keywords" }`. `purpose` is one line. `summary` is one sentence drafted from the child's purpose and its assigned grilling answers. `keywords` are drafted from the child's name, purpose and assigned grilling answers. Both are editable (D-07, D-09).
+        - `order`: child names in dependency order.
+        - `shared_first_child`: the grilling answers whose content is shared and assigned to the first child.
+        - `unevaluated`: copy `result.unevaluated`. For each name, state that the signal could not be evaluated and so cannot raise the flag (BR-02).
+     b. Child ids are not assigned here. `apply` (FTR-035) assigns them, so the proposal carries names only.
+     c. Show the proposal to the user as readable text: child names, one-line purposes, dependency order, shared parts for the first child, each flow with its reason, each child's Summary and Keywords as editable items, and any unevaluated signals.
+     d. Do not ask the user anything. The skill collects the decision in the main loop. End the turn with the block below as the final output, and enter no further phase.
+
+     ```text
+     CHECKPOINT: split-proposal
+     feature_id: {PREFIX}
+     record: {"actors":[...],"applications":[...],"flows":[{"name":"","reason":""}]}
+     check: {"status":"flagged","signals":{...},"flows":[...],"unevaluated":[...]}
+     proposal:
+       parent: {PREFIX}
+       children: [{"name":"","purpose":"","summary":"","keywords":[]}]
+       order: [child names in dependency order]
+       shared_first_child: [grilling answer ids]
+     ```
+
+     The `record` field is included so the skill can return it in the decision round. It is never written to disk (D-03). Unevaluated names go in `check.unevaluated` and in the readable text only, never in a separate file.
+
 ---
 
 ## Phase 4 — Write feature.md
