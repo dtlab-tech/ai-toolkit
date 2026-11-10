@@ -444,3 +444,83 @@ describe('skill late-child text', () => {
     expect(skill).toMatch(/status is not `epic` is refused and creates nothing/);
   });
 });
+
+describe('block contract between the agent and the skill', () => {
+  const LIB = require('../../src/claude/scripts/feature-split');
+  const contract = agent.slice(agent.indexOf('### Block contract'), agent.indexOf('### Late-child steps'));
+  const fenceAfter = (text, marker) => {
+    const at = text.indexOf(marker);
+    if (at < 0) return '';
+    const open = text.lastIndexOf('```', at);
+    const close = text.indexOf('```', at);
+    return text.slice(open, close);
+  };
+  const keysOf = (block) => [...block.matchAll(/^(\w+):/gm)].map(m => m[1]);
+
+  test('the contract section exists in the agent and names the four blocks', () => {
+    expect(contract).toMatch(/\*\*1\. Spawn prompt/);
+    expect(contract).toMatch(/\*\*2\. `CHECKPOINT: split-proposal`/);
+    expect(contract).toMatch(/\*\*3\. `CHECKPOINT: decision`/);
+    expect(contract).toMatch(/\*\*4\. Returns/);
+  });
+
+  test('the agent recognises the skill re-invocation by its first two lines, never as a new session', () => {
+    expect(agent).toMatch(/first line is `Mode: define` and whose second line is\s+`CHECKPOINT: decision`/);
+    expect(agent).toMatch(/never a new session/);
+    expect(agent).not.toMatch(/checkpoint: \{ decision/);
+  });
+
+  test('every key of the split-proposal block is read by the skill proposal view', () => {
+    const block = fenceAfter(contract, 'CHECKPOINT: split-proposal\nfeature_id');
+    const keys = keysOf(block).filter(k => k !== 'CHECKPOINT');
+    expect(keys).toEqual(['feature_id', 'title', 'feature_dir', 'features_root', 'parent_summary', 'parent_keywords',
+      'answers', 'record', 'check', 'proposal', 'violations', 'foundation_warnings']);
+    const view = skill.slice(skill.indexOf('## Proposal view'), skill.indexOf('## Decision round'));
+    for (const key of keys) expect(view).toContain('`' + key + '`');
+  });
+
+  test('the decision block has the same keys in the agent contract and in the skill', () => {
+    const expected = ['Mode', 'CHECKPOINT', 'feature_id', 'decision', 'title', 'feature_dir', 'features_root',
+      'parent_summary', 'parent_keywords', 'answers', 'record', 'proposal', 'edits', 'apply_failed'];
+    const skillBlock = fenceAfter(skill.slice(skill.indexOf('## Decision round')), 'CHECKPOINT: decision\nfeature_id');
+    expect(keysOf(skillBlock)).toEqual(expected);
+    const agentBlock = fenceAfter(contract, 'CHECKPOINT: decision\nfeature_id');
+    for (const key of expected) expect(agentBlock).toContain(key);
+  });
+
+  test('the proposal example of the agent is an object that apply and validate-proposal accept', () => {
+    const phase3aText = agent.slice(agent.indexOf('## Phase 3a'), agent.indexOf('## Phase 4'));
+    const line = phase3aText.split('\n').map(l => l.trim()).find(l => l.startsWith('proposal: {"source"'));
+    const proposal = JSON.parse(line.slice('proposal: '.length));
+    expect(Object.keys(proposal).sort()).toEqual(['children', 'foundationNote', 'minChildren', 'source', 'sharedFoundationOwner'].sort());
+    expect(Object.keys(proposal.children[0]).sort()).toEqual(['assigned', 'dependsOn', 'keywords', 'name', 'purpose', 'summary']);
+    expect(() => LIB.assertProposalShape(proposal)).not.toThrow();
+  });
+
+  test('the agent defines the return tokens the skill dispatches on', () => {
+    expect(contract).toMatch(/`ERROR: <CODE>`/);
+    expect(contract).toMatch(/last line is `DONE`/);
+    expect(skill).toMatch(/\*\*ERROR: <CODE>\*\*/);
+    expect(skill).toMatch(/\*\*DONE\*\*/);
+  });
+
+  test('names that existed only in one half are gone', () => {
+    expect(skill).not.toMatch(/confirmed_keywords/);
+    expect(skill).not.toMatch(/shared_first_child/);
+    expect(agent).not.toMatch(/shared_first_child/);
+    expect(skill).not.toMatch(/proposal\.order/);
+    expect(skill).not.toMatch(/US-02-TASK-BE-01 before implementation/);
+  });
+
+  test('a re-invocation rescans the feature number before it creates anything', () => {
+    expect(agent).toMatch(/ID re-scan \(race guard/);
+    expect(agent).toMatch(/ERROR: ID_TAKEN/);
+  });
+
+  test('the late-child edit uses the late mode of validate-proposal and re-reads the previous last child', () => {
+    const late = agent.slice(agent.indexOf('### L7. Decision'));
+    expect(late).toMatch(/"mode": "late"/);
+    expect(late).toMatch(/read the previous last child again/);
+    expect(skill).toMatch(/depends_on: \[<the previous last child/);
+  });
+});

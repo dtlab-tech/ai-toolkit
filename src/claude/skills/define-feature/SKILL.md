@@ -80,6 +80,7 @@ CHECKPOINT: decision
 epicId: {epicId}
 decision: accept | edit | reject
 proposal: child: {"name":"...","purpose":"...","summary":"...","keywords":[...]}    # unchanged, or with the user's Summary and Keywords edits
+depends_on: [<the previous last child, from the latest late-child-proposal block>]    # shown to the user; the agent re-reads it at accept
 edits: "<user's free-text edits>"    # only when decision = edit
 ```
 
@@ -93,10 +94,12 @@ The skill never writes files and never runs `check-definition`, `apply` or `regi
 
 ## Handling the agent's return
 
+A late-child return (`CHECKPOINT: late-child-proposal`, or DONE or ERROR after a late-child decision) is handled only by the late-child sections above. The rules below are for `Mode: define`. The exact keys of every block are in the agent's "Block contract".
+
 This skill never writes files and never runs `check-definition` or `apply` itself. The agent resolves the features root with `ai-toolkit resolve-features-root` and performs every write.
 
-- **DONE**: relay the written `feature.md` path or the created children, then stop. If the agent lists unevaluated signals, relay each one as described under "Unevaluated signals" below.
-- **ERROR**: this covers a failed `ai-toolkit resolve-features-root` call and a `RECORD_INVALID` result. Relay the reason, state that nothing was written, and stop. Do not retry and do not continue to another phase. An `ERROR: partial-apply` block is different: handle it under "Partial apply failure" below.
+- **DONE** (the last line of the agent's final report): relay the written `feature.md` path or the created children, then stop. If the agent lists unevaluated signals, relay each one as described under "Unevaluated signals" below.
+- **ERROR: <CODE>**: a coded error block (`feature_id`, `reason`, `nothing_written`): a failed `ai-toolkit resolve-features-root` call, `RECORD_INVALID`, `FEATURES_ROOT_INVALID`, `ID_TAKEN`, `FEATURE_EXISTS`. Relay the reason and whether anything was written, and stop. Do not retry and do not continue to another phase. An `ERROR: partial-apply` block is different: handle it under "Partial apply failure" below.
 - **CHECKPOINT: split-proposal**: present the proposal view below. The agent has ended its turn and has written nothing. Present the proposal view, then collect the user's decision as described under "Decision round".
 
 ## Partial apply failure
@@ -117,14 +120,15 @@ The grilling record (`record` in the CHECKPOINT block) is held in main-loop cont
 
 ## Proposal view
 
-When a CHECKPOINT arrives, parse its `feature_id`, `record`, `check` and `proposal` keys, then show the user:
+When a CHECKPOINT arrives, parse its keys `feature_id`, `title`, `feature_dir`, `features_root`, `parent_summary`, `parent_keywords`, `answers`, `record`, `check` and `proposal` (and, after an edit, `violations` and `foundation_warnings`), then show the user:
 
 1. **Signal counts**: for each of actors, applications and flows, the count and the minimum from `check.signals`, and whether the minimum was met.
 2. **Flows**: each flow in `check.flows` by name, with its one-line reason.
 3. **Children**: for each entry in `proposal.children`, show the child's name and one-line purpose. Show its Summary and Keywords as editable items, and say that the user may edit them.
-4. **Order**: the dependency order from `proposal.order`.
-5. **Shared parts**: the grilling answers assigned to the first child, from `proposal.shared_first_child`.
+4. **Order**: the order of `proposal.children`; each child's `dependsOn` names the children it waits for.
+5. **Shared parts**: `proposal.foundationNote` and the first child's `assigned` text, owned by `proposal.sharedFoundationOwner`.
 6. **Unevaluated signals**: every name in `check.unevaluated`, each with the statement that this signal could not be evaluated and so did not count toward the split threshold.
+7. **Parent**: `parent_summary` and `parent_keywords` as editable items; they are registered with the parent if the split is accepted. After an edit, also each entry of `violations` and `foundation_warnings`.
 
 ## Decision round
 
@@ -136,15 +140,21 @@ After the proposal view, ask the user once, in the main loop, to choose one opti
 
 The user's decision is the only trigger for a write. Nothing is written before accept or reject. The skill never writes files and never runs `check-definition` or `apply` itself. The decision is collected in the main loop, and the agent is never asked for it.
 
-Re-invoke the agent with this decision block. The `record` and `proposal` values come from the CHECKPOINT block held in main-loop context, not from disk:
+Re-invoke the agent with this decision block. Every value comes from the CHECKPOINT block held in main-loop context, not from disk. `title`, `feature_dir`, `features_root`, `answers` and `record` are echoed unchanged; `parent_summary` and `parent_keywords` carry the user's confirmed or edited values; `proposal` is the current proposal:
 
 ```
 Mode: define
 CHECKPOINT: decision
 feature_id: {FTR-XXX}
 decision: accept | edit | reject | retry
-record: <unchanged JSON from the PROPOSAL block>
-proposal: <unchanged, or with the user's edits applied>
+title: <from the block>
+feature_dir: <from the block>
+features_root: <from the block>
+parent_summary: <confirmed or edited by the user>
+parent_keywords: <JSON array, confirmed or edited by the user>
+answers: <unchanged JSON from the block>
+record: <unchanged JSON from the block>
+proposal: <the current proposal, one JSON line>
 edits: "<user's free-text edits>"    # only when decision = edit
 apply_failed: <held from the last ERROR: partial-apply block>    # only after a partial apply failure
 ```
@@ -154,14 +164,14 @@ Routing per decision:
 - **accept**: re-invoke with `decision: accept` and the proposal unchanged. Relay the DONE result. An ERROR is handled as under "Handling the agent's return". If `apply_failed` is held, send `decision: retry` instead, as under "Partial apply failure".
 - **retry**: only after a partial apply failure. Re-invoke with `decision: retry`, `apply_failed` and the unchanged proposal. Relay the DONE result. A new ERROR: partial-apply is handled under "Partial apply failure".
 - **reject**: re-invoke with `decision: reject`, including `apply_failed` when it is held. Relay the DONE result and state that the feature continues as one standalone feature. Relay the sentence "Checkpoint 2 remains available for this feature." unchanged when the result contains it.
-- **edit**: re-invoke with `decision: edit`, the `edits` text, and the proposal unchanged. The agent returns a revised CHECKPOINT block with `violations` and `foundationWarnings`. Report each violation. Show the foundation warning from the returned block for each entry in `foundationWarnings`. Then re-present the revised proposal with the proposal view and return to this decision round. The next decision carries the revised `proposal`. Repeat until the user chooses accept or reject. Edit rounds write nothing.
+- **edit**: re-invoke with `decision: edit`, the `edits` text, and the proposal unchanged. The agent returns a revised CHECKPOINT block with `violations` and `foundation_warnings`. Report each violation. Show the foundation warning from the returned block for each entry in `foundation_warnings`. Then re-present the revised proposal with the proposal view and return to this decision round. The next decision carries the revised `proposal`. Repeat until the user chooses accept or reject. Edit rounds write nothing.
 
 ## Non-flagged result
 
 When the spawn returns with no CHECKPOINT block, status `skipped` or `not-flagged`, no proposal is shown.
 
 - **`skipped`**: relay the agent's stop reason and stop. Show no Keywords prompt.
-- **`not-flagged`**: show the Keywords prompt that the agent returns, with the derived Keywords as an editable item. Collect the confirmed keywords in the main loop and pass them back as `confirmed_keywords: "<k1,k2>"`. The name must be aligned with US-02-TASK-BE-01 before implementation. Also name each `unevaluated` signal, as described under "Unevaluated signals".
+- **`not-flagged`**: the agent continues in the same run as a standalone feature. It confirms the Summary and Keywords with the user itself (`AskUserQuestion`), writes `feature.md`, registers it, and returns DONE. The skill collects nothing and passes nothing back. Name each `unevaluated` signal the agent reports, as described under "Unevaluated signals".
 
 ## Unevaluated signals
 

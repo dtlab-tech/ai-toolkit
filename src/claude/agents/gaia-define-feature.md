@@ -25,9 +25,11 @@ If a source reference is given, your job is to **ingest it, pre-fill the feature
 
 ### Input modes
 
-- **Checkpoint re-invocation**: the skill passes
-  `checkpoint: { decision: "accept" | "edit" | "reject" | "retry", proposal: {...}, record: {...} }`.
-  The agent does not re-run grilling or `check-definition`.
+- **Checkpoint re-invocation**: a prompt whose first line is `Mode: define` and whose second line is
+  `CHECKPOINT: decision` is a re-invocation, never a new session. Read the keys of the decision block (see
+  "Block contract"). Skip Phase 0 to Phase 3a: do not ask grilling questions, do not run `check-definition`.
+  `features_root` and `feature_dir` come from the block, `PREFIX` is its `feature_id`, and the feature
+  definition is `answers`, not a new grilling.
   - decision `reject`: discard the proposal and any user edits to it. If the checkpoint carries no
     `apply_failed`, go to "Phase 4 — standalone branch". Do not validate the proposal and do not write
     any split file. If it carries `apply_failed`, go to "Phase 4 — split branch (reject after a failed apply)".
@@ -39,6 +41,64 @@ If a source reference is given, your job is to **ingest it, pre-fill the feature
   - **Phase 0 is limited** to reading `{epicFolder}/epic.md`. Skip 0a to 0e.
   - **No standalone fallback.** Every refusal below ends the run. Nothing is written.
   - **No `register` call.** A late child is never registered by this path.
+
+### Block contract
+
+The skill and this agent exchange the blocks below. Every block is plain text, one `key: value` per line, and a JSON
+value stays on one line. The skill reads these keys and no others, and this agent reads the keys of the decision
+block and no others. A key renamed on one side without the other is a defect: `tests/cli/define-feature-checkpoint-text.test.js`
+compares both files.
+
+**1. Spawn prompt (skill to agent).** The first line is `Mode: define` or `Mode: late-child`.
+
+**2. `CHECKPOINT: split-proposal` (agent to skill).** The agent ends its turn with this block when Phase 3a flags the
+feature, and again after every edit. It writes nothing.
+
+```text
+CHECKPOINT: split-proposal
+feature_id: {PREFIX}
+title: {feature title}
+feature_dir: {featureDir, not yet created}
+features_root: {featuresRoot}
+parent_summary: {one sentence}
+parent_keywords: ["k1","k2"]
+answers: {one key per section of the feature.md template, see below}
+record: {the grilling record}
+check: {the check-definition result}
+proposal: {the apply schema, see below}
+violations: [{"code","key","message"}]          # only after an edit
+foundation_warnings: [{"code","message"}]       # only after an edit
+```
+
+`proposal` is the object that `validate-proposal` and `apply` accept, written as one JSON line:
+`{"source":"definition","minChildren":<check.minChildren>,"foundationNote":"<text>","sharedFoundationOwner":"<name of the first child>","children":[{"name","purpose","summary","keywords":[],"dependsOn":[],"assigned":"<assigned parts>"}]}`.
+The children are listed in dependency order. The first child has `dependsOn: []`. The shared parts go into the first
+child's `assigned` and are described in `foundationNote`. `answers` has one key per section of the feature.md template
+below (the section name in snake_case), each a short text or an array of short items, and nothing else: it is the
+only content Phase 4 may use on a re-invocation.
+
+**3. `CHECKPOINT: decision` (skill to agent).** The first line is `Mode: define`.
+
+```text
+Mode: define
+CHECKPOINT: decision
+feature_id: {PREFIX}
+decision: accept | edit | reject | retry
+title, feature_dir, features_root, parent_summary, parent_keywords, answers, record, proposal
+edits: "<free text>"                                                        # only when decision = edit
+apply_failed: {"created_children":[...],"staging_leftover":[...]}           # only after a partial apply
+```
+
+`title`, `feature_dir`, `features_root`, `answers` and `record` are echoed unchanged from the last
+`split-proposal` block. `parent_summary` and `parent_keywords` carry the user's confirmed or edited values, and
+`proposal` the current proposal.
+
+**4. Returns.** The agent ends every run with exactly one of:
+- a `CHECKPOINT: ...` block (above, or `CHECKPOINT: late-child-proposal`);
+- an error block, and nothing else: `ERROR: <CODE>`, then `feature_id: {PREFIX}`, `reason: <one line>` and
+  `nothing_written: true | false` (the error code is the `code` of the script's error JSON, or a short code of this
+  agent such as `ROOT_UNRESOLVED` or `FEATURE_EXISTS`). `ERROR: partial-apply` keeps its own fields (Phase 4, split branch);
+- a final report whose last line is `DONE`.
 
 ### Late-child steps
 
@@ -109,7 +169,7 @@ Entered only on a late-child re-invocation that carries `decision`, `epicId`, an
 
 **Decision `accept`**
 
-1. Re-check before writing (same rules as L2 to L4): `{epicFolder}/epic.md` still exists; the registry status of `{epicId}` is still `epic`; no `{featuresRoot}/FTR-*-{slug}` folder exists and `{epicFolder}/epic.md` has no child row for `{slug}`. Any failure: report it, STOP, write nothing.
+1. Re-check before writing (same rules as L2 to L4), and read the previous last child again from `{epicFolder}/epic.md` now (ignore any `depends_on` echoed by the skill): `{epicFolder}/epic.md` still exists; the registry status of `{epicId}` is still `epic`; no `{featuresRoot}/FTR-*-{slug}` folder exists and `{epicFolder}/epic.md` has no child row for `{slug}`. Any failure: report it, STOP, write nothing.
 2. Leftover check: any `.split-staging-*` entry directly under `{featuresRoot}` -> STOP, report the leftover path, run no apply (Tech-Spec §12).
 3. Build the one-child payload in memory: `{ "children": [ { "name", "purpose", "summary", "keywords", "dependsOn": ["{previous last child name}"] } ] }`. The child is placed last. Pipe it on stdin; never write it to a file:
    ```bash
@@ -126,10 +186,11 @@ Entered only on a late-child re-invocation that carries `decision`, `epicId`, an
 1. Validate the edit with `validate-proposal`. Write nothing:
    ```bash
    cat <<'JSON' | run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
-   { "proposal": { "source": "definition", "minChildren": 0, "foundationNote": "", "sharedFoundationOwner": null, "children": [ <the child, dependsOn []> ] }, "edit": <one op JSON> }
+   { "mode": "late", "proposal": { "source": "definition", "minChildren": 0, "foundationNote": "", "sharedFoundationOwner": null, "children": [ <the child, dependsOn []> ] }, "edit": <one op JSON> }
    JSON
    ```
    `dependsOn` stays `[]` in this envelope. The previous last child is an `epic.md` row, not a proposal child, so the validator would reject it.
+   In late mode the only ops are `rename` and `set` of `purpose`, `summary` or `keywords`. A request to move the child or change its dependency is not an op: say that a late child is always placed last, after the epic's last child.
 2. If exit != 0: STOP, report the error. Write nothing.
 3. Parse the single JSON line: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`). Report every violation and every foundation warning. A refused edit is a violation, not a failure.
 4. Return a revised `CHECKPOINT: late-child-proposal` block (same format as L6) with the revised child, `depends_on` restored to the previous last child, and the `violations` and `foundationWarnings`.
@@ -376,7 +437,7 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
    JSON
    ```
 
-4. If the exit code is non-zero, or stderr contains `RECORD_INVALID`: STOP. Report the error. Write nothing. Do not continue to Phase 4.
+4. If the exit code is non-zero (the script prints the error JSON, with its `code`, on stdout, for example `RECORD_INVALID` or `FEATURES_ROOT_INVALID`): STOP. Write nothing. Return `ERROR: <code>` with `nothing_written: true`. Do not continue to Phase 4.
 
 5. Otherwise keep the parsed result `{ status, signals, flows, unevaluated }` for the branching that follows. Do not write `feature.md` here, and do not create the feature folder or open the ledger entry.
 
@@ -393,27 +454,35 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
    - **`"not-flagged"`**: for each name in `result.unevaluated`, report: "{name} could not be evaluated, so it did not count toward the split threshold." Then report: "The feature is below the split threshold. Continuing as a standalone feature." Continue to Phase 4 as standalone. Do not show a proposal.
 
    - **`"flagged"`**: the feature is new and at least one signal reached its minimum. Propose a split. Write nothing in this branch: no `mkdir`, no `feature.md`, no ledger entry, no `register`, no `apply`. The record stays in memory only (D-03).
-     a. Build the proposal from `result` and the in-memory record:
-        - `signals`: copy `result.signals` (count and minimum for each of actors, applications, flows).
-        - `flows`: copy `result.flows` (each flow name with its one-line reason).
-        - `children`: one entry per child, each `{ "name", "purpose", "summary", "keywords" }`. `purpose` is one line. `summary` is one sentence drafted from the child's purpose and its assigned grilling answers. `keywords` are drafted from the child's name, purpose and assigned grilling answers. Both are editable (D-07, D-09).
-        - `order`: child names in dependency order.
-        - `shared_first_child`: the grilling answers whose content is shared and assigned to the first child.
-        - `unevaluated`: copy `result.unevaluated`. For each name, state that the signal could not be evaluated and so cannot raise the flag (BR-02).
+     a. Build the proposal from `result` and the in-memory record, in the apply schema of "Block contract":
+        - `source`: `"definition"`. `minChildren`: `result.minChildren`.
+        - `children`: one entry per child, in dependency order, each `{ "name", "purpose", "summary", "keywords", "dependsOn", "assigned" }`.
+          `purpose` is one line. `summary` is one sentence drafted from the child's purpose and its assigned grilling answers.
+          `keywords` are drafted from the child's name, purpose and assigned grilling answers; each has no comma and no line break.
+          `dependsOn` names the sibling children it waits for (the first child has `[]`). `assigned` lists its use cases and flows.
+          Names have no line break and no `|`. Summary and Keywords are editable by the user (D-07, D-09).
+        - `sharedFoundationOwner`: the first child's name. `foundationNote`: the grilling answers whose content is shared, assigned to the first child.
+        - The signals, flows and unevaluated names are not part of `proposal`: they stay in `check`.
      b. Child ids are not assigned here. `apply` (FTR-035) assigns them, so the proposal carries names only.
-     c. Show the proposal to the user as readable text: child names, one-line purposes, dependency order, shared parts for the first child, each flow with its reason, each child's Summary and Keywords as editable items, and any unevaluated signals.
-     d. Do not ask the user anything. The skill collects the decision in the main loop. End the turn with the block below as the final output, and enter no further phase.
+     c. Draft `parent_summary` (one sentence) and `parent_keywords` (no comma or line break in a keyword), and compose `answers`
+        from the grilling so that Phase 4 can write the parent `feature.md` without asking again.
+     d. Show the proposal to the user as readable text: child names, one-line purposes, dependency order, shared parts for the first child,
+        each flow with its reason, each child's Summary and Keywords as editable items, the parent Summary and Keywords, and every name in `check.unevaluated` with the statement that this signal could not be evaluated and so cannot raise the flag (BR-02).
+     e. Do not ask the user anything. The skill collects the decision in the main loop. End the turn with the block of "Block contract"
+        as the final output, and enter no further phase.
 
      ```text
      CHECKPOINT: split-proposal
      feature_id: {PREFIX}
+     title: {feature title}
+     feature_dir: {featureDir}
+     features_root: {featuresRoot}
+     parent_summary: {one sentence}
+     parent_keywords: ["k1","k2"]
+     answers: {"problem":"","objective":"","actors":[],"flows":[],"rules":[],"acceptance":[],"out_of_scope":[],"open_questions":[]}
      record: {"actors":[...],"applications":[...],"flows":[{"name":"","reason":""}]}
-     check: {"status":"flagged","signals":{...},"flows":[...],"unevaluated":[...]}
-     proposal:
-       parent: {PREFIX}
-       children: [{"name":"","purpose":"","summary":"","keywords":[]}]
-       order: [child names in dependency order]
-       shared_first_child: [grilling answer ids]
+     check: {"status":"flagged","signals":{...},"flows":[...],"unevaluated":[...],"minChildren":2}
+     proposal: {"source":"definition","minChildren":2,"foundationNote":"","sharedFoundationOwner":"","children":[{"name":"","purpose":"","summary":"","keywords":[],"dependsOn":[],"assigned":""}]}
      ```
 
      The `record` field is included so the skill can return it in the decision round. It is never written to disk (D-03). Unevaluated names go in `check.unevaluated` and in the readable text only, never in a separate file.
@@ -424,11 +493,15 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
 Synthesize all answers into a structured `feature.md` file.
 
+On a re-invocation (the decision block of "Block contract") the answers are the block's `answers`: write each section of the
+template from the matching key, `title` is the feature title, and `feature_dir` and `features_root` are the block's values.
+Ask no grilling question; ask nothing the block already carries.
+
 #### Checkpoint decisions
 
 Used only on a checkpoint re-invocation (see "Input modes").
 
-**Decision `edit`** — the user changed the proposal at the checkpoint. Input: `checkpoint: { decision: "edit", proposal: {...}, record: {...}, edits: "<user free text>" }`.
+**Decision `edit`** — the user changed the proposal at the checkpoint. Input: the decision block of "Block contract" with `decision: edit` and `edits`.
 
 1. Do NOT re-run grilling and do NOT re-run the definition check. Write nothing: no `mkdir`, no `feature.md`, no ledger entry, no `register`, no `apply`.
 2. Translate each user edit into one structured op: `rename` `{ from, to }`; `set` `{ name, field, value }` (field: `purpose`, `summary`, `keywords`, `assigned`, `dependsOn`); `reorder` `{ names }`; `owner` `{ name }`; `add` `{ child }`; `remove` `{ name }`; `merge` `{ names, into }`. An edit that fits none of these is not applied; report it to the user.
@@ -440,8 +513,8 @@ Used only on a checkpoint re-invocation (see "Input modes").
    ```
 4. If exit != 0: STOP. Report the error. Write nothing.
 5. Parse the single JSON line per call: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`).
-6. Report every violation and every foundation warning to the user. Violations cover: names empty or duplicated; `dependsOn` naming an unlisted child or forming a cycle; a shared part not assigned to exactly one child. A refused edit is shown as a violation, not as a failure.
-7. Return a new `CHECKPOINT: split-proposal` block (same format as Phase 3a) with the revised proposal, the same `record`, the `violations` and the `foundationWarnings`. Keep the `feature_id`.
+6. Report every violation and every foundation warning to the user. Violations cover: names empty, duplicated, or with a line break or `|`; `dependsOn` naming an unlisted child, a child naming itself, or forming a cycle; an owner that is not a child; fewer children than `minChildren`; keywords with a comma or a line break; and any other shape `apply` would refuse. A refused edit is shown as a violation, not as a failure.
+7. Return a new `CHECKPOINT: split-proposal` block (same format as Phase 3a) with every key unchanged except `proposal` (revised), `violations` and `foundation_warnings`.
 8. STOP. Write no file, create no folder, open no ledger entry, call no `register` and no `apply`. Nothing changes until the user sends a new explicit accept. A new accept runs the Phase 4 split branch on the revised proposal. If the edit input carries `apply_failed` (the edit follows a failed apply), that new accept is sent as `decision: retry` and runs "Phase 4 — split branch (retry)" instead.
 
 ```text
@@ -488,7 +561,7 @@ Entered only when the re-invocation carries decision = accept. Record and propos
 
 2. **Leftover check:** if any entry matching `.split-staging-*` exists directly under `{featuresRoot}` -> STOP, report the leftover path, and run no apply. Later applies stay blocked until the leftover is cleared (Tech-Spec §12).
 
-3. **Write the parent:** run Mode write steps 1–2 (create the feature directory, open the ledger entry). Then write `{featureDir}/feature.md` with the existing feature.md template, unchanged. Summary = first sentence of the parent Summary section. Keywords as confirmed in the proposal.
+3. **Write the parent:** run Mode write steps 1–2 (create the feature directory, open the ledger entry). Then write `{featureDir}/feature.md` with the existing feature.md template, unchanged. Summary = first sentence of the parent Summary section. Keywords = `parent_keywords` of the decision block, as confirmed or edited by the user.
 
 4. **Register the parent with status defined, BEFORE apply:**
    ```bash
@@ -501,7 +574,7 @@ Entered only when the re-invocation carries decision = accept. Record and propos
    ```bash
    cat <<'JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- \
        apply --parent "$PREFIX" --features-root "$featuresRoot"
-   <accepted proposal as JSON>
+   <the `proposal` value of the decision block, unchanged>
    JSON
    ```
 
@@ -552,6 +625,12 @@ Entered on `decision: reject` with `apply_failed`. The parent stays a standalone
 ### Mode write (runs only after the user decision)
 
 Mode write is the only point where anything is created on disk. It runs only after the user has confirmed the definition. Before the user confirms, nothing is created: no feature folder, no ledger entry, no `feature.md`.
+
+0. **ID re-scan (race guard, Tech-Spec §12):** before anything is created, look for a folder that already carries this number:
+   ```bash
+   ls -d "{featuresRoot}/{PREFIX}" "{featuresRoot}/{PREFIX}"-* 2>/dev/null
+   ```
+   If anything is listed: STOP and return `ERROR: ID_TAKEN` with `nothing_written: true`. The number was taken after Phase 1b; the skill must start again.
 
 1. Create the feature directory (no `-p`, so an existing folder fails instead of being silently reused):
    ```bash
@@ -696,6 +775,8 @@ Summary:
 Next step: run /implement-feature {featuresRoot}/{PREFIX}-{slug}/feature.md
            to start the full pipeline (requirements → spec → implementation → PR).
 ```
+
+The last line of the final report is `DONE`.
 
 ---
 
