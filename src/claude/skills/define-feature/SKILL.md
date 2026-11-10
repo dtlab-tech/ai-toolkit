@@ -53,6 +53,44 @@ The agent resolves the features root with `ai-toolkit resolve-features-root` and
 
 This skill never writes files and never runs `check-definition`, `apply`, or `register` itself.
 
+## Late-child proposal (LATE_PROPOSAL)
+
+This section applies only to late-child mode. The split decision round below does not apply to a late child.
+
+When the agent returns a `CHECKPOINT: late-child-proposal` block, this skill calls it the LATE_PROPOSAL. The agent has ended its turn and has written nothing. The block carries `epic_id`, `proposal.child` (name, purpose, summary, keywords) and `depends_on`, which names the epic's previous last child.
+
+Show the proposal in the main loop:
+
+```text
+Late child proposal for epic {epicId}
+  Name:     {child.name}
+  Purpose:  {child.purpose}
+  Summary:  {child.summary}     (editable)
+  Keywords: {child.keywords}    (editable)
+  Position: last; depends on {previousLastChild}
+```
+
+Then ask the user once, in the main loop, to choose accept, edit or reject. The user may also edit Summary and Keywords. A subagent cannot ask mid-run, so the skill asks the question, and the agent is never asked for the decision.
+
+Re-invoke the agent in late-child mode. The `Mode:` line is the first line. There is no `record`, because the late path has no grilling round:
+
+```text
+Mode: late-child
+CHECKPOINT: decision
+epicId: {epicId}
+decision: accept | edit | reject
+proposal: child: {"name":"...","purpose":"...","summary":"...","keywords":[...]}    # unchanged, or with the user's Summary and Keywords edits
+edits: "<user's free-text edits>"    # only when decision = edit
+```
+
+Routing per decision:
+
+1. **accept**: re-invoke with `decision: accept` and the proposal unchanged. The agent runs `apply --parent {epicId}` with the one child. On DONE, relay the created child path and child ID, then stop. The skill never calls `register` for a late child. On an error, relay the apply error text as reported and stop. Offer no retry, edit or reject choice, because the partial-apply offer applies to the define path only.
+2. **edit**: re-invoke with `decision: edit`, the `edits` text and the proposal as held. The agent validates the edit and returns a revised LATE_PROPOSAL with `violations` and `foundationWarnings`. Report each violation and each foundation warning, then re-present the revised proposal and ask again. Edits require a new explicit accept. Edit rounds write nothing.
+3. **reject**: re-invoke with `decision: reject`. The agent writes nothing and reports "no child created". Relay that result and stop. There is no standalone fallback: do not offer a standalone feature or any other alternative.
+
+The skill never writes files and never runs `check-definition`, `apply` or `register` itself. The epic and its registry entry are unchanged unless `apply` succeeds on accept, and `register` is not called for a late child in any case.
+
 ## Handling the agent's return
 
 This skill never writes files and never runs `check-definition` or `apply` itself. The agent resolves the features root with `ai-toolkit resolve-features-root` and performs every write.
