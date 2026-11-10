@@ -6,6 +6,9 @@ const path = require('path');
 const AGENT = path.join(__dirname, '..', '..', 'src', 'claude', 'agents', 'gaia-define-feature.md');
 const agent = fs.readFileSync(AGENT, 'utf8');
 
+const SKILL = path.join(__dirname, '..', '..', 'src', 'claude', 'skills', 'define-feature', 'SKILL.md');
+const skill = fs.readFileSync(SKILL, 'utf8');
+
 // Index of the first markdown heading that names the given phase, or -1.
 // The \b after the phase id stops "Phase 3" from matching "Phase 3a".
 const headingIndex = (phase) => {
@@ -144,5 +147,53 @@ describe('agent failure paths write nothing (AC-08)', () => {
     expect(flaggedBranch).toMatch(/Write nothing in this branch/);
     expect(flaggedBranch).toMatch(/mkdir/);
     expect(flaggedBranch).toMatch(/ledger entry/);
+  });
+});
+
+// True when a line containing `anchor` has a line matching `re` within `window` lines after it.
+const nearby = (text, anchor, re, window = 5) => {
+  const lines = text.split('\n');
+  return lines.some((line, i) =>
+    line.includes(anchor) &&
+    lines.slice(i, i + window + 1).some(l => re.test(l)));
+};
+
+describe('skill checkpoint relay text', () => {
+  test('passes a Mode line in the spawn prompt', () => {
+    expect(skill).toMatch(/\bMode:/);
+  });
+
+  test('shows the proposal children with their Summary and Keywords', () => {
+    expect(skill).toMatch(/proposal\.children/);
+  });
+
+  test('shows the proposal with dependency order and shared parts', () => {
+    expect(skill).toMatch(/dependency order/i);
+    expect(skill).toMatch(/shared/i);
+  });
+
+  test('lists each flow with a one-line reason', () => {
+    expect(nearby(skill, 'flow', /reason/i)).toBe(true);
+  });
+
+  test('shows Summary and Keywords as editable items per child', () => {
+    expect(nearby(skill, 'Summary', /edit/i)).toBe(true);
+    expect(nearby(skill, 'Keywords', /edit/i)).toBe(true);
+  });
+
+  test('names each unevaluated signal to the user', () => {
+    expect(skill).toMatch(/unevaluated/);
+  });
+
+  test('keeps the grilling record in memory and never on disk', () => {
+    expect(skill).toMatch(/in memory/i);
+  });
+
+  test('stops and reports when root resolution fails', () => {
+    expect(nearby(skill, 'resolve-features-root', /stop|report/i)).toBe(true);
+  });
+
+  test('stops and reports on RECORD_INVALID', () => {
+    expect(nearby(skill, 'RECORD_INVALID', /stop|report/i)).toBe(true);
   });
 });
