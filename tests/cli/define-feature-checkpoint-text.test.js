@@ -277,6 +277,68 @@ describe('agent write mode and recovery text', () => {
   });
 });
 
+describe('agent late-child text', () => {
+  // Late-child mode rules from the Input modes list, up to the step list.
+  const mode = () => section(agent, '- **Late-child mode (UC-03)**', '### Late-child steps');
+  // Late-child steps L1 to L6, up to the decision section.
+  const steps = () => section(agent, '### Late-child steps', '### L7. Decision');
+  // Late-child decision section, up to the end of the late-child heading block.
+  const decisions = () => section(agent, '### L7. Decision', '## Phase 0');
+  const accept = () => section(decisions(), '**Decision `accept`**', '**Decision `edit`**');
+  const reject = () => section(decisions(), '**Decision `reject`**', '---');
+
+  test('matches the epic folder by ID or by ID and hyphen, and requires epic.md (AC-13)', () => {
+    expect(steps()).toMatch(/name\(D\) == epicId, or name\(D\) starts with epicId followed by a hyphen/);
+    expect(steps()).toMatch(/contains `epic\.md`/);
+  });
+
+  test('lists candidate epics and creates nothing when no folder matches (AC-14)', () => {
+    expect(steps()).toMatch(/list the candidate epics/);
+    expect(steps()).toMatch(/Create nothing/);
+  });
+
+  test('refuses unless the registry status is epic (AC-16)', () => {
+    expect(steps()).toMatch(/status is not `epic`/);
+    expect(steps()).toMatch(/late children require status 'epic'/);
+  });
+
+  test('reports an existing child feature.md and stops without overwriting (AC-15)', () => {
+    expect(steps()).toMatch(/say the child already exists, and STOP/);
+    expect(steps()).toMatch(/do not overwrite/i);
+  });
+
+  test('runs no grilling round (AC-13)', () => {
+    expect(mode()).toMatch(/No grilling round/);
+  });
+
+  test('derives Summary and Keywords from the purpose and the epic Summary (AC-19)', () => {
+    expect(steps()).toMatch(/Draft both values only from these three inputs/);
+    expect(steps()).toMatch(/childPurpose[\s\S]*epic's Summary/);
+  });
+
+  test('places the child last with apply, depending on the previous last child (AC-13)', () => {
+    expect(accept()).toMatch(/placed last/);
+    expect(accept()).toMatch(/"dependsOn": \["\{previous last child name\}"\]/);
+    expect(accept()).toMatch(/apply --features-root/);
+  });
+
+  test('never calls register for a late child (AC-18)', () => {
+    expect(accept()).toMatch(/Never call `register` for the child/);
+    expect(mode()).toMatch(/No `register` call/);
+  });
+
+  test('has no standalone fallback on any refusal or rejection (AC-17)', () => {
+    expect(steps()).toMatch(/No standalone fallback/);
+    expect(reject()).toMatch(/There is no standalone fallback/);
+  });
+
+  test('reject writes no feature.md, creates no folder and runs no apply or register (AC-17)', () => {
+    expect(reject()).toMatch(/Create nothing/);
+    expect(reject()).toMatch(/Do not write `feature\.md`/);
+    expect(reject()).toMatch(/Do not run `apply` or `register`/);
+  });
+});
+
 describe('skill decision relay text', () => {
   // Decision round runs from its heading to the Non-flagged result heading.
   const decisionRound = () => section(skill, '## Decision round', '## Non-flagged result');
