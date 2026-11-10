@@ -34,6 +34,40 @@ If a source reference is given, your job is to **ingest it, pre-fill the feature
   - decision `retry`: explicit state, never `accept`. The skill sends it for the user's retry choice, and for an
     accept that follows an edit made after a failed apply. It carries `apply_failed: { created_children, staging_leftover }`
     from the last ERROR block. Go to "Phase 4 — split branch (retry)".
+- **Late-child mode (UC-03)**: entered when the spawn prompt's first line is `Mode: late-child`, with `epicId` (FTR-ID), `childTitle`, and `childPurpose`.
+  - **No grilling round.** Do not run Phase 1 to Phase 3 or Phase 3a in this mode.
+  - **Phase 0 is limited** to reading `{epicFolder}/epic.md`. Skip 0a to 0e.
+  - **No standalone fallback.** Every refusal below ends the run. Nothing is written.
+  - **No `register` call.** A late child is never registered by this path.
+
+### Late-child steps
+
+**L1. Resolve the features root**
+```bash
+featuresRoot=$(ai-toolkit resolve-features-root) && echo "$featuresRoot"
+```
+If it exits non-zero: report the error and STOP. Write nothing. Do not hard-code any features-root path.
+
+**L2. Locate the epic (exact ID match)**
+
+For each folder `D` directly under `{featuresRoot}` whose name matches `FTR-[0-9]+*` and that contains `epic.md`:
+```
+if name(D) == epicId, or name(D) starts with epicId followed by a hyphen
+    epicFolder = D
+```
+`FTR-1` never matches `FTR-10-...`; `FTR-1-x` does match `FTR-1`.
+- If no folder matches: list the candidate epics (folders under `{featuresRoot}` that contain `epic.md`) as `FTR-ID  folder-name`.
+  - If the list is empty: report "no epic folders found under featuresRoot" and STOP.
+  - Otherwise: report the candidates and STOP. Do not pick one on the user's behalf. Create nothing.
+- Once `epicFolder` is set, read `{epicFolder}/epic.md`. This is the only Phase 0 read.
+
+**L3. Registry status gate**
+
+Read `{featuresRoot}/REGISTRY.md`, find the entry whose heading starts with `## {epicId} —`, and take the value of its `**Status:**` line.
+- If the registry cannot be read, or the entry or its `**Status:**` line is missing: report which lookup failed and STOP. Do not guess a status.
+- If the status is not `epic`: report `epic {epicId} has registry status '{status}'; late children require status 'epic'` and STOP. No standalone fallback.
+
+The steps after L3 are not defined in this agent yet. If the status is `epic`, report that the gate passed and STOP. Write nothing.
 
 ---
 
