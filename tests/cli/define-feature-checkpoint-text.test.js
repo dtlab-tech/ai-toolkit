@@ -394,3 +394,53 @@ describe('skill decision relay text', () => {
     expect(partialFailure()).toMatch(/leftover[^\n]*blocks later applies/);
   });
 });
+
+describe('skill late-child text', () => {
+  // The reject routing bullet, from its "3. **reject**" line to the next heading.
+  const lateReject = () => section(skill, '3. **reject**', "## Handling the agent's return");
+  // The late-child proposal section, from its heading to the Handling heading.
+  const lateProposal = () => section(skill, '## Late-child proposal (LATE_PROPOSAL)', "## Handling the agent's return");
+
+  test('spawn prompt carries a Mode: late-child line', () => {
+    expect(skill).toMatch(/Mode: late-child/);
+  });
+
+  test('routes a request naming an epic through --epic <FTR-ID>', () => {
+    expect(skill).toMatch(/--epic <FTR-ID>/);
+  });
+
+  test('asks the child title and the one-line child purpose in the main loop', () => {
+    expect(skill).toMatch(/the child title/);
+    expect(skill).toMatch(/the child purpose \(one line\)/);
+    expect(skill).toMatch(/Before any spawn, ask the user two questions in the main loop/);
+  });
+
+  test('relays the late-child proposal block for the single child', () => {
+    expect(skill).toMatch(/CHECKPOINT: late-child-proposal/);
+    expect(lateProposal()).toMatch(/Late child proposal for epic \{epicId\}/);
+    expect(lateProposal()).toMatch(/apply --parent \{epicId\}` with the one child/);
+  });
+
+  test('shows the previous last child as the dependency of the late child', () => {
+    expect(lateProposal()).toMatch(/Position: last; depends on \{previousLastChild\}/);
+    expect(lateProposal()).toMatch(/previous last child/);
+  });
+
+  test('reject writes nothing, reports no child created and has no standalone fallback', () => {
+    expect(lateReject()).toMatch(/writes nothing/);
+    expect(lateReject()).toMatch(/no child created/);
+    expect(lateReject()).toMatch(/There is no standalone fallback/);
+  });
+
+  test('never calls register for a late child', () => {
+    expect(skill).toMatch(/never calls `register` for a late child/);
+  });
+
+  test('refuses and creates nothing when no epic folder matches', () => {
+    expect(skill).toMatch(/A missing epic[^\n]*creates nothing/);
+  });
+
+  test('refuses and creates nothing when the epic status is not epic', () => {
+    expect(skill).toMatch(/status is not `epic` is refused and creates nothing/);
+  });
+});
