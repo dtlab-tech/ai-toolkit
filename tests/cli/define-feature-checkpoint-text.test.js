@@ -276,3 +276,59 @@ describe('agent write mode and recovery text', () => {
     expect(split()).toMatch(/leftover[\s\S]{0,200}blocked|blocked[\s\S]{0,200}leftover/i);
   });
 });
+
+describe('skill decision relay text', () => {
+  // Decision round runs from its heading to the Non-flagged result heading.
+  const decisionRound = () => section(skill, '## Decision round', '## Non-flagged result');
+  // Partial apply failure section runs from its heading to the Grilling record heading.
+  const partialFailure = () => section(skill, '## Partial apply failure', '## Grilling record');
+  // The routing bullet for one decision, from its "- **name**" line to the next bullet.
+  const routeLine = (name) => skill.split('\n').find(l => l.startsWith(`- **${name}**`)) || '';
+
+  test('the decision block carries feature_id, decision, record, proposal and edits keys', () => {
+    const block = decisionRound();
+    ['feature_id', 'decision', 'record', 'proposal', 'edits'].forEach(key =>
+      expect(block).toMatch(new RegExp(`^${key}:`, 'm')));
+  });
+
+  test('the user decision is the only trigger for a write', () => {
+    expect(decisionRound()).toMatch(/only trigger for a write/);
+  });
+
+  test('accept, edit and reject are each offered as a decision in the main loop', () => {
+    const round = decisionRound();
+    expect(round).toMatch(/main loop/);
+    expect(round).toMatch(/`accept`:/);
+    expect(round).toMatch(/`edit`:/);
+    expect(round).toMatch(/`reject`:/);
+  });
+
+  test('edit routing shows the foundation warning and re-presents the revised proposal', () => {
+    const line = routeLine('edit');
+    expect(line).toMatch(/foundation/);
+    expect(line).toMatch(/re-present/);
+  });
+
+  test('reject routing continues the feature as standalone', () => {
+    expect(routeLine('reject')).toMatch(/standalone/);
+  });
+
+  test('accept routing re-invokes the agent with decision accept', () => {
+    expect(routeLine('accept')).toMatch(/`decision: accept`/);
+  });
+
+  test('partial failure offers retry, edit and reject', () => {
+    const offer = partialFailure();
+    expect(offer).toMatch(/\*\*retry\*\*/);
+    expect(offer).toMatch(/\*\*edit\*\*/);
+    expect(offer).toMatch(/\*\*reject\*\*/);
+  });
+
+  test('partial failure names the .split-staging- leftover', () => {
+    expect(partialFailure()).toContain('.split-staging-');
+  });
+
+  test('partial failure states that later applies are blocked while a leftover exists', () => {
+    expect(partialFailure()).toMatch(/leftover[^\n]*blocks later applies/);
+  });
+});
