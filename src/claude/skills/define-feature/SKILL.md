@@ -20,8 +20,20 @@ The agent runs Phase 0 (context ingestion) first — it reads AGENTS.md, the sou
 This skill never writes files and never runs `check-definition` or `apply` itself. The agent resolves the features root with `ai-toolkit resolve-features-root` and performs every write.
 
 - **DONE**: relay the written `feature.md` path or the created children, then stop. If the agent lists unevaluated signals, relay each one as described under "Unevaluated signals" below.
-- **ERROR**: this covers a failed `ai-toolkit resolve-features-root` call and a `RECORD_INVALID` result. Relay the reason, state that nothing was written, and stop. Do not retry and do not continue to another phase.
+- **ERROR**: this covers a failed `ai-toolkit resolve-features-root` call and a `RECORD_INVALID` result. Relay the reason, state that nothing was written, and stop. Do not retry and do not continue to another phase. An `ERROR: partial-apply` block is different: handle it under "Partial apply failure" below.
 - **CHECKPOINT: split-proposal**: present the proposal view below. The agent has ended its turn and has written nothing. Present the proposal view, then collect the user's decision as described under "Decision round".
+
+## Partial apply failure
+
+When the agent returns `ERROR: partial-apply`, the parent `feature.md` is already written and registered as `defined`, and some children may already exist. Hold the block's `feature_id`, `created_children`, `staging_leftover` and `reason` in main-loop context, together with the `record` and `proposal`. Like the grilling record, keep them in memory only.
+
+1. Relay the block: the `created_children` list (or "none"), the `staging_leftover` list (or "none"), and the `reason`. Do not delete any listed child or leftover.
+2. If `staging_leftover` is not "none", state that the `.split-staging-*` leftover blocks later applies until it is resolved. A retry stops without running `apply` while the leftover exists.
+3. Offer the user one choice of `retry`, `edit` or `reject`:
+   - **retry**: send `decision: retry` with `apply_failed`, the unchanged `record` and `proposal`. The agent skips the parent write and `register`, and runs the leftover check before `apply`.
+   - **edit**: send `decision: edit` with `apply_failed` and the user's `edits`. The agent returns a revised CHECKPOINT, which is presented under the proposal view. The next decision is then sent as `retry`, carrying `apply_failed`.
+   - **reject**: send `decision: reject` with `apply_failed`. The feature stays a standalone feature, already registered as `defined`. The agent writes nothing. Relay the result and the created children and leftover as reported.
+4. Never send `decision: accept` after a partial failure, because the parent already exists and the agent refuses to rewrite it. While `apply_failed` is held, an accept is sent as `retry`. The skill never writes files and never runs `apply` or `check-definition` itself.
 
 ## Grilling record
 
@@ -54,16 +66,18 @@ Re-invoke the agent with this decision block. The `record` and `proposal` values
 Mode: define
 CHECKPOINT: decision
 feature_id: {FTR-XXX}
-decision: accept | edit | reject
+decision: accept | edit | reject | retry
 record: <unchanged JSON from the PROPOSAL block>
 proposal: <unchanged, or with the user's edits applied>
 edits: "<user's free-text edits>"    # only when decision = edit
+apply_failed: <held from the last ERROR: partial-apply block>    # only after a partial apply failure
 ```
 
 Routing per decision:
 
-- **accept**: re-invoke with `decision: accept` and the proposal unchanged. Relay the DONE result. An ERROR is handled as under "Handling the agent's return".
-- **reject**: re-invoke with `decision: reject`. Relay the DONE result and state that the feature continues as one standalone feature. Relay the sentence "Checkpoint 2 remains available for this feature." unchanged when the result contains it.
+- **accept**: re-invoke with `decision: accept` and the proposal unchanged. Relay the DONE result. An ERROR is handled as under "Handling the agent's return". If `apply_failed` is held, send `decision: retry` instead, as under "Partial apply failure".
+- **retry**: only after a partial apply failure. Re-invoke with `decision: retry`, `apply_failed` and the unchanged proposal. Relay the DONE result. A new ERROR: partial-apply is handled under "Partial apply failure".
+- **reject**: re-invoke with `decision: reject`, including `apply_failed` when it is held. Relay the DONE result and state that the feature continues as one standalone feature. Relay the sentence "Checkpoint 2 remains available for this feature." unchanged when the result contains it.
 - **edit**: re-invoke with `decision: edit`, the `edits` text, and the proposal unchanged. The agent returns a revised CHECKPOINT block with `violations` and `foundationWarnings`. Report each violation. Show the foundation warning from the returned block for each entry in `foundationWarnings`. Then re-present the revised proposal with the proposal view and return to this decision round. The next decision carries the revised `proposal`. Repeat until the user chooses accept or reject. Edit rounds write nothing.
 
 ## Non-flagged result
