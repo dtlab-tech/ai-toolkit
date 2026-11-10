@@ -103,6 +103,42 @@ proposal:
 
 Write nothing in this mode before the explicit accept: no `mkdir`, no `feature.md`, no ledger entry, no `register`, no `apply`.
 
+### L7. Decision
+
+Entered only on a late-child re-invocation that carries `decision`, `epicId`, and the one-child `proposal.child` from L6. Phases 1 to 4 do not run. Each decision below is exclusive.
+
+**Decision `accept`**
+
+1. Re-check before writing (same rules as L2 to L4): `{epicFolder}/epic.md` still exists; the registry status of `{epicId}` is still `epic`; no `{featuresRoot}/FTR-*-{slug}` folder exists and `{epicFolder}/epic.md` has no child row for `{slug}`. Any failure: report it, STOP, write nothing.
+2. Leftover check: any `.split-staging-*` entry directly under `{featuresRoot}` -> STOP, report the leftover path, run no apply (Tech-Spec §12).
+3. Build the one-child payload in memory: `{ "children": [ { "name", "purpose", "summary", "keywords", "dependsOn": ["{previous last child name}"] } ] }`. The child is placed last. Pipe it on stdin; never write it to a file:
+   ```bash
+   cat <<'JSON' | run-asset scripts/feature-split.js --project "<projectRoot>" -- apply --features-root "$featuresRoot" --parent "{epicId}"
+   { "children": [ { "name": "...", "purpose": "...", "summary": "...", "keywords": ["..."], "dependsOn": ["..."] } ] }
+   JSON
+   ```
+4. If exit != 0: report apply's error text verbatim. STOP. Do not call `register`.
+5. If exit = 0: parse the single JSON line. `children[0].id` is the child ID and `children[0].dir` is its folder name under `{featuresRoot}`. Report the created child path (`{featuresRoot}/{dir}`) and the child ID to the user, then finish with DONE.
+6. Never call `register` for the child. The epic is not re-registered on this path.
+
+**Decision `edit`**
+
+1. Validate the edit with `validate-proposal`. Write nothing:
+   ```bash
+   cat <<'JSON' | run-asset scripts/feature-split.js --project "<projectRoot>" -- validate-proposal
+   { "proposal": { "source": "definition", "minChildren": 0, "foundationNote": "", "sharedFoundationOwner": null, "children": [ <the child, dependsOn []> ] }, "edit": <one op JSON> }
+   JSON
+   ```
+   `dependsOn` stays `[]` in this envelope. The previous last child is an `epic.md` row, not a proposal child, so the validator would reject it.
+2. If exit != 0: STOP, report the error. Write nothing.
+3. Parse the single JSON line: `proposal` (revised, or unchanged on refusal), `violations[]` (`code`, `key`, `message`), `foundationWarnings[]` (`code`, `message`). Report every violation and every foundation warning. A refused edit is a violation, not a failure.
+4. Return a revised `CHECKPOINT: late-child-proposal` block (same format as L6) with the revised child, `depends_on` restored to the previous last child, and the `violations` and `foundationWarnings`.
+5. STOP. Write no file, create no folder, open no ledger entry, call no `register` and no `apply`. Nothing changes until the user sends a new explicit accept.
+
+**Decision `reject`**
+
+Create nothing. Do not write `feature.md`. Do not `mkdir`. Do not open a ledger entry. Do not run `apply` or `register`. There is no standalone fallback. Report "no child created" and finish with DONE.
+
 ---
 
 ## Phase 0 — Context Ingestion (MANDATORY — before any question)
