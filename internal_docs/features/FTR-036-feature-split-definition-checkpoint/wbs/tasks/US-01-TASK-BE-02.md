@@ -72,7 +72,7 @@ grep -q "ai-toolkit resolve-features-root" src/claude/agents/gaia-define-feature
 ```
 
 ```
-node -e "const t=require('fs').readFileSync('src/claude/agents/gaia-define-feature.md','utf8');const a=t.indexOf('Phase 3a');const c=t.indexOf('Phase 4');const b=t.lastIndexOf('Phase 3',a);if(a<0||b<0||c<0||!(b<a&&a<c))process.exit(1)"
+node -e "const t=require('fs').readFileSync('src/claude/agents/gaia-define-feature.md','utf8');const h=n=>t.search(new RegExp('^## Phase '+n+' ','m'));const a=h('3a');const b=h('3');const c=h('4');if(a<0||b<0||c<0||!(b<a&&a<c))process.exit(1)"
 ```
 
 ```

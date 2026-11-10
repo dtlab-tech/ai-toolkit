@@ -51,3 +51,7 @@ Also by hand: one verification command that fails until the deliverable exists w
 | Cycle | Action | Date | Details |
 |-------|--------|------|---------|
 | 2 | Approved | 2026-11-09 | "Approve — start implementation" |
+
+## Amendment 2026-11-10
+
+- US-01-TASK-BE-02: its ordering check used `indexOf('Phase 4')`, which matches an earlier mention in the body text (US-01-TASK-BE-01 wrote "see Mode write in Phase 4" before Phase 3a), so the check failed twice on correct work and blocked the task. The check now looks for the headings (`## Phase 3`, `## Phase 3a`, `## Phase 4`). Only that command changed; the task's work was verified and committed by hand before the run restarted.
