@@ -99,15 +99,15 @@ A late-child return (`CHECKPOINT: late-child-proposal`, or DONE or ERROR after a
 This skill never writes files and never runs `check-definition` or `apply` itself. The agent resolves the features root with `ai-toolkit resolve-features-root` and performs every write.
 
 - **DONE** (the last line of the agent's final report): relay the written `feature.md` path or the created children, then stop. If the agent lists unevaluated signals, relay each one as described under "Unevaluated signals" below.
-- **ERROR: <CODE>**: a coded error block (`feature_id`, `reason`, `nothing_written`): a failed `ai-toolkit resolve-features-root` call, `RECORD_INVALID`, `FEATURES_ROOT_INVALID`, `ID_TAKEN`, `FEATURE_EXISTS`. Relay the reason and whether anything was written, and stop. Do not retry and do not continue to another phase. An `ERROR: partial-apply` block is different: handle it under "Partial apply failure" below.
+- **ERROR: <CODE>**: a coded error block (`feature_id`, `reason`, `nothing_written`): a failed `ai-toolkit resolve-features-root` call, `RECORD_INVALID`, `FEATURES_ROOT_INVALID`, `ID_TAKEN`, `FEATURE_EXISTS`, `PARENT_VALUES_INVALID`. Relay the reason and whether anything was written, and stop. For `PARENT_VALUES_INVALID` ask the user for a corrected parent Summary (one sentence) or Keywords (at least one, no comma) and send the same decision block again with the corrected values. Do not retry and do not continue to another phase. An `ERROR: partial-apply` block is different: handle it under "Partial apply failure" below.
 - **CHECKPOINT: split-proposal**: present the proposal view below. The agent has ended its turn and has written nothing. Present the proposal view, then collect the user's decision as described under "Decision round".
 
 ## Partial apply failure
 
 When the agent returns `ERROR: partial-apply`, the parent `feature.md` is already written and registered as `defined`, and some children may already exist. Hold the block's `feature_id`, `created_children`, `staging_leftover` and `reason` in main-loop context, together with the `record` and `proposal`. Like the grilling record, keep them in memory only.
 
-1. Relay the block: the `created_children` list, the `staging_leftover` list (an empty list means none), the `error_code` and the `reason`. Do not delete any listed child or leftover.
-2. If `staging_leftover` is not "none", state that the `.split-staging-*` leftover blocks later applies until it is resolved. A retry stops without running `apply` while the leftover exists.
+1. Relay the block: the `created_children` list, the `staging_leftover` list (an empty list means none), the `error_code` and the `reason`. Do not delete any listed child or leftover. Build `apply_failed` as the JSON object `{"created_children":[...],"staging_leftover":[...]}` from the two lists, every item a JSON string.
+2. If `staging_leftover` is not an empty list, state that the `.split-staging-*` leftover blocks later applies until it is resolved. A retry stops without running `apply` while the leftover exists.
 3. Offer the user one choice of `retry`, `edit` or `reject`. When the block's `options` line is `edit | reject` (a refusal that a retry cannot change), offer only those two and never send `retry`:
    - **retry**: send `decision: retry` with `apply_failed`, the unchanged `record` and `proposal`. The agent skips the parent write and `register`, and runs the leftover check before `apply`.
    - **edit**: send `decision: edit` with `apply_failed` and the user's `edits`. The agent returns a revised CHECKPOINT, which is presented under the proposal view. The next decision is then sent as `retry`, carrying `apply_failed`.
@@ -128,7 +128,7 @@ When a CHECKPOINT arrives, parse its keys `feature_id`, `title`, `feature_dir`, 
 4. **Order**: the order of `proposal.children`; each child's `dependsOn` names the children it waits for.
 5. **Shared parts**: `proposal.foundationNote` and the first child's `assigned` text, owned by `proposal.sharedFoundationOwner`.
 6. **Unevaluated signals**: every name in `check.unevaluated`, each with the statement that this signal could not be evaluated and so did not count toward the split threshold.
-7. **Parent**: `parent_summary` and `parent_keywords` as editable items; they are registered with the parent if the split is accepted. A change the user makes to them goes into `parent_summary` or `parent_keywords` of the next decision block. After an edit, also each entry of `violations` and `foundation_warnings`.
+7. **Parent**: `parent_summary` and `parent_keywords` as editable items; they are registered with the parent if the split is accepted. A change the user makes to them goes into `parent_summary` or `parent_keywords` of the next decision block and is not repeated in `edits`. After an edit, also each entry of `violations` and `foundation_warnings`.
 
 ## Decision round
 

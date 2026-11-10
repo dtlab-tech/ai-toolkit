@@ -578,7 +578,7 @@ describe('state a re-invocation relies on (review of the contract)', () => {
 
   test('the Summary of the parent is the confirmed parent_summary, and a reject does not ask for it again', () => {
     expect(agent).toMatch(/The first sentence of the Summary section is `parent_summary` of the decision block/);
-    expect(agent).toMatch(/`parent_summary` and `parent_keywords` of the decision block are the Summary and Keywords the user already confirmed: use them, skip steps 2 and 3, and do not ask again/);
+    expect(agent).toMatch(/`parent_summary` and `parent_keywords` of the decision block are the Summary and Keywords the user already confirmed: validate them first as in the split branch \(`ERROR: PARENT_VALUES_INVALID`\), then use them, skip steps 2 and 3, and do not ask again/);
   });
 
   test('a parent Summary or Keywords edit is not an op; the returned block takes both from the decision block', () => {
@@ -617,5 +617,54 @@ describe('state a re-invocation relies on (review of the contract)', () => {
     expect(late).toMatch(/`foundation_warnings`/);
     expect(skill).not.toMatch(/foundationWarnings\` and/);
     expect(skill).toMatch(/epic_id: \{epicId\}\ndecision: accept/);
+  });
+});
+
+describe('the last warnings of the protocol review', () => {
+  const contract = agent.slice(agent.indexOf('### Block contract'), agent.indexOf('### Late-child steps'));
+
+  test('no text of the agent still says a reject derives its own Summary and Keywords or that edits are not used', () => {
+    expect(agent).not.toMatch(/they are not used anywhere/);
+    expect(agent).not.toMatch(/derives its\s+own Summary and Keywords/);
+    expect(agent).toMatch(/keep the confirmed\s+parent_summary and parent_keywords/);
+    expect(agent).toMatch(/the confirmed `parent_summary` and `parent_keywords` are kept/);
+  });
+
+  test('Mode write is entered from step 0, so the ID re-scan runs', () => {
+    expect(agent).not.toMatch(/Mode write steps 1–2/);
+    expect(agent.match(/Mode write steps 0–2/g).length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('the confirmed parent values are validated before anything is written, and the skill asks for corrected ones', () => {
+    expect(agent).toMatch(/Before step 1, validate the values the user confirmed: `parent_summary` is one sentence ending in a period/);
+    expect(agent).toMatch(/ERROR: PARENT_VALUES_INVALID` with `nothing_written: true`/);
+    expect(contract).toContain('PARENT_VALUES_INVALID');
+    expect(skill).toMatch(/`PARENT_VALUES_INVALID`\. Relay the reason/);
+    expect(skill).toMatch(/send the same decision block again with the corrected values/);
+  });
+
+  test('one owner for a parent edit: the skill puts it in the keys, the agent returns them as they came', () => {
+    expect(agent).toMatch(/The skill has already put it into `parent_summary` or `parent_keywords` of the decision block and does not repeat it in `edits`/);
+    expect(skill).toMatch(/is not repeated in `edits`/);
+    expect(agent).not.toMatch(/a parent edit of step 2 replaces its key/);
+  });
+
+  test('every answers item has a shape, so a table-shaped section needs no invented cell', () => {
+    const phase3a = agent.slice(agent.indexOf('## Phase 3a'), agent.indexOf('## Phase 4'));
+    const line = phase3a.split('\n').map(l => l.trim()).find(l => l.startsWith('answers: {'));
+    const a = JSON.parse(line.slice('answers: '.length));
+    expect(Object.keys(a.actors[0])).toEqual(['actor', 'role', 'frequency']);
+    expect(Object.keys(a.edge_cases_and_error_scenarios[0])).toEqual(['scenario', 'expected']);
+    expect(Object.keys(a.acceptance_criteria[0])).toEqual(['given', 'when', 'then', 'priority']);
+    expect(Object.keys(a.open_questions[0])).toEqual(['question', 'impact']);
+    expect(Object.keys(a.roles_and_permissions[0])).toEqual(['role', 'permissions']);
+    expect(Object.keys(a.data_model)).toEqual(['entities', 'validation_rules']);
+    expect(Object.keys(a.mvp_vs_deferred)).toEqual(['mvp', 'deferred']);
+    expect(contract).toMatch(/N\/A — <type> feature/);
+  });
+
+  test('the skill builds apply_failed as a JSON object from the two lists, and no longer tests for the string "none"', () => {
+    expect(skill).not.toMatch(/is not "none"/);
+    expect(skill).toMatch(/Build `apply_failed` as the JSON object/);
   });
 });
