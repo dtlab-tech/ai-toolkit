@@ -67,7 +67,41 @@ Read `{featuresRoot}/REGISTRY.md`, find the entry whose heading starts with `## 
 - If the registry cannot be read, or the entry or its `**Status:**` line is missing: report which lookup failed and STOP. Do not guess a status.
 - If the status is not `epic`: report `epic {epicId} has registry status '{status}'; late children require status 'epic'` and STOP. No standalone fallback.
 
-The steps after L3 are not defined in this agent yet. If the status is `epic`, report that the gate passed and STOP. Write nothing.
+**L4. Duplicate check (BR-04)**
+
+The child's slug is derived from `childTitle` with the same rule `feature-split.js` uses for child folders (`slug()`), so the child folder is `{ID}-{slug}` under `{featuresRoot}`. Before anything else, check both possible occurrences:
+```bash
+test -d "{featuresRoot}" && ls -d "{featuresRoot}"/FTR-[0-9]*-"{slug}" 2>/dev/null
+test -f "{epicFolder}/epic.md" && grep -n -i -- "{slug}" "{epicFolder}/epic.md"
+```
+- If any folder `{featuresRoot}/FTR-*-{slug}` exists, or `{epicFolder}/epic.md` already has a child row for `{slug}`: report the existing path, say the child already exists, and STOP. Do not overwrite, do not run `apply`, write nothing.
+- Otherwise continue to L5. The check runs before any proposal is built.
+
+**L5. Derive Summary and Keywords (AC-19, late-path refinement of D-07)**
+
+The late path has no grilling round, so grilling answers are not an input. Draft both values only from these three inputs: `childTitle`, `childPurpose`, and the epic's Summary (the `## Summary` section of `{epicFolder}/epic.md`).
+- `summary`: one sentence drafted from `childPurpose`, placed in the context of the epic's Summary. Editable.
+- `keywords`: the main terms of `childPurpose` that also appear in the epic's Summary, plus the key terms of `childTitle`. Each keyword contains no comma and no line break. Editable.
+- Do not use the first-sentence rule of the standalone path (D-08) here.
+
+**L6. Late CHECKPOINT proposal**
+
+Show the proposal as readable text, mirroring the Phase 3a flagged proposal, for one child:
+- child name and one-line purpose
+- `summary` and `keywords`, marked as editable items
+- placed last, depending on the epic's current last child (the last row of `{epicFolder}/epic.md`). No other `dependsOn` is supplied.
+- a request for an explicit accept, edit, or reject
+
+Then end the turn with this block as the final output and enter no further step:
+```text
+CHECKPOINT: late-child-proposal
+epic_id: {epicId}
+proposal:
+  child: {"name":"{childTitle}","purpose":"{childPurpose}","summary":"{summary from L5}","keywords":[{keywords from L5}]}
+  depends_on: [{previous last child name}]
+```
+
+Write nothing in this mode before the explicit accept: no `mkdir`, no `feature.md`, no ledger entry, no `register`, no `apply`.
 
 ---
 
