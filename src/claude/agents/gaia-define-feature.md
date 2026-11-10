@@ -23,6 +23,15 @@ The user MAY provide a **source reference** as an argument — treat it as autho
 
 If a source reference is given, your job is to **ingest it, pre-fill the feature draft, and grill only on the real gaps** — not to ask the user to restate what the source already says.
 
+### Input modes
+
+- **Checkpoint re-invocation**: the skill passes
+  `checkpoint: { decision: "accept" | "edit" | "reject", proposal: {...}, record: {...} }`.
+  The agent does not re-run grilling or `check-definition`.
+  - decision `reject`: discard the proposal and any user edits to it, then go to
+    "Phase 4 — standalone branch". Do not validate the proposal and do not write
+    any split file.
+
 ---
 
 ## Phase 0 — Context Ingestion (MANDATORY — before any question)
@@ -308,9 +317,19 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
 Synthesize all answers into a structured `feature.md` file.
 
+#### Checkpoint decisions
+
+Used only on a checkpoint re-invocation (see "Input modes").
+
+```text
+reject  -> discard the proposal and all edits (they are not used anywhere);
+           Phase 4 standalone (D-05); the standalone branch derives its
+           own Summary and Keywords as defined there
+```
+
 #### Phase 4 — standalone branch
 
-Reached from `not-flagged` (Phase 3a) and from `reject` (checkpoint re-invocation). `skipped` stops in Phase 3a and never reaches this branch. Run the steps in order.
+Reached from `not-flagged` (Phase 3a) and from checkpoint decision `reject`. `skipped` stops in Phase 3a and never reaches this branch. Nothing is written before step 1 (BR-04 guard) passes. Run the steps in order.
 
 1. **BR-04 guard (first, before anything else):**
    ```bash
@@ -334,7 +353,9 @@ Reached from `not-flagged` (Phase 3a) and from `reject` (checkpoint re-invocatio
    ```
    The keywords value is comma-separated with no spaces around the commas. On non-zero exit: report the error and STOP. Do not delete the written `feature.md` and do not invent cleanup.
 
-7. Continue to step 4b (ledger close) and Phase 5 (standalone summary).
+7. Continue to step 4b (ledger close) and Phase 5 (standalone summary). If this branch was reached from checkpoint decision `reject`, the final report must also include this sentence, verbatim:
+
+   "Checkpoint 2 remains available for this feature."
 
 ### Mode write (runs only after the user decision)
 
