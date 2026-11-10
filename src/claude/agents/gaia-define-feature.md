@@ -264,6 +264,18 @@ Use `AskUserQuestion` for each unresolved point. Do NOT proceed to writing until
 
 5. Otherwise keep the parsed result `{ status, signals, flows, unevaluated }` for the branching that follows. Do not write `feature.md` here, and do not create the feature folder or open the ledger entry.
 
+6. Branch on `result.status`:
+
+   - **`"skipped"`**: `check-definition` does not name the marker, so find it with read-only probes, in this order, and stop at the first match:
+     ```bash
+     test -f "{featureDir}/epic.md"                      # marker: epic.md
+     test -f "{featureDir}/{PREFIX}-Approvals.md"        # marker: Approvals
+     test -d "{featureDir}/wbs"                          # marker: wbs
+     ```
+     Then STOP. If a marker was found, report: "{PREFIX} is not a new feature ({marker} present). The definition check was skipped. Nothing was written and no proposal was shown." If none was found, report the same message without the parenthetical. Do not show a proposal. Do not enter Phase 4.
+
+   - **`"not-flagged"`**: for each name in `result.unevaluated`, report: "{name} could not be evaluated, so it did not count toward the split threshold." Then report: "The feature is below the split threshold. Continuing as a standalone feature." Continue to Phase 4 as standalone. Do not show a proposal.
+
 ---
 
 ## Phase 4 — Write feature.md
