@@ -357,6 +357,38 @@ Reached from `not-flagged` (Phase 3a) and from checkpoint decision `reject`. `sk
 
    "Checkpoint 2 remains available for this feature."
 
+#### Phase 4 — split branch (checkpoint decision: accept)
+
+Entered only when the re-invocation carries decision = accept. Record and proposal come from the prompt. Do not re-run grilling or `check-definition`. Never write the record or the proposal to disk.
+
+1. **Existence guard (BR-04):** if `test -e "{featureDir}/feature.md"` succeeds -> STOP, report that the parent feature.md already exists, and never overwrite it. Write nothing.
+
+2. **Leftover check:** if any entry matching `.split-staging-*` exists directly under `{featuresRoot}` -> STOP, report the leftover path, and run no apply. Later applies stay blocked until the leftover is cleared (Tech-Spec §12).
+
+3. **Write the parent:** run Mode write steps 1–2 (create the feature directory, open the ledger entry). Then write `{featureDir}/feature.md` with the existing feature.md template, unchanged. Summary = first sentence of the parent Summary section. Keywords as confirmed in the proposal.
+
+4. **Register the parent with status defined, BEFORE apply:**
+   ```bash
+   ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- register --features-root "$featuresRoot" "{featureDir}" --keywords "<k1,k2,...>"
+   ```
+   The register command has no status flag: it always writes status `defined`, and it reads the Summary's first sentence from `feature.md`, so step 3 must be complete first. On non-zero exit: report the error and STOP. Do not delete the written `feature.md`.
+   Reason: apply's initial mode precondition requires the parent to hold `feature.md` and no `epic.md`, to have no approvals or WBS, and to be registered with status defined (D-08 refinement). Apply refuses any other state with PARENT_STATUS_INVALID or PARENT_NOT_NEW.
+
+5. **Apply the accepted proposal, passed on stdin:**
+   ```bash
+   cat <<'JSON' | ai-toolkit run-asset scripts/feature-split.js --project "<projectRoot>" -- \
+       apply --parent "$PREFIX" --features-root "$featuresRoot"
+   <accepted proposal as JSON>
+   JSON
+   ```
+
+6. **Outcome:**
+   - Success -> close the ledger entry (4b), then Phase 5 with the created children listed.
+   - Failure -> return an ERROR block listing the children already created (parsed from apply output) and any `.split-staging-*` leftover. Offer:
+     - retry (back to step 2),
+     - edit (back to the proposal),
+     - reject (the parent continues as a standalone feature, already registered; created children are reported and not deleted by this agent).
+
 ### Mode write (runs only after the user decision)
 
 Mode write is the only point where anything is created on disk. It runs only after the user has confirmed the definition. Before the user confirms, nothing is created: no feature folder, no ledger entry, no `feature.md`.
