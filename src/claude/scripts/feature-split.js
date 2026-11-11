@@ -1311,10 +1311,15 @@ function globMd(dir) {
   return names.filter(n => n.endsWith('.md')).sort().map(n => path.join(dir, n));
 }
 
-function countDistinct(texts, re) {
+// Sorted numerically (UC-10 follows UC-09). Both UC-NN and AC-NN IDs have a three-character prefix.
+function listDistinct(texts, re) {
   const ids = new Set();
   for (const text of texts) for (const m of text.matchAll(re)) ids.add(m[0]);
-  return ids.size;
+  return [...ids].sort((a, b) => Number(a.slice(3)) - Number(b.slice(3)));
+}
+
+function countDistinct(texts, re) {
+  return listDistinct(texts, re).length;
 }
 
 function measureUseCases(featureDir) {
@@ -1473,14 +1478,44 @@ function decide({ counts, thresholds, unavailable }) {
   return { status: 'split-proposed', over, unavailable: [] };
 }
 
-// Grouping (Tech-Spec T-6) and depth-0 foundation mapping (T-7) are built by US-02-TASK-BE-01 to BE-03.
-// Until they land no children can be derived, so an over-threshold feature fails closed as unavailable (BR-03).
-function measuredChildren() {
-  fail('PROPOSAL_UNAVAILABLE', 'Measured split grouping is not implemented yet (FTR-037 T-6), so no split can be proposed.');
+// Tech-Spec T-6 step 2: the child count is the largest ceil(count / threshold) over the counts above their threshold,
+// floored at minChildren and capped at the number of distinct use cases U.
+function childCount({ useCases, acceptanceCriteria, components, thresholds, minChildren }) {
+  const ratios = [['useCases', useCases], ['acceptanceCriteria', acceptanceCriteria], ['components', components]]
+    .filter(([key, count]) => isOverThreshold(count, thresholds[key]))
+    .map(([key, count]) => Math.ceil(count / thresholds[key]));
+  return Math.min(Math.max(minChildren, ...ratios), useCases);
 }
 
-function measuredProposal(config) {
-  const children = measuredChildren().map(c => ({ ...c, keywords: [] }));
+// N contiguous blocks; the first (items.length mod N) blocks get one extra item.
+function splitBlocks(items, N) {
+  const base = Math.floor(items.length / N), extra = items.length % N;
+  const blocks = [];
+  let pos = 0;
+  for (let k = 0; k < N; k++) {
+    const size = base + (k < extra ? 1 : 0);
+    blocks.push(items.slice(pos, pos + size));
+    pos += size;
+  }
+  return blocks;
+}
+
+// Child grouping (Tech-Spec T-6). Components are filled in by US-02-TASK-BE-02; until then each child carries none.
+function groupChildren({ featureDir, counts, thresholds, minChildren }) {
+  const files = globMd(path.join(featureDir, 'req', 'use-cases'));
+  if (files === null) fail('PROPOSAL_UNAVAILABLE', 'req/use-cases/ is missing, so the use cases cannot be grouped');
+  const useCases = listDistinct(files.map(f => readText(f) ?? ''), UC_ID);
+  const U = useCases.length;
+  if (U < minChildren) fail('PROPOSAL_UNAVAILABLE', `fewer use cases (${U}) than minChildren (${minChildren}), so no split can be formed`);
+  const N = childCount({
+    useCases: U, acceptanceCriteria: counts.acceptanceCriteria, components: counts.components, thresholds, minChildren,
+  });
+  return splitBlocks(useCases, N).map((block, k) => ({ name: `part-${k + 1}`, useCases: block, components: [] }));
+}
+
+function measuredProposal({ featureDir, counts, config }) {
+  const children = groupChildren({ featureDir, counts, thresholds: config.thresholds, minChildren: config.minChildren })
+    .map(c => ({ ...c, keywords: [] }));
   return buildProposal({ source: 'measured', children, config }).proposal;
 }
 
@@ -1505,7 +1540,7 @@ function checkSize({ project, featureDir }) {
   if (decision.status !== 'split-proposed')
     return result(decision.status, { counts, thresholds, over: decision.over, unavailable: decision.unavailable });
   try {
-    const proposal = measuredProposal(config);
+    const proposal = measuredProposal({ featureDir, counts, config });
     return result('split-proposed', { counts, thresholds, over: decision.over, proposal });
   } catch (err) {
     const reason = String((err && err.message) || err);
@@ -1616,3 +1651,7 @@ module.exports.checkSize = checkSize;
 module.exports.runCheckSize = runCheckSize;
 module.exports.globMd = globMd;
 module.exports.countDistinct = countDistinct;
+module.exports.listDistinct = listDistinct;
+module.exports.childCount = childCount;
+module.exports.splitBlocks = splitBlocks;
+module.exports.groupChildren = groupChildren;
