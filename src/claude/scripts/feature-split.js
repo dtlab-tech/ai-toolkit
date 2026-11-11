@@ -1500,7 +1500,88 @@ function splitBlocks(items, N) {
   return blocks;
 }
 
-// Child grouping (Tech-Spec T-6). Components are filled in by US-02-TASK-BE-02; until then each child carries none.
+function cellsOf(line) {
+  return line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+}
+
+// T-6 step 1, AC side: Map<AC-NN, UC-NN[]> from the Related UC column of the acceptance-criteria table in req/index.md.
+function readAcRelatedUcs(featureDir) {
+  const text = readText(path.join(featureDir, 'req', 'index.md'));
+  if (text === null) fail('PROPOSAL_UNAVAILABLE', 'AC to use-case link source missing: req/index.md is missing');
+  const links = new Map();
+  let found = false;
+  for (const table of extractPipeTables(text)) {
+    const header = cellsOf(table[0]);
+    const idCol = header.indexOf('ID'), ucCol = header.indexOf('Related UC');
+    if (idCol < 0 || ucCol < 0) continue;
+    found = true;
+    for (const row of table.slice(1).filter(l => !SEPARATOR.test(l))) {
+      const cells = cellsOf(row);
+      const ac = (cells[idCol] || '').match(AC_ID)?.[0];
+      if (!ac) continue;
+      const ucs = links.get(ac) ?? [];
+      for (const uc of (cells[ucCol] || '').match(UC_ID) ?? []) if (!ucs.includes(uc)) ucs.push(uc);
+      links.set(ac, ucs);
+    }
+  }
+  if (!found) fail('PROPOSAL_UNAVAILABLE', 'AC to use-case link source missing: req/index.md has no table with a Related UC column');
+  return links;
+}
+
+// T-6 step 4, component side: one row per distinct Path in the Section 9 file tables, with the AC IDs of its Addresses cell.
+function readComponentRows(featureDir) {
+  const text = readText(path.join(featureDir, 'spec', 'index.md'));
+  if (text === null) fail('PROPOSAL_UNAVAILABLE', 'spec/index.md is missing, so components cannot be assigned');
+  const { scope, where } = section9Of(text);
+  const tables = extractPipeTables(scope).filter(t => pathColumnOf(t) >= 0);
+  if (tables.length === 0) fail('PROPOSAL_UNAVAILABLE', `no table with a Path column found in ${where}`);
+  const rows = new Map();
+  for (const table of tables) {
+    const header = cellsOf(table[0]);
+    const pathCol = header.indexOf('Path'), addressesCol = header.indexOf('Addresses');
+    if (addressesCol < 0) fail('PROPOSAL_UNAVAILABLE', `the Addresses column is missing from a file table in ${where}`);
+    for (const row of table.slice(1).filter(l => !SEPARATOR.test(l))) {
+      const cells = cellsOf(row);
+      const p = (cells[pathCol] || '').replace(/`/g, '');
+      if (p === '' || rows.has(p)) continue;
+      rows.set(p, { path: p, addresses: (cells[addressesCol] || '').match(AC_ID) ?? [] });
+    }
+  }
+  return [...rows.values()];
+}
+
+// T-6 steps 4 and 5. blocks: [{ index, useCases }] with index 1-based. A component goes to the block of the lowest-numbered
+// use case reachable through its Addresses ACs; a component with no such link goes to block 1 with a "no use-case link" note.
+// A link to a use case outside every block does not count as resolvable.
+function assignComponents({ featureDir, blocks }) {
+  const blockOfUc = new Map();
+  for (const b of blocks) for (const uc of b.useCases) blockOfUc.set(uc, b.index);
+  const acLinks = readAcRelatedUcs(featureDir);
+  const buckets = new Map(blocks.map(b => [b.index, { components: [], unlinked: [] }]));
+  for (const row of readComponentRows(featureDir)) {
+    const linked = row.addresses.flatMap(ac => acLinks.get(ac) ?? []).filter(uc => blockOfUc.has(uc));
+    if (linked.length === 0) {
+      buckets.get(1).components.push(row.path);
+      buckets.get(1).unlinked.push(row.path);
+      continue;
+    }
+    const lowest = linked.reduce((a, b) => (Number(b.slice(3)) < Number(a.slice(3)) ? b : a));
+    buckets.get(blockOfUc.get(lowest)).components.push(row.path);
+  }
+  return blocks.map(b => fillChild(b, buckets.get(b.index)));
+}
+
+// Child fields (T-6 step 5). assigned is text, as FTR-035 D-08 defines it, and carries the use-case IDs, the component Paths and
+// the "no use-case link" note. summary equals purpose (D-11). keywords are filled later by the agent (T-8).
+function fillChild(block, bucket) {
+  const first = block.useCases[0], last = block.useCases[block.useCases.length - 1];
+  const purpose = `Use cases ${first}..${last} and their components`;
+  const parts = [`Use cases: ${block.useCases.join(', ')}.`, `Components: ${bucket.components.join(', ') || 'none'}.`];
+  if (bucket.unlinked.length) parts.push(`No use-case link (assigned to part-1): ${bucket.unlinked.join(', ')}.`);
+  return { name: `part-${block.index}`, purpose, summary: purpose, keywords: [], assigned: parts.join(' ') };
+}
+
+// Child grouping (Tech-Spec T-6): the child count and use-case blocks, then the component assignment and child fields.
 function groupChildren({ featureDir, counts, thresholds, minChildren }) {
   const files = globMd(path.join(featureDir, 'req', 'use-cases'));
   if (files === null) fail('PROPOSAL_UNAVAILABLE', 'req/use-cases/ is missing, so the use cases cannot be grouped');
@@ -1510,7 +1591,9 @@ function groupChildren({ featureDir, counts, thresholds, minChildren }) {
   const N = childCount({
     useCases: U, acceptanceCriteria: counts.acceptanceCriteria, components: counts.components, thresholds, minChildren,
   });
-  return splitBlocks(useCases, N).map((block, k) => ({ name: `part-${k + 1}`, useCases: block, components: [] }));
+  if (N < 1) fail('PROPOSAL_UNAVAILABLE', 'no use cases to group');
+  const blocks = splitBlocks(useCases, N).map((block, k) => ({ index: k + 1, useCases: block }));
+  return assignComponents({ featureDir, blocks });
 }
 
 function measuredProposal({ featureDir, counts, config }) {
@@ -1655,3 +1738,5 @@ module.exports.listDistinct = listDistinct;
 module.exports.childCount = childCount;
 module.exports.splitBlocks = splitBlocks;
 module.exports.groupChildren = groupChildren;
+module.exports.assignComponents = assignComponents;
+module.exports.fillChild = fillChild;
