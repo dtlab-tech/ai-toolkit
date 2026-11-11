@@ -8,6 +8,32 @@ export const meta = {
 const c = control
 const { featurePath, featureDir, prefix } = c.feature(args[0])
 const force = args.includes('--force')
+const SPLIT_CHECK_EXIT_CODES = new Set([0, 1])
+// BR-04 / D-04: every failure path yields unavailable with a reason, never passed.
+function unavailableCheck(reason) {
+  return {
+    status: 'unavailable',
+    counts: null,
+    thresholds: null,
+    over: [],
+    unavailable: [{ count: 'check-size', reason }],
+    proposal: null,
+  }
+}
+// Returns the parsed check-size JSON, or an unavailable result. Never throws.
+function parseSplitCheck(result) {
+  if (result === null || typeof result !== 'object') return unavailableCheck('check-size did not return a result')
+  if (!SPLIT_CHECK_EXIT_CODES.has(result.exitCode)) return unavailableCheck(`check-size did not run (exit ${result.exitCode})`)
+  if (typeof result.stdout !== 'string') return unavailableCheck('check-size produced no output')
+  let parsed
+  try {
+    parsed = JSON.parse(result.stdout)
+  } catch (err) {
+    return unavailableCheck('check-size output is not JSON')
+  }
+  if (parsed === null || typeof parsed !== 'object' || typeof parsed.status !== 'string') return unavailableCheck('check-size output has no string status')
+  return parsed
+}
 return c.run(meta.name, featureDir, prefix, async () => {
   const file = suffix => `${featureDir}/${prefix}-${suffix}.md`
   const fresh = (output, inputs = [featurePath]) => c.exists(output) && c.read(output).trim().length > 0 && inputs.every(input => c.exists(input) && c.mtime(output) >= c.mtime(input))
