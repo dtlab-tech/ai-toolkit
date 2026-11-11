@@ -1,4 +1,41 @@
 ## 0.1.4 (2026-07-21)
+## [0.28.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.27.1...v0.28.0) (2026-11-11)
+
+
+### Features
+
+* add accept split branch to define-feature agent ([557e4a1](https://github.com/dtlab-tech/ai-toolkit/commit/557e4a124a8d42cdc04f40662541ce787d8ce561))
+* add check-definition command to feature-split ([5d9fcd2](https://github.com/dtlab-tech/ai-toolkit/commit/5d9fcd281a90e7d329126a3afdffb9a37d782222))
+* add decision relay to define-feature skill ([80fcde4](https://github.com/dtlab-tech/ai-toolkit/commit/80fcde4bfce3096f1658e70421369eeaf4f61cff))
+* add edit validation loop to define-feature agent ([288ef62](https://github.com/dtlab-tech/ai-toolkit/commit/288ef626ef58653e7a38ea6ba9e6e0bcf0ada7a2))
+* add grilling record parsing and definition signal evaluation ([4892a4e](https://github.com/dtlab-tech/ai-toolkit/commit/4892a4e24e4f36cd56d7503e5e8881112033c5f9))
+* add late-child apply and reject handling to define-feature agent ([0d62bc4](https://github.com/dtlab-tech/ai-toolkit/commit/0d62bc4eb7891a3a1de6af32c1db4d52754e33ec))
+* add late-child duplicate check and derived keywords to define-feature agent ([cab35c1](https://github.com/dtlab-tech/ai-toolkit/commit/cab35c112cd4847476aca159403bb5cff72337e4))
+* add late-child epic lookup and status gate to define-feature agent ([7d2f7a4](https://github.com/dtlab-tech/ai-toolkit/commit/7d2f7a427ff23cab53c2dbf73cd7f0cd523ace8b))
+* add late-child proposal relay to define-feature skill ([8ba059c](https://github.com/dtlab-tech/ai-toolkit/commit/8ba059ccd5643f200549398218e0eae3974f7d4c))
+* add late-child routing to define-feature skill ([a184403](https://github.com/dtlab-tech/ai-toolkit/commit/a184403d647ac356af4264f4982ab82c7dd53bc2))
+* add Phase 3a size checkpoint to the define-feature agent (US-01-TASK-BE-02) ([209a7bf](https://github.com/dtlab-tech/ai-toolkit/commit/209a7bf27085a4be065bfdf6324d6f883055c55f))
+* add standalone write and register branch to define-feature agent ([90e133f](https://github.com/dtlab-tech/ai-toolkit/commit/90e133f695318578a823ce53ce9fbb42362526f0))
+* add validate-proposal command to feature-split ([048981d](https://github.com/dtlab-tech/ai-toolkit/commit/048981d0f37413e313b5f26fb0d67332d99da605))
+* defer feature folder and ledger open to write mode ([50a69c0](https://github.com/dtlab-tech/ai-toolkit/commit/50a69c09ec287ce26d2a902d7b18a1c987db8513))
+* **define-feature:** size checkpoint and split proposal at feature definition (FTR-036) ([535d710](https://github.com/dtlab-tech/ai-toolkit/commit/535d710ac4632ea7a92093fef09341e97d464b7c))
+* **define-feature:** size checkpoint and split proposal at feature definition (FTR-036) ([cbee94a](https://github.com/dtlab-tech/ai-toolkit/commit/cbee94ab58d75bf9e991cea0734efe40f1bcb813))
+* handle reject decision in define-feature agent ([5b28fe0](https://github.com/dtlab-tech/ai-toolkit/commit/5b28fe0b608a68d4c2f30e683858a567a74a3062))
+* handle skipped and not-flagged results in Phase 3a ([5b80fd2](https://github.com/dtlab-tech/ai-toolkit/commit/5b80fd21e839f8a205e54cf9cb001dc7efbc795c))
+* offer retry edit or reject after failed apply in skill ([d4b57d1](https://github.com/dtlab-tech/ai-toolkit/commit/d4b57d16aec99d3382900ebe087e1511b79540ce))
+* relay Phase 3a checkpoint proposal in define-feature skill ([666d761](https://github.com/dtlab-tech/ai-toolkit/commit/666d7612de805024bbe9e4c4333a53a239e28e3e))
+* report partial apply failure in define-feature agent ([92beb5a](https://github.com/dtlab-tech/ai-toolkit/commit/92beb5a8a2febc95ff506e42ae90733f6d20a8dd))
+* return split proposal CHECKPOINT from Phase 3a when flagged ([8220f56](https://github.com/dtlab-tech/ai-toolkit/commit/8220f56a490b260caba979a4afc874cdf39fc8ae))
+
+
+### Bug Fixes
+
+* **define-feature:** one block contract between the agent and the skill ([81a3aef](https://github.com/dtlab-tech/ai-toolkit/commit/81a3aef91ae36642b25b3dff02756648dce60dfa))
+* **define-feature:** refine the late-child, failure and call-form texts ([8721d6d](https://github.com/dtlab-tech/ai-toolkit/commit/8721d6d567ff341fc926e240e8fe1887f76e925f))
+* **define-feature:** the parent Summary, the answers layout and the stops of the contract ([c8ce50d](https://github.com/dtlab-tech/ai-toolkit/commit/c8ce50d0be1bde1cd4654d0c219b158f02095a71))
+* **define-feature:** validate the confirmed parent values, one owner for a parent edit, answers item shapes ([74bd166](https://github.com/dtlab-tech/ai-toolkit/commit/74bd166ede19484fefc3f0fe7b852bbb8972f975))
+* **feature-split:** validate the grilling record and the validate-proposal envelope ([2f60fbb](https://github.com/dtlab-tech/ai-toolkit/commit/2f60fbbba308f9e0d012c7018e5089bb997854b6))
+
 ## [0.27.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.27.0...v0.27.1) (2026-11-09)
 
 
