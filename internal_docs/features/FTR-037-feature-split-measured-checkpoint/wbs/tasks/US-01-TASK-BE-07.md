@@ -72,7 +72,7 @@ Behavior the code must guarantee:
 **Verification commands:**
 
 ```
-node --check src/claude/workflows/pm-phase1.js
+node -e "const F=Object.getPrototypeOf(async function(){}).constructor;new F(require('fs').readFileSync(process.argv[1],'utf8').replace(/^export /gm,''))" src/claude/workflows/pm-phase1.js
 ```
 
 ```
