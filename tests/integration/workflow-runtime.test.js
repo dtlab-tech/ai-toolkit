@@ -47,7 +47,11 @@ const COMPONENTS_TABLE = '### New files\n| Path | Purpose | Addresses | Domain |
   '### Modified files\n| Path | Change description | Addresses | Domain | Spec |\n|---|---|---|---|---|\n';
 const techSpecSkeletonDoc = (upToSection = 12) => Array.from({ length: upToSection }, (_, i) => {
   const n = i + 1;
-  return n === 9 ? `## 9. File Inventory\n\n${COMPONENTS_TABLE}` : `## ${n}. Section ${n}\n`;
+  if (n === 9) return `## 9. File Inventory\n\n${COMPONENTS_TABLE}`;
+  // check-size (FTR-037) measures the build order, so the fixture Tech-Spec carries one item; without it the check is
+  // unavailable and the workflow stops before the digest
+  if (n === 11) return '## 11. Build order\n\n1. a.js — depends on: nothing\n';
+  return `## ${n}. Section ${n}\n`;
 }).join('\n');
 const techSpecComponentDetailDoc = () =>
   '# a.js — New\n\n## Change\n\nExample change.\n\n## Algorithm\n\nExample body.\n\n## Tests\n\nExample tests.\n';

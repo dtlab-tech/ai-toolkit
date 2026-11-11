@@ -854,6 +854,18 @@ return c.run(meta.name, featureDir, prefix, async () => {
       if (mergedNeedsTechSpecFix) { await generateTechSpec(true); assembledTechSpec = assembleTechSpec() }
     }
   }
+  const checkRun = c.command(['run-asset', 'scripts/feature-split.js', '--project', c.root, '--',
+    'check-size', '--feature-dir', featureDir, '--prefix', prefix], [0, 1])
+  const split_checkpoint = parseSplitCheck(checkRun)
+  if (split_checkpoint.status !== 'passed' && split_checkpoint.status !== 'skipped') {
+    return {
+      prefix, feature_dir: featureDir, feature_path: featurePath,
+      requirements: { path: reqIndexPath, summary: 'Requirements ready (split; req/index.md + req/use-cases/*.md)' },
+      tech_spec: { path: specIndexPath, summary: 'Tech-Spec ready (split; spec/index.md + spec/components/*.md)' },
+      validation: { path: file('Validation-Report'), summary: validationSummary, open_gaps: openGaps },
+      token_ledger: c.tokenLedger, errors: [], split_checkpoint,
+    }
+  }
   // Binds Gate 1's eventual approval to the EXACT Requirements/Tech-Spec bytes
   // produced here, not just "a file named *-Requirements.md exists" — SKILL.md's
   // Step 2 embeds this verbatim into Approvals.md, and pm-phase2.js's Gate 1 check
@@ -867,6 +879,6 @@ return c.run(meta.name, featureDir, prefix, async () => {
     tech_spec: { path: specIndexPath, summary: 'Tech-Spec ready (split; spec/index.md + spec/components/*.md)' },
     validation: { path: file('Validation-Report'), summary: validationSummary, open_gaps: openGaps },
     docs_digest: docsDigest,
-    token_ledger: c.tokenLedger, errors: [],
+    token_ledger: c.tokenLedger, errors: [], split_checkpoint,
   }
 })
