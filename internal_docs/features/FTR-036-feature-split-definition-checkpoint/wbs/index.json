@@ -1,0 +1,699 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-036",
+  "phases": [
+    {
+      "id": "INFRA",
+      "type": "infrastructure",
+      "title": "Shared infrastructure: read-only check-definition and validate-proposal commands in feature-split.js with unit tests",
+      "commit": {
+        "type": "feat",
+        "subject": "add check-definition and validate-proposal commands to feature-split"
+      },
+      "sourceUC": [],
+      "detailFile": "user-stories/INFRA.md",
+      "taskIds": [
+        "INFRA-TASK-BE-01",
+        "INFRA-TASK-BE-02",
+        "INFRA-TASK-BE-03",
+        "INFRA-TASK-TEST-01",
+        "INFRA-TASK-TEST-02",
+        "INFRA-TASK-TEST-03"
+      ]
+    },
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "title": "As the define-feature agent, I want to assess a new feature's size right after grilling, so that a probable epic is flagged and a split is proposed before anything is written",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-01 Phase 3a size assessment at definition time"
+      },
+      "sourceUC": [
+        "UC-01"
+      ],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02",
+        "US-01-TASK-BE-03",
+        "US-01-TASK-BE-04",
+        "US-01-TASK-BE-05",
+        "US-01-TASK-TEST-01",
+        "US-01-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "title": "As a user, I want to accept, edit or reject the split proposal in the main loop, so that children are created only after I confirm and a rejected feature continues as standalone",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-02 accept, edit or reject split proposal"
+      },
+      "sourceUC": [
+        "UC-02"
+      ],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-BE-02",
+        "US-02-TASK-BE-03",
+        "US-02-TASK-BE-04",
+        "US-02-TASK-BE-05",
+        "US-02-TASK-BE-06",
+        "US-02-TASK-BE-07",
+        "US-02-TASK-TEST-01",
+        "US-02-TASK-TEST-02"
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "title": "As a user, I want to add a missing late child to an existing epic through define-feature, so that the epic is completed without a grilling round",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-03 late child of an existing epic"
+      },
+      "sourceUC": [
+        "UC-03"
+      ],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-02",
+        "US-03-TASK-BE-03",
+        "US-03-TASK-BE-04",
+        "US-03-TASK-BE-05",
+        "US-03-TASK-TEST-01",
+        "US-03-TASK-TEST-02"
+      ]
+    }
+  ],
+  "tasks": {
+    "INFRA-TASK-BE-01": {
+      "title": "Add parseGrillingRecord and evaluateDefinition to feature-split.js",
+      "outcome": "feature-split.js contains an exported parseGrillingRecord, which throws RECORD_INVALID for non-JSON or non-object input, and an exported pure evaluateDefinition. evaluateDefinition returns status, signals, flows and unevaluated from definitionSignals minimums via meetsMinimum, and lists a missing or malformed signal field under unevaluated.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add grilling record parsing and definition signal evaluation"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-02": {
+      "title": "Wire the check-definition command into feature-split.js",
+      "outcome": "feature-split.js exposes a read-only check-definition command, backed by exported checkDefinition and runCheckDefinition, registered in COMMANDS. It returns status skipped without reading stdin when isNewFeature reports the feature is not new, validates the feature id, and loads minimums through loadConfig. The unknown-command message now lists check-definition.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add check-definition command to feature-split"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-BE-03": {
+      "title": "Add the validate-proposal command to feature-split.js",
+      "outcome": "feature-split.js exposes a read-only validate-proposal command, registered in COMMANDS and exported. It takes the proposal and an edit on stdin and wraps editProposal and validateProposal. It returns the revised proposal, the violations and the foundation warnings as one JSON line, and writes nothing to disk.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "INFRA-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add validate-proposal command to feature-split"
+      },
+      "detailFile": "tasks/INFRA-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-TEST-01": {
+      "title": "Unit test checkDefinition evaluation and skip behaviour",
+      "outcome": "tests/scripts/feature-split.test.js has a check-definition describe block. It covers skipped for epic.md, Approvals and wbs folders without reading stdin, the new-folder cases, each signal at its boundary, not-flagged, unevaluated signals, a config override of minActors, and an unchanged features-root snapshot after each call.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "INFRA-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "cover check-definition evaluation and skip cases"
+      },
+      "detailFile": "tasks/INFRA-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-TEST-02": {
+      "title": "Unit test check-definition errors and facade dispatch",
+      "outcome": "tests/scripts/feature-split.test.js asserts that RECORD_INVALID is raised for non-JSON, null, array and string stdin. It asserts that FEATURE_INVALID is raised for malformed ids. It also asserts that main dispatches check-definition with exit code 0 and that the unknown-command message lists the new command. Existing apply and register tests are unchanged.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "INFRA-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "cover check-definition errors and dispatch"
+      },
+      "detailFile": "tasks/INFRA-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "INFRA-TASK-TEST-03": {
+      "title": "Unit test the validate-proposal command",
+      "outcome": "tests/scripts/feature-split.test.js has a validate-proposal describe block, run through main. It covers a valid edit, a violation (for example a dependency cycle), a foundation warning, a malformed stdin payload, and an unchanged features-root snapshot after the call. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "INFRA-TASK-BE-03",
+        "INFRA-TASK-TEST-02"
+      ],
+      "acceptanceCriteria": [],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "cover validate-proposal command"
+      },
+      "detailFile": "tasks/INFRA-TASK-TEST-03.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-01": {
+      "title": "Defer folder creation and ledger open from Phase 1d to write mode",
+      "outcome": "gaia-define-feature.md no longer creates the feature folder or opens the ledger entry before grilling ends. Both actions are stated to happen only in mode write, after the user decision, so the checkpoint writes nothing to disk before confirmation.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "defer feature folder and ledger open to write mode"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-02": {
+      "title": "Add Phase 3a record build and check-definition invocation to the agent",
+      "outcome": "gaia-define-feature.md has a Phase 3a between Phase 3 and Phase 4. It resolves the features root with ai-toolkit resolve-features-root, builds the in-memory grilling record with actors, applications and flows with reasons, and pipes it on stdin to check-definition through run-asset. It stops, reports and writes nothing when the root resolution fails or when RECORD_INVALID is returned.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "INFRA-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-05",
+        "AC-06",
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add Phase 3a check-definition invocation to define-feature agent"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-03": {
+      "title": "Add Phase 3a skipped and not-flagged status handling to the agent",
+      "outcome": "gaia-define-feature.md handles status skipped by reporting the marker (epic.md, Approvals or wbs) and stopping without writing or showing a proposal. It handles status not-flagged by continuing to Phase 4 as standalone with no proposal. In the not-flagged path it names each unevaluated signal to the user.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-02",
+        "AC-03",
+        "AC-04"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "handle skipped and not-flagged results in Phase 3a"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-04": {
+      "title": "Add Phase 3a flagged proposal and CHECKPOINT return to the agent",
+      "outcome": "gaia-define-feature.md handles status flagged by building a split proposal and ending its turn with a CHECKPOINT block without writing any file. The proposal lists child names, one-line purposes, dependency order, shared parts for the first child, each flow with a one-line reason, editable Summary and Keywords per child, and any unevaluated signals.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-04",
+        "AC-07",
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "return split proposal CHECKPOINT from Phase 3a when flagged"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-05": {
+      "title": "Add CHECKPOINT proposal relay and mode line to the define-feature skill",
+      "outcome": "define-feature/SKILL.md passes a Mode line in the spawn prompt, keeps the grilling record only in main-loop context and never on disk, and presents the CHECKPOINT proposal view with children, purposes, order, shared parts, flows with reasons and editable Summary and Keywords. It names unevaluated signals, and it stops and reports on root-resolution failure or RECORD_INVALID.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "relay Phase 3a checkpoint proposal in define-feature skill"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Add static tests pinning the agent Phase 3a text",
+      "outcome": "tests/cli/define-feature-checkpoint-text.test.js exists and asserts the agent text. It checks that Phase 3a sits between Phase 3 and Phase 4, that check-definition is called with --features-root and --feature-id and the record on stdin in memory, and that resolve-features-root is used with no hard-coded path. It also checks that all three statuses and unevaluated are handled, and that RECORD_INVALID and root failure stop with nothing written. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin define-feature agent Phase 3a text with static tests"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-02": {
+      "title": "Add static tests pinning the skill checkpoint relay text",
+      "outcome": "tests/cli/define-feature-checkpoint-text.test.js also asserts the skill text. It checks the Mode line, the proposal view contents (children, dependency order, shared parts, flows with reasons, editable Summary and Keywords), the unevaluated note, the in-memory-only record, and the stop on root failure or RECORD_INVALID. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-05",
+        "US-01-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin define-feature skill checkpoint relay text with static tests"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Add standalone write branch with no-overwrite guard and register to the agent",
+      "outcome": "gaia-define-feature.md Phase 4 has a standalone branch. It first checks that feature.md is absent and stops without writing if it exists. It then shows the Summary (first sentence) and derived Keywords for user confirmation or edit, writes feature.md, and runs register.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-09"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add standalone write and register branch to define-feature agent"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-02": {
+      "title": "Add checkpoint reject re-invocation handling to the agent",
+      "outcome": "gaia-define-feature.md accepts a checkpoint re-invocation with decision reject, without repeating grilling. It routes to the standalone branch, discards any edits, and states that checkpoint 2 remains available for the feature.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-01",
+        "US-01-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-09"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "handle reject decision in define-feature agent"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-03": {
+      "title": "Add accept split branch to the agent with parent register before apply",
+      "outcome": "gaia-define-feature.md handles checkpoint decision accept in this order: the no-overwrite guard, a .split-staging-* leftover check, the parent feature.md write, register with status defined, then apply --parent with the proposal on stdin. The text cites the apply initial-mode precondition.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-01",
+        "US-01-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-10"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add accept split branch to define-feature agent"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-04": {
+      "title": "Add edit validation loop to the agent",
+      "outcome": "gaia-define-feature.md handles checkpoint decision edit. It pipes the proposal and edit to validate-proposal, reports violations and the foundation warning, and returns the revised proposal in a new CHECKPOINT. It writes nothing and requires a new explicit accept.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-04",
+        "INFRA-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-11"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add edit validation loop to define-feature agent"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-05": {
+      "title": "Add partial apply failure reporting to the agent",
+      "outcome": "gaia-define-feature.md handles a failed apply by returning an error block. The block lists the child folders already created and any .split-staging-* leftover, and offers retry, edit or reject. Later applies are blocked while a leftover exists. Retry, an accept after an edit, and reject after a failed apply do not rewrite the parent or call register again; retry is the explicit decision: retry.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-12"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "report partial apply failure in define-feature agent"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-06": {
+      "title": "Add decision collection and re-invocation to the skill",
+      "outcome": "define-feature/SKILL.md asks the user in the main loop to accept, edit or reject the CHECKPOINT proposal. It re-invokes the agent with a decision block (feature_id, decision, record, proposal, edits) and the in-memory record. It states that the user's decision is the only trigger for a write, and for edit it re-presents the revised proposal with the foundation warning. For a non-flagged result it shows the Keywords prompt.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-05",
+        "US-02-TASK-BE-02",
+        "US-02-TASK-BE-03",
+        "US-02-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-09",
+        "AC-10",
+        "AC-11"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add decision relay to define-feature skill"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-06.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-07": {
+      "title": "Add partial apply failure recovery offer to the skill",
+      "outcome": "define-feature/SKILL.md relays an apply ERROR block by listing the children already created. It offers retry, edit or reject, and reports that later applies are blocked while a .split-staging-* leftover exists. Retry is sent as decision: retry, never as accept.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-06",
+        "US-02-TASK-BE-05"
+      ],
+      "acceptanceCriteria": [
+        "AC-12"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "offer retry edit or reject after failed apply in skill"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-07.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Add static tests pinning agent decision handling text",
+      "outcome": "tests/cli/define-feature-checkpoint-text.test.js asserts the agent text for the no-overwrite guard, standalone register after the write, reject routing to standalone, the parent register status defined appearing before apply --parent, the edit validation with no write, and the partial failure text (retry, edit, reject, .split-staging-*). npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-BE-02",
+        "US-02-TASK-BE-03",
+        "US-02-TASK-BE-04",
+        "US-02-TASK-BE-05",
+        "US-01-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin agent accept edit reject text in static tests"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-02": {
+      "title": "Add static tests pinning skill decision relay text",
+      "outcome": "tests/cli/define-feature-checkpoint-text.test.js asserts the skill text for the decision block keys, accept, edit and reject collected in the main loop, the foundation warning on edit, the accept order (parent write, register defined, apply --parent), reject continuing as standalone, and the partial failure recovery offer. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-06",
+        "US-02-TASK-BE-07",
+        "US-01-TASK-TEST-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin skill decision relay text in static tests"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Add late-child epic lookup and status gate to the agent",
+      "outcome": "gaia-define-feature.md has a late-child mode (epicId, childTitle, childPurpose) that resolves the features root with ai-toolkit resolve-features-root and finds the epic by a folder name equal to the ID or starting with the ID and a hyphen, on a folder that contains epic.md. It lists candidate epics and creates nothing when none matches. It refuses, naming the status, unless the registry status is epic. It runs no grilling round.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-14",
+        "AC-16"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add late-child epic lookup and status gate to define-feature agent"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-02": {
+      "title": "Add late-child duplicate check and derived Summary and Keywords to the agent",
+      "outcome": "gaia-define-feature.md checks whether the child's feature.md or folder already exists, reports it and stops without overwriting. It derives the child's Summary and Keywords from the child's purpose and the epic's Summary, not from grilling answers, and returns a late CHECKPOINT proposal with editable Summary and Keywords, placed last and depending on the previous last child, without writing any file.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-15",
+        "AC-19",
+        "AC-08"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add late-child duplicate check and derived keywords to define-feature agent"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-03": {
+      "title": "Add late-child accept and reject handling to the agent",
+      "outcome": "gaia-define-feature.md handles a late-child accept by running apply --parent with the epic ID and one child on stdin, placed last, and reports the created child path and ID. It never calls register for the child. A rejection creates nothing and writes no standalone feature.md. Edits go through validate-proposal.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-02",
+        "US-02-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-13",
+        "AC-17",
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add late-child apply and reject handling to define-feature agent"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-04": {
+      "title": "Add late-child routing and child prompt to the skill",
+      "outcome": "define-feature/SKILL.md routes a request naming an epic FTR-ID (--epic) to Mode late-child, asks the child title and one-line purpose in the main loop, and spawns the agent with no grilling round. It says that a missing epic or a non-epic status creates nothing, and that an existing child feature.md is reported and stops.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-03",
+        "US-02-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-13",
+        "AC-14",
+        "AC-16"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add late-child routing to define-feature skill"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-05": {
+      "title": "Add late-child proposal relay and decision handling to the skill",
+      "outcome": "define-feature/SKILL.md presents the single-child proposal (title, purpose, editable Summary and Keywords, dependency on the previous last child), collects accept, edit or reject in the main loop, and re-invokes the agent in late-child mode. It states that reject creates nothing with no standalone fallback, and that register is not called for a late child.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-17",
+        "AC-18",
+        "AC-19"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add late-child proposal relay to define-feature skill"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Add static tests pinning agent late-child text",
+      "outcome": "tests/cli/define-feature-checkpoint-text.test.js asserts the agent late-child text: an epic folder named by the ID or by the ID and a hyphen, containing epic.md, candidate listing, status must be epic, existing child reported and stop, no grilling round, Summary and Keywords from the purpose and the epic Summary, apply placed last, no register call, and no standalone fallback. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-13",
+        "AC-14",
+        "AC-15",
+        "AC-16",
+        "AC-17",
+        "AC-18",
+        "AC-19"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin agent late-child text in static tests"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-03-TASK-TEST-02": {
+      "title": "Add static tests pinning skill late-child text",
+      "outcome": "tests/cli/define-feature-checkpoint-text.test.js asserts the skill late-child text: the Mode late-child line, --epic routing, the child title and purpose question, the single-child proposal relay, no standalone fallback on reject, no register call, and refusal when the epic is missing or its status is not epic. npm test passes.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-05",
+        "US-03-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-13",
+        "AC-14",
+        "AC-16",
+        "AC-17",
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin skill late-child text in static tests"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-02.md",
+      "status": "generated"
+    }
+  }
+}
