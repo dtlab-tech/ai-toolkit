@@ -2498,3 +2498,536 @@ describe('refinement of the review warnings', () => {
     }
   });
 });
+
+describe('check-definition', () => {
+  const crypto = require('crypto');
+  const FLAGGED = {
+    actors: ['Customer', 'Admin'],
+    applications: ['web', 'api'],
+    flows: [{ name: 'Sign up', reason: 'independent' }, { name: 'Pay', reason: 'independent' }, { name: 'Refund', reason: 'independent' }],
+  };
+  const ZERO = { actors: [], applications: [], flows: [] };
+
+  let featuresRoot;
+  let projectRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    projectRoot = path.join(root, 'project');
+    fs.mkdirSync(featuresRoot, { recursive: true });
+    fs.mkdirSync(projectRoot, { recursive: true });
+  });
+
+  // Creates <featuresRoot>/<folder>/ with the given files (name -> text).
+  function makeFeatureFolder(folder, files = {}) {
+    const dir = path.join(featuresRoot, folder);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text);
+    return dir;
+  }
+
+  // Returns a jest mock for readRecord that yields the record as JSON text, so tests can assert on reads.
+  function recordReader(record) {
+    return jest.fn(() => JSON.stringify(record));
+  }
+
+  function check(featureId, record, { reader = recordReader(record), project = projectRoot } = {}) {
+    return LIB.checkDefinition({ featuresRoot, featureId, readRecord: reader, projectRoot: project });
+  }
+
+  // Hashes every file under featuresRoot so a test can prove a call wrote nothing.
+  function snapshotFeaturesRoot() {
+    const out = {};
+    const walk = (dir) => {
+      for (const name of fs.readdirSync(dir).sort()) {
+        const full = path.join(dir, name);
+        if (fs.statSync(full).isDirectory()) walk(full);
+        else out[path.relative(featuresRoot, full)] = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+      }
+    };
+    if (fs.existsSync(featuresRoot)) walk(featuresRoot);
+    return JSON.stringify(out);
+  }
+
+  describe('skip behaviour (feature is not new)', () => {
+    test('returns skipped without reading stdin when the folder holds epic.md', () => {
+      makeFeatureFolder('FTR-034-parent', { 'epic.md': '# epic' });
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-034', FLAGGED, { reader }).status).toBe('skipped');
+      expect(reader).not.toHaveBeenCalled();
+    });
+
+    test('returns skipped without reading stdin when the folder holds FTR-NNN-Approvals.md', () => {
+      makeFeatureFolder('FTR-035-x', { 'FTR-035-Approvals.md': '# approvals' });
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-035', FLAGGED, { reader }).status).toBe('skipped');
+      expect(reader).not.toHaveBeenCalled();
+    });
+
+    test('returns skipped without reading stdin when the folder holds a wbs directory', () => {
+      const dir = makeFeatureFolder('FTR-036-y');
+      fs.mkdirSync(path.join(dir, 'wbs'));
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-036', FLAGGED, { reader }).status).toBe('skipped');
+      expect(reader).not.toHaveBeenCalled();
+    });
+
+    test('a wbs entry that is a file, not a directory, does not make the feature non-new', () => {
+      makeFeatureFolder('FTR-037-z', { wbs: 'not a directory' });
+      expect(check('FTR-037', FLAGGED).status).toBe('flagged');
+    });
+  });
+
+  describe('new-folder cases (evaluated)', () => {
+    test('a missing feature folder is treated as new and the record is evaluated', () => {
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-040', FLAGGED, { reader }).status).toBe('flagged');
+      expect(reader).toHaveBeenCalledTimes(1);
+    });
+
+    test('an existing empty feature folder is treated as new and the record is evaluated', () => {
+      makeFeatureFolder('FTR-041-empty');
+      const reader = recordReader(FLAGGED);
+      expect(check('FTR-041', FLAGGED, { reader }).status).toBe('flagged');
+      expect(reader).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('signal boundaries (default config minimums: actors 2, applications 2, flows 3)', () => {
+    test('actors one below minActors does not flag', () => {
+      const out = check('FTR-050', { ...ZERO, actors: ['Customer'] });
+      expect(out.signals.actors).toEqual({ count: 1, minimum: 2, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('actors exactly at minActors flags', () => {
+      const out = check('FTR-051', { ...ZERO, actors: ['Customer', 'Admin'] });
+      expect(out.signals.actors.met).toBe(true);
+      expect(out.status).toBe('flagged');
+    });
+
+    test('applications one below minApplications does not flag', () => {
+      const out = check('FTR-052', { ...ZERO, applications: ['web'] });
+      expect(out.signals.applications).toEqual({ count: 1, minimum: 2, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('applications exactly at minApplications flags', () => {
+      const out = check('FTR-053', { ...ZERO, applications: ['web', 'api'] });
+      expect(out.signals.applications.met).toBe(true);
+      expect(out.status).toBe('flagged');
+    });
+
+    test('two flows, one below minFlows, does not flag', () => {
+      const out = check('FTR-054', { ...ZERO, flows: FLAGGED.flows.slice(0, 2) });
+      expect(out.signals.flows).toEqual({ count: 2, minimum: 3, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('three flows, exactly at minFlows, flags', () => {
+      const out = check('FTR-055', { ...ZERO, flows: FLAGGED.flows });
+      expect(out.signals.flows.met).toBe(true);
+      expect(out.status).toBe('flagged');
+    });
+  });
+
+  test('a record with every signal below its minimum is not flagged', () => {
+    const out = check('FTR-060', { ...ZERO, actors: ['Customer'], applications: ['web'], flows: [{ name: 'Only', reason: 'x' }] });
+    expect(out.status).toBe('not-flagged');
+  });
+
+  describe('unevaluated signals', () => {
+    test('a null actors field is reported as unevaluated and does not raise the flag', () => {
+      const out = check('FTR-070', { actors: null, applications: ['web'], flows: [] });
+      expect(out.unevaluated).toEqual(['actors']);
+      expect(out.signals.actors).toEqual({ count: null, minimum: 2, met: false });
+      expect(out.status).toBe('not-flagged');
+    });
+
+    test('a missing applications field is unevaluated while a met actors signal still flags', () => {
+      const out = check('FTR-071', { actors: ['Customer', 'Admin'], flows: [] });
+      expect(out.unevaluated).toEqual(['applications']);
+      expect(out.status).toBe('flagged');
+    });
+  });
+
+  test('a project config override of minActors changes the flag decision', () => {
+    fs.writeFileSync(path.join(projectRoot, 'feature-split.config.json'), JSON.stringify({ definitionSignals: { minActors: 3 } }));
+    const out = check('FTR-080', { ...ZERO, actors: ['Customer', 'Admin'] });
+    expect(out.signals.actors).toEqual({ count: 2, minimum: 3, met: false });
+    expect(out.status).toBe('not-flagged');
+  });
+
+  test('a skipped call leaves the features root unchanged', () => {
+    makeFeatureFolder('FTR-090-done', { 'epic.md': '# epic' });
+    const before = snapshotFeaturesRoot();
+    check('FTR-090', FLAGGED);
+    expect(snapshotFeaturesRoot()).toBe(before);
+  });
+
+  test('an evaluated call leaves the features root unchanged', () => {
+    makeFeatureFolder('FTR-091-new', { 'feature.md': '# New\n' });
+    const before = snapshotFeaturesRoot();
+    check('FTR-091', FLAGGED);
+    expect(snapshotFeaturesRoot()).toBe(before);
+  });
+});
+
+describe('check-definition errors and facade dispatch', () => {
+  const FEATURE_ID = 'FTR-900';
+  const VALID_RECORD = {
+    actors: ['Customer', 'Admin'],
+    applications: ['web', 'api'],
+    flows: [{ name: 'Sign up', reason: 'independent' }],
+  };
+
+  let featuresRoot;
+  let projectRoot;
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    projectRoot = path.join(root, 'project');
+    fs.mkdirSync(path.join(featuresRoot, 'FTR-900-sample'), { recursive: true });
+    fs.mkdirSync(projectRoot, { recursive: true });
+  });
+
+  // Calls main() the way the facade does, with stdinText as the only stdin content.
+  function runMain(argv, stdinText) {
+    return LIB.main(argv, () => stdinText);
+  }
+
+  function checkArgv(featureId = FEATURE_ID) {
+    return ['check-definition', '--features-root', featuresRoot, '--feature-id', featureId, '--project', projectRoot];
+  }
+
+  describe('RECORD_INVALID for stdin that is not a JSON object', () => {
+    test.each([
+      ['non-JSON text', 'not json'],
+      ['null', 'null'],
+      ['an array', '[]'],
+      ['a string', '"text"'],
+    ])('exits with code 1 for %s', (_label, stdin) => {
+      const { exitCode } = runMain(checkArgv(), stdin);
+      expect(exitCode).toBe(1);
+    });
+
+    test.each([
+      ['non-JSON text', 'not json'],
+      ['null', 'null'],
+      ['an array', '[]'],
+      ['a string', '"text"'],
+    ])('raises RECORD_INVALID for %s', (_label, stdin) => {
+      const { payload } = runMain(checkArgv(), stdin);
+      expect(payload.error.code).toBe('RECORD_INVALID');
+    });
+  });
+
+  describe('FEATURE_INVALID for a malformed feature id', () => {
+    test.each(['ftr-900', 'FTR900', '../FTR-900', 'FTR-9x'])(
+      'exits with code 1 for id %s',
+      (id) => {
+        const { exitCode } = runMain(checkArgv(id), JSON.stringify(VALID_RECORD));
+        expect(exitCode).toBe(1);
+      }
+    );
+
+    test.each(['ftr-900', 'FTR900', '../FTR-900', 'FTR-9x'])(
+      'raises FEATURE_INVALID for id %s',
+      (id) => {
+        const { payload } = runMain(checkArgv(id), JSON.stringify(VALID_RECORD));
+        expect(payload.error.code).toBe('FEATURE_INVALID');
+      }
+    );
+
+    test.each(['ftr-900', 'FTR900', '../FTR-900', 'FTR-9x'])(
+      'creates nothing in the features root for id %s',
+      (id) => {
+        runMain(checkArgv(id), JSON.stringify(VALID_RECORD));
+        expect(fs.readdirSync(featuresRoot)).toEqual(['FTR-900-sample']);
+      }
+    );
+  });
+
+  describe('facade dispatch', () => {
+    test('check-definition exits with code 0 for a valid record', () => {
+      const { exitCode } = runMain(checkArgv(), JSON.stringify(VALID_RECORD));
+      expect(exitCode).toBe(0);
+    });
+
+    test('check-definition returns a status in its payload for a valid record', () => {
+      const { payload } = runMain(checkArgv(), JSON.stringify(VALID_RECORD));
+      expect(payload.status).toBe('flagged');
+    });
+
+    test('the unknown-command error message lists check-definition', () => {
+      const { payload } = runMain(['no-such-command'], '');
+      expect(payload.error.message).toContain('check-definition');
+    });
+  });
+});
+
+describe('validate-proposal', () => {
+  const child = (name, extra = {}) => ({
+    name,
+    purpose: `${name} purpose`,
+    keywords: [name.toLowerCase()],
+    dependsOn: [],
+    assigned: `UC-${name}`,
+    ...extra,
+  });
+  // Auth <- Billing; Auth owns the shared foundation.
+  const proposal = () => LIB.buildProposal({
+    source: 'definition',
+    children: [child('Auth'), child('Billing', { dependsOn: ['Auth'] })],
+    config: loadConfig({ projectRoot: root }),
+  }).proposal;
+
+  let featuresRoot;
+
+  // Recursive, sorted listing of every path with the content of each file.
+  function snapshotTree(dir) {
+    const entries = [];
+    const walk = (current) => {
+      const dirents = fs.readdirSync(current, { withFileTypes: true })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      for (const e of dirents) {
+        const p = path.join(current, e.name);
+        const rel = path.relative(dir, p);
+        if (e.isDirectory()) {
+          entries.push(rel + '/');
+          walk(p);
+        } else {
+          entries.push(`${rel}\n${fs.readFileSync(p, 'utf8')}`);
+        }
+      }
+    };
+    walk(dir);
+    return entries;
+  }
+
+  // Calls main() the way the facade does, with stdinText as the only stdin content.
+  function runMain(stdinText) {
+    return LIB.main(['validate-proposal', '--features-root', featuresRoot], () => stdinText);
+  }
+
+  beforeEach(() => {
+    featuresRoot = path.join(root, 'features');
+    fs.mkdirSync(path.join(featuresRoot, 'FTR-001-parent'), { recursive: true });
+    fs.writeFileSync(path.join(featuresRoot, 'FTR-001-parent', 'feature.md'), '# Parent\n\n## Summary\n\nParent summary.\n');
+    fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n\n');
+  });
+
+  test('exits with code 0 for a valid edit', () => {
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' } };
+
+    const { exitCode } = runMain(JSON.stringify(payload));
+
+    expect(exitCode).toBe(0);
+  });
+
+  test('returns the revised proposal with the edit applied and no violations for a valid edit', () => {
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' } };
+
+    const { payload: result } = runMain(JSON.stringify(payload));
+
+    expect(result.violations).toEqual([]);
+    expect(result.proposal.children.find(c => c.name === 'Billing').purpose).toBe('Invoices and refunds');
+  });
+
+  test('reports a dependency cycle as a violation with exit code 0', () => {
+    // Auth already depends on nothing; making Auth depend on Billing closes the loop Billing -> Auth -> Billing.
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Auth', field: 'dependsOn', value: ['Billing'] } };
+
+    const { exitCode, payload: result } = runMain(JSON.stringify(payload));
+
+    expect(exitCode).toBe(0);
+    expect(result.violations.map(v => v.code)).toContain('PROPOSAL_CYCLE');
+  });
+
+  test('returns the original proposal unchanged when the edit is refused', () => {
+    const original = proposal();
+    const payload = { proposal: original, edit: { type: 'set', name: 'Auth', field: 'dependsOn', value: ['Billing'] } };
+
+    const { payload: result } = runMain(JSON.stringify(payload));
+
+    expect(result.proposal).toEqual(original);
+  });
+
+  test('returns a foundation warning and no violation when the owner is moved off the first child', () => {
+    const payload = { proposal: proposal(), edit: { type: 'owner', name: 'Billing' } };
+
+    const { exitCode, payload: result } = runMain(JSON.stringify(payload));
+
+    expect(exitCode).toBe(0);
+    expect(result.violations).toEqual([]);
+    expect(result.foundationWarnings.map(w => w.code)).toContain('FOUNDATION_NOT_FIRST');
+  });
+
+  test('exits with code 1 and error code INVALID_PROPOSAL for a malformed stdin payload', () => {
+    const { exitCode, payload: result } = runMain('not json');
+
+    expect(exitCode).toBe(1);
+    expect(result.error.code).toBe('INVALID_PROPOSAL');
+  });
+
+  // The command ignores --features-root, so comparing a directory snapshot before and after could never fail.
+  // What matters is that it never writes: every fs call that changes the disk is spied on.
+  const WRITERS = ['writeFileSync', 'appendFileSync', 'mkdirSync', 'renameSync', 'rmSync', 'unlinkSync', 'copyFileSync', 'rmdirSync'];
+  const writesDuring = (fn) => {
+    const spies = WRITERS.map(name => jest.spyOn(fs, name).mockImplementation(() => { throw new Error('unexpected write: ' + name); }));
+    try { fn(); } finally { spies.forEach(spy => spy.mockRestore()); }
+    return spies.reduce((total, spy) => total + spy.mock.calls.length, 0);
+  };
+
+  test('writes nothing to disk for a valid edit', () => {
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' } };
+    expect(writesDuring(() => runMain(JSON.stringify(payload)))).toBe(0);
+  });
+
+  test('writes nothing to disk for a refused edit', () => {
+    const payload = { proposal: proposal(), edit: { type: 'set', name: 'Auth', field: 'dependsOn', value: ['Billing'] } };
+    expect(writesDuring(() => runMain(JSON.stringify(payload)))).toBe(0);
+  });
+
+  test('the write spy really fails when something writes (the check is not vacuous)', () => {
+    expect(() => writesDuring(() => fs.writeFileSync(path.join(root, 'x.txt'), 'x'))).toThrow(/unexpected write/);
+  });
+});
+
+describe('FTR-036 review fixes: record validation, features root, validate-proposal envelope', () => {
+  const mainWith = (argv, payload) => LIB.main(argv, () => (typeof payload === 'string' ? payload : JSON.stringify(payload)));
+  const check = (record, rootArg) => {
+    fs.mkdirSync(path.join(root, 'features'), { recursive: true });
+    return mainWith(['check-definition', '--features-root', rootArg ?? path.join(root, 'features'), '--feature-id', 'FTR-050'], record);
+  };
+
+  describe('check-definition', () => {
+    test('a signal that is null or missing is unevaluated; the call succeeds', () => {
+      const r = check({ actors: null, flows: [] });
+      expect(r.exitCode).toBe(0);
+      expect(r.payload.unevaluated).toEqual(['actors', 'applications']);
+    });
+
+    test('a non-null value that is not an array is RECORD_INVALID (Gate 1 decision 3)', () => {
+      for (const record of [{ actors: 'two' }, { applications: 5 }, { flows: { a: 1 } }, { actors: true }]) {
+        const r = check(record);
+        expect(r.exitCode).toBe(1);
+        expect(r.payload.error.code).toBe('RECORD_INVALID');
+      }
+    });
+
+    test('a blank or non-string name is RECORD_INVALID, so [null, null] cannot raise the flag', () => {
+      for (const record of [{ actors: [null, null] }, { actors: ['a', ''] }, { applications: ['  '] }, { actors: [1, 2] }]) {
+        expect(check(record).payload.error.code).toBe('RECORD_INVALID');
+      }
+    });
+
+    test('a flow must be { name, reason } with a non-empty name', () => {
+      for (const flows of [[1, null, 'x'], [{ name: '', reason: 'r' }], [{ name: 'a' }], [{ name: 'a', reason: 3 }], [['a', 'b']]]) {
+        expect(check({ flows }).payload.error.code).toBe('RECORD_INVALID');
+      }
+      expect(check({ flows: [{ name: 'Sign up', reason: 'new user' }] }).exitCode).toBe(0);
+    });
+
+    test('a features root that does not exist is FEATURES_ROOT_INVALID', () => {
+      const r = check({ actors: [] }, path.join(root, 'nonexist'));
+      expect(r.exitCode).toBe(1);
+      expect(r.payload.error.code).toBe('FEATURES_ROOT_INVALID');
+    });
+
+    test('the result carries the configured minChildren, which the proposal needs', () => {
+      expect(check({ actors: ['a', 'b'] }).payload.minChildren).toBe(2);
+    });
+  });
+
+  describe('validate-proposal', () => {
+    const proposal = (extra = {}) => ({
+      source: 'definition', minChildren: 2, foundationNote: 'Shared models', sharedFoundationOwner: 'Auth',
+      children: [
+        { name: 'Auth', purpose: 'Sign-in', summary: 'Sign-in.', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' },
+        { name: 'Billing', purpose: 'Invoices', summary: 'Invoices.', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' },
+      ],
+      ...extra,
+    });
+    const validate = (p, edit, mode) => mainWith(['validate-proposal'], { proposal: p, edit, ...(mode ? { mode } : {}) });
+
+    test('children without dependsOn are normalised, so an edit works instead of throwing', () => {
+      const bare = proposal();
+      bare.children.forEach(c => delete c.dependsOn);
+      const r = validate(bare, { type: 'rename', from: 'Auth', to: 'Identity' });
+      expect(r.exitCode).toBe(0);
+      expect(r.payload.violations).toEqual([]);
+      expect(r.payload.proposal.children.map(c => c.name)).toEqual(['Identity', 'Billing']);
+    });
+
+    test('a refused edit on a proposal without dependsOn is a violation, not a crash', () => {
+      const bare = proposal();
+      bare.children.forEach(c => delete c.dependsOn);
+      const r = validate(bare, { type: 'rename', from: 'Nobody', to: 'X' });
+      expect(r.exitCode).toBe(0);
+      expect(r.payload.violations[0].code).toBe('CHILD_NOT_FOUND');
+      expect(r.payload.violations[0].key).toBe('Nobody');
+    });
+
+    test('a violation without a key reports key null', () => {
+      const r = validate(proposal(), { type: 'bogus' });
+      expect(r.payload.violations[0]).toEqual(expect.objectContaining({ code: 'EDIT_UNKNOWN', key: null }));
+    });
+
+    test('an edit that apply would refuse is refused here too (keywords with a comma or a line break)', () => {
+      const r = validate(proposal(), { type: 'set', name: 'Auth', field: 'keywords', value: ['a,b', 'x\ny'] });
+      expect(r.payload.violations[0].code).toBe('INVALID_PROPOSAL');
+      expect(r.payload.proposal.children[0].keywords).toEqual(['auth']);
+    });
+
+    test('an edit that is missing or not an object is INVALID_PROPOSAL', () => {
+      for (const edit of [undefined, null, 'rename', [1]]) {
+        const r = mainWith(['validate-proposal'], { proposal: proposal(), edit });
+        expect(r.exitCode).toBe(1);
+        expect(r.payload.error.code).toBe('INVALID_PROPOSAL');
+      }
+    });
+
+    test('the proposal example written in the agent is accepted by validate-proposal and by apply (the contract)', () => {
+      const agentText = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'claude', 'agents', 'gaia-define-feature.md'), 'utf8');
+      const phase3a = agentText.slice(agentText.indexOf('## Phase 3a'), agentText.indexOf('## Phase 4'));
+      const line = phase3a.split('\n').map(l => l.trim()).find(l => l.startsWith('proposal: {"source"'));
+      const example = JSON.parse(line.slice('proposal: '.length));
+      // fill the example the way the agent does: two children, the first one owns the shared foundation
+      const first = { ...example.children[0], name: 'Auth', purpose: 'Sign-in', summary: 'Sign-in.', keywords: ['auth'], dependsOn: [], assigned: 'UC-01' };
+      const second = { ...first, name: 'Billing', purpose: 'Invoices', summary: 'Invoices.', keywords: ['billing'], dependsOn: ['Auth'], assigned: 'UC-02' };
+      const filled = { ...example, minChildren: 2, foundationNote: 'Shared models', sharedFoundationOwner: 'Auth', children: [first, second] };
+      const featuresRoot = path.join(root, 'contract');
+      const parent = path.join(featuresRoot, 'FTR-060-big');
+      fs.mkdirSync(parent, { recursive: true });
+      fs.writeFileSync(path.join(parent, 'feature.md'), '# Big\n\n## Summary\n\nA big feature.\n');
+      fs.writeFileSync(path.join(featuresRoot, 'REGISTRY.md'), '# Feature Registry\n\n## FTR-060 — Big\n**Keywords:** big\n**Status:** defined\n**Summary:** A big feature.\n→ [Detail](FTR-060-big/feature.md)\n---\n');
+      const v = validate(filled, { type: 'set', name: 'Billing', field: 'purpose', value: 'Invoices and refunds' });
+      expect(v.exitCode).toBe(0);
+      expect(v.payload.violations).toEqual([]);
+      const applied = apply({ featuresRoot, parentId: 'FTR-060', proposal: v.payload.proposal, runId: 'aabbccdd' });
+      expect(applied.children).toHaveLength(2);
+    });
+
+    test('initial mode still warns when there is no shared-foundation owner', () => {
+      const r = validate(proposal({ sharedFoundationOwner: null }), { type: 'set', name: 'Auth', field: 'purpose', value: 'x' });
+      expect(r.payload.foundationWarnings.map(w => w.code)).toContain('FOUNDATION_NOT_FIRST');
+    });
+
+    test('late mode: no BR-03 warning, and a second child is refused as LATE_CHILD_COUNT', () => {
+      const late = { source: 'definition', minChildren: 0, foundationNote: '', sharedFoundationOwner: null,
+        children: [{ name: 'Reports', purpose: 'Reports', summary: 'Reports.', keywords: ['r'], dependsOn: [] }] };
+      const ok = validate(late, { type: 'set', name: 'Reports', field: 'summary', value: 'Monthly reports.' }, 'late');
+      expect(ok.payload.violations).toEqual([]);
+      expect(ok.payload.foundationWarnings).toEqual([]);
+      const two = validate(late, { type: 'add', child: { name: 'Extra', purpose: 'e', keywords: [] } }, 'late');
+      expect(two.payload.violations[0].code).toBe('LATE_CHILD_COUNT');
+      expect(two.payload.proposal.children).toHaveLength(1);
+    });
+
+    test('mode must be initial or late', () => {
+      const r = mainWith(['validate-proposal'], { proposal: proposal(), edit: { type: 'reorder', names: ['Auth', 'Billing'] }, mode: 'later' });
+      expect(r.payload.error.code).toBe('INVALID_PROPOSAL');
+    });
+  });
+});

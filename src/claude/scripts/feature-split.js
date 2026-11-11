@@ -1146,7 +1146,133 @@ function runRegister(args) {
   return register({ featuresRoot, featureDir, keywords });
 }
 
-const COMMANDS = { apply: runApply, register: runRegister };
+// D-03 signal keys mapped to their definitionSignals minimum keys (feature-split.config.json).
+const GRILLING_SIGNALS = [
+  { key: 'actors', minKey: 'minActors' },
+  { key: 'applications', minKey: 'minApplications' },
+  { key: 'flows', minKey: 'minFlows' },
+];
+
+// Parses the grilling record from stdin text. Throws RECORD_INVALID only at the top level.
+// Field-level problems are handled by evaluateDefinition.
+function parseGrillingRecord(text) {
+  let record;
+  try {
+    record = JSON.parse(text);
+  } catch {
+    fail('RECORD_INVALID', 'The grilling record on stdin is not valid JSON');
+  }
+  if (record === null || typeof record !== 'object' || Array.isArray(record))
+    fail('RECORD_INVALID', 'The grilling record must be a JSON object');
+  return record;
+}
+
+// Pure: no I/O. definitionSignals is config.definitionSignals as returned by loadConfig.
+// Returns { status: 'flagged' | 'not-flagged', signals, flows, unevaluated }.
+// A signal whose field is missing or null is unevaluated and never raises the flag. Any other non-array value, a blank
+// name, or a flow that is not { name, reason } is RECORD_INVALID (Gate 1 decision 3).
+// A signal raises the flag when meetsMinimum(count, minimum) holds for at least one signal (D-05, at least N).
+function evaluateDefinition(record, definitionSignals) {
+  const signals = {};
+  const unevaluated = [];
+  for (const { key, minKey } of GRILLING_SIGNALS) {
+    const minimum = definitionSignals[minKey];
+    const value = record[key];
+    if (value === undefined || value === null) {          // not elicited, or explicitly unevaluated (Gate 1 decision 3)
+      unevaluated.push(key);
+      signals[key] = { count: null, minimum, met: false };
+      continue;
+    }
+    if (!Array.isArray(value))
+      fail('RECORD_INVALID', `"${key}" must be an array or null; got ${typeof value}`, { key });
+    value.forEach((item, i) => {
+      if (key === 'flows') {
+        if (item === null || typeof item !== 'object' || Array.isArray(item)
+          || typeof item.name !== 'string' || item.name.trim() === '' || typeof item.reason !== 'string')
+          fail('RECORD_INVALID', `flows[${i}] must be { "name": non-empty string, "reason": string }`, { key });
+      } else if (typeof item !== 'string' || item.trim() === '') {
+        fail('RECORD_INVALID', `${key}[${i}] must be a non-empty string`, { key });
+      }
+    });
+    signals[key] = { count: value.length, minimum, met: meetsMinimum(value.length, minimum) };
+  }
+  const flows = Array.isArray(record.flows) ? record.flows : [];
+  const flagged = Object.values(signals).some(s => s.met);
+  return { status: flagged ? 'flagged' : 'not-flagged', signals, flows, unevaluated };
+}
+
+// D-04: the record is read only when the feature is new, so a skipped check never touches stdin.
+function checkDefinition({ featuresRoot, featureId, readRecord, projectRoot = process.cwd() }) {
+  if (!/^FTR-\d+$/.test(featureId ?? ''))
+    fail('FEATURE_INVALID', `${featureId} is not an FTR-NNN id`, { key: featureId ?? null });
+  let rootStat = null;
+  try { rootStat = fs.statSync(featuresRoot); } catch (_) { /* reported below */ }
+  if (!rootStat || !rootStat.isDirectory())
+    fail('FEATURES_ROOT_INVALID', `${featuresRoot} is not an existing directory`, { file: featuresRoot });
+  const featureDir = findParentDir(featuresRoot, featureId);
+  if (!isNewFeature(featureDir).isNew)
+    return { status: 'skipped', signals: {}, flows: [], unevaluated: [] };
+  const { definitionSignals, minChildren } = loadConfig({ projectRoot });
+  const record = parseGrillingRecord(readRecord());
+  return { ...evaluateDefinition(record, definitionSignals), minChildren };
+}
+
+function runCheckDefinition(args, readStdin) {
+  const flags = parseFlags(args);
+  return checkDefinition({
+    featuresRoot: required(flags, 'features-root'),
+    featureId: required(flags, 'feature-id'),
+    projectRoot: flags.project || process.cwd(),
+    readRecord: readStdin,
+  });
+}
+
+// Read-only. A refused edit is a normal answer (exit 0) with the original proposal and a violation.
+// Payload: { proposal, edit, mode? }. mode 'late' checks the revised proposal as apply checks a late child: exactly one
+// child, no minChildren, owner or foundation note, and no BR-03 warning (a late child has no shared foundation).
+function runValidateProposal(_args, readStdin) {
+  const text = readStdin();
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    fail('INVALID_PROPOSAL', 'The payload on stdin is not valid JSON');
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !payload.proposal)
+    fail('INVALID_PROPOSAL', 'The payload must be an object with "proposal" and "edit"');
+  if (payload.edit === null || typeof payload.edit !== 'object' || Array.isArray(payload.edit))
+    fail('INVALID_PROPOSAL', 'The payload "edit" must be an object with a type');
+  if (payload.mode !== undefined && payload.mode !== 'initial' && payload.mode !== 'late')
+    fail('INVALID_PROPOSAL', 'The payload "mode" must be "initial" or "late"');
+  const late = payload.mode === 'late';
+  assertProposalShape(payload.proposal, { late });
+  const proposal = { ...payload.proposal, children: payload.proposal.children.map(normaliseChild) };
+  const warningsOf = (p) => {
+    if (late) return [];
+    try { return foundationWarnings(p, dependencyOrder(p.children)); } catch (_) { return []; }
+  };
+  try {
+    const { proposal: revised, warnings } = editProposal(proposal, payload.edit);
+    assertProposalShape(revised, { late });
+    if (late && revised.children.length !== LATE_CHILD_COUNT)
+      fail('LATE_CHILD_COUNT', `A late proposal takes exactly ${LATE_CHILD_COUNT} child; the edit leaves ${revised.children.length}`);
+    return { proposal: revised, violations: [], foundationWarnings: late ? [] : warnings };
+  } catch (err) {
+    if (!(err instanceof FeatureSplitError)) throw err;
+    return {
+      proposal,
+      violations: [{ code: err.code, key: err.key ?? null, message: err.message }],
+      foundationWarnings: warningsOf(proposal),
+    };
+  }
+}
+
+const COMMANDS = {
+  apply: runApply,
+  register: runRegister,
+  'check-definition': runCheckDefinition,
+  'validate-proposal': runValidateProposal,
+};
 
 function errorPayload(err) {
   if (err instanceof FeatureSplitError) {
@@ -1159,7 +1285,7 @@ function main(argv, readStdin) {
   const [command, ...rest] = argv;
   try {
     if (!command || !Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
-      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply or register`);
+      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register, check-definition or validate-proposal`);
     }
     return { exitCode: 0, payload: COMMANDS[command](rest, readStdin) };
   } catch (err) {
@@ -1215,3 +1341,8 @@ module.exports.setDetailLink = setDetailLink;
 module.exports.planInitial = planInitial;
 module.exports.planLate = planLate;
 module.exports.register = register;
+module.exports.parseGrillingRecord = parseGrillingRecord;
+module.exports.evaluateDefinition = evaluateDefinition;
+module.exports.checkDefinition = checkDefinition;
+module.exports.runCheckDefinition = runCheckDefinition;
+module.exports.runValidateProposal = runValidateProposal;
