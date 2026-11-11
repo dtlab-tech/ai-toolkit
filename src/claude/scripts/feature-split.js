@@ -1288,13 +1288,64 @@ function parseCheckSizeArgs(argv) {
   return args;
 }
 
+const UC_ID = /\bUC-\d{2,}\b/g;
+const AC_ID = /\bAC-\d{2,}\b/g;
+
+function readText(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return null;
+    throw err;
+  }
+}
+
+function globMd(dir) {
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return null;
+    throw err;
+  }
+  return names.filter(n => n.endsWith('.md')).sort().map(n => path.join(dir, n));
+}
+
+function countDistinct(texts, re) {
+  const ids = new Set();
+  for (const text of texts) for (const m of text.matchAll(re)) ids.add(m[0]);
+  return ids.size;
+}
+
+function measureUseCases(featureDir) {
+  const files = globMd(path.join(featureDir, 'req', 'use-cases'));
+  if (files === null) return { reason: 'req/use-cases/ is missing' };
+  const count = countDistinct(files.map(f => readText(f)), UC_ID);
+  return count > 0 ? { value: count } : { reason: 'no UC-NN identifiers in req/use-cases/*.md' };
+}
+
+function measureAcceptanceCriteria(featureDir) {
+  const text = readText(path.join(featureDir, 'req', 'index.md'));
+  if (text === null) return { reason: 'req/index.md is missing' };
+  const count = countDistinct([text], AC_ID);
+  return count > 0 ? { value: count } : { reason: 'no AC-NN identifiers in req/index.md' };
+}
+
 function checkSize({ project, featureDir }) {
   if (!isNewFeature(featureDir).isNew) return result('skipped');
   const thresholds = loadConfig({ projectRoot: project || process.cwd() }).thresholds;
-  return result('unavailable', {
-    thresholds,
-    unavailable: [{ count: CHECK_SIZE, reason: 'measurement not implemented yet (BE-02 to BE-05)' }],
-  });
+  const counts = {};
+  const unavailable = [];
+  for (const [key, measure] of [['useCases', measureUseCases], ['acceptanceCriteria', measureAcceptanceCriteria]]) {
+    const m = measure(featureDir);
+    if (m.reason) unavailable.push({ count: key, reason: m.reason });
+    else counts[key] = m.value;
+  }
+  unavailable.push(
+    { count: 'components', reason: 'measurement not implemented yet (BE-03 to BE-05)' },
+    { count: 'estimatedPhases', reason: 'measurement not implemented yet (BE-03 to BE-05)' },
+  );
+  return result('unavailable', { counts, thresholds, unavailable });
 }
 
 function runCheckSize(argv) {
@@ -1398,3 +1449,5 @@ module.exports.runValidateProposal = runValidateProposal;
 module.exports.parseCheckSizeArgs = parseCheckSizeArgs;
 module.exports.checkSize = checkSize;
 module.exports.runCheckSize = runCheckSize;
+module.exports.globMd = globMd;
+module.exports.countDistinct = countDistinct;
