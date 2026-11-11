@@ -27,8 +27,8 @@ Scope of this task: it asserts only the component row count and the build-order 
 Assumptions that must be confirmed against BE-03 and BE-04 before the tests are final. If any is wrong, change the fixture text, not the assertions:
 1. The output key for the component count (`COMPONENTS`) and for the phase count (`PHASES`). The Tech-Spec test list uses `phases` in one place and `estimatedPhases` in BE-04, so the key is taken as `estimatedPhases`.
 2. The Section 11 heading (`## 11. Build order`) and the dependency reference syntax (`depends on: 1`, `depends on: none`).
-3. The component table header. The table is a single table with a `Component | Path | Domain | Addresses` header.
-4. T-2 is decided (Gate 1 decision 7): one component table, no union with the New and Modified file rows. BE-03 defines the count as data rows of that table, so this test pins only that. It does not pin de-duplication by Path.
+3. The component tables. A table counts when it has a `Path` column: the real Section 9 has `Path | Purpose | Addresses | Domain | Spec` (New files) and `Path | Change description | Addresses | Domain | Spec` (Modified files); the fixtures below use `Component | Path | Domain | Addresses`. Tables without a `Path` column never count.
+4. T-2 is decided (Gate 1 decision 7, revised by the user on 2026-11-12 to option A): the component count is the union of the data rows of the tables with a `Path` column, a Path that appears in two tables counted once. The tests below pin the union, the de-duplication by Path and the scoping to Section 9.
 
 Shared harness (append after TEST-01's imports and helpers, or reuse them):
 
@@ -96,6 +96,32 @@ describe('check-size component row count', () => {
     expect(result.counts[COMPONENTS]).toBe(3);
   });
 
+  test('counts the rows of the New files and Modified files tables of Section 9 together', () => {
+    const spec = ['## 9. File Inventory', '', '### New files', '| Path | Purpose | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      '| src/a.js | a | AC-01 | BE | x |', '| src/b.js | b | AC-02 | BE | x |', '',
+      '### Modified files', '| Path | Change description | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      '| src/c.js | c | AC-03 | BE | x |', ''].join('\n');
+    const { root, feature } = makeProject({ 'spec/index.md': spec });
+    expect(runCheck(root, feature).result.counts[COMPONENTS]).toBe(3);
+  });
+
+  test('a Path that appears in both tables is counted once', () => {
+    const spec = ['## 9. File Inventory', '', '### New files', '| Path | Purpose | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      '| src/a.js | a | AC-01 | BE | x |', '',
+      '### Modified files', '| Path | Change description | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      '| src/a.js | again | AC-01 | BE | x |', '| src/b.js | b | AC-02 | BE | x |', ''].join('\n');
+    const { root, feature } = makeProject({ 'spec/index.md': spec });
+    expect(runCheck(root, feature).result.counts[COMPONENTS]).toBe(2);
+  });
+
+  test('a table with a Path column outside Section 9 is not counted when Section 9 exists', () => {
+    const spec = ['## 7. Notes', '', '| Path | Note |', '|---|---|', '| docs/x.md | y |', '',
+      '## 9. File Inventory', '', '### New files', '| Path | Purpose | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      '| src/a.js | a | AC-01 | BE | x |', '', '## 10. Next', ''].join('\n');
+    const { root, feature } = makeProject({ 'spec/index.md': spec });
+    expect(runCheck(root, feature).result.counts[COMPONENTS]).toBe(1);
+  });
+
   test('marks components unavailable when the component table has a header but no data rows', () => {
     const { root, feature } = makeProject({ 'spec/index.md': `## Components\n\n${componentTable(0)}\n` });
     const { result, code } = runCheck(root, feature);
@@ -122,6 +148,12 @@ describe('check-size estimated phases from build order', () => {
     const { root, feature } = makeProject({ 'spec/index.md': specWithOrder([
       '1. A — depends on: none', '2. B — depends on: none', '3. C — depends on: none']) });
     expect(runCheck(root, feature).result.counts[PHASES]).toBe(1);
+  });
+
+  test('the template wording "depends on: nothing" and a note after the clause are accepted', () => {
+    const { root, feature } = makeProject({ 'spec/index.md': specWithOrder([
+      '1. A — depends on: nothing', '2. B — depends on: 1', '3. C — depends on: none. Requires a decision first.']) });
+    expect(runCheck(root, feature).result.counts[PHASES]).toBe(2);
   });
 
   test('a chain of three items gives three phases', () => {
