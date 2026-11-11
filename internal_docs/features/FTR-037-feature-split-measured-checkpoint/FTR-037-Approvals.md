@@ -59,3 +59,7 @@ Approved with notes:
 | Cycle | Action | Date | Details |
 |-------|--------|------|---------|
 | 2 | Approved with notes | 2026-11-11 | "Approve with notes — start implementation, on the Work Breakdown as corrected by hand (see the Amendment of 2026-11-11 in FTR-037-Approvals.md). Notes:" followed by the 3 notes recorded above, verbatim |
+
+## Amendment 2026-11-12
+
+- US-01-TASK-BE-01: the second verification command ran `check-size` on a folder that does not exist and required exit code 0, but the scaffold of the same task returns `unavailable` (exit code 1) for a new feature, and a folder that does not exist is new (FTR-035 D-07). The command contradicted its own task, so the task was blocked twice with the work correct (the output is the documented JSON with status `unavailable`). The command now checks the printed status (`| grep -q '"status":"unavailable"'`); the work of the agent was verified and committed by hand before the run restarted.

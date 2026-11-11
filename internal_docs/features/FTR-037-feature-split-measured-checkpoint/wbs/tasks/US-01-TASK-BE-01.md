@@ -88,7 +88,7 @@ node --check src/claude/scripts/feature-split.js
 ```
 
 ```
-node src/claude/scripts/feature-split.js --project . check-size --feature-dir ./internal_docs/features/FTR-NONEXISTENT-fixture --prefix FTR-NONEXISTENT
+node src/claude/scripts/feature-split.js --project . check-size --feature-dir ./internal_docs/features/FTR-NONEXISTENT-fixture --prefix FTR-NONEXISTENT | grep -q '"status":"unavailable"'
 ```
 
 ```
