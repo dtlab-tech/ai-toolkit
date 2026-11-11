@@ -1371,19 +1371,80 @@ function measureComponents(featureDir) {
   return rows.length > 0 ? { value: rows.length } : { reason: 'component table in spec/index.md has no data rows' };
 }
 
+const BUILD_ITEM = /^(\d+)\.\s+(.+?)\s+—\s+depends on:\s*(none|\d+(?:\s*,\s*\d+)*)\s*$/;
+
+// ASSUMED LOCATOR (FTR-037 T-1): the Section 11 heading starts with "## 11."; the section ends at the next heading of the same or higher level.
+function readSection11(featureDir) {
+  const text = readText(path.join(featureDir, 'spec', 'index.md'));
+  if (text === null) throw new Error('spec/index.md is missing');
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^#{1,6}\s+11[.\s]/.test(l));
+  if (start < 0) throw new Error('Section 11 build order not found in spec/index.md');
+  const level = lines[start].match(/^#+/)[0].length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const h = lines[i].match(/^(#{1,6})\s/);
+    if (h && h[1].length <= level) { end = i; break; }
+  }
+  return lines.slice(start + 1, end).map(l => l.trim());
+}
+
+function parseBuildOrder(lines) {
+  const items = new Map();
+  for (const line of lines.filter(l => /^\d+\./.test(l))) {
+    const m = BUILD_ITEM.exec(line);
+    if (!m) throw new Error(`build-order item has no valid "depends on:" clause: ${line}`);
+    const n = Number(m[1]);
+    if (items.has(n)) throw new Error(`duplicate build-order item ${n}`);
+    items.set(n, m[3] === 'none' ? [] : m[3].split(',').map(s => Number(s.trim())));
+  }
+  if (items.size === 0) throw new Error('Section 11 build order is empty');
+  return items;
+}
+
+function depths(items) {
+  const memo = new Map();
+  const visiting = new Set();
+  const depth = n => {
+    if (memo.has(n)) return memo.get(n);
+    if (!items.has(n)) throw new Error(`dangling dependency on build-order item ${n}`);
+    if (visiting.has(n)) throw new Error(`cycle through build-order item ${n}`);
+    visiting.add(n);
+    const deps = items.get(n);
+    const d = deps.length === 0 ? 0 : 1 + Math.max(...deps.map(depth));
+    visiting.delete(n);
+    memo.set(n, d);
+    return d;
+  };
+  for (const n of items.keys()) depth(n);
+  return memo;
+}
+
+function measureEstimatedPhases(featureDir) {
+  try {
+    const items = parseBuildOrder(readSection11(featureDir));
+    return { value: Math.max(...depths(items).values()) + 1 };
+  } catch (err) {
+    return { reason: err.message };
+  }
+}
+
 function checkSize({ project, featureDir }) {
   if (!isNewFeature(featureDir).isNew) return result('skipped');
   const thresholds = loadConfig({ projectRoot: project || process.cwd() }).thresholds;
   const counts = {};
   const unavailable = [];
-  for (const [key, measure] of [['useCases', measureUseCases], ['acceptanceCriteria', measureAcceptanceCriteria], ['components', measureComponents]]) {
+  const measures = [
+    ['useCases', measureUseCases],
+    ['acceptanceCriteria', measureAcceptanceCriteria],
+    ['components', measureComponents],
+    ['estimatedPhases', measureEstimatedPhases],
+  ];
+  for (const [key, measure] of measures) {
     const m = measure(featureDir);
     if (m.reason) unavailable.push({ count: key, reason: m.reason });
     else counts[key] = m.value;
   }
-  unavailable.push(
-    { count: 'estimatedPhases', reason: 'measurement not implemented yet (BE-04 to BE-05)' },
-  );
   return result('unavailable', { counts, thresholds, unavailable });
 }
 
