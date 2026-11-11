@@ -1267,6 +1267,46 @@ function runValidateProposal(_args, readStdin) {
   }
 }
 
+// FTR-037 check-size scaffold: measurement is added by later tasks. A new feature is never reported as passed.
+const CHECK_SIZE = 'check-size';
+
+function result(status, extra = {}) {
+  return { status, counts: {}, thresholds: {}, over: [], unavailable: [], ...extra };
+}
+
+function parseCheckSizeArgs(argv) {
+  const args = { project: null, featureDir: null, prefix: null };
+  for (let i = 0; i < argv.length; i++) {
+    const t = argv[i];
+    if (t === '--') continue;
+    if (t === '--project') args.project = argv[++i];
+    else if (t === '--feature-dir') args.featureDir = argv[++i];
+    else if (t === '--prefix') args.prefix = argv[++i];
+  }
+  if (!args.featureDir || !args.prefix)
+    fail('CHECK_SIZE_ARGS', 'check-size requires --feature-dir and --prefix');
+  return args;
+}
+
+function checkSize({ project, featureDir }) {
+  if (!isNewFeature(featureDir).isNew) return result('skipped');
+  const thresholds = loadConfig({ projectRoot: project || process.cwd() }).thresholds;
+  return result('unavailable', {
+    thresholds,
+    unavailable: [{ count: CHECK_SIZE, reason: 'measurement not implemented yet (BE-02 to BE-05)' }],
+  });
+}
+
+function runCheckSize(argv) {
+  let out;
+  try {
+    out = checkSize(parseCheckSizeArgs(argv));
+  } catch (err) {
+    out = result('unavailable', { unavailable: [{ count: CHECK_SIZE, reason: String((err && err.message) || err) }] });
+  }
+  return { exitCode: out.status === 'unavailable' ? 1 : 0, payload: out };
+}
+
 const COMMANDS = {
   apply: runApply,
   register: runRegister,
@@ -1281,11 +1321,20 @@ function errorPayload(err) {
   return { error: { code: UNEXPECTED_CODE, key: null, file: null, message: String((err && err.message) || err) } };
 }
 
+// check-size accepts leading global tokens ("--project <root>" and "--") before the command name.
+function commandStart(argv) {
+  let i = 0;
+  while (i < argv.length && (argv[i] === '--' || argv[i] === '--project')) i += argv[i] === '--project' ? 2 : 1;
+  return i;
+}
+
 function main(argv, readStdin) {
+  const start = commandStart(argv);
+  if (argv[start] === CHECK_SIZE) return runCheckSize(argv.slice(0, start).concat(argv.slice(start + 1)));
   const [command, ...rest] = argv;
   try {
     if (!command || !Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
-      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register, check-definition or validate-proposal`);
+      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register, check-definition, validate-proposal or check-size`);
     }
     return { exitCode: 0, payload: COMMANDS[command](rest, readStdin) };
   } catch (err) {
@@ -1346,3 +1395,6 @@ module.exports.evaluateDefinition = evaluateDefinition;
 module.exports.checkDefinition = checkDefinition;
 module.exports.runCheckDefinition = runCheckDefinition;
 module.exports.runValidateProposal = runValidateProposal;
+module.exports.parseCheckSizeArgs = parseCheckSizeArgs;
+module.exports.checkSize = checkSize;
+module.exports.runCheckSize = runCheckSize;
