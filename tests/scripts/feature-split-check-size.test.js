@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -10,12 +11,13 @@ const PREFIX = 'FTR-900';
 const FEATURE_NAME = 'FTR-900-fixture';
 const tempRoots = [];
 
-function makeProject(files = {}) {
+const DEFAULT_TEST_THRESHOLDS = { useCases: 10, acceptanceCriteria: 20, components: 10, estimatedPhases: 5 };
+
+function makeProject(files = {}, thresholds = DEFAULT_TEST_THRESHOLDS) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-size-'));
   tempRoots.push(root);
   // Override file at the project root. Values are test-only, not defaults.
-  fs.writeFileSync(path.join(root, 'feature-split.config.json'),
-    JSON.stringify({ thresholds: { useCases: 10, acceptanceCriteria: 20, components: 10, estimatedPhases: 5 } }));
+  fs.writeFileSync(path.join(root, 'feature-split.config.json'), JSON.stringify({ thresholds }));
   const feature = path.join(root, 'internal_docs', 'features', FEATURE_NAME);
   fs.mkdirSync(feature, { recursive: true });
   for (const [rel, body] of Object.entries(files)) {
@@ -217,5 +219,112 @@ describe('check-size estimated phases from build order', () => {
     const entry = phasesEntry(runCheck(root, feature).result);
     expect(entry).toBeDefined();
     expect(entry.reason.length).toBeGreaterThan(0);
+  });
+});
+
+// Fixture builder for the boundary and precedence group. Every count it writes is distinct and parses through the
+// same markup the measures read: UC-NN files, an AC-NN table in req/index.md, a Path-column component table, and a
+// Section 11 build order where item k depends on item k-1 (a chain of N items gives N phases).
+const pad = (n) => String(n).padStart(2, '0');
+
+function filesFor({ ucCount, acCount, componentRows, chain }) {
+  const files = {};
+  for (let i = 1; i <= ucCount; i++) files[`req/use-cases/UC-${pad(i)}.md`] = `# UC-${pad(i)}\n`;
+  const acRows = Array.from({ length: acCount }, (_, i) => `| AC-${pad(i + 1)} | Criterion ${i + 1} |`);
+  files['req/index.md'] = ['| ID | Criterion |', '|---|---|', ...acRows, ''].join('\n');
+  const order = Array.from({ length: chain }, (_, i) =>
+    i === 0 ? '1. Item 1 — depends on: none' : `${i + 1}. Item ${i + 1} — depends on: ${i}`);
+  files['spec/index.md'] = ['## Components', '', componentTable(componentRows), '',
+    '## 11. Build order', '', ...order, ''].join('\n');
+  return files;
+}
+
+// Hashes every file under a directory so a test can prove the check left the tree untouched.
+function hashTree(dir) {
+  const out = {};
+  const walk = (d) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else out[path.relative(dir, full)] = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+describe('check-size threshold boundary and precedence', () => {
+  const EVEN = { useCases: 2, acceptanceCriteria: 2, components: 2, estimatedPhases: 2 };
+
+  test('a count equal to its threshold is not over', () => {
+    const { root, feature } = makeProject(filesFor({ ucCount: 2, acCount: 2, componentRows: 2, chain: 2 }), EVEN);
+    expect(runCheck(root, feature).result.over).toEqual([]);
+  });
+
+  test('a run where every count equals its threshold reports status passed', () => {
+    const { root, feature } = makeProject(filesFor({ ucCount: 2, acCount: 2, componentRows: 2, chain: 2 }), EVEN);
+    expect(runCheck(root, feature).result.status).toBe('passed');
+  });
+
+  test('a passed run exits with code 0', () => {
+    const { root, feature } = makeProject(filesFor({ ucCount: 2, acCount: 2, componentRows: 2, chain: 2 }), EVEN);
+    expect(runCheck(root, feature).code).toBe(0);
+  });
+
+  test('a passed run carries no proposal', () => {
+    const { root, feature } = makeProject(filesFor({ ucCount: 2, acCount: 2, componentRows: 2, chain: 2 }), EVEN);
+    expect(runCheck(root, feature).result).not.toHaveProperty('proposal');
+  });
+
+  test('unavailable takes precedence over an over-threshold count', () => {
+    const files = filesFor({ ucCount: 3, acCount: 2, componentRows: 2, chain: 2 });
+    delete files['req/index.md']; // acceptanceCriteria becomes unavailable
+    const { root, feature } = makeProject(files, { useCases: 1, acceptanceCriteria: 1, components: 5, estimatedPhases: 5 });
+    expect(runCheck(root, feature).result.status).toBe('unavailable');
+  });
+
+  test('an unavailable run exits with code 1', () => {
+    const files = filesFor({ ucCount: 3, acCount: 2, componentRows: 2, chain: 2 });
+    delete files['req/index.md'];
+    const { root, feature } = makeProject(files, { useCases: 1, acceptanceCriteria: 1, components: 5, estimatedPhases: 5 });
+    expect(runCheck(root, feature).code).toBe(1);
+  });
+
+  test('an unavailable run carries no proposal even when a count is over', () => {
+    const files = filesFor({ ucCount: 3, acCount: 2, componentRows: 2, chain: 2 });
+    delete files['req/index.md'];
+    const { root, feature } = makeProject(files, { useCases: 1, acceptanceCriteria: 1, components: 5, estimatedPhases: 5 });
+    expect(runCheck(root, feature).result).not.toHaveProperty('proposal');
+  });
+
+  test('an unavailable run still lists the over-threshold count', () => {
+    const files = filesFor({ ucCount: 3, acCount: 2, componentRows: 2, chain: 2 });
+    delete files['req/index.md'];
+    const { root, feature } = makeProject(files, { useCases: 1, acceptanceCriteria: 1, components: 5, estimatedPhases: 5 });
+    expect(runCheck(root, feature).result.over).toEqual(['useCases']);
+  });
+
+  test('an unavailable run names the unavailable count with a reason', () => {
+    const files = filesFor({ ucCount: 3, acCount: 2, componentRows: 2, chain: 2 });
+    delete files['req/index.md'];
+    const { root, feature } = makeProject(files, { useCases: 1, acceptanceCriteria: 1, components: 5, estimatedPhases: 5 });
+    const entry = runCheck(root, feature).result.unavailable.find(u => u.count === 'acceptanceCriteria');
+    expect(entry).toBeDefined();
+    expect(entry.reason.length).toBeGreaterThan(0);
+  });
+
+  test('the printed key set for a passed run is exactly status, counts, thresholds, over and unavailable', () => {
+    const { root, feature } = makeProject(filesFor({ ucCount: 1, acCount: 1, componentRows: 1, chain: 1 }),
+      { useCases: 5, acceptanceCriteria: 5, components: 5, estimatedPhases: 5 });
+    const { result } = runCheck(root, feature);
+    expect(Object.keys(result).sort()).toEqual(['counts', 'over', 'status', 'thresholds', 'unavailable']);
+  });
+
+  test('a passed run leaves the project tree byte-for-byte unchanged', () => {
+    const { root, feature } = makeProject(filesFor({ ucCount: 1, acCount: 1, componentRows: 1, chain: 1 }),
+      { useCases: 5, acceptanceCriteria: 5, components: 5, estimatedPhases: 5 });
+    const before = hashTree(root);
+    runCheck(root, feature);
+    expect(hashTree(root)).toEqual(before);
   });
 });
