@@ -1267,7 +1267,7 @@ function runValidateProposal(_args, readStdin) {
   }
 }
 
-// FTR-037 check-size scaffold: measurement is added by later tasks. A new feature is never reported as passed.
+// FTR-037 check-size: measured counts are compared with FTR-035 thresholds; any unavailable count blocks a pass.
 const CHECK_SIZE = 'check-size';
 
 function result(status, extra = {}) {
@@ -1429,6 +1429,24 @@ function measureEstimatedPhases(featureDir) {
   }
 }
 
+const COUNT_KEYS = ['useCases', 'acceptanceCriteria', 'components', 'estimatedPhases'];
+
+function decide({ counts, thresholds, unavailable }) {
+  const over = [];
+  const unavailableOut = [...unavailable];
+  for (const key of COUNT_KEYS) {
+    if (!(key in counts)) continue;
+    if (!(key in thresholds)) {
+      unavailableOut.push({ count: key, reason: `no FTR-035 threshold configured for ${key}` });
+      continue;
+    }
+    if (isOverThreshold(counts[key], thresholds[key])) over.push(key);
+  }
+  if (unavailableOut.length) return { status: 'unavailable', over, unavailable: unavailableOut };
+  if (over.length === 0) return { status: 'passed', over: [], unavailable: [] };
+  return { status: 'split-proposed', over, unavailable: [] };
+}
+
 function checkSize({ project, featureDir }) {
   if (!isNewFeature(featureDir).isNew) return result('skipped');
   const thresholds = loadConfig({ projectRoot: project || process.cwd() }).thresholds;
@@ -1445,7 +1463,8 @@ function checkSize({ project, featureDir }) {
     if (m.reason) unavailable.push({ count: key, reason: m.reason });
     else counts[key] = m.value;
   }
-  return result('unavailable', { counts, thresholds, unavailable });
+  const decision = decide({ counts, thresholds, unavailable });
+  return result(decision.status, { counts, thresholds, over: decision.over, unavailable: decision.unavailable });
 }
 
 function runCheckSize(argv) {
