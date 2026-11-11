@@ -1331,19 +1331,58 @@ function measureAcceptanceCriteria(featureDir) {
   return count > 0 ? { value: count } : { reason: 'no AC-NN identifiers in req/index.md' };
 }
 
+const SEPARATOR = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/;
+
+// Splits text into maximal runs of consecutive lines that start with "|".
+function extractPipeTables(text) {
+  const tables = [];
+  let cur = null;
+  for (const raw of text.split(/\r?\n/)) {
+    if (/^\s*\|/.test(raw)) {
+      if (!cur) cur = [];
+      cur.push(raw.trim());
+    } else if (cur) {
+      tables.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) tables.push(cur);
+  return tables;
+}
+
+// ASSUMED LOCATOR (FTR-037 design open gap 3): the component table's header row starts with "Component".
+function isComponentTable(lines) {
+  const header = lines[0].split('|').map(c => c.trim()).filter(Boolean);
+  return header[0] === 'Component';
+}
+
+function measureComponents(featureDir) {
+  let text;
+  try {
+    text = readText(path.join(featureDir, 'spec', 'index.md'));
+  } catch (err) {
+    return { reason: `cannot read spec/index.md: ${err.code || err.message}` };
+  }
+  if (text === null) return { reason: 'spec/index.md is missing' };
+  const found = extractPipeTables(text).filter(isComponentTable);
+  if (found.length === 0) return { reason: 'component table not found in spec/index.md' };
+  if (found.length > 1) return { reason: `expected one component table in spec/index.md, found ${found.length}` };
+  const rows = found[0].slice(1).filter(l => !SEPARATOR.test(l));
+  return rows.length > 0 ? { value: rows.length } : { reason: 'component table in spec/index.md has no data rows' };
+}
+
 function checkSize({ project, featureDir }) {
   if (!isNewFeature(featureDir).isNew) return result('skipped');
   const thresholds = loadConfig({ projectRoot: project || process.cwd() }).thresholds;
   const counts = {};
   const unavailable = [];
-  for (const [key, measure] of [['useCases', measureUseCases], ['acceptanceCriteria', measureAcceptanceCriteria]]) {
+  for (const [key, measure] of [['useCases', measureUseCases], ['acceptanceCriteria', measureAcceptanceCriteria], ['components', measureComponents]]) {
     const m = measure(featureDir);
     if (m.reason) unavailable.push({ count: key, reason: m.reason });
     else counts[key] = m.value;
   }
   unavailable.push(
-    { count: 'components', reason: 'measurement not implemented yet (BE-03 to BE-05)' },
-    { count: 'estimatedPhases', reason: 'measurement not implemented yet (BE-03 to BE-05)' },
+    { count: 'estimatedPhases', reason: 'measurement not implemented yet (BE-04 to BE-05)' },
   );
   return result('unavailable', { counts, thresholds, unavailable });
 }
