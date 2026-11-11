@@ -1427,7 +1427,8 @@ function parseBuildOrder(lines) {
     if (!m) throw new Error(`build-order item has no valid "depends on:" clause: ${line}`);
     const n = Number(m[1]);
     if (items.has(n)) throw new Error(`duplicate build-order item ${n}`);
-    items.set(n, m[3] === 'none' || m[3] === 'nothing' ? [] : m[3].split(',').map(s => Number(s.trim())));
+    const deps = m[3] === 'none' || m[3] === 'nothing' ? [] : m[3].split(',').map(s => Number(s.trim()));
+    items.set(n, { deps, text: m[2] });
   }
   if (items.size === 0) throw new Error('Section 11 build order is empty');
   return items;
@@ -1441,7 +1442,7 @@ function depths(items) {
     if (!items.has(n)) throw new Error(`dangling dependency on build-order item ${n}`);
     if (visiting.has(n)) throw new Error(`cycle through build-order item ${n}`);
     visiting.add(n);
-    const deps = items.get(n);
+    const deps = items.get(n).deps;
     const d = deps.length === 0 ? 0 : 1 + Math.max(...deps.map(depth));
     visiting.delete(n);
     memo.set(n, d);
@@ -1449,6 +1450,13 @@ function depths(items) {
   };
   for (const n of items.keys()) depth(n);
   return memo;
+}
+
+// Depth-0 items have no dependencies, so they need no traversal. checkSize runs depths() first, which rejects dangling
+// dependencies and cycles, so the graph is valid here.
+function depth0ItemTexts(lines) {
+  const items = parseBuildOrder(lines);
+  return [...items.values()].filter(i => i.deps.length === 0).map(i => i.text);
 }
 
 function measureEstimatedPhases(featureDir) {
@@ -1578,7 +1586,9 @@ function fillChild(block, bucket) {
   const purpose = `Use cases ${first}..${last} and their components`;
   const parts = [`Use cases: ${block.useCases.join(', ')}.`, `Components: ${bucket.components.join(', ') || 'none'}.`];
   if (bucket.unlinked.length) parts.push(`No use-case link (assigned to part-1): ${bucket.unlinked.join(', ')}.`);
-  return { name: `part-${block.index}`, purpose, summary: purpose, keywords: [], assigned: parts.join(' ') };
+  return {
+    name: `part-${block.index}`, purpose, summary: purpose, keywords: [], assigned: parts.join(' '), components: bucket.components,
+  };
 }
 
 // Child grouping (Tech-Spec T-6): the child count and use-case blocks, then the component assignment and child fields.
@@ -1596,10 +1606,35 @@ function groupChildren({ featureDir, counts, thresholds, minChildren }) {
   return assignComponents({ featureDir, blocks });
 }
 
+// Shared foundation (BR-03, Tech-Spec T-7). A child holds a depth-0 component when one of its component Paths is a
+// case-sensitive substring of a depth-0 build-order item. The holder with the lowest block index owns the foundation and moves
+// to position 1; every other child depends on it. With no holder there is no owner and no dependencies.
+function mapFoundation(children, depth0Texts) {
+  const holds = c => c.components.some(p => p && depth0Texts.some(t => t.includes(p)));
+  const holders = children.filter(holds);
+  if (holders.length === 0) {
+    return {
+      children: children.map(c => ({ ...c, dependsOn: [] })),
+      sharedFoundationOwner: null,
+      foundationNote: 'no shared foundation assigned: no component matches depth-0 build-order items',
+    };
+  }
+  const owner = holders[0];
+  const ordered = [owner, ...children.filter(c => c !== owner)];
+  return {
+    children: ordered.map(c => ({ ...c, dependsOn: c === owner ? [] : [owner.name] })),
+    sharedFoundationOwner: owner.name,
+    foundationNote: '',
+  };
+}
+
 function measuredProposal({ featureDir, counts, config }) {
-  const children = groupChildren({ featureDir, counts, thresholds: config.thresholds, minChildren: config.minChildren })
-    .map(c => ({ ...c, keywords: [] }));
-  return buildProposal({ source: 'measured', children, config }).proposal;
+  const grouped = groupChildren({ featureDir, counts, thresholds: config.thresholds, minChildren: config.minChildren });
+  const mapped = mapFoundation(grouped, depth0ItemTexts(readSection11(featureDir)));
+  const children = mapped.children.map(c => ({ ...c, keywords: [] }));
+  return buildProposal({
+    source: 'measured', children, sharedFoundationOwner: mapped.sharedFoundationOwner, foundationNote: mapped.foundationNote, config,
+  }).proposal;
 }
 
 function checkSize({ project, featureDir }) {
