@@ -1350,10 +1350,26 @@ function extractPipeTables(text) {
   return tables;
 }
 
-// ASSUMED LOCATOR (FTR-037 design open gap 3): the component table's header row starts with "Component".
-function isComponentTable(lines) {
-  const header = lines[0].split('|').map(c => c.trim()).filter(Boolean);
-  return header[0] === 'Component';
+// Component rows (FTR-037 T-2, option A, chosen by the user): the data rows of the tables that have a "Path" column, that is the
+// New files and Modified files tables of Section 9, with a Path that appears in both counted once. The tables are looked for in
+// Section 9 when the document has one; a document without a Section 9 is searched as a whole. Tables without a Path column
+// (Sections 6, 7, 8, 11, 12) are never counted.
+function pathColumnOf(table) {
+  const header = table[0].split('|').map(c => c.trim()).filter(Boolean);
+  return header.findIndex(c => c === 'Path');
+}
+
+function section9Of(text) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^#{1,6}\s+9[.\s]/.test(l));
+  if (start < 0) return { scope: text, where: 'spec/index.md' };
+  const level = lines[start].match(/^#+/)[0].length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const h = lines[i].match(/^(#{1,6})\s/);
+    if (h && h[1].length <= level) { end = i; break; }
+  }
+  return { scope: lines.slice(start + 1, end).join('\n'), where: 'Section 9 of spec/index.md' };
 }
 
 function measureComponents(featureDir) {
@@ -1364,14 +1380,24 @@ function measureComponents(featureDir) {
     return { reason: `cannot read spec/index.md: ${err.code || err.message}` };
   }
   if (text === null) return { reason: 'spec/index.md is missing' };
-  const found = extractPipeTables(text).filter(isComponentTable);
-  if (found.length === 0) return { reason: 'component table not found in spec/index.md' };
-  if (found.length > 1) return { reason: `expected one component table in spec/index.md, found ${found.length}` };
-  const rows = found[0].slice(1).filter(l => !SEPARATOR.test(l));
-  return rows.length > 0 ? { value: rows.length } : { reason: 'component table in spec/index.md has no data rows' };
+  const { scope, where } = section9Of(text);
+  const tables = extractPipeTables(scope).filter(t => pathColumnOf(t) >= 0);
+  if (tables.length === 0) return { reason: `no table with a Path column (New files, Modified files) found in ${where}` };
+  const paths = new Set();
+  for (const table of tables) {
+    const col = pathColumnOf(table);
+    for (const row of table.slice(1).filter(l => !SEPARATOR.test(l))) {
+      const cells = row.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const p = (cells[col] || '').replace(/`/g, '');
+      if (p !== '') paths.add(p);
+    }
+  }
+  return paths.size > 0 ? { value: paths.size } : { reason: `the file tables in ${where} have no data rows` };
 }
 
-const BUILD_ITEM = /^(\d+)\.\s+(.+?)\s+—\s+depends on:\s*(none|\d+(?:\s*,\s*\d+)*)\s*$/;
+// The generator template writes "depends on: nothing" or a list of item numbers; "none" is accepted too, and text after the clause
+// (a note on the item) is ignored.
+const BUILD_ITEM = /^(\d+)\.\s+(.+?)\s+—\s+depends on:\s*(none|nothing|\d+(?:\s*,\s*\d+)*)(?![\w])/;
 
 // ASSUMED LOCATOR (FTR-037 T-1): the Section 11 heading starts with "## 11."; the section ends at the next heading of the same or higher level.
 function readSection11(featureDir) {
@@ -1396,7 +1422,7 @@ function parseBuildOrder(lines) {
     if (!m) throw new Error(`build-order item has no valid "depends on:" clause: ${line}`);
     const n = Number(m[1]);
     if (items.has(n)) throw new Error(`duplicate build-order item ${n}`);
-    items.set(n, m[3] === 'none' ? [] : m[3].split(',').map(s => Number(s.trim())));
+    items.set(n, m[3] === 'none' || m[3] === 'nothing' ? [] : m[3].split(',').map(s => Number(s.trim())));
   }
   if (items.size === 0) throw new Error('Section 11 build order is empty');
   return items;
