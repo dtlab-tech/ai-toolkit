@@ -1447,9 +1447,21 @@ function decide({ counts, thresholds, unavailable }) {
   return { status: 'split-proposed', over, unavailable: [] };
 }
 
+// Grouping (Tech-Spec T-6) and depth-0 foundation mapping (T-7) are built by US-02-TASK-BE-01 to BE-03.
+// Until they land no children can be derived, so an over-threshold feature fails closed as unavailable (BR-03).
+function measuredChildren() {
+  fail('PROPOSAL_UNAVAILABLE', 'Measured split grouping is not implemented yet (FTR-037 T-6), so no split can be proposed.');
+}
+
+function measuredProposal(config) {
+  const children = measuredChildren().map(c => ({ ...c, keywords: [] }));
+  return buildProposal({ source: 'measured', children, config }).proposal;
+}
+
 function checkSize({ project, featureDir }) {
   if (!isNewFeature(featureDir).isNew) return result('skipped');
-  const thresholds = loadConfig({ projectRoot: project || process.cwd() }).thresholds;
+  const config = loadConfig({ projectRoot: project || process.cwd() });
+  const thresholds = config.thresholds;
   const counts = {};
   const unavailable = [];
   const measures = [
@@ -1464,7 +1476,15 @@ function checkSize({ project, featureDir }) {
     else counts[key] = m.value;
   }
   const decision = decide({ counts, thresholds, unavailable });
-  return result(decision.status, { counts, thresholds, over: decision.over, unavailable: decision.unavailable });
+  if (decision.status !== 'split-proposed')
+    return result(decision.status, { counts, thresholds, over: decision.over, unavailable: decision.unavailable });
+  try {
+    const proposal = measuredProposal(config);
+    return result('split-proposed', { counts, thresholds, over: decision.over, proposal });
+  } catch (err) {
+    const reason = String((err && err.message) || err);
+    return result('unavailable', { counts, thresholds, over: decision.over, unavailable: [{ count: 'proposal', reason }] });
+  }
 }
 
 function runCheckSize(argv) {
