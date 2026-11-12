@@ -200,6 +200,9 @@ Outcomes of the decision (split-proposed only):
 - `reject`: the pipeline continues to Gate 1 unchanged and stores nothing.
 - Nothing is created before an explicit accept. The proposal exists only in the conversation.
 - An unanswered proposal stores nothing. Silence is neither accept nor reject.
+- A retry after a failed `apply`, or after a session that ended before an answer, is a fresh run. That
+  run re-runs `check-size` and presents a new proposal with fresh child IDs. The failed attempt is not
+  resumed, and no state is stored between runs.
 
 Rules for this step:
 - Step 1a calls `feature-split.js` only for `validate-proposal` in the edit arm and for `apply` on an
