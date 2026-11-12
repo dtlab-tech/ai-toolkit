@@ -84,6 +84,33 @@ required documents were produced.
 
 ---
 
+## Step 1a — Split checkpoint
+
+Read `split_checkpoint` from the pm-phase1 result.
+
+1. If `split_checkpoint` is missing, is not an object, or has no string `status`: treat it as
+   unavailable with the reason "split checkpoint result missing or malformed".
+2. If `status` is `passed` or `skipped`: continue to Gate 1 (Step 2). Show no prompt.
+3. If `status` is `unavailable`: print a plain error, not a gate and not an approval prompt:
+   ```
+   Feature split check unavailable. Cannot proceed to Gate 1.
+     - <count>: <reason>        (one line per entry in split_checkpoint.unavailable)
+   ```
+   If there are no entries (missing or malformed result), print one line:
+   `  - split_checkpoint: <reason>`.
+   Then STOP. Do not reach Gate 1. Do not ask the user anything.
+4. Any other status (including `split-proposed` until US-02-TASK-BE-05 lands): treat it as
+   unavailable with the reason "unknown split checkpoint status: <status>", print it the same way
+   as step 3, and STOP.
+
+Rules for this step:
+- Step 1a never calls `feature-split.js apply`, never builds a proposal and never prompts.
+- An unknown or malformed result never leads to Gate 1. Only `passed` and `skipped` continue.
+- The unavailable message must not contain the words "accept", "approve" or "confirm", so it
+  cannot read as an approval prompt.
+
+---
+
 ## Step 2 — Present Gate 1 (HARD STOP — present in main loop)
 
 Present the following to the user:
