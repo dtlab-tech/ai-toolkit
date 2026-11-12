@@ -1267,6 +1267,420 @@ function runValidateProposal(_args, readStdin) {
   }
 }
 
+// FTR-037 check-size: measured counts are compared with FTR-035 thresholds; any unavailable count blocks a pass.
+const CHECK_SIZE = 'check-size';
+
+function result(status, extra = {}) {
+  return { status, counts: {}, thresholds: {}, over: [], unavailable: [], ...extra };
+}
+
+function parseCheckSizeArgs(argv) {
+  const args = { project: null, featureDir: null, prefix: null };
+  for (let i = 0; i < argv.length; i++) {
+    const t = argv[i];
+    if (t === '--') continue;
+    if (t === '--project') args.project = argv[++i];
+    else if (t === '--feature-dir') args.featureDir = argv[++i];
+    else if (t === '--prefix') args.prefix = argv[++i];
+  }
+  if (!args.featureDir || !args.prefix)
+    fail('CHECK_SIZE_ARGS', 'check-size requires --feature-dir and --prefix');
+  return args;
+}
+
+const UC_ID = /\bUC-\d{2,}\b/g;
+const AC_ID = /\bAC-\d{2,}\b/g;
+
+function readText(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return null;
+    throw err;
+  }
+}
+
+function globMd(dir) {
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return null;
+    throw err;
+  }
+  return names.filter(n => n.endsWith('.md')).sort().map(n => path.join(dir, n));
+}
+
+// Sorted numerically (UC-10 follows UC-09). Both UC-NN and AC-NN IDs have a three-character prefix.
+function listDistinct(texts, re) {
+  const ids = new Set();
+  for (const text of texts) for (const m of text.matchAll(re)) ids.add(m[0]);
+  return [...ids].sort((a, b) => Number(a.slice(3)) - Number(b.slice(3)));
+}
+
+function countDistinct(texts, re) {
+  return listDistinct(texts, re).length;
+}
+
+function measureUseCases(featureDir) {
+  const files = globMd(path.join(featureDir, 'req', 'use-cases'));
+  if (files === null) return { reason: 'req/use-cases/ is missing' };
+  const count = countDistinct(files.map(f => readText(f)), UC_ID);
+  return count > 0 ? { value: count } : { reason: 'no UC-NN identifiers in req/use-cases/*.md' };
+}
+
+function measureAcceptanceCriteria(featureDir) {
+  const text = readText(path.join(featureDir, 'req', 'index.md'));
+  if (text === null) return { reason: 'req/index.md is missing' };
+  const count = countDistinct([text], AC_ID);
+  return count > 0 ? { value: count } : { reason: 'no AC-NN identifiers in req/index.md' };
+}
+
+const SEPARATOR = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/;
+
+// Splits text into maximal runs of consecutive lines that start with "|".
+function extractPipeTables(text) {
+  const tables = [];
+  let cur = null;
+  for (const raw of text.split(/\r?\n/)) {
+    if (/^\s*\|/.test(raw)) {
+      if (!cur) cur = [];
+      cur.push(raw.trim());
+    } else if (cur) {
+      tables.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) tables.push(cur);
+  return tables;
+}
+
+// Component rows (FTR-037 T-2, option A, chosen by the user): the data rows of the tables that have a "Path" column, that is the
+// New files and Modified files tables of Section 9, with a Path that appears in both counted once. The tables are looked for in
+// Section 9 when the document has one; a document without a Section 9 is searched as a whole. Tables without a Path column
+// (Sections 6, 7, 8, 11, 12) are never counted.
+function pathColumnOf(table) {
+  const header = table[0].split('|').map(c => c.trim()).filter(Boolean);
+  return header.findIndex(c => c === 'Path');
+}
+
+function section9Of(text) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^#{1,6}\s+9[.\s]/.test(l));
+  if (start < 0) return { scope: text, where: 'spec/index.md' };
+  const level = lines[start].match(/^#+/)[0].length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const h = lines[i].match(/^(#{1,6})\s/);
+    if (h && h[1].length <= level) { end = i; break; }
+  }
+  return { scope: lines.slice(start + 1, end).join('\n'), where: 'Section 9 of spec/index.md' };
+}
+
+function measureComponents(featureDir) {
+  let text;
+  try {
+    text = readText(path.join(featureDir, 'spec', 'index.md'));
+  } catch (err) {
+    return { reason: `cannot read spec/index.md: ${err.code || err.message}` };
+  }
+  if (text === null) return { reason: 'spec/index.md is missing' };
+  const { scope, where } = section9Of(text);
+  const tables = extractPipeTables(scope).filter(t => pathColumnOf(t) >= 0);
+  if (tables.length === 0) return { reason: `no table with a Path column (New files, Modified files) found in ${where}` };
+  const paths = new Set();
+  for (const table of tables) {
+    const col = pathColumnOf(table);
+    for (const row of table.slice(1).filter(l => !SEPARATOR.test(l))) {
+      const cells = row.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const p = (cells[col] || '').replace(/`/g, '');
+      if (p !== '') paths.add(p);
+    }
+  }
+  return paths.size > 0 ? { value: paths.size } : { reason: `the file tables in ${where} have no data rows` };
+}
+
+// The generator template writes "depends on: nothing" or a list of item numbers; "none" is accepted too. The dash may be an em dash,
+// an en dash or a hyphen and "depends on" is case-insensitive. What follows the list is checked in parseBuildOrder: only an empty rest,
+// or a note introduced by punctuation or a parenthesis, is accepted, so "1 and 1" or "2–9 and 1" are unavailable and never a silently
+// shorter list.
+const BUILD_ITEM = /^(\d+)\.\s+(.+?)\s+[—–-]\s+depends on:\s*(none|nothing|\d+(?:\s*,\s*\d+)*)(.*)$/i;
+
+// ASSUMED LOCATOR (FTR-037 T-1): the Section 11 heading starts with "## 11."; the section ends at the next heading of the same or higher level.
+function readSection11(featureDir) {
+  const text = readText(path.join(featureDir, 'spec', 'index.md'));
+  if (text === null) throw new Error('spec/index.md is missing');
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^#{1,6}\s+11[.\s]/.test(l));
+  if (start < 0) throw new Error('Section 11 build order not found in spec/index.md');
+  const level = lines[start].match(/^#+/)[0].length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const h = lines[i].match(/^(#{1,6})\s/);
+    if (h && h[1].length <= level) { end = i; break; }
+  }
+  return lines.slice(start + 1, end).map(l => l.trim());
+}
+
+function parseBuildOrder(lines) {
+  const items = new Map();
+  for (const line of lines.filter(l => /^\d+\./.test(l))) {
+    const m = BUILD_ITEM.exec(line);
+    if (!m) throw new Error(`build-order item has no valid "depends on:" clause: ${line}`);
+    const n = Number(m[1]);
+    if (items.has(n)) throw new Error(`duplicate build-order item ${n}`);
+    const rest = m[4].trim();
+    if (rest !== '' && !/^[.;:(]/.test(rest)) throw new Error(`build-order item ${m[1]} has text after its "depends on:" list that is not a note ("${rest.slice(0, 30)}"): ${line}`);
+    const clause = m[3].toLowerCase();
+    const deps = clause === 'none' || clause === 'nothing' ? [] : m[3].split(',').map(s => Number(s.trim()));
+    items.set(n, { deps, text: m[2] });
+  }
+  if (items.size === 0) throw new Error('Section 11 build order is empty');
+  return items;
+}
+
+function depths(items) {
+  const memo = new Map();
+  const visiting = new Set();
+  const depth = n => {
+    if (memo.has(n)) return memo.get(n);
+    if (!items.has(n)) throw new Error(`dangling dependency on build-order item ${n}`);
+    if (visiting.has(n)) throw new Error(`cycle through build-order item ${n}`);
+    visiting.add(n);
+    const deps = items.get(n).deps;
+    const d = deps.length === 0 ? 0 : 1 + Math.max(...deps.map(depth));
+    visiting.delete(n);
+    memo.set(n, d);
+    return d;
+  };
+  for (const n of items.keys()) depth(n);
+  return memo;
+}
+
+// Depth-0 items have no dependencies, so they need no traversal. checkSize runs depths() first, which rejects dangling
+// dependencies and cycles, so the graph is valid here.
+function depth0ItemTexts(lines) {
+  const items = parseBuildOrder(lines);
+  return [...items.values()].filter(i => i.deps.length === 0).map(i => i.text);
+}
+
+function measureEstimatedPhases(featureDir) {
+  try {
+    const items = parseBuildOrder(readSection11(featureDir));
+    return { value: Math.max(...depths(items).values()) + 1 };
+  } catch (err) {
+    return { reason: err.message };
+  }
+}
+
+const COUNT_KEYS = ['useCases', 'acceptanceCriteria', 'components', 'estimatedPhases'];
+
+function decide({ counts, thresholds, unavailable }) {
+  const over = [];
+  const unavailableOut = [...unavailable];
+  for (const key of COUNT_KEYS) {
+    if (!(key in counts)) continue;
+    if (!(key in thresholds)) {
+      unavailableOut.push({ count: key, reason: `no FTR-035 threshold configured for ${key}` });
+      continue;
+    }
+    if (isOverThreshold(counts[key], thresholds[key])) over.push(key);
+  }
+  if (unavailableOut.length) return { status: 'unavailable', over, unavailable: unavailableOut };
+  if (over.length === 0) return { status: 'passed', over: [], unavailable: [] };
+  return { status: 'split-proposed', over, unavailable: [] };
+}
+
+// Tech-Spec T-6 step 2: the child count is the largest ceil(count / threshold) over the counts above their threshold,
+// floored at minChildren and capped at the number of distinct use cases U.
+function childCount({ useCases, acceptanceCriteria, components, thresholds, minChildren }) {
+  const ratios = [['useCases', useCases], ['acceptanceCriteria', acceptanceCriteria], ['components', components]]
+    .filter(([key, count]) => isOverThreshold(count, thresholds[key]))
+    .map(([key, count]) => Math.ceil(count / thresholds[key]));
+  return Math.min(Math.max(minChildren, ...ratios), useCases);
+}
+
+// N contiguous blocks; the first (items.length mod N) blocks get one extra item.
+function splitBlocks(items, N) {
+  const base = Math.floor(items.length / N), extra = items.length % N;
+  const blocks = [];
+  let pos = 0;
+  for (let k = 0; k < N; k++) {
+    const size = base + (k < extra ? 1 : 0);
+    blocks.push(items.slice(pos, pos + size));
+    pos += size;
+  }
+  return blocks;
+}
+
+function cellsOf(line) {
+  return line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+}
+
+// T-6 step 1, AC side: Map<AC-NN, UC-NN[]> from the Related UC column of the acceptance-criteria table in req/index.md.
+function readAcRelatedUcs(featureDir) {
+  const text = readText(path.join(featureDir, 'req', 'index.md'));
+  if (text === null) fail('PROPOSAL_UNAVAILABLE', 'AC to use-case link source missing: req/index.md is missing');
+  const links = new Map();
+  let found = false;
+  for (const table of extractPipeTables(text)) {
+    const header = cellsOf(table[0]);
+    const idCol = header.indexOf('ID'), ucCol = header.indexOf('Related UC');
+    if (idCol < 0 || ucCol < 0) continue;
+    found = true;
+    for (const row of table.slice(1).filter(l => !SEPARATOR.test(l))) {
+      const cells = cellsOf(row);
+      const ac = (cells[idCol] || '').match(AC_ID)?.[0];
+      if (!ac) continue;
+      const ucs = links.get(ac) ?? [];
+      for (const uc of (cells[ucCol] || '').match(UC_ID) ?? []) if (!ucs.includes(uc)) ucs.push(uc);
+      links.set(ac, ucs);
+    }
+  }
+  if (!found) fail('PROPOSAL_UNAVAILABLE', 'AC to use-case link source missing: req/index.md has no table with a Related UC column');
+  return links;
+}
+
+// T-6 step 4, component side: one row per distinct Path in the Section 9 file tables, with the AC IDs of its Addresses cell.
+function readComponentRows(featureDir) {
+  const text = readText(path.join(featureDir, 'spec', 'index.md'));
+  if (text === null) fail('PROPOSAL_UNAVAILABLE', 'spec/index.md is missing, so components cannot be assigned');
+  const { scope, where } = section9Of(text);
+  const tables = extractPipeTables(scope).filter(t => pathColumnOf(t) >= 0);
+  if (tables.length === 0) fail('PROPOSAL_UNAVAILABLE', `no table with a Path column found in ${where}`);
+  const rows = new Map();
+  for (const table of tables) {
+    const header = cellsOf(table[0]);
+    const pathCol = header.indexOf('Path'), addressesCol = header.indexOf('Addresses');
+    if (addressesCol < 0) fail('PROPOSAL_UNAVAILABLE', `the Addresses column is missing from a file table in ${where}`);
+    for (const row of table.slice(1).filter(l => !SEPARATOR.test(l))) {
+      const cells = cellsOf(row);
+      const p = (cells[pathCol] || '').replace(/`/g, '');
+      if (p === '' || rows.has(p)) continue;
+      rows.set(p, { path: p, addresses: (cells[addressesCol] || '').match(AC_ID) ?? [] });
+    }
+  }
+  return [...rows.values()];
+}
+
+// T-6 steps 4 and 5. blocks: [{ index, useCases }] with index 1-based. A component goes to the block of the lowest-numbered
+// use case reachable through its Addresses ACs; a component with no such link goes to block 1 with a "no use-case link" note.
+// A link to a use case outside every block does not count as resolvable.
+function assignComponents({ featureDir, blocks }) {
+  const blockOfUc = new Map();
+  for (const b of blocks) for (const uc of b.useCases) blockOfUc.set(uc, b.index);
+  const acLinks = readAcRelatedUcs(featureDir);
+  const buckets = new Map(blocks.map(b => [b.index, { components: [], unlinked: [] }]));
+  for (const row of readComponentRows(featureDir)) {
+    const linked = row.addresses.flatMap(ac => acLinks.get(ac) ?? []).filter(uc => blockOfUc.has(uc));
+    if (linked.length === 0) {
+      buckets.get(1).components.push(row.path);
+      buckets.get(1).unlinked.push(row.path);
+      continue;
+    }
+    const lowest = linked.reduce((a, b) => (Number(b.slice(3)) < Number(a.slice(3)) ? b : a));
+    buckets.get(blockOfUc.get(lowest)).components.push(row.path);
+  }
+  return blocks.map(b => fillChild(b, buckets.get(b.index)));
+}
+
+// Child fields (T-6 step 5). assigned is text, as FTR-035 D-08 defines it, and carries the use-case IDs, the component Paths and
+// the "no use-case link" note. summary equals purpose (D-11). keywords are filled later by the agent (T-8).
+function fillChild(block, bucket) {
+  const first = block.useCases[0], last = block.useCases[block.useCases.length - 1];
+  const purpose = `Use cases ${first}..${last} and their components`;
+  const parts = [`Use cases: ${block.useCases.join(', ')}.`, `Components: ${bucket.components.join(', ') || 'none'}.`];
+  if (bucket.unlinked.length) parts.push(`No use-case link (assigned to part-1): ${bucket.unlinked.join(', ')}.`);
+  return {
+    name: `part-${block.index}`, purpose, summary: purpose, keywords: [], assigned: parts.join(' '), components: bucket.components,
+  };
+}
+
+// Child grouping (Tech-Spec T-6): the child count and use-case blocks, then the component assignment and child fields.
+function groupChildren({ featureDir, counts, thresholds, minChildren }) {
+  const files = globMd(path.join(featureDir, 'req', 'use-cases'));
+  if (files === null) fail('PROPOSAL_UNAVAILABLE', 'req/use-cases/ is missing, so the use cases cannot be grouped');
+  const useCases = listDistinct(files.map(f => readText(f) ?? ''), UC_ID);
+  const U = useCases.length;
+  if (U < minChildren) fail('PROPOSAL_UNAVAILABLE', `fewer use cases (${U}) than minChildren (${minChildren}), so no split can be formed`);
+  const N = childCount({
+    useCases: U, acceptanceCriteria: counts.acceptanceCriteria, components: counts.components, thresholds, minChildren,
+  });
+  if (N < 1) fail('PROPOSAL_UNAVAILABLE', 'no use cases to group');
+  const blocks = splitBlocks(useCases, N).map((block, k) => ({ index: k + 1, useCases: block }));
+  return assignComponents({ featureDir, blocks });
+}
+
+// Shared foundation (BR-03, Tech-Spec T-7). A child holds a depth-0 component when one of its component Paths is a
+// case-sensitive substring of a depth-0 build-order item. The holder with the lowest block index owns the foundation and moves
+// to position 1; every other child depends on it. With no holder there is no owner and no dependencies.
+function mapFoundation(children, depth0Texts) {
+  const holds = c => c.components.some(p => p && depth0Texts.some(t => t.includes(p)));
+  const holders = children.filter(holds);
+  if (holders.length === 0) {
+    return {
+      children: children.map(c => ({ ...c, dependsOn: [] })),
+      sharedFoundationOwner: null,
+      foundationNote: 'no shared foundation assigned: no component matches depth-0 build-order items',
+    };
+  }
+  const owner = holders[0];
+  const ordered = [owner, ...children.filter(c => c !== owner)];
+  return {
+    children: ordered.map(c => ({ ...c, dependsOn: c === owner ? [] : [owner.name] })),
+    sharedFoundationOwner: owner.name,
+    foundationNote: '',
+  };
+}
+
+function measuredProposal({ featureDir, counts, config }) {
+  const grouped = groupChildren({ featureDir, counts, thresholds: config.thresholds, minChildren: config.minChildren });
+  const mapped = mapFoundation(grouped, depth0ItemTexts(readSection11(featureDir)));
+  const children = mapped.children.map(c => ({ ...c, keywords: [] }));
+  return buildProposal({
+    source: 'measured', children, sharedFoundationOwner: mapped.sharedFoundationOwner, foundationNote: mapped.foundationNote, config,
+  }).proposal;
+}
+
+function checkSize({ project, featureDir }) {
+  if (!isNewFeature(featureDir).isNew) return result('skipped');
+  const config = loadConfig({ projectRoot: project || process.cwd() });
+  const thresholds = config.thresholds;
+  const counts = {};
+  const unavailable = [];
+  const measures = [
+    ['useCases', measureUseCases],
+    ['acceptanceCriteria', measureAcceptanceCriteria],
+    ['components', measureComponents],
+    ['estimatedPhases', measureEstimatedPhases],
+  ];
+  for (const [key, measure] of measures) {
+    const m = measure(featureDir);
+    if (m.reason) unavailable.push({ count: key, reason: m.reason });
+    else counts[key] = m.value;
+  }
+  const decision = decide({ counts, thresholds, unavailable });
+  if (decision.status !== 'split-proposed')
+    return result(decision.status, { counts, thresholds, over: decision.over, unavailable: decision.unavailable });
+  try {
+    const proposal = measuredProposal({ featureDir, counts, config });
+    return result('split-proposed', { counts, thresholds, over: decision.over, proposal });
+  } catch (err) {
+    const reason = String((err && err.message) || err);
+    return result('unavailable', { counts, thresholds, over: decision.over, unavailable: [{ count: 'proposal', reason }] });
+  }
+}
+
+function runCheckSize(argv) {
+  let out;
+  try {
+    out = checkSize(parseCheckSizeArgs(argv));
+  } catch (err) {
+    out = result('unavailable', { unavailable: [{ count: CHECK_SIZE, reason: String((err && err.message) || err) }] });
+  }
+  return { exitCode: out.status === 'unavailable' ? 1 : 0, payload: out };
+}
+
 const COMMANDS = {
   apply: runApply,
   register: runRegister,
@@ -1281,11 +1695,20 @@ function errorPayload(err) {
   return { error: { code: UNEXPECTED_CODE, key: null, file: null, message: String((err && err.message) || err) } };
 }
 
+// check-size accepts leading global tokens ("--project <root>" and "--") before the command name.
+function commandStart(argv) {
+  let i = 0;
+  while (i < argv.length && (argv[i] === '--' || argv[i] === '--project')) i += argv[i] === '--project' ? 2 : 1;
+  return i;
+}
+
 function main(argv, readStdin) {
+  const start = commandStart(argv);
+  if (argv[start] === CHECK_SIZE) return runCheckSize(argv.slice(0, start).concat(argv.slice(start + 1)));
   const [command, ...rest] = argv;
   try {
     if (!command || !Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
-      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register, check-definition or validate-proposal`);
+      throw new Error(`unknown or missing command: ${command || '(none)'}; expected apply, register, check-definition, validate-proposal or check-size`);
     }
     return { exitCode: 0, payload: COMMANDS[command](rest, readStdin) };
   } catch (err) {
@@ -1346,3 +1769,14 @@ module.exports.evaluateDefinition = evaluateDefinition;
 module.exports.checkDefinition = checkDefinition;
 module.exports.runCheckDefinition = runCheckDefinition;
 module.exports.runValidateProposal = runValidateProposal;
+module.exports.parseCheckSizeArgs = parseCheckSizeArgs;
+module.exports.checkSize = checkSize;
+module.exports.runCheckSize = runCheckSize;
+module.exports.globMd = globMd;
+module.exports.countDistinct = countDistinct;
+module.exports.listDistinct = listDistinct;
+module.exports.childCount = childCount;
+module.exports.splitBlocks = splitBlocks;
+module.exports.groupChildren = groupChildren;
+module.exports.assignComponents = assignComponents;
+module.exports.fillChild = fillChild;

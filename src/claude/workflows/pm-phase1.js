@@ -8,6 +8,32 @@ export const meta = {
 const c = control
 const { featurePath, featureDir, prefix } = c.feature(args[0])
 const force = args.includes('--force')
+const SPLIT_CHECK_EXIT_CODES = new Set([0, 1])
+// BR-04 / D-04: every failure path yields unavailable with a reason, never passed.
+function unavailableCheck(reason) {
+  return {
+    status: 'unavailable',
+    counts: null,
+    thresholds: null,
+    over: [],
+    unavailable: [{ count: 'check-size', reason }],
+    proposal: null,
+  }
+}
+// Returns the parsed check-size JSON, or an unavailable result. Never throws.
+function parseSplitCheck(result) {
+  if (result === null || typeof result !== 'object') return unavailableCheck('check-size did not return a result')
+  if (!SPLIT_CHECK_EXIT_CODES.has(result.exitCode)) return unavailableCheck(`check-size did not run (exit ${result.exitCode})`)
+  if (typeof result.stdout !== 'string') return unavailableCheck('check-size produced no output')
+  let parsed
+  try {
+    parsed = JSON.parse(result.stdout)
+  } catch (err) {
+    return unavailableCheck('check-size output is not JSON')
+  }
+  if (parsed === null || typeof parsed !== 'object' || typeof parsed.status !== 'string') return unavailableCheck('check-size output has no string status')
+  return parsed
+}
 return c.run(meta.name, featureDir, prefix, async () => {
   const file = suffix => `${featureDir}/${prefix}-${suffix}.md`
   const fresh = (output, inputs = [featurePath]) => c.exists(output) && c.read(output).trim().length > 0 && inputs.every(input => c.exists(input) && c.mtime(output) >= c.mtime(input))
@@ -828,12 +854,35 @@ return c.run(meta.name, featureDir, prefix, async () => {
       if (mergedNeedsTechSpecFix) { await generateTechSpec(true); assembledTechSpec = assembleTechSpec() }
     }
   }
+  // A failure to run the check (spawn error, timeout, an exit code other than 0 or 1) is an unavailable result, never an exception.
+  let checkRun = null
+  let checkError = null
+  try {
+    checkRun = c.command(['run-asset', 'scripts/feature-split.js', '--project', c.root, '--',
+      'check-size', '--feature-dir', featureDir, '--prefix', prefix], [0, 1])
+  } catch (err) {
+    checkError = err
+  }
+  const split_checkpoint = checkError
+    ? unavailableCheck('check-size failed to run: ' + (checkError && checkError.message ? checkError.message : String(checkError)))
+    : parseSplitCheck(checkRun)
   // Binds Gate 1's eventual approval to the EXACT Requirements/Tech-Spec bytes
   // produced here, not just "a file named *-Requirements.md exists" — SKILL.md's
   // Step 2 embeds this verbatim into Approvals.md, and pm-phase2.js's Gate 1 check
   // fails closed if the current file content no longer matches it (content
   // regenerated after approval, e.g. via a later --force run, must re-approve).
+  // Computed on every path: a rejected split proposal continues to Gate 1 and needs it.
   const docsDigest = c.hash(assembledRequirements + '\u0000' + assembledTechSpec)
+  if (split_checkpoint.status !== 'passed' && split_checkpoint.status !== 'skipped') {
+    return {
+      prefix, feature_dir: featureDir, feature_path: featurePath,
+      requirements: { path: reqIndexPath, summary: 'Requirements ready (split; req/index.md + req/use-cases/*.md)' },
+      tech_spec: { path: specIndexPath, summary: 'Tech-Spec ready (split; spec/index.md + spec/components/*.md)' },
+      validation: { path: file('Validation-Report'), summary: validationSummary, open_gaps: openGaps },
+      docs_digest: docsDigest,
+      token_ledger: c.tokenLedger, errors: [], split_checkpoint,
+    }
+  }
   c.append(`${featureDir}/${prefix}-process-log.txt`, `[${new Date().toISOString()}] pm-phase1: ${validationSummary}; Gate 1 approval requested\n`)
   return {
     prefix, feature_dir: featureDir, feature_path: featurePath,
@@ -841,6 +890,6 @@ return c.run(meta.name, featureDir, prefix, async () => {
     tech_spec: { path: specIndexPath, summary: 'Tech-Spec ready (split; spec/index.md + spec/components/*.md)' },
     validation: { path: file('Validation-Report'), summary: validationSummary, open_gaps: openGaps },
     docs_digest: docsDigest,
-    token_ledger: c.tokenLedger, errors: [],
+    token_ledger: c.tokenLedger, errors: [], split_checkpoint,
   }
 })

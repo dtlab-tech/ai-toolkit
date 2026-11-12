@@ -84,6 +84,139 @@ required documents were produced.
 
 ---
 
+## Step 1a — Split checkpoint
+
+Read `split_checkpoint` from the pm-phase1 result.
+
+1. If `split_checkpoint` is missing, is not an object, or has no string `status`: treat it as
+   unavailable with the reason "split checkpoint result missing or malformed".
+2. If `status` is `passed` or `skipped`: continue to Gate 1 (Step 2). Show no prompt.
+3. If `status` is `unavailable`: print a plain error, not a gate and not an approval prompt:
+   ```
+   Feature split check unavailable. Cannot proceed to Gate 1.
+     - <count>: <reason>        (one line per entry in split_checkpoint.unavailable)
+   ```
+   If there are no entries (missing or malformed result), print one line:
+   `  - split_checkpoint: <reason>`.
+   Then STOP. Do not reach Gate 1. Do not ask the user anything.
+4. If `status` is `split-proposed`: show the measured proposal. Do not reach Gate 1.
+   - If `split_checkpoint.proposal` is missing or not an object: treat it as unavailable with the
+     reason "split proposal missing or malformed", print it as in step 3, and STOP.
+   - Derive Keywords only. For each child in `proposal.children`, in order, set its `keywords` from
+     its `name`, the use cases and the component paths in its `assigned` text. Each keyword has no comma and no line break (`apply` refuses both). Do not change
+     `name`, `purpose`, `summary`, `dependsOn`, `assigned` or the order of the children.
+   - Print the over-threshold counts. For each key in `split_checkpoint.over`, print one line:
+     `<key>: <counts[key]> / threshold <thresholds[key]> (over)`. Read both numbers from the
+     result. Do not list keys that are not in `over`.
+   - For each child, in order, print: name, purpose, Summary (`summary`), Keywords, dependsOn and
+     the assigned use cases and components (`assigned`). Summary is editable; show what the
+     proposal gives. A child whose `assigned` text names no components is shown with `Components: none.`; that is a valid
+     child of the proposal and is shown as it is.
+   - Foundation: if `proposal.sharedFoundationOwner` is a child name, print it as the shared
+     foundation owner and list the children whose `dependsOn` names it. If it is null, print
+     `proposal.foundationNote` exactly as given. Do not invent a foundation.
+   - State that this proposal exists only on screen and nothing has been written. Nothing is
+     written before an explicit accept.
+   - Set `current_proposal` to `proposal`, with the Keywords derived above. Then run the decision
+     loop below.
+   - This branch calls `feature-split.js apply` only on an explicit accept, as set out in the Outcomes below.
+   - **Decision loop.** Ask the user once: `accept | edit | reject`. Wait for the answer. Any other
+     answer: ask the same question again.
+     - `accept`: its outcome is defined in the Outcomes rules below. It applies `current_proposal`,
+       the last re-presented proposal, never the original.
+     - `reject`: its outcome is defined in the Outcomes rules below. Nothing is written.
+     - `edit`: run the edit arm below, then return to this prompt.
+   - **Edit arm.** Ask the user for one change: a child name, a purpose, the order, the foundation
+     owner, add a child, remove a child, merge two children, the Summary or the Keywords. Each edit
+     is one change. Map it to one op of the form `rename` (`from`, `to`), `set` (`name`, `field` as
+     `purpose`, `summary` or `keywords`, `value`), `reorder` (`names`), `owner` (`name`), `add`
+     (`child`), `remove` (`name`) or `merge` (`names`, `into`).
+     - Check the change with the FTR-035 edit rules (`editProposal`), through the validator. This
+       is the only `feature-split.js` call in the edit arm. Do not call `apply` here.
+
+       ```
+       cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project . -- validate-proposal
+       { "proposal": <current_proposal JSON>, "edit": <one op JSON> }
+       FEATURE_SPLIT_JSON
+       ```
+     - If the command exits non-zero: print its error, keep `current_proposal` and return to the
+       decision prompt.
+     - Otherwise read the single JSON line it prints: `proposal` (revised, or unchanged on refusal)
+       and `violations`.
+     - If `violations` is not empty, the edit is refused and changes nothing. A child count below
+       `minChildren` is refused with the message below. Read the minimum from
+       `split_checkpoint.proposal.minChildren`; never write it as a number in this skill.
+       - Child count below `minChildren`: print `Edit refused: it would leave <n> children; the minimum
+         is <value>. The previous proposal is kept.`
+       - Any other violation: print `Edit refused: <violation message>. The previous proposal is kept.`
+       Keep `current_proposal` and return to the decision prompt. The user may try a different edit,
+       or answer accept or reject.
+     - If `violations` is empty, set `current_proposal` to the returned `proposal`. Re-present it
+       with the rules of this step: the over-threshold lines as printed above (an edited proposal is
+       not re-measured), each child's fields, and the foundation note. Print each returned
+       `foundationWarnings` message. Then return to the decision prompt.
+     - Each re-presented proposal needs a fresh explicit accept. An edit is never an accept. A
+       proposal is applied only when the user answers `accept` after its last re-presentation.
+     - Keywords the user types are kept as entered. They are not re-derived after an edit.
+5. Any other status: treat it as unavailable with the reason
+   "unknown split checkpoint status: <status>", print it the same way as step 3, and STOP.
+
+Outcomes of the decision (split-proposed only):
+- `accept`: the main-loop agent runs `feature-split.js apply` for the proposal shown to the user, and
+  the pipeline stops for the parent without reaching Gate 1. This call is made only here, in the main
+  loop, after an explicit accept of `current_proposal`, and never from `pm-phase1`:
+  1. Resolve the features root: `featuresRoot=$(ai-toolkit resolve-features-root) && echo "$featuresRoot"`.
+     If it exits non-zero: report the error and STOP. Write nothing.
+  2. Pipe `current_proposal` on stdin, unchanged (the last explicitly accepted proposal, edits included):
+     ```bash
+     cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project . -- apply --features-root "$featuresRoot" --parent "<FTR-ID>"
+     <current_proposal JSON>
+     FEATURE_SPLIT_JSON
+     ```
+     - `<FTR-ID>` is the parent prefix of the current run. It is never read from the proposal.
+     - Stdin carries only the confirmed proposal JSON. It carries no paths and no prompt text.
+  3. If the command exits non-zero, the split was not applied. Print the error from the command as
+     the reason, then this line:
+     ```
+     Split not applied for <FTR-ID>. Nothing was written: apply stages every child under a
+     dot-prefixed staging directory and rolls back on failure (FTR-035 D-13), so no child folder
+     and no registry entry remains.
+     ```
+     - If the error code is `ROLLBACK_INCOMPLETE`, the rollback did not finish. Do not print the line
+       above. Print `Split not applied for <FTR-ID>. Rollback was incomplete; the paths below remain
+       on disk and must be checked by hand:` followed by each path listed in the error, one per line.
+     - Never report a partial child set as created. Do not print the "Created children" list and do
+       not list any child id after a non-zero exit.
+     - Do not retry `apply` in this run. Do not reach Gate 1. Stop the pipeline for the parent.
+  4. If it exits zero, it prints one JSON line with `epic` (the parent prefix), `children` (each with
+     `id` and `dir`, in order) and, only when present, `warnings`. Report the created children:
+     ```
+     Created children for <FTR-ID>:
+       <id> — <dir>          (one line per entry in children, in order)
+     ```
+     Print each entry in `warnings` after the list, one line each.
+     Then STOP for the parent. Print no Gate 1 digest in this run. Do not edit, rename or rewrite the
+     parent's documents after apply; they are what apply wrote.
+- `reject`: the pipeline continues to Gate 1 unchanged and stores nothing.
+  - This holds even after the user has edited the proposal. Rejecting discards all edits in
+    `current_proposal`, the last re-presented proposal included. The parent's documents stay unchanged.
+    No rejection record and no registry change is written. Gate 1 then uses the `docs_digest` of the same result (the hook computes it on every path) and runs on the parent as it was
+    before this run.
+- Nothing is created before an explicit accept. The proposal exists only in the conversation.
+- An unanswered proposal stores nothing. Silence is neither accept nor reject.
+- A retry after a failed `apply`, or after a session that ended before an answer, is a fresh run. That
+  run re-runs `check-size` and presents a new proposal with fresh child IDs. The failed attempt is not
+  resumed, and no state is stored between runs.
+
+Rules for this step:
+- Step 1a calls `feature-split.js` only for `validate-proposal` in the edit arm and for `apply` on an
+  explicit accept. Otherwise the proposal is read from the pm-phase1 result.
+- An unknown or malformed result never leads to Gate 1. Only `passed` and `skipped` continue.
+- The unavailable message must not contain the words "accept", "approve" or "confirm", so it
+  cannot read as an approval prompt.
+
+---
+
 ## Step 2 — Present Gate 1 (HARD STOP — present in main loop)
 
 Present the following to the user:
