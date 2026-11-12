@@ -1,0 +1,682 @@
+{
+  "schemaVersion": 3,
+  "feature": "FTR-037",
+  "phases": [
+    {
+      "id": "US-01",
+      "type": "user-story",
+      "title": "As the pipeline, I want to measure feature size after Tech-Spec and compare it with thresholds before Gate 1, so that oversized features are detected deterministically",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-01 check-size measurement and pm-phase1 hook"
+      },
+      "sourceUC": [
+        "UC-01"
+      ],
+      "detailFile": "user-stories/US-01.md",
+      "taskIds": [
+        "US-01-TASK-BE-01",
+        "US-01-TASK-BE-02",
+        "US-01-TASK-BE-03",
+        "US-01-TASK-BE-04",
+        "US-01-TASK-BE-05",
+        "US-01-TASK-BE-06",
+        "US-01-TASK-BE-07",
+        "US-01-TASK-BE-08",
+        "US-01-TASK-TEST-01",
+        "US-01-TASK-TEST-02",
+        "US-01-TASK-TEST-03",
+        "US-01-TASK-TEST-04"
+      ]
+    },
+    {
+      "id": "US-02",
+      "type": "user-story",
+      "title": "As a user, I want a split proposal presented before Gate 1 that I can accept, edit or reject, so that I control how an oversized feature is divided",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-02 split proposal and Step 1a presentation"
+      },
+      "sourceUC": [
+        "UC-02"
+      ],
+      "detailFile": "user-stories/US-02.md",
+      "taskIds": [
+        "US-02-TASK-BE-01",
+        "US-02-TASK-BE-02",
+        "US-02-TASK-BE-03",
+        "US-02-TASK-BE-04",
+        "US-02-TASK-BE-05",
+        "US-02-TASK-BE-06",
+        "US-02-TASK-BE-07",
+        "US-02-TASK-TEST-01",
+        "US-02-TASK-TEST-02",
+        "US-02-TASK-TEST-03"
+      ]
+    },
+    {
+      "id": "US-03",
+      "type": "user-story",
+      "title": "As a user, I want an accepted split applied or a rejected one to continue unchanged, so that nothing is created without my confirmation",
+      "commit": {
+        "type": "feat",
+        "subject": "implement US-03 apply accepted split or continue unchanged"
+      },
+      "sourceUC": [
+        "UC-03"
+      ],
+      "detailFile": "user-stories/US-03.md",
+      "taskIds": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-02",
+        "US-03-TASK-BE-03",
+        "US-03-TASK-BE-04",
+        "US-03-TASK-BE-05",
+        "US-03-TASK-TEST-01",
+        "US-03-TASK-TEST-02"
+      ]
+    }
+  ],
+  "tasks": {
+    "US-01-TASK-BE-01": {
+      "title": "Add check-size command scaffold with skipped status and JSON result printer",
+      "outcome": "feature-split.js accepts a check-size command with --feature-dir and --prefix, applies isNewFeature to return status skipped, prints one JSON object with the keys status, counts, thresholds, over and unavailable, sets exit code 1 only for unavailable, and reports top-level failures as status unavailable.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add check-size command scaffold with skipped status"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-02": {
+      "title": "Measure distinct use case and acceptance criteria counts in check-size",
+      "outcome": "check-size computes the useCases count as distinct UC-NN identifiers across req/use-cases/*.md and the acceptanceCriteria count as distinct AC-NN identifiers in req/index.md, and marks a count unavailable with a reason when its source is missing or has no matches.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-02"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "measure use case and acceptance criteria counts in check-size"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-03": {
+      "title": "Measure component table row count from spec/index.md in check-size",
+      "outcome": "check-size computes the components count as the data rows of the single component table in spec/index.md, excluding header and separator rows and rows of other tables, and marks the count unavailable with a reason when the file or table is missing, unreadable or empty.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-07"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "measure component table rows in check-size"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-04": {
+      "title": "Compute estimated phases from Section 11 build order depth levels",
+      "outcome": "check-size parses the Section 11 build order in spec/index.md using the 'N. text — depends on:' format, computes depth levels as greatest depth plus one for estimatedPhases, and marks the count unavailable with a reason on a dangling dependency, a cycle, or an item without a depends on clause.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-08",
+        "AC-09"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "compute estimated phases from build order depth in check-size"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-05": {
+      "title": "Assemble check-size threshold comparison and status precedence",
+      "outcome": "check-size compares each available count with its FTR-035 configured threshold through isOverThreshold, lists strictly-over keys in over, returns unavailable (exit 1, no proposal, over still listed) when any count is unavailable, passed when nothing is over, and split-proposed otherwise.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-02",
+        "US-01-TASK-BE-03",
+        "US-01-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add check-size threshold comparison and status precedence"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-06": {
+      "title": "Attach measured proposal envelope with empty keywords to split-proposed result",
+      "outcome": "For status split-proposed, check-size includes a proposal built through the FTR-035 buildProposal with source measured, the over-threshold counts, and keywords as an empty array for every child. The proposal key is absent for all other statuses.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-05"
+      ],
+      "acceptanceCriteria": [
+        "AC-03",
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "attach measured proposal envelope to check-size result"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-06.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-07": {
+      "title": "Add guarded check-size result parser to pm-phase1",
+      "outcome": "pm-phase1.js contains a parser that turns a missing result, an exit code other than 0 or 1, non-JSON stdout, or a result without a string status into an unavailable result with a reason. It never throws and never returns passed for those inputs.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [],
+      "acceptanceCriteria": [
+        "AC-17"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add guarded check-size result parser to pm-phase1"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-07.md",
+      "status": "generated"
+    },
+    "US-01-TASK-BE-08": {
+      "title": "Insert check-size hook after validation loop and return split_checkpoint",
+      "outcome": "pm-phase1.js runs check-size through c.command with run-asset, scripts/feature-split.js, --project, --feature-dir and --prefix after the validation loop and before the Gate 1 digest. It returns split_checkpoint on every path and skips the digest for any status other than passed or skipped.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-07",
+        "US-01-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-03",
+        "AC-05",
+        "AC-17",
+        "AC-18",
+        "AC-22"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add check-size hook to pm-phase1 before Gate 1 digest"
+      },
+      "detailFile": "tasks/US-01-TASK-BE-08.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-01": {
+      "title": "Test check-size skipped status and distinct UC and AC counts",
+      "outcome": "tests/scripts/feature-split-check-size.test.js exists with a temp-project CLI harness and passing cases for skipped on Approvals.md, wbs/ or epic.md, a non-existent folder treated as new, and distinct UC-NN and AC-NN counting.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-02"
+      ],
+      "acceptanceCriteria": [
+        "AC-01",
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "test check-size skipped status and UC and AC counts"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-02": {
+      "title": "Test check-size component rows and build-order phase counting",
+      "outcome": "tests/scripts/feature-split-check-size.test.js has passing cases for component table row counting, including empty and missing table unavailable, build-order level counts for chain and diamond shapes, and unavailable reasons for dangling dependency, cycle and missing depends on clause.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-TEST-01",
+        "US-01-TASK-BE-03",
+        "US-01-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-07",
+        "AC-08",
+        "AC-09"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "test check-size component and build-order measurement"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-03": {
+      "title": "Test check-size threshold boundary, status precedence and output keys (passed and unavailable)",
+      "outcome": "tests/scripts/feature-split-check-size.test.js has passing cases for a count equal to its threshold passing, unavailable taking precedence over over-threshold with no proposal and over still listed, exit codes, a read-only folder hash check, and the printed key set for passed.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-TEST-02",
+        "US-01-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-18"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "test check-size thresholds, precedence and output shape"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-03.md",
+      "status": "generated"
+    },
+    "US-01-TASK-TEST-04": {
+      "title": "Add static tests pinning the pm-phase1 check-size hook",
+      "outcome": "tests/workflows/split-checkpoint-static.test.js exists with passing hook assertions: run-asset call form with feature-split.js, --feature-dir and --prefix; check-size positioned after the validation loop and before the Gate 1 digest; split_checkpoint in the return; guarded JSON parse mapping failures to unavailable; no apply call or prompt in the workflow.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-01-TASK-BE-08"
+      ],
+      "acceptanceCriteria": [
+        "AC-17",
+        "AC-18",
+        "AC-22"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "add static tests for pm-phase1 check-size hook"
+      },
+      "detailFile": "tasks/US-01-TASK-TEST-04.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-01": {
+      "title": "Compute child count and use-case blocks for the measured proposal",
+      "outcome": "feature-split.js has a groupChildren step that derives the child count N from the over-threshold useCases, acceptanceCriteria and components counts, floored at minChildren and capped at the number of distinct use cases. It splits the numerically sorted use cases into N contiguous blocks, giving the first U mod N blocks one extra use case. When U is below minChildren it throws an unavailable reason, so check-size reports unavailable. The child count is max(minChildren, ceil(count / threshold)) over the over-threshold counts of useCases, acceptanceCriteria and components (Tech-Spec T-6 step 2).",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-10"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add deterministic use-case block grouping to check-size proposal"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-02": {
+      "title": "Assign components to child blocks and fill child fields",
+      "outcome": "groupChildren assigns each spec/index.md component to the block of the lowest-numbered use case reachable through its Addresses ACs and their Related UC. A component with no resolvable link goes to block 1 with a no use-case link note. Each child gets name part-k, a purpose and summary of the form Use cases first..last and their components, and an assigned list of use-case IDs and component Paths.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-10",
+        "AC-15"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "assign components and fill child fields in measured proposal"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-03": {
+      "title": "Map depth-0 components to the shared foundation child",
+      "outcome": "check-size matches component Paths as exact case-sensitive substrings of depth-0 Section 11 items and moves the child with the lowest block index holding a depth-0 component to position 1. That child is set as sharedFoundationOwner and every other child gets it as dependsOn. When no component matches, sharedFoundationOwner is null, every dependsOn is empty, and foundationNote states that no shared foundation is assigned.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-02",
+        "US-01-TASK-BE-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-14"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "map depth-0 components to shared foundation child in proposal"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-04": {
+      "title": "Add Step 1a status branches to implement-feature skill",
+      "outcome": "SKILL.md has a Step 1a between pm-phase1 and Gate 1 that reads split_checkpoint. It treats a missing, non-object or unknown-status result as unavailable. passed and skipped continue to Gate 1 with no prompt. unavailable prints each count and reason as a plain error, is not a gate or approval prompt, and stops before Gate 1.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-01-TASK-BE-08"
+      ],
+      "acceptanceCriteria": [
+        "AC-05",
+        "AC-06",
+        "AC-19"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add Step 1a status branches to implement-feature skill"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-05": {
+      "title": "Add split-proposed Keywords derivation and proposal presentation to Step 1a",
+      "outcome": "The Step 1a split-proposed branch in SKILL.md tells the main-loop agent to derive only each child's Keywords from its title, use cases and components. It then presents each over-threshold count beside its threshold, read from the result, and for each child its name, purpose, Summary, Keywords, dependsOn, and assigned use cases and components. It also states the foundation owner or the no-foundation note.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-04",
+        "US-02-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-03",
+        "AC-10",
+        "AC-14",
+        "AC-15",
+        "AC-19"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "present measured split proposal with derived keywords in Step 1a"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-06": {
+      "title": "Add edit loop with minChildren refusal and re-presentation to Step 1a",
+      "outcome": "The SKILL.md Step 1a decision loop offers accept, edit or reject. For edit it lists the editable fields: child names, purposes, order, foundation owner, add, remove or merge children, Summary and Keywords. It refuses an edit that leaves fewer than minChildren children and keeps the previous proposal. After each accepted edit it re-presents the proposal and requires a fresh explicit accept.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-05"
+      ],
+      "acceptanceCriteria": [
+        "AC-16"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add proposal edit loop to implement-feature Step 1a"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-06.md",
+      "status": "generated"
+    },
+    "US-02-TASK-BE-07": {
+      "title": "Add the no-write guarantees and the outcome sentences to Step 1a",
+      "outcome": "SKILL.md Step 1a states in one sentence each that accept runs feature-split.js apply in the main loop and stops for the parent without reaching Gate 1, and that reject continues to Gate 1 unchanged and stores nothing. It also states that nothing is created before an explicit accept and that an unanswered proposal stores nothing. The apply arguments (US-03-TASK-BE-01), the created-children report (US-03-TASK-BE-02) and the discard of edits on reject (US-03-TASK-BE-05) are added by those tasks.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-06"
+      ],
+      "acceptanceCriteria": [
+        "AC-13"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add accept and reject outcomes to implement-feature Step 1a"
+      },
+      "detailFile": "tasks/US-02-TASK-BE-07.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-01": {
+      "title": "Test deterministic child grouping and component assignment in check-size",
+      "outcome": "tests/scripts/feature-split-check-size.test.js has passing cases for the child count formula, contiguous use-case block sizes, component assignment through Addresses to the lowest Related UC, the no use-case link fallback to block 1, the child name, purpose and assigned fields, and the unavailable result when use cases are fewer than minChildren. A repeat run gives identical output.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-02",
+        "US-01-TASK-TEST-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-10",
+        "AC-15"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "test check-size child grouping and component assignment"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-02": {
+      "title": "Test shared foundation mapping and empty keywords in check-size proposal",
+      "outcome": "tests/scripts/feature-split-check-size.test.js has passing cases for a depth-0 component moving its child to position 1 as foundation with other children depending on it, and for the no depth-0 match case with a null owner, the explicit foundationNote and empty dependsOn. It also checks that every child has keywords as an empty array. It also holds the split-proposed cases moved from US-01-TASK-TEST-03: one count above its threshold gives split-proposed with source measured and empty keywords, the printed key set with proposal, and a read-only folder check after split-proposed.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-03",
+        "US-02-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-14"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "test check-size foundation mapping and empty keywords"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-02.md",
+      "status": "generated"
+    },
+    "US-02-TASK-TEST-03": {
+      "title": "Extend static tests to pin the Step 1a skill text",
+      "outcome": "tests/workflows/split-checkpoint-static.test.js has passing skill assertions that Step 1a sits before Gate 1 and names all four statuses. They also check that unavailable is a plain stop naming count and reason, that a missing or non-JSON result is treated as unavailable, that Keywords are derived by the main-loop agent, and that the edit loop refuses fewer than minChildren and re-presents the proposal. They further check that accept runs apply, that reject stores nothing, that the apply call is in the skill and not the workflow, and that no threshold number is hard-coded.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-02-TASK-BE-07",
+        "US-01-TASK-TEST-04"
+      ],
+      "acceptanceCriteria": [
+        "AC-06",
+        "AC-16",
+        "AC-19",
+        "AC-22"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin implement-feature Step 1a text with static tests"
+      },
+      "detailFile": "tasks/US-02-TASK-TEST-03.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-01": {
+      "title": "Add apply invocation with the confirmed edited proposal to Step 1a accept",
+      "outcome": "SKILL.md Step 1a accept branch runs feature-split.js apply through run-asset with --features-root and --parent set to the parent prefix. It sends the last explicitly accepted proposal, including any edits, as JSON on stdin, and only after the explicit accept.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-06",
+        "US-02-TASK-BE-07"
+      ],
+      "acceptanceCriteria": [
+        "AC-11",
+        "AC-13"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add apply call with accepted proposal to Step 1a accept"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-01.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-02": {
+      "title": "Add created-children report and parent stop after successful apply",
+      "outcome": "SKILL.md Step 1a tells the main loop, after a successful apply, to report the parent prefix and the child IDs and folders that apply created. It then stops the pipeline for the parent with no Gate 1 digest in this run and no change to the parent's documents.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-11"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "report created children and stop parent after apply"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-02.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-03": {
+      "title": "Add apply failure handling to Step 1a accept",
+      "outcome": "SKILL.md Step 1a tells the main loop that when apply fails it reports the error and says the split was not applied. It states that FTR-035 D-13 staging and rollback leave no child folder or registry entry. It never reports a partial child set as complete, and it stops before Gate 1.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-20"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "add apply failure and rollback reporting to Step 1a"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-03.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-04": {
+      "title": "Add retry and unanswered-proposal rerun wording to Step 1a",
+      "outcome": "SKILL.md Step 1a states that a retry after a failed apply, or after a session that ended before an answer, is a fresh run. That run re-runs check-size and presents a new proposal with fresh child IDs. The failed attempt is not resumed and no state is stored between runs.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-03-TASK-BE-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-20",
+        "AC-21"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "document fresh-run retry and unanswered proposal in Step 1a"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-04.md",
+      "status": "generated"
+    },
+    "US-03-TASK-BE-05": {
+      "title": "Add edit-then-reject discard rule to Step 1a reject branch",
+      "outcome": "SKILL.md Step 1a states that rejecting a proposal, including one the user already edited, discards the edits and continues to Gate 1 with the parent's documents unchanged. It states that no rejection record and no registry change is written.",
+      "domain": "BE",
+      "agentType": "developer-backend",
+      "dependsOn": [
+        "US-02-TASK-BE-07"
+      ],
+      "acceptanceCriteria": [
+        "AC-12",
+        "AC-13"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "feat",
+        "subject": "state edit-then-reject discards edits in Step 1a"
+      },
+      "detailFile": "tasks/US-03-TASK-BE-05.md",
+      "status": "generated"
+    },
+    "US-03-TASK-TEST-01": {
+      "title": "Add static tests for the Step 1a apply and success path",
+      "outcome": "tests/workflows/split-checkpoint-static.test.js has passing assertions that the skill's accept branch calls feature-split.js apply with --features-root and --parent only after an explicit accept. It also checks that the skill reports the parent prefix and the created child IDs and folders and stops without Gate 1.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-01",
+        "US-03-TASK-BE-02",
+        "US-02-TASK-TEST-03"
+      ],
+      "acceptanceCriteria": [
+        "AC-11",
+        "AC-13"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin Step 1a apply and success path in static tests"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-01.md",
+      "status": "generated"
+    },
+    "US-03-TASK-TEST-02": {
+      "title": "Add static tests for Step 1a reject, failure, retry and unanswered text",
+      "outcome": "tests/workflows/split-checkpoint-static.test.js has passing assertions that the skill states the following. Reject and edit-then-reject store nothing and continue to Gate 1. An apply failure reports the error with no remaining child or registry entry and does not reach Gate 1. A retry or an unanswered proposal starts a fresh run with fresh IDs.",
+      "domain": "TEST",
+      "agentType": "developer-testing",
+      "dependsOn": [
+        "US-03-TASK-BE-03",
+        "US-03-TASK-BE-04",
+        "US-03-TASK-BE-05",
+        "US-03-TASK-TEST-01"
+      ],
+      "acceptanceCriteria": [
+        "AC-12",
+        "AC-20",
+        "AC-21"
+      ],
+      "outputCount": 1,
+      "commit": {
+        "type": "test",
+        "subject": "pin Step 1a reject, failure and retry text in static tests"
+      },
+      "detailFile": "tasks/US-03-TASK-TEST-02.md",
+      "status": "generated"
+    }
+  }
+}

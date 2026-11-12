@@ -1,0 +1,30 @@
+{
+  "pathHashes": {},
+  "components": {
+    "tests/scripts/feature-split-check-size.test.js": {
+      "slug": "feature-split-check-size.test.js.md",
+      "rowHash": "sha256:02d567e9e55fb72a42d205b9dd6739a1327dd8f88658390d00847b96a77bdca0",
+      "lastSeenInSkeleton": "2026-11-11T08:49:14.456Z"
+    },
+    "tests/workflows/split-checkpoint-static.test.js": {
+      "slug": "split-checkpoint-static.test.js.md",
+      "rowHash": "sha256:dc1ccea9a4502af6770e6c07acdb8db83e016df2e59118e2bd894e25b3a85662",
+      "lastSeenInSkeleton": "2026-11-11T08:49:14.456Z"
+    },
+    "src/claude/scripts/feature-split.js": {
+      "slug": "feature-split.js.md",
+      "rowHash": "sha256:1a4c93ff3ed790eb59133c318c2226d7f42630dd77890078ce48656e9c9c50a1",
+      "lastSeenInSkeleton": "2026-11-11T08:49:14.456Z"
+    },
+    "src/claude/workflows/pm-phase1.js": {
+      "slug": "pm-phase1.js.md",
+      "rowHash": "sha256:76e223e2e744d46c404d571e0d6fd885f47f0705e074871f6733069e2180205c",
+      "lastSeenInSkeleton": "2026-11-11T08:49:14.456Z"
+    },
+    "src/claude/skills/implement-feature/SKILL.md": {
+      "slug": "SKILL.md.md",
+      "rowHash": "sha256:090b009557ef10596df66cc54adb90df430361d28773867298ecd5f4ed461851",
+      "lastSeenInSkeleton": "2026-11-11T08:49:14.456Z"
+    }
+  }
+}
