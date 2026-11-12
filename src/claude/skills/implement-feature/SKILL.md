@@ -175,7 +175,19 @@ Outcomes of the decision (split-proposed only):
      ```
      - `<FTR-ID>` is the parent prefix of the current run. It is never read from the proposal.
      - Stdin carries only the confirmed proposal JSON. It carries no paths and no prompt text.
-  3. If the command exits non-zero: print its error and STOP. Do not reach Gate 1.
+  3. If the command exits non-zero, the split was not applied. Print the error from the command as
+     the reason, then this line:
+     ```
+     Split not applied for <FTR-ID>. Nothing was written: apply stages every child under a
+     dot-prefixed staging directory and rolls back on failure (FTR-035 D-13), so no child folder
+     and no registry entry remains.
+     ```
+     - If the error code is `ROLLBACK_INCOMPLETE`, the rollback did not finish. Do not print the line
+       above. Print `Split not applied for <FTR-ID>. Rollback was incomplete; the paths below remain
+       on disk and must be checked by hand:` followed by each path listed in the error, one per line.
+     - Never report a partial child set as created. Do not print the "Created children" list and do
+       not list any child id after a non-zero exit.
+     - Do not retry `apply` in this run. Do not reach Gate 1. Stop the pipeline for the parent.
   4. If it exits zero, it prints one JSON line with `epic` (the parent prefix), `children` (each with
      `id` and `dir`, in order) and, only when present, `warnings`. Report the created children:
      ```
