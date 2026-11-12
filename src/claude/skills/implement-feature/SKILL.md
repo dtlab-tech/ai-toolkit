@@ -198,6 +198,10 @@ Outcomes of the decision (split-proposed only):
      Then STOP for the parent. Print no Gate 1 digest in this run. Do not edit, rename or rewrite the
      parent's documents after apply; they are what apply wrote.
 - `reject`: the pipeline continues to Gate 1 unchanged and stores nothing.
+  - This holds even after the user has edited the proposal. Rejecting will discard all edits in
+    `current_proposal`, the last re-presented proposal included. The parent's documents stay unchanged.
+    No rejection record and no registry change is written. Gate 1 then runs on the parent as it was
+    before this run.
 - Nothing is created before an explicit accept. The proposal exists only in the conversation.
 - An unanswered proposal stores nothing. Silence is neither accept nor reject.
 - A retry after a failed `apply`, or after a session that ended before an answer, is a fresh run. That
