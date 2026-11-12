@@ -122,9 +122,9 @@ Read `split_checkpoint` from the pm-phase1 result.
    - This branch never calls `feature-split.js apply`.
    - **Decision loop.** Ask the user once: `accept | edit | reject`. Wait for the answer. Any other
      answer: ask the same question again.
-     - `accept`: its outcome is not defined in this step. It applies `current_proposal`, the last
-       re-presented proposal, never the original.
-     - `reject`: its outcome is not defined in this step. Nothing is written.
+     - `accept`: its outcome is defined in the Outcomes rules below. It applies `current_proposal`,
+       the last re-presented proposal, never the original.
+     - `reject`: its outcome is defined in the Outcomes rules below. Nothing is written.
      - `edit`: run the edit arm below, then return to this prompt.
    - **Edit arm.** Ask the user for one change: a child name, a purpose, the order, the foundation
      owner, add a child, remove a child, merge two children, the Summary or the Keywords. Each edit
@@ -160,6 +160,13 @@ Read `split_checkpoint` from the pm-phase1 result.
      - Keywords the user types are kept as entered. They are not re-derived after an edit.
 5. Any other status: treat it as unavailable with the reason
    "unknown split checkpoint status: <status>", print it the same way as step 3, and STOP.
+
+Outcomes of the decision (split-proposed only):
+- `accept`: the main-loop agent runs `feature-split.js apply` for the proposal shown to the user, and
+  the pipeline stops for the parent without reaching Gate 1.
+- `reject`: the pipeline continues to Gate 1 unchanged and stores nothing.
+- Nothing is created before an explicit accept. The proposal exists only in the conversation.
+- An unanswered proposal stores nothing. Silence is neither accept nor reject.
 
 Rules for this step:
 - Step 1a calls `feature-split.js` only for `validate-proposal` in the edit arm. Otherwise the
