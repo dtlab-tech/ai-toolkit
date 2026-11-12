@@ -1,4 +1,12 @@
 ## 0.1.4 (2026-07-21)
+## [0.29.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.29.0...v0.29.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **cli:** a project's own skill, agent or command is not a toolkit installation ([ece54c5](https://github.com/dtlab-tech/ai-toolkit/commit/ece54c5d508ce7db7d95a1a67a9bc816208c6c2a))
+* **cli:** a project's own skill, agent or command is not a toolkit installation ([ab8d6be](https://github.com/dtlab-tech/ai-toolkit/commit/ab8d6be0f267e98d68eadbfcd750457192be5b6d))
+
 ## [0.29.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.28.0...v0.29.0) (2026-11-12)
 
 
