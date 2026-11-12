@@ -1,4 +1,38 @@
 ## 0.1.4 (2026-07-21)
+## [0.29.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.28.0...v0.29.0) (2026-11-12)
+
+
+### Features
+
+* add accept and reject outcomes to implement-feature Step 1a ([0cd6be2](https://github.com/dtlab-tech/ai-toolkit/commit/0cd6be2ca8bf13c628ff984d66d39ecc258d073d))
+* add apply call with accepted proposal to Step 1a accept ([0c8c13f](https://github.com/dtlab-tech/ai-toolkit/commit/0c8c13f002d4fcfe0fc5c0a7d998825991914358))
+* add apply failure and rollback reporting to Step 1a ([748bdfc](https://github.com/dtlab-tech/ai-toolkit/commit/748bdfc0eee9d15750f37f7948d270a210310403))
+* add check-size command scaffold with skipped status (US-01-TASK-BE-01) ([e23bd00](https://github.com/dtlab-tech/ai-toolkit/commit/e23bd00fe950a43cc60f5e2b0f96180ed2c3ed31))
+* add check-size threshold comparison and status precedence ([dacf8a4](https://github.com/dtlab-tech/ai-toolkit/commit/dacf8a48ed8a0c59b16940ff20593648b06f8e3f))
+* add deterministic use-case block grouping to check-size proposal ([83eeb41](https://github.com/dtlab-tech/ai-toolkit/commit/83eeb415b2222f147f56bb7fd3ac2f3d78981a45))
+* add guarded check-size result parser to pm-phase1 (US-01-TASK-BE-07) ([76aa475](https://github.com/dtlab-tech/ai-toolkit/commit/76aa47595122758d310d048316f810d677db7c80))
+* add proposal edit loop to implement-feature Step 1a ([bac8545](https://github.com/dtlab-tech/ai-toolkit/commit/bac85454d950b44f3a4dd2315aaf62f1a0da8e64))
+* add Step 1a split checkpoint branches for passed, skipped and unavailable (US-02-TASK-BE-04) ([3c9082c](https://github.com/dtlab-tech/ai-toolkit/commit/3c9082c7bcf941fdfbe1b60d0cc1c6201ac4829d))
+* assign components and fill child fields in measured proposal ([f59c490](https://github.com/dtlab-tech/ai-toolkit/commit/f59c490f266cc055992d7e8fd6d7f199352396d1))
+* attach measured proposal envelope to check-size result ([e096992](https://github.com/dtlab-tech/ai-toolkit/commit/e096992a9e6c065971d689937867c1fb13ea0781))
+* compute estimated phases from build order depth in check-size ([444b9e3](https://github.com/dtlab-tech/ai-toolkit/commit/444b9e37df771471543a0806be30d8c16bd26203))
+* document fresh-run retry and unanswered proposal in Step 1a ([85fdde6](https://github.com/dtlab-tech/ai-toolkit/commit/85fdde6045a03db6433f23bc1a37bcb61f0004cf))
+* **feature-split:** measured size check at Gate 1 with a split proposal (FTR-037) ([2d8cbbf](https://github.com/dtlab-tech/ai-toolkit/commit/2d8cbbfe5e2f5d5b56aec011659ac9763cd34837))
+* **feature-split:** measured size check at Gate 1 with a split proposal (FTR-037) ([9bc6a2a](https://github.com/dtlab-tech/ai-toolkit/commit/9bc6a2aaf708706a3bc55d46699d2563ce31fb60))
+* hook check-size into pm-phase1 and return split_checkpoint (US-01-TASK-BE-08) ([4a8c23f](https://github.com/dtlab-tech/ai-toolkit/commit/4a8c23f756637ab77e9675476494e6a6dc8edcf1))
+* map depth-0 components to shared foundation child in proposal ([d813ddd](https://github.com/dtlab-tech/ai-toolkit/commit/d813ddddbf081c64311e34a6d8080df028f207c6))
+* measure component table rows in check-size ([51b3d2b](https://github.com/dtlab-tech/ai-toolkit/commit/51b3d2ba7228dd796e7ba92eef65a8ac67cc0559))
+* measure use case and acceptance criteria counts in check-size ([ed2a216](https://github.com/dtlab-tech/ai-toolkit/commit/ed2a2160997ffc84e3464e66221443fbf5ea9717))
+* present measured split proposal with derived keywords in Step 1a ([6cb9d5b](https://github.com/dtlab-tech/ai-toolkit/commit/6cb9d5b4510263a21aca9fe4e9bc6c109d31269e))
+* report created children and stop parent after apply ([0d98b6f](https://github.com/dtlab-tech/ai-toolkit/commit/0d98b6fbcd9e5bb4bd4b8c52d0ce812a9c5c20e0))
+* state edit-then-reject discards edits in Step 1a ([722a366](https://github.com/dtlab-tech/ai-toolkit/commit/722a366f94f4abbff619e52812d6a51012e24e4c))
+
+
+### Bug Fixes
+
+* **check-size:** the digest on every path, a strict build-order clause, a hook that cannot throw ([2b82c59](https://github.com/dtlab-tech/ai-toolkit/commit/2b82c59d21331da25f4c4566b2067fbc6ed376a3))
+* count the Path rows of Section 9 as components and accept the template wording of the build order ([94c0bb4](https://github.com/dtlab-tech/ai-toolkit/commit/94c0bb4c2812765e343e7deff5875d13fbb58505))
+
 ## [0.28.0](https://github.com/dtlab-tech/ai-toolkit/compare/v0.27.1...v0.28.0) (2026-11-11)
 
 
