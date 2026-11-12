@@ -116,14 +116,54 @@ Read `split_checkpoint` from the pm-phase1 result.
      foundation owner and list the children whose `dependsOn` names it. If it is null, print
      `proposal.foundationNote` exactly as given. Do not invent a foundation.
    - State that this proposal exists only on screen and nothing has been written. Nothing is
-     written before an explicit accept. Then STOP. The accept, edit and reject outcomes are not
-     defined in this step.
+     written before an explicit accept.
+   - Set `current_proposal` to `proposal`, with the Keywords derived above. Then run the decision
+     loop below.
    - This branch never calls `feature-split.js apply`.
+   - **Decision loop.** Ask the user once: `accept | edit | reject`. Wait for the answer. Any other
+     answer: ask the same question again.
+     - `accept`: its outcome is not defined in this step. It applies `current_proposal`, the last
+       re-presented proposal, never the original.
+     - `reject`: its outcome is not defined in this step. Nothing is written.
+     - `edit`: run the edit arm below, then return to this prompt.
+   - **Edit arm.** Ask the user for one change: a child name, a purpose, the order, the foundation
+     owner, add a child, remove a child, merge two children, the Summary or the Keywords. Each edit
+     is one change. Map it to one op of the form `rename` (`from`, `to`), `set` (`name`, `field` as
+     `purpose`, `summary` or `keywords`, `value`), `reorder` (`names`), `owner` (`name`), `add`
+     (`child`), `remove` (`name`) or `merge` (`names`, `into`).
+     - Check the change with the FTR-035 edit rules (`editProposal`), through the validator. This
+       is the only `feature-split.js` call in this step. Do not call `apply` here.
+
+       ```
+       cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project . -- validate-proposal
+       { "proposal": <current_proposal JSON>, "edit": <one op JSON> }
+       FEATURE_SPLIT_JSON
+       ```
+     - If the command exits non-zero: print its error, keep `current_proposal` and return to the
+       decision prompt.
+     - Otherwise read the single JSON line it prints: `proposal` (revised, or unchanged on refusal)
+       and `violations`.
+     - If `violations` is not empty, the edit is refused and changes nothing. A child count below
+       `minChildren` is refused with the message below. Read the minimum from
+       `split_checkpoint.proposal.minChildren`; never write it as a number in this skill.
+       - Child count below `minChildren`: print `Edit refused: it would leave <n> children; the minimum
+         is <value>. The previous proposal is kept.`
+       - Any other violation: print `Edit refused: <violation message>. The previous proposal is kept.`
+       Keep `current_proposal` and return to the decision prompt. The user may try a different edit,
+       or answer accept or reject.
+     - If `violations` is empty, set `current_proposal` to the returned `proposal`. Re-present it
+       with the rules of this step: the over-threshold lines as printed above (an edited proposal is
+       not re-measured), each child's fields, and the foundation note. Print each returned
+       `foundationWarnings` message. Then return to the decision prompt.
+     - Each re-presented proposal needs a fresh explicit accept. An edit is never an accept. A
+       proposal is applied only when the user answers `accept` after its last re-presentation.
+     - Keywords the user types are kept as entered. They are not re-derived after an edit.
 5. Any other status: treat it as unavailable with the reason
    "unknown split checkpoint status: <status>", print it the same way as step 3, and STOP.
 
 Rules for this step:
-- Step 1a never calls `feature-split.js` directly. The proposal is read from the pm-phase1 result.
+- Step 1a calls `feature-split.js` only for `validate-proposal` in the edit arm. Otherwise the
+  proposal is read from the pm-phase1 result.
 - An unknown or malformed result never leads to Gate 1. Only `passed` and `skipped` continue.
 - The unavailable message must not contain the words "accept", "approve" or "confirm", so it
   cannot read as an approval prompt.
