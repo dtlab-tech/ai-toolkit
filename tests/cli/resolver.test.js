@@ -356,6 +356,28 @@ describe('Phase B — Mode decision', () => {
     expect(err.message).toContain(claudeDir(home));
   });
 
+  test('a project with a skill of its own and the toolkit installed for the user resolves the global asset, never "Ambiguous"', () => {
+    // A legitimate .claude/ of a project: only its own skill and a lock file, no toolkit marker.
+    const local = mktmp('proj');
+    const home  = mktmp('home');
+    const ownSkill = path.join(claudeDir(local), 'skills', 'kb-config');
+    fs.mkdirSync(ownSkill, { recursive: true });
+    fs.writeFileSync(path.join(ownSkill, 'SKILL.md'), '# kb-config');
+    fs.writeFileSync(path.join(claudeDir(local), 'scheduled_tasks.lock'), '');
+    makeCompleteInstall(home, { mode: 'global' });
+    const resolved = resolveClaudeRuntimeAsset(VALID_ASSET, { projectDir: local, home });
+    expect(resolved).toBe(path.join(claudeDir(home), 'scripts', 'wb-validate.js'));
+  });
+
+  test('a project agent of its own next to a global installation does not make the installation ambiguous either', () => {
+    const local = mktmp('proj');
+    const home  = mktmp('home');
+    fs.mkdirSync(path.join(claudeDir(local), 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir(local), 'agents', 'my-own-agent.md'), '# mine');
+    makeCompleteInstall(home, { mode: 'global' });
+    expect(() => resolveClaudeRuntimeAsset(VALID_ASSET, { projectDir: local, home })).not.toThrow();
+  });
+
   test('both installed — error is raised even when local manifest is corrupt', () => {
     // Spec: "presence is established regardless of metadata validity"
     const local = mktmp('proj');

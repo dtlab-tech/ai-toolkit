@@ -51,11 +51,19 @@ describe('isToolkitInstalled()', () => {
     expect(isToolkitInstalled(claudeDir)).toBe(true);
   });
 
-  test('condC: true when only category payload files exist', () => {
+  test('condC: true when only files the toolkit ships exist in a category', () => {
     const agentsDir = path.join(claudeDir, 'agents');
     fs.mkdirSync(agentsDir, { recursive: true });
-    fs.writeFileSync(path.join(agentsDir, 'x.md'), '# x');
+    fs.writeFileSync(path.join(agentsDir, 'gaia-define-feature.md'), '# x');
     expect(isToolkitInstalled(claudeDir)).toBe(true);
+  });
+
+  test('a .claude with only a skill of the project itself is not a toolkit installation', () => {
+    const own = path.join(claudeDir, 'skills', 'kb-config');
+    fs.mkdirSync(own, { recursive: true });
+    fs.writeFileSync(path.join(own, 'SKILL.md'), '# kb');
+    fs.writeFileSync(path.join(claudeDir, 'scheduled_tasks.lock'), '');
+    expect(isToolkitInstalled(claudeDir)).toBe(false);
   });
 
   test('settings files alone do NOT satisfy any condition', () => {

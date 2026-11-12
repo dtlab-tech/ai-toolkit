@@ -186,7 +186,7 @@ describe('doctor resolution', () => {
     const tmpProject = mktmp('proj');
     const tmpHome    = mktmp('home');
 
-    putAgentFile(tmpProject, 'something.md', '# agent');
+    putAgentFile(tmpProject, 'gaia-define-feature.md', '# agent');   // a file the toolkit ships
 
     const result = cli(['doctor', 'resolution', '--project', tmpProject, '--home', tmpHome]);
 
