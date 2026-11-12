@@ -119,7 +119,7 @@ Read `split_checkpoint` from the pm-phase1 result.
      written before an explicit accept.
    - Set `current_proposal` to `proposal`, with the Keywords derived above. Then run the decision
      loop below.
-   - This branch never calls `feature-split.js apply`.
+   - This branch calls `feature-split.js apply` only on an explicit accept, as set out in the Outcomes below.
    - **Decision loop.** Ask the user once: `accept | edit | reject`. Wait for the answer. Any other
      answer: ask the same question again.
      - `accept`: its outcome is defined in the Outcomes rules below. It applies `current_proposal`,
@@ -163,14 +163,25 @@ Read `split_checkpoint` from the pm-phase1 result.
 
 Outcomes of the decision (split-proposed only):
 - `accept`: the main-loop agent runs `feature-split.js apply` for the proposal shown to the user, and
-  the pipeline stops for the parent without reaching Gate 1.
+  the pipeline stops for the parent without reaching Gate 1. This call is made only here, in the main
+  loop, after an explicit accept of `current_proposal`, and never from `pm-phase1`:
+  1. Resolve the features root: `featuresRoot=$(ai-toolkit resolve-features-root) && echo "$featuresRoot"`.
+     If it exits non-zero: report the error and STOP. Write nothing.
+  2. Pipe `current_proposal` on stdin, unchanged (the last explicitly accepted proposal, edits included):
+     ```bash
+     cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project . -- apply --features-root "$featuresRoot" --parent "<FTR-ID>"
+     <current_proposal JSON>
+     FEATURE_SPLIT_JSON
+     ```
+     - `<FTR-ID>` is the parent prefix of the current run. It is never read from the proposal.
+     - Stdin carries only the confirmed proposal JSON. It carries no paths and no prompt text.
 - `reject`: the pipeline continues to Gate 1 unchanged and stores nothing.
 - Nothing is created before an explicit accept. The proposal exists only in the conversation.
 - An unanswered proposal stores nothing. Silence is neither accept nor reject.
 
 Rules for this step:
-- Step 1a calls `feature-split.js` only for `validate-proposal` in the edit arm. Otherwise the
-  proposal is read from the pm-phase1 result.
+- Step 1a calls `feature-split.js` only for `validate-proposal` in the edit arm and for `apply` on an
+  explicit accept. Otherwise the proposal is read from the pm-phase1 result.
 - An unknown or malformed result never leads to Gate 1. Only `passed` and `skipped` continue.
 - The unavailable message must not contain the words "accept", "approve" or "confirm", so it
   cannot read as an approval prompt.
