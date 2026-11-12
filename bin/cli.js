@@ -934,14 +934,22 @@ function validateManifestFilesField(files, destRoot) {
 }
 
 // Shared presence-detection helpers — used by resolver, doctor, and list-assets.
-// condC: at least one catalog category directory inside claudeDir has files.
+// condC: at least one file of the toolkit's own catalog is inside a catalog category directory of claudeDir. A file counts only
+// when the toolkit ships a file with the same relative path (src/claude/<category>/<relative path>), so a project's own skill,
+// agent or command in .claude/ is not mistaken for a toolkit installation.
 function hasToolkitPayloadFiles(claudeDir) {
   const { getAssetCategories } = require('../lib/asset-catalog');
+  const toolkitRoot = path.join(__dirname, '..');
   for (const cat of getAssetCategories()) {
     const catDir = path.join(claudeDir, cat.runtimeDir.replace(/^\.claude\//, ''));
     if (!fs.existsSync(catDir)) continue;
-    try { if (fs.statSync(catDir).isDirectory() && walkDir(catDir).length > 0) return true; }
-    catch (_) { /* ignore unreadable dirs */ }
+    try {
+      if (!fs.statSync(catDir).isDirectory()) continue;
+      for (const file of walkDir(catDir)) {
+        const rel = path.relative(catDir, file);
+        if (fs.existsSync(path.join(toolkitRoot, cat.sourceDir, rel))) return true;
+      }
+    } catch (_) { /* ignore unreadable dirs */ }
   }
   return false;
 }
@@ -949,7 +957,7 @@ function hasToolkitPayloadFiles(claudeDir) {
 // A toolkit installation is PRESENT at claudeDir when any of:
 //   condA: .ai-toolkit-manifest.json exists (content may be corrupt)
 //   condB: .ai-toolkit-version exists
-//   condC: at least one catalog category dir contains one or more files
+//   condC: at least one catalog category dir contains a file that the toolkit itself ships (see hasToolkitPayloadFiles)
 // settings.json / settings.local.json alone do NOT satisfy any condition.
 function isToolkitInstalled(claudeDir) {
   if (fs.existsSync(path.join(claudeDir, '.ai-toolkit-manifest.json'))) return true;
