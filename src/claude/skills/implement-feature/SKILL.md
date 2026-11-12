@@ -99,12 +99,31 @@ Read `split_checkpoint` from the pm-phase1 result.
    If there are no entries (missing or malformed result), print one line:
    `  - split_checkpoint: <reason>`.
    Then STOP. Do not reach Gate 1. Do not ask the user anything.
-4. Any other status (including `split-proposed` until US-02-TASK-BE-05 lands): treat it as
-   unavailable with the reason "unknown split checkpoint status: <status>", print it the same way
-   as step 3, and STOP.
+4. If `status` is `split-proposed`: show the measured proposal. Do not reach Gate 1.
+   - If `split_checkpoint.proposal` is missing or not an object: treat it as unavailable with the
+     reason "split proposal missing or malformed", print it as in step 3, and STOP.
+   - Derive Keywords only. For each child in `proposal.children`, in order, set its `keywords` from
+     its `name`, the use cases and the component paths in its `assigned` text. Do not change
+     `name`, `purpose`, `summary`, `dependsOn`, `assigned` or the order of the children.
+   - Print the over-threshold counts. For each key in `split_checkpoint.over`, print one line:
+     `<key>: <counts[key]> / threshold <thresholds[key]> (over)`. Read both numbers from the
+     result. Do not list keys that are not in `over`.
+   - For each child, in order, print: name, purpose, Summary (`summary`), Keywords, dependsOn and
+     the assigned use cases and components (`assigned`). Summary is editable; show what the
+     proposal gives. A child whose `assigned` text names no components is shown as an error and
+     cannot be accepted unedited.
+   - Foundation: if `proposal.sharedFoundationOwner` is a child name, print it as the shared
+     foundation owner and list the children whose `dependsOn` names it. If it is null, print
+     `proposal.foundationNote` exactly as given. Do not invent a foundation.
+   - State that this proposal exists only on screen and nothing has been written. Nothing is
+     written before an explicit accept. Then STOP. The accept, edit and reject outcomes are not
+     defined in this step.
+   - This branch never calls `feature-split.js apply`.
+5. Any other status: treat it as unavailable with the reason
+   "unknown split checkpoint status: <status>", print it the same way as step 3, and STOP.
 
 Rules for this step:
-- Step 1a never calls `feature-split.js apply`, never builds a proposal and never prompts.
+- Step 1a never calls `feature-split.js` directly. The proposal is read from the pm-phase1 result.
 - An unknown or malformed result never leads to Gate 1. Only `passed` and `skipped` continue.
 - The unavailable message must not contain the words "accept", "approve" or "confirm", so it
   cannot read as an approval prompt.
