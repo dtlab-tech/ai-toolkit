@@ -350,17 +350,17 @@ describe('Step 1a reject, failure, retry and unanswered text', () => {
     })
 
     test('reject runs Gate 1 on the parent as it was before this run', () => {
-      expect(rejectOutcome()).toMatch(/Gate 1 then runs on the parent as it was before this run\./)
+      expect(rejectOutcome()).toMatch(/and runs on the parent as it was before this run\./)
     })
   })
 
   describe('edit then reject', () => {
     test('reject discards all edits, including the last re-presented proposal', () => {
-      expect(rejectOutcome()).toMatch(/Rejecting will discard all edits in `current_proposal`, the last re-presented proposal included\./)
+      expect(rejectOutcome()).toMatch(/Rejecting discards all edits in `current_proposal`, the last re-presented proposal included\./)
     })
 
     test('an edit never calls apply, so an edited then rejected proposal stores nothing', () => {
-      expect(step1aText()).toMatch(/This is the only `feature-split\.js` call in this step\. Do not call `apply` here\./)
+      expect(step1aText()).toMatch(/This is the only `feature-split\.js` call in the edit arm\. Do not call `apply` here\./)
     })
   })
 
@@ -417,3 +417,46 @@ describe('Step 1a reject, failure, retry and unanswered text', () => {
     })
   })
 })
+
+describe('hook: the digest on every path, and a check that cannot throw (review of the whole branch)', () => {
+  test('docs_digest is computed before the early return and the early return carries it', () => {
+    const digestAt = hookSrc.indexOf('const docsDigest = c.hash(');
+    const earlyAt = hookSrc.indexOf("if (split_checkpoint.status !== 'passed' && split_checkpoint.status !== 'skipped')");
+    expect(digestAt).toBeGreaterThan(-1);
+    expect(earlyAt).toBeGreaterThan(digestAt);
+    const earlyBlock = hookSrc.slice(earlyAt, hookSrc.indexOf('c.append(', earlyAt));
+    expect(earlyBlock).toMatch(/docs_digest: docsDigest/);
+    expect(earlyBlock).toMatch(/split_checkpoint/);
+  });
+
+  test('the command is called inside a try/catch that turns a failure into an unavailable result', () => {
+    const at = hookSrc.indexOf("c.command(['run-asset', 'scripts/feature-split.js'");
+    expect(hookSrc.slice(hookSrc.lastIndexOf('try {', at), at)).not.toBe('');
+    expect(hookSrc.lastIndexOf('try {', at)).toBeGreaterThan(hookSrc.lastIndexOf('}', at - 1) - 400);
+    expect(hookSrc).toMatch(/unavailableCheck\('check-size failed to run: '/);
+  });
+
+  test('the skill says a rejected proposal uses the docs_digest of the same result', () => {
+    expect(skillSrc).toMatch(/Gate 1 then uses the `docs_digest` of the same result/);
+  });
+});
+
+describe('Step 1a sentences that contradicted each other (review of the whole branch)', () => {
+  test('the validate-proposal call is the only call of the edit arm, not of the whole step', () => {
+    expect(skillSrc).toMatch(/is the only `feature-split\.js` call in the edit arm/);
+    expect(skillSrc).not.toMatch(/is the only `feature-split\.js` call in this step/);
+  });
+
+  test('a child with no components is shown as it is, never an error that blocks the accept', () => {
+    expect(skillSrc).toMatch(/shown with `Components: none\.`; that is a valid/);
+    expect(skillSrc).not.toMatch(/cannot be accepted unedited/);
+  });
+
+  test('keywords carry no comma and no line break', () => {
+    expect(skillSrc).toMatch(/Each keyword has no comma and no line break/);
+  });
+
+  test('the reject sentence is in the present tense', () => {
+    expect(skillSrc).toMatch(/Rejecting discards all edits/);
+  });
+});

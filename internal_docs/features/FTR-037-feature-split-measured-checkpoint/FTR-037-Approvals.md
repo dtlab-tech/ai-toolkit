@@ -77,3 +77,13 @@ The Sonnet review of phase US-01 ended FAIL with 21 blocking findings. The run w
 - "TEST-02 cannot pass against BE-03 and BE-04" (component header and `depends on: nothing`): the review sees only the diff of the task commits, and the hand correction of the 2026-11-12 (2) Amendment is not a task commit. The tests pass (41 of 41 in the check-size and workflow test files).
 
 The work of TEST-04 was verified (its tests pass) and committed by hand, so the phase closes through the already-satisfied check, and phase US-01 gets no valid phase review: the whole-branch review at the end covers it. The real, smaller findings of that review are kept for the refinement: each count measure needs its own try/catch (a null text or a directory named `x.md` drops the other counts), a test for a configuration without a threshold, and anchored assertions in US-01-TASK-TEST-04 (the digest guard, the return statements).
+
+## Amendment 2026-11-12 (4) — whole-branch review and its fixes
+
+A whole-branch review (Sonnet) ran `check-size` on the real documents of FTR-035, FTR-036 and FTR-037 (none was unavailable; all three are `split-proposed` because their acceptance criteria are 46, 19 and 22 against a threshold of 15) and on hand-made features at and around each threshold (at the threshold: passed; one above: split-proposed). It reported one critical defect and the warnings below; all were fixed:
+
+- **Critical:** a rejected proposal reached Gate 1 without `docs_digest`, because the hook returned before computing it. The digest is now computed on every path and the early return carries it (Step 1a says a reject uses the `docs_digest` of the same result).
+- The build-order clause was truncated silently (`depends on: 2–9 and 1` read as `[2]`, a fail-open result). Text after the list must now be empty or a note introduced by punctuation or a parenthesis, otherwise the phases count is unavailable. The dash may be an em dash, an en dash or a hyphen, and `Depends on` is case-insensitive.
+- The hook no longer throws when `check-size` cannot run (spawn error, timeout, an exit code other than 0 or 1): it returns `unavailable`.
+- Step 1a: a child with no components (`Components: none.`) is a valid child and no longer "cannot be accepted unedited" (no edit operation could change `assigned`, so such a proposal could never be accepted); keywords carry no comma and no line break; the sentence "the only feature-split.js call in this step" now says "in the edit arm" (accept calls `apply`).
+- Not changed: Requirements BR-05 and AC-07 still read "single table" (the Gate 1 digest binds that text); the count follows the amendment of 2026-11-12 (2).

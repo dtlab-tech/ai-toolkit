@@ -1400,9 +1400,11 @@ function measureComponents(featureDir) {
   return paths.size > 0 ? { value: paths.size } : { reason: `the file tables in ${where} have no data rows` };
 }
 
-// The generator template writes "depends on: nothing" or a list of item numbers; "none" is accepted too, and text after the clause
-// (a note on the item) is ignored.
-const BUILD_ITEM = /^(\d+)\.\s+(.+?)\s+—\s+depends on:\s*(none|nothing|\d+(?:\s*,\s*\d+)*)(?![\w])/;
+// The generator template writes "depends on: nothing" or a list of item numbers; "none" is accepted too. The dash may be an em dash,
+// an en dash or a hyphen and "depends on" is case-insensitive. What follows the list is checked in parseBuildOrder: only an empty rest,
+// or a note introduced by punctuation or a parenthesis, is accepted, so "1 and 1" or "2–9 and 1" are unavailable and never a silently
+// shorter list.
+const BUILD_ITEM = /^(\d+)\.\s+(.+?)\s+[—–-]\s+depends on:\s*(none|nothing|\d+(?:\s*,\s*\d+)*)(.*)$/i;
 
 // ASSUMED LOCATOR (FTR-037 T-1): the Section 11 heading starts with "## 11."; the section ends at the next heading of the same or higher level.
 function readSection11(featureDir) {
@@ -1427,7 +1429,10 @@ function parseBuildOrder(lines) {
     if (!m) throw new Error(`build-order item has no valid "depends on:" clause: ${line}`);
     const n = Number(m[1]);
     if (items.has(n)) throw new Error(`duplicate build-order item ${n}`);
-    const deps = m[3] === 'none' || m[3] === 'nothing' ? [] : m[3].split(',').map(s => Number(s.trim()));
+    const rest = m[4].trim();
+    if (rest !== '' && !/^[.;:(]/.test(rest)) throw new Error(`build-order item ${m[1]} has text after its "depends on:" list that is not a note ("${rest.slice(0, 30)}"): ${line}`);
+    const clause = m[3].toLowerCase();
+    const deps = clause === 'none' || clause === 'nothing' ? [] : m[3].split(',').map(s => Number(s.trim()));
     items.set(n, { deps, text: m[2] });
   }
   if (items.size === 0) throw new Error('Section 11 build order is empty');

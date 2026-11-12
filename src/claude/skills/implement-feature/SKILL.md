@@ -103,15 +103,15 @@ Read `split_checkpoint` from the pm-phase1 result.
    - If `split_checkpoint.proposal` is missing or not an object: treat it as unavailable with the
      reason "split proposal missing or malformed", print it as in step 3, and STOP.
    - Derive Keywords only. For each child in `proposal.children`, in order, set its `keywords` from
-     its `name`, the use cases and the component paths in its `assigned` text. Do not change
+     its `name`, the use cases and the component paths in its `assigned` text. Each keyword has no comma and no line break (`apply` refuses both). Do not change
      `name`, `purpose`, `summary`, `dependsOn`, `assigned` or the order of the children.
    - Print the over-threshold counts. For each key in `split_checkpoint.over`, print one line:
      `<key>: <counts[key]> / threshold <thresholds[key]> (over)`. Read both numbers from the
      result. Do not list keys that are not in `over`.
    - For each child, in order, print: name, purpose, Summary (`summary`), Keywords, dependsOn and
      the assigned use cases and components (`assigned`). Summary is editable; show what the
-     proposal gives. A child whose `assigned` text names no components is shown as an error and
-     cannot be accepted unedited.
+     proposal gives. A child whose `assigned` text names no components is shown with `Components: none.`; that is a valid
+     child of the proposal and is shown as it is.
    - Foundation: if `proposal.sharedFoundationOwner` is a child name, print it as the shared
      foundation owner and list the children whose `dependsOn` names it. If it is null, print
      `proposal.foundationNote` exactly as given. Do not invent a foundation.
@@ -132,7 +132,7 @@ Read `split_checkpoint` from the pm-phase1 result.
      `purpose`, `summary` or `keywords`, `value`), `reorder` (`names`), `owner` (`name`), `add`
      (`child`), `remove` (`name`) or `merge` (`names`, `into`).
      - Check the change with the FTR-035 edit rules (`editProposal`), through the validator. This
-       is the only `feature-split.js` call in this step. Do not call `apply` here.
+       is the only `feature-split.js` call in the edit arm. Do not call `apply` here.
 
        ```
        cat <<'FEATURE_SPLIT_JSON' | ai-toolkit run-asset scripts/feature-split.js --project . -- validate-proposal
@@ -198,9 +198,9 @@ Outcomes of the decision (split-proposed only):
      Then STOP for the parent. Print no Gate 1 digest in this run. Do not edit, rename or rewrite the
      parent's documents after apply; they are what apply wrote.
 - `reject`: the pipeline continues to Gate 1 unchanged and stores nothing.
-  - This holds even after the user has edited the proposal. Rejecting will discard all edits in
+  - This holds even after the user has edited the proposal. Rejecting discards all edits in
     `current_proposal`, the last re-presented proposal included. The parent's documents stay unchanged.
-    No rejection record and no registry change is written. Gate 1 then runs on the parent as it was
+    No rejection record and no registry change is written. Gate 1 then uses the `docs_digest` of the same result (the hook computes it on every path) and runs on the parent as it was
     before this run.
 - Nothing is created before an explicit accept. The proposal exists only in the conversation.
 - An unanswered proposal stores nothing. Silence is neither accept nor reject.

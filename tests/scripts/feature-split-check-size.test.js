@@ -730,3 +730,26 @@ describe('check-size split-proposed (moved from US-01-TASK-TEST-03)', () => {
     expect(hashTree(root)).toEqual(before);
   });
 });
+
+describe('check-size build-order clause (review of the whole branch)', () => {
+  test('a clause with "and" or a range is unavailable, never a silently shorter list', () => {
+    for (const clause of ['1 and 1', '2–9 and 1', '1-3']) {
+      const { root, feature } = makeProject({ 'spec/index.md': specWithOrder(['1. A — depends on: nothing', `2. B — depends on: ${clause}`]) });
+      const { result, code } = runCheck(root, feature);
+      expect(result.status).toBe('unavailable');
+      expect(code).toBe(1);
+      expect(phasesEntry(result).reason).toMatch(/text after its "depends on:" list/);
+    }
+  });
+
+  test('a hyphen or an en dash before the clause and "Depends on" with a capital are accepted', () => {
+    const { root, feature } = makeProject({ 'spec/index.md': specWithOrder(['1. A - Depends on: nothing', '2. B – depends on: 1']) });
+    expect(runCheck(root, feature).result.counts[PHASES]).toBe(2);
+  });
+
+  test('a note introduced by a parenthesis or by punctuation after the list is accepted', () => {
+    const { root, feature } = makeProject({ 'spec/index.md': specWithOrder([
+      '1. A — depends on: nothing', '2. B — depends on: 1 (see the note below)', '3. C — depends on: none. Needs a decision first.']) });
+    expect(runCheck(root, feature).result.counts[PHASES]).toBe(2);
+  });
+});
