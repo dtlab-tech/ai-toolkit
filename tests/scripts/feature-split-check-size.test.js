@@ -573,3 +573,160 @@ describe('check-size child grouping', () => {
     });
   });
 });
+
+// Thresholds of 1 for useCases make it over threshold; the other counts stay far below their thresholds.
+const FOUNDATION_THRESHOLDS = { useCases: 1, acceptanceCriteria: 100, components: 100, estimatedPhases: 100 };
+
+describe('check-size shared foundation mapping (BE-03)', () => {
+  // Three use cases, one per child: ceil(3 / 1) = 3 children, capped at the 3 use cases. AC-NN links one to one to UC-NN.
+  function foundationProject(components, buildOrder) {
+    const files = {};
+    for (const uc of ['UC-01', 'UC-02', 'UC-03']) files[`req/use-cases/${uc}.md`] = `# ${uc}\n`;
+    files['req/index.md'] = [
+      '| ID | Criterion | Related UC |', '|---|---|---|',
+      '| AC-01 | Criterion | UC-01 |', '| AC-02 | Criterion | UC-02 |', '| AC-03 | Criterion | UC-03 |', '',
+    ].join('\n');
+    files['spec/index.md'] = [
+      '## 9. File Inventory', '', '### New files', '| Path | Purpose | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      ...components.map(([p, ac]) => `| ${p} | purpose | ${ac} | BE | x |`), '',
+      '## 11. Build order', '', ...buildOrder, '',
+    ].join('\n');
+    return makeProject(files, FOUNDATION_THRESHOLDS);
+  }
+
+  const proposalOf = (components, buildOrder) => {
+    const { root, feature } = foundationProject(components, buildOrder);
+    return runCheck(root, feature).result.proposal;
+  };
+
+  // src/core.js is in the third use-case block (part-3) and is the only path in a depth-0 item (item 1), so part-3 holds the foundation.
+  const COMPONENTS_WITH_CORE = [['src/ui.js', 'AC-01'], ['src/api.js', 'AC-02'], ['src/core.js', 'AC-03']];
+  const ORDER_WITH_CORE = [
+    '1. Build src/core.js — depends on: none', '2. Wire src/ui.js — depends on: 1', '3. Wire src/api.js — depends on: 1',
+  ];
+
+  // No component path appears in a depth-0 item (item 1 is "Scaffold the project"), so no child holds the foundation.
+  const COMPONENTS_NO_MATCH = [['src/ui.js', 'AC-01'], ['src/api.js', 'AC-02'], ['src/db.js', 'AC-03']];
+  const ORDER_NO_MATCH = [
+    '1. Scaffold the project — depends on: none', '2. Wire src/ui.js — depends on: 1', '3. Wire src/api.js — depends on: 1',
+  ];
+
+  describe('a depth-0 component match', () => {
+    test('a depth-0 component moves its child to position 1 as the shared foundation', () => {
+      const proposal = proposalOf(COMPONENTS_WITH_CORE, ORDER_WITH_CORE);
+      expect(proposal.children[0].name).toBe('part-3');
+    });
+
+    test('the shared foundation owner is the child that holds the depth-0 component', () => {
+      const proposal = proposalOf(COMPONENTS_WITH_CORE, ORDER_WITH_CORE);
+      expect(proposal.sharedFoundationOwner).toBe('part-3');
+    });
+
+    test('the other children depend on the shared foundation child', () => {
+      const proposal = proposalOf(COMPONENTS_WITH_CORE, ORDER_WITH_CORE);
+      expect(proposal.children.slice(1).map(c => c.dependsOn)).toEqual([['part-3'], ['part-3']]);
+    });
+
+    test('the shared foundation child has no dependsOn', () => {
+      const proposal = proposalOf(COMPONENTS_WITH_CORE, ORDER_WITH_CORE);
+      expect(proposal.children[0].dependsOn).toEqual([]);
+    });
+
+    test('a depth-0 match leaves the foundationNote empty', () => {
+      const proposal = proposalOf(COMPONENTS_WITH_CORE, ORDER_WITH_CORE);
+      expect(proposal.foundationNote).toBe('');
+    });
+
+    test('every child has keywords as an empty array', () => {
+      const proposal = proposalOf(COMPONENTS_WITH_CORE, ORDER_WITH_CORE);
+      expect(proposal.children.map(c => c.keywords)).toEqual([[], [], []]);
+    });
+  });
+
+  describe('no depth-0 match', () => {
+    test('with no depth-0 match, no shared foundation owner is assigned', () => {
+      const proposal = proposalOf(COMPONENTS_NO_MATCH, ORDER_NO_MATCH);
+      expect(proposal.sharedFoundationOwner).toBeNull();
+    });
+
+    test('with no depth-0 match, the foundationNote states that no shared foundation was assigned', () => {
+      const proposal = proposalOf(COMPONENTS_NO_MATCH, ORDER_NO_MATCH);
+      expect(proposal.foundationNote)
+        .toBe('no shared foundation assigned: no component matches depth-0 build-order items');
+    });
+
+    test('with no depth-0 match, every child has an empty dependsOn', () => {
+      const proposal = proposalOf(COMPONENTS_NO_MATCH, ORDER_NO_MATCH);
+      expect(proposal.children.map(c => c.dependsOn)).toEqual([[], [], []]);
+    });
+
+    test('with no depth-0 match, children keep their use-case order', () => {
+      const proposal = proposalOf(COMPONENTS_NO_MATCH, ORDER_NO_MATCH);
+      expect(proposal.children.map(c => c.name)).toEqual(['part-1', 'part-2', 'part-3']);
+    });
+
+    test('with no depth-0 match, every child has keywords as an empty array', () => {
+      const proposal = proposalOf(COMPONENTS_NO_MATCH, ORDER_NO_MATCH);
+      expect(proposal.children.map(c => c.keywords)).toEqual([[], [], []]);
+    });
+  });
+});
+
+describe('check-size split-proposed (moved from US-01-TASK-TEST-03)', () => {
+  // One count (useCases, 3) above its threshold (1); the other counts are below theirs.
+  function overThresholdProject() {
+    const files = {};
+    for (const uc of ['UC-01', 'UC-02', 'UC-03']) files[`req/use-cases/${uc}.md`] = `# ${uc}\n`;
+    files['req/index.md'] = [
+      '| ID | Criterion | Related UC |', '|---|---|---|',
+      '| AC-01 | Criterion | UC-01 |', '| AC-02 | Criterion | UC-02 |', '| AC-03 | Criterion | UC-03 |', '',
+    ].join('\n');
+    files['spec/index.md'] = [
+      '## 9. File Inventory', '', '### New files', '| Path | Purpose | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      '| src/ui.js | purpose | AC-01 | BE | x |', '| src/api.js | purpose | AC-02 | BE | x |',
+      '| src/core.js | purpose | AC-03 | BE | x |', '',
+      '## 11. Build order', '', '1. Build src/core.js — depends on: none', '2. Wire src/ui.js — depends on: 1',
+      '3. Wire src/api.js — depends on: 1', '',
+    ].join('\n');
+    return makeProject(files, FOUNDATION_THRESHOLDS);
+  }
+
+  test('one count above its threshold gives status split-proposed', () => {
+    const { root, feature } = overThresholdProject();
+    expect(runCheck(root, feature).result.status).toBe('split-proposed');
+  });
+
+  test('a split-proposed run names only the count above its threshold', () => {
+    const { root, feature } = overThresholdProject();
+    expect(runCheck(root, feature).result.over).toEqual(['useCases']);
+  });
+
+  test('a split-proposed run exits with code 0', () => {
+    const { root, feature } = overThresholdProject();
+    expect(runCheck(root, feature).code).toBe(0);
+  });
+
+  test('a split-proposed run reports the proposal source as measured', () => {
+    const { root, feature } = overThresholdProject();
+    expect(runCheck(root, feature).result.proposal.source).toBe('measured');
+  });
+
+  test('a split-proposed run gives every child empty keywords', () => {
+    const { root, feature } = overThresholdProject();
+    const { children } = runCheck(root, feature).result.proposal;
+    expect(children.map(c => c.keywords)).toEqual([[], [], []]);
+  });
+
+  test('a split-proposed run prints exactly the keys status, counts, thresholds, over, unavailable and proposal', () => {
+    const { root, feature } = overThresholdProject();
+    const { result } = runCheck(root, feature);
+    expect(Object.keys(result).sort()).toEqual(['counts', 'over', 'proposal', 'status', 'thresholds', 'unavailable']);
+  });
+
+  test('a split-proposed run leaves the project tree byte-for-byte unchanged', () => {
+    const { root, feature } = overThresholdProject();
+    const before = hashTree(root);
+    runCheck(root, feature);
+    expect(hashTree(root)).toEqual(before);
+  });
+});
