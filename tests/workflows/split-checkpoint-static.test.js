@@ -308,3 +308,112 @@ describe('Step 1a apply and success path (SKILL.md)', () => {
     expect(successArm()).toMatch(/Print no Gate 1 digest in this run\./)
   })
 })
+
+
+// FTR-037 US-03-TASK-TEST-02: static pins on the Step 1a reject, apply-failure, retry and unanswered
+// wording. Each case reads the Step 1a text of SKILL.md and asserts a phrase the behaviour depends on:
+// reject and edit-then-reject store nothing and continue to Gate 1; an apply failure reports the error
+// with no child folder or registry entry and does not reach Gate 1; a retry or an unanswered proposal
+// starts a fresh run with fresh IDs. The skill is prose for an agent, so these tests read its text and
+// make no LLM call and run no apply.
+
+describe('Step 1a reject, failure, retry and unanswered text', () => {
+  const STEP_1A_HEADING = /^#{1,6} .*Step 1a\b.*$/m
+  // Collapse whitespace so phrase matches do not depend on line wrapping.
+  const step1aText = () => sectionOf(STEP_1A_HEADING).replace(/\s+/g, ' ')
+  const FAILURE_ARM_START = 'If the command exits non-zero, the split was not applied'
+  const SUCCESS_ARM_START = 'If it exits zero'
+  const failureArm = () => {
+    const s = step1aText()
+    const start = s.indexOf(FAILURE_ARM_START)
+    const end = s.indexOf(SUCCESS_ARM_START, start)
+    return start >= 0 && end > start ? s.slice(start, end) : ''
+  }
+  const rejectOutcome = () => {
+    const s = step1aText()
+    const start = s.indexOf('- `reject`: the pipeline continues to Gate 1 unchanged')
+    const end = s.indexOf('- Nothing is created before an explicit accept', start)
+    return start >= 0 && end > start ? s.slice(start, end) : ''
+  }
+
+  describe('reject', () => {
+    test('reject continues to Gate 1 unchanged and stores nothing', () => {
+      expect(rejectOutcome()).toMatch(/`reject`: the pipeline continues to Gate 1 unchanged and stores nothing\./)
+    })
+
+    test('reject writes no rejection record and no registry change', () => {
+      expect(rejectOutcome()).toMatch(/No rejection record and no registry change is written\./)
+    })
+
+    test('reject leaves the parent documents unchanged', () => {
+      expect(rejectOutcome()).toMatch(/The parent's documents stay unchanged\./)
+    })
+
+    test('reject runs Gate 1 on the parent as it was before this run', () => {
+      expect(rejectOutcome()).toMatch(/Gate 1 then runs on the parent as it was before this run\./)
+    })
+  })
+
+  describe('edit then reject', () => {
+    test('reject discards all edits, including the last re-presented proposal', () => {
+      expect(rejectOutcome()).toMatch(/Rejecting will discard all edits in `current_proposal`, the last re-presented proposal included\./)
+    })
+
+    test('an edit never calls apply, so an edited then rejected proposal stores nothing', () => {
+      expect(step1aText()).toMatch(/This is the only `feature-split\.js` call in this step\. Do not call `apply` here\./)
+    })
+  })
+
+  describe('apply failure', () => {
+    test('a failed apply prints the error from the command as the reason', () => {
+      expect(failureArm()).toMatch(/Print the error from the command as the reason/)
+    })
+
+    test('a failed apply reports that the split was not applied for the parent', () => {
+      expect(failureArm()).toMatch(/Split not applied for <FTR-ID>\. Nothing was written:/)
+    })
+
+    test('a failed apply states that no child folder and no registry entry remains', () => {
+      expect(failureArm()).toMatch(/so no child folder and no registry entry remains\./)
+    })
+
+    test('a failed apply never reports a partial child set as created', () => {
+      expect(failureArm()).toMatch(/Never report a partial child set as created\./)
+    })
+
+    test('a failed apply does not list any child ID', () => {
+      expect(failureArm()).toMatch(/do not list any child id after a non-zero exit\./)
+    })
+
+    test('a failed apply does not retry apply in this run and does not reach Gate 1', () => {
+      expect(failureArm()).toMatch(/Do not retry `apply` in this run\. Do not reach Gate 1\. Stop the pipeline for the parent\./)
+    })
+
+    test('an incomplete rollback is reported with the paths left on disk', () => {
+      expect(failureArm()).toMatch(/If the error code is `ROLLBACK_INCOMPLETE`, the rollback did not finish\./)
+      expect(failureArm()).toMatch(/the paths below remain on disk and must be checked by hand/)
+    })
+  })
+
+  describe('retry and unanswered proposal', () => {
+    test('a retry after a failed apply is a fresh run', () => {
+      expect(step1aText()).toMatch(/A retry after a failed `apply`, or after a session that ended before an answer, is a fresh run\./)
+    })
+
+    test('a fresh run re-runs check-size and presents a new proposal with fresh child IDs', () => {
+      expect(step1aText()).toMatch(/That run re-runs `check-size` and presents a new proposal with fresh child IDs\./)
+    })
+
+    test('the failed attempt is not resumed and no state is stored between runs', () => {
+      expect(step1aText()).toMatch(/The failed attempt is not resumed, and no state is stored between runs\./)
+    })
+
+    test('an unanswered proposal stores nothing', () => {
+      expect(step1aText()).toMatch(/An unanswered proposal stores nothing\./)
+    })
+
+    test('silence is neither accept nor reject', () => {
+      expect(step1aText()).toMatch(/Silence is neither accept nor reject\./)
+    })
+  })
+})
