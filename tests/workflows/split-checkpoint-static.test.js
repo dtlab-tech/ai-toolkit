@@ -228,3 +228,83 @@ describe('implement-feature SKILL.md Step 1a text', () => {
     expect(skillSrc).not.toMatch(/minChildren\s*(=|is|:)\s*\d+/i)
   })
 })
+
+// FTR-037 US-03-TASK-TEST-01: static pins on the Step 1a accept branch and its success arm. The apply
+// invocation must sit after the accept/edit/reject prompt, inside the accept outcome, with
+// --features-root and --parent. The success arm must report the parent prefix, the created child IDs
+// and folders, and stop for the parent without reaching Gate 1. The skill is prose for an agent, so
+// these tests read its text and make no LLM call and no apply run.
+
+describe('Step 1a apply and success path (SKILL.md)', () => {
+  const STEP_1A_HEADING = /^#{1,6} .*Step 1a\b.*$/m
+  // Collapse whitespace so phrase and invocation matches do not depend on line wrapping.
+  const step1aText = () => sectionOf(STEP_1A_HEADING).replace(/\s+/g, ' ')
+  const APPLY_INVOCATION = /run-asset scripts\/feature-split\.js --project \. -- apply --features-root "\$featuresRoot" --parent "<FTR-ID>"/
+  const DECISION_PROMPT = 'Ask the user once: `accept | edit | reject`'
+  const ACCEPT_OUTCOME = '- `accept`: the main-loop agent runs `feature-split.js apply`'
+  const REJECT_OUTCOME = '- `reject`: the pipeline continues to Gate 1 unchanged'
+  const SUCCESS_ARM_START = 'If it exits zero'
+
+  const applyAt = () => step1aText().search(APPLY_INVOCATION)
+  const acceptArm = () => {
+    const s = step1aText()
+    const start = s.indexOf(ACCEPT_OUTCOME)
+    const end = s.indexOf(REJECT_OUTCOME)
+    return start >= 0 && end > start ? s.slice(start, end) : ''
+  }
+  const successArm = () => {
+    const s = step1aText()
+    const start = s.indexOf(SUCCESS_ARM_START, applyAt())
+    return start >= 0 ? s.slice(start) : ''
+  }
+
+  test('the apply invocation is present in Step 1a with --features-root and --parent', () => {
+    expect(applyAt()).toBeGreaterThanOrEqual(0)
+  })
+
+  test('the apply invocation comes after the accept/edit/reject decision prompt', () => {
+    const decisionAt = step1aText().indexOf(DECISION_PROMPT)
+    expect(decisionAt).toBeGreaterThanOrEqual(0)
+    expect(applyAt()).toBeGreaterThan(decisionAt)
+  })
+
+  test('the apply invocation sits inside the accept outcome, not the reject outcome', () => {
+    const arm = acceptArm()
+    expect(arm).not.toBe('')
+    expect(arm).toMatch(APPLY_INVOCATION)
+  })
+
+  test('the accept outcome applies only after an explicit accept of current_proposal', () => {
+    expect(acceptArm()).toMatch(/only here, in the main loop, after an explicit accept of `current_proposal`/)
+  })
+
+  test('the features root is resolved before apply is called', () => {
+    const resolveAt = step1aText().indexOf('ai-toolkit resolve-features-root')
+    expect(resolveAt).toBeGreaterThanOrEqual(0)
+    expect(resolveAt).toBeLessThan(applyAt())
+  })
+
+  test('the parent prefix passed to --parent is the run prefix, never read from the proposal', () => {
+    expect(acceptArm()).toMatch(/`<FTR-ID>` is the parent prefix of the current run\. It is never read from the proposal\./)
+  })
+
+  test('the success arm reports the parent prefix', () => {
+    const arm = successArm()
+    expect(arm).toMatch(/`epic` \(the parent prefix\)/)
+    expect(arm).toMatch(/Created children for <FTR-ID>:/)
+  })
+
+  test('the success arm reports each created child ID and folder', () => {
+    const arm = successArm()
+    expect(arm).toMatch(/`children` \(each with `id` and `dir`, in order\)/)
+    expect(arm).toMatch(/<id> — <dir>\s+\(one line per entry in children, in order\)/)
+  })
+
+  test('the success arm stops for the parent', () => {
+    expect(successArm()).toMatch(/Then STOP for the parent\./)
+  })
+
+  test('the success arm prints no Gate 1 digest in this run', () => {
+    expect(successArm()).toMatch(/Print no Gate 1 digest in this run\./)
+  })
+})
