@@ -328,3 +328,248 @@ describe('check-size threshold boundary and precedence', () => {
     expect(hashTree(root)).toEqual(before);
   });
 });
+
+describe('check-size child grouping', () => {
+  // Thresholds of 1 make every count over its threshold; NO_LIMIT keeps a count under its threshold.
+  const GROUP_THRESHOLDS = { useCases: 1, acceptanceCriteria: 1, components: 1, estimatedPhases: 10 };
+  const NO_LIMIT = 100;
+  const groupRoots = [];
+
+  afterEach(() => {
+    for (const dir of groupRoots.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const twoDigit = (n) => String(n).padStart(2, '0');
+  const acId = (n) => `AC-${twoDigit(n)}`;
+  const ucIds = (count) => Array.from({ length: count }, (_, i) => `UC-${twoDigit(i + 1)}`);
+  // AC k relates to the use case at index (k - 1) mod ucCount, so every use case has at least one AC when acCount >= ucCount.
+  const acRowsFor = (acCount, ucs) => Array.from({ length: acCount }, (_, i) => [acId(i + 1), ucs[i % ucs.length]]);
+  const componentRowsFor = (count) => Array.from({ length: count }, (_, i) => [`src/c${i + 1}.js`, acId(i + 1)]);
+
+  // acRows: [[AC-NN, 'UC-NN, ...'], ...]; componentRows: [[Path, 'AC-NN, ...'], ...]. Returns the project root and feature folder.
+  function makeGroupingProject({ thresholds = GROUP_THRESHOLDS, minChildren = 2, useCases, acRows, componentRows }) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-size-group-'));
+    groupRoots.push(root);
+    fs.writeFileSync(path.join(root, 'feature-split.config.json'), JSON.stringify({ thresholds, minChildren }));
+    const feature = path.join(root, 'internal_docs', 'features', FEATURE_NAME);
+    fs.mkdirSync(path.join(feature, 'req', 'use-cases'), { recursive: true });
+    fs.mkdirSync(path.join(feature, 'spec'), { recursive: true });
+    for (const uc of useCases) fs.writeFileSync(path.join(feature, 'req', 'use-cases', `${uc}.md`), `# ${uc}\n`);
+    fs.writeFileSync(path.join(feature, 'req', 'index.md'), [
+      '| ID | Criterion | Related UC |', '|---|---|---|',
+      ...acRows.map(([ac, ucs]) => `| ${ac} | Criterion | ${ucs} |`),
+      '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(feature, 'spec', 'index.md'), [
+      '## 9. File Inventory', '', '### New files', '| Path | Purpose | Addresses | Domain | Spec |', '|---|---|---|---|---|',
+      ...componentRows.map(([p, addr]) => `| ${p} | purpose | ${addr} | BE | x |`), '',
+      '## 11. Build order', '', '1. Core — depends on: none', '2. Edge — depends on: 1', '',
+    ].join('\n'));
+    return { root, feature };
+  }
+
+  // Runs check-size and returns the printed output, the exit code and the parsed result, including on exit code 1.
+  function check(root, feature) {
+    try {
+      const stdout = execFileSync(process.execPath,
+        [SCRIPT, '--project', root, 'check-size', '--feature-dir', feature, '--prefix', PREFIX],
+        { encoding: 'utf8' });
+      return { stdout, code: 0, result: JSON.parse(stdout) };
+    } catch (err) {
+      return { stdout: err.stdout, code: err.status, result: JSON.parse(err.stdout) };
+    }
+  }
+
+  // The assigned text reads "Use cases: UC-01, UC-02. Components: ...". Returns the use-case IDs listed for a child.
+  const useCasesOf = (child) => child.assigned.match(/Use cases: ([^.]*)\./)[1].split(', ');
+
+  describe('child count', () => {
+    test('a use-case count above its threshold gives the ceiling of count divided by threshold', () => {
+      // 5 use cases with a threshold of 2: ceil(5 / 2) = 3 children.
+      const useCases = ucIds(5);
+      const { root, feature } = makeGroupingProject({
+        thresholds: { useCases: 2, acceptanceCriteria: NO_LIMIT, components: NO_LIMIT, estimatedPhases: 10 },
+        useCases, acRows: acRowsFor(5, useCases), componentRows: componentRowsFor(5),
+      });
+      expect(check(root, feature).result.proposal.children).toHaveLength(3);
+    });
+
+    test('the largest ratio across the over-threshold counts sets the child count', () => {
+      // Use cases: ceil(6 / 5) = 2. Acceptance criteria: ceil(9 / 2) = 5. The largest, 5, is below the cap of 6.
+      const useCases = ucIds(6);
+      const { root, feature } = makeGroupingProject({
+        thresholds: { useCases: 5, acceptanceCriteria: 2, components: NO_LIMIT, estimatedPhases: 10 },
+        useCases, acRows: acRowsFor(9, useCases), componentRows: componentRowsFor(6),
+      });
+      expect(check(root, feature).result.proposal.children).toHaveLength(5);
+    });
+
+    test('a child count below minChildren is raised to minChildren', () => {
+      // ceil(3 / 2) = 2 is below minChildren 3, so 3 children are formed (the cap is 3 use cases).
+      const useCases = ucIds(3);
+      const { root, feature } = makeGroupingProject({
+        thresholds: { useCases: 2, acceptanceCriteria: NO_LIMIT, components: NO_LIMIT, estimatedPhases: 10 },
+        minChildren: 3, useCases, acRows: acRowsFor(3, useCases), componentRows: componentRowsFor(3),
+      });
+      expect(check(root, feature).result.proposal.children).toHaveLength(3);
+    });
+
+    test('a child count above the distinct use-case count is capped at that count', () => {
+      // ceil(10 / 1) = 10 acceptance criteria would give 10 children, but only 3 use cases exist.
+      const useCases = ucIds(3);
+      const { root, feature } = makeGroupingProject({
+        thresholds: { useCases: NO_LIMIT, acceptanceCriteria: 1, components: NO_LIMIT, estimatedPhases: 10 },
+        useCases, acRows: acRowsFor(10, useCases), componentRows: componentRowsFor(3),
+      });
+      expect(check(root, feature).result.proposal.children).toHaveLength(3);
+    });
+
+    test('two use cases with minChildren 2 always give exactly two children', () => {
+      const useCases = ucIds(2);
+      const { root, feature } = makeGroupingProject({
+        useCases, acRows: acRowsFor(2, useCases), componentRows: componentRowsFor(2),
+      });
+      expect(check(root, feature).result.proposal.children).toHaveLength(2);
+    });
+  });
+
+  describe('use-case blocks', () => {
+    test('every use case appears in exactly one block, in sorted order', () => {
+      const useCases = ucIds(5);
+      const { root, feature } = makeGroupingProject({
+        thresholds: { useCases: 2, acceptanceCriteria: NO_LIMIT, components: NO_LIMIT, estimatedPhases: 10 },
+        useCases, acRows: acRowsFor(5, useCases), componentRows: componentRowsFor(5),
+      });
+      const blocks = check(root, feature).result.proposal.children.map(useCasesOf);
+      expect(blocks.flat()).toEqual(useCases);
+    });
+
+    test('the first blocks take one extra use case when the count does not divide evenly', () => {
+      // 5 use cases in 3 blocks: sizes 2, 2, 1.
+      const useCases = ucIds(5);
+      const { root, feature } = makeGroupingProject({
+        thresholds: { useCases: 2, acceptanceCriteria: NO_LIMIT, components: NO_LIMIT, estimatedPhases: 10 },
+        useCases, acRows: acRowsFor(5, useCases), componentRows: componentRowsFor(5),
+      });
+      const sizes = check(root, feature).result.proposal.children.map(c => useCasesOf(c).length);
+      expect(sizes).toEqual([2, 2, 1]);
+    });
+  });
+
+  describe('component assignment', () => {
+    const useCases = ['UC-01', 'UC-02'];
+
+    test('a component goes to the block of the lowest use case reachable through its Addresses', () => {
+      // AC-01 relates to UC-02 and AC-02 relates to UC-01, so src/mixed.js reaches UC-01 and belongs to part-1.
+      const acRows = [['AC-01', 'UC-02'], ['AC-02', 'UC-01'], ['AC-03', 'UC-02']];
+      const componentRows = [['src/mixed.js', 'AC-01, AC-02'], ['src/late.js', 'AC-03']];
+      const { root, feature } = makeGroupingProject({ useCases, acRows, componentRows });
+      const [part1] = check(root, feature).result.proposal.children;
+      expect(part1.assigned).toContain('src/mixed.js');
+    });
+
+    test('a component whose only linked use case is in the second block goes to the second block', () => {
+      const acRows = [['AC-01', 'UC-02'], ['AC-02', 'UC-01'], ['AC-03', 'UC-02']];
+      const componentRows = [['src/mixed.js', 'AC-01, AC-02'], ['src/late.js', 'AC-03']];
+      const { root, feature } = makeGroupingProject({ useCases, acRows, componentRows });
+      const [, part2] = check(root, feature).result.proposal.children;
+      expect(part2.assigned).toContain('src/late.js');
+    });
+
+    test('a component with no use-case link is placed in block 1', () => {
+      const acRows = [['AC-01', 'UC-01'], ['AC-02', 'UC-02']];
+      const componentRows = [['src/orphan.js', 'AC-99']];
+      const { root, feature } = makeGroupingProject({ useCases, acRows, componentRows });
+      const [part1] = check(root, feature).result.proposal.children;
+      expect(part1.assigned).toContain('src/orphan.js');
+    });
+
+    test('a component with no use-case link is not placed in block 2', () => {
+      const acRows = [['AC-01', 'UC-01'], ['AC-02', 'UC-02']];
+      const componentRows = [['src/orphan.js', 'AC-99']];
+      const { root, feature } = makeGroupingProject({ useCases, acRows, componentRows });
+      const [, part2] = check(root, feature).result.proposal.children;
+      expect(part2.assigned).not.toContain('src/orphan.js');
+    });
+
+    test('a component with no use-case link carries a no use-case link note', () => {
+      const acRows = [['AC-01', 'UC-01'], ['AC-02', 'UC-02']];
+      const componentRows = [['src/orphan.js', 'AC-99']];
+      const { root, feature } = makeGroupingProject({ useCases, acRows, componentRows });
+      const [part1] = check(root, feature).result.proposal.children;
+      expect(part1.assigned).toMatch(/no use-case link/i);
+    });
+  });
+
+  describe('child fields', () => {
+    const acRows = [['AC-01', 'UC-01'], ['AC-02', 'UC-02']];
+    const componentRows = [['src/x.js', 'AC-01'], ['src/y.js', 'AC-02']];
+
+    test('children are named part-1 and part-2 in order', () => {
+      const { root, feature } = makeGroupingProject({ useCases: ['UC-01', 'UC-02'], acRows, componentRows });
+      const [p1, p2] = check(root, feature).result.proposal.children;
+      expect([p1.name, p2.name]).toEqual(['part-1', 'part-2']);
+    });
+
+    test('a child purpose names the use-case range of its block', () => {
+      const { root, feature } = makeGroupingProject({ useCases: ['UC-01', 'UC-02'], acRows, componentRows });
+      const [p1] = check(root, feature).result.proposal.children;
+      expect(p1.purpose).toBe('Use cases UC-01..UC-01 and their components');
+    });
+
+    test('a child summary equals its purpose', () => {
+      const { root, feature } = makeGroupingProject({ useCases: ['UC-01', 'UC-02'], acRows, componentRows });
+      const [p1] = check(root, feature).result.proposal.children;
+      expect(p1.summary).toBe(p1.purpose);
+    });
+
+    test('a child assigned field is text that lists its use cases and components', () => {
+      const { root, feature } = makeGroupingProject({ useCases: ['UC-01', 'UC-02'], acRows, componentRows });
+      const [p1] = check(root, feature).result.proposal.children;
+      expect(p1.assigned).toBe('Use cases: UC-01. Components: src/x.js.');
+    });
+  });
+
+  describe('unavailable when use cases are fewer than minChildren', () => {
+    // Threshold 0 makes useCases over threshold, so the proposal path runs and then fails on the single use case.
+    const OVER_ON_USE_CASES = { useCases: 0, acceptanceCriteria: 1, components: 1, estimatedPhases: 10 };
+    const build = () => makeGroupingProject({
+      thresholds: OVER_ON_USE_CASES, useCases: ['UC-01'],
+      acRows: [['AC-01', 'UC-01']], componentRows: [['src/x.js', 'AC-01']],
+    });
+
+    test('reports status unavailable', () => {
+      const { root, feature } = build();
+      expect(check(root, feature).result.status).toBe('unavailable');
+    });
+
+    test('exits with code 1', () => {
+      const { root, feature } = build();
+      expect(check(root, feature).code).toBe(1);
+    });
+
+    test('carries no proposal', () => {
+      const { root, feature } = build();
+      expect(check(root, feature).result).not.toHaveProperty('proposal');
+    });
+
+    test('names minChildren as the reason', () => {
+      const { root, feature } = build();
+      const entry = check(root, feature).result.unavailable.find(u => u.count === 'proposal');
+      expect(entry.reason).toMatch(/minChildren/);
+    });
+  });
+
+  describe('repeat run', () => {
+    test('a second run over the same project prints identical output', () => {
+      const useCases = ucIds(5);
+      const { root, feature } = makeGroupingProject({
+        thresholds: { useCases: 2, acceptanceCriteria: NO_LIMIT, components: NO_LIMIT, estimatedPhases: 10 },
+        useCases, acRows: acRowsFor(5, useCases), componentRows: componentRowsFor(5),
+      });
+      const first = check(root, feature);
+      const second = check(root, feature);
+      expect(second.stdout).toBe(first.stdout);
+    });
+  });
+});
