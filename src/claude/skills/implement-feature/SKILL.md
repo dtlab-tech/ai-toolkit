@@ -175,6 +175,16 @@ Outcomes of the decision (split-proposed only):
      ```
      - `<FTR-ID>` is the parent prefix of the current run. It is never read from the proposal.
      - Stdin carries only the confirmed proposal JSON. It carries no paths and no prompt text.
+  3. If the command exits non-zero: print its error and STOP. Do not reach Gate 1.
+  4. If it exits zero, it prints one JSON line with `epic` (the parent prefix), `children` (each with
+     `id` and `dir`, in order) and, only when present, `warnings`. Report the created children:
+     ```
+     Created children for <FTR-ID>:
+       <id> — <dir>          (one line per entry in children, in order)
+     ```
+     Print each entry in `warnings` after the list, one line each.
+     Then STOP for the parent. Print no Gate 1 digest in this run. Do not edit, rename or rewrite the
+     parent's documents after apply; they are what apply wrote.
 - `reject`: the pipeline continues to Gate 1 unchanged and stores nothing.
 - Nothing is created before an explicit accept. The proposal exists only in the conversation.
 - An unanswered proposal stores nothing. Silence is neither accept nor reject.
