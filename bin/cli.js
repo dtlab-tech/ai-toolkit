@@ -2963,6 +2963,11 @@ async function handleExecutorCommand(argv) {
       const result = await taskExecutor.diagnose({ project: projectDir, runId: runId });
       emitSuccess(result);
 
+    } else if (subcommand === 'release-lease') {
+      // Releases the lease of a run whose process is confirmed dead; refuses a live or unverifiable owner.
+      const result = await taskExecutor.releaseLease({ project: projectDir });
+      emitSuccess(result);
+
     } else if (subcommand === 'report') {
       // Writes <PREFIX>-Token-Estimate.md and <PREFIX>-executor-ledger.json into the feature folder from the
       // evidence of every run of the feature (the evidence lives in .git and is otherwise never committed).

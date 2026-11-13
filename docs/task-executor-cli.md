@@ -448,3 +448,13 @@ before `start` will run on them at all.
 ## A blocked task leaves the worktree clean
 
 When a task ends `blocked` (retry policy exhausted) the executor saves what the task changed under `<git common dir>/ai-toolkit/execution/evidence/<runId>/blocked-<taskId>/` (`blocked-task.patch` for tracked files, `new-files/` for new ones) and restores those paths to `HEAD`, so the next task does not take the leftovers for pre-existing changes. The task's state records `blockedWork` (`saved`, `saveDir`, `discarded`, `kept`). A path that was already modified before the task started is never touched and is listed in `kept`. To keep a blocked task's work, apply the saved patch by hand after the run.
+
+### `release-lease`
+
+```
+ai-toolkit executor release-lease --project <path>
+```
+
+Releases the repo-wide lease of a run whose process is **confirmed dead** (crash, closed terminal, killed session), so `executor start` no longer fails with `LEASE_HELD`. Same safety as the executor's own lease reclaim: a live owner is refused (`LEASE_STILL_LIVE`, exit 3) and so is an owner whose liveness cannot be verified (`LEASE_LIVENESS_UNKNOWN`, exit 3: other host, not Windows, no recorded start time). Age alone is never a reason to release.
+
+Result: `{ released, runId, runState, reason }`. `runState` is the dead run's recorded status (`runStatus` is deliberately not used, so the command never exits 8). The run's state is not modified: use `reconcile`/`resume`, or start again and the finished tasks are carried over. When `start` fails with `LEASE_HELD`, its message names this command.

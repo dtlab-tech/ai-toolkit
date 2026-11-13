@@ -172,6 +172,20 @@ describe('executor CLI routing', () => {
       expect(process.exitCode).toBe(0);
     });
 
+    test('release-lease routes to releaseLease() with the project; its result never carries runStatus, so it exits 0', async () => {
+      taskExecutor.releaseLease.mockResolvedValue({ released: true, runId: 'r1', runState: 'paused', reason: 'dead' });
+      await handleExecutorCommand(['release-lease', '--project', REPO_ROOT]);
+      expect(taskExecutor.releaseLease).toHaveBeenCalledWith({ project: REPO_ROOT });
+      expect(process.exitCode).toBe(0);
+      expect(stdoutJSON()).toEqual({ released: true, runId: 'r1', runState: 'paused', reason: 'dead' });
+    });
+
+    test('release-lease on a live owner surfaces LEASE_STILL_LIVE as exit 3', async () => {
+      taskExecutor.releaseLease.mockRejectedValue(makeErr('LEASE_STILL_LIVE'));
+      await handleExecutorCommand(['release-lease', '--project', REPO_ROOT]);
+      expect(process.exitCode).toBe(3);
+    });
+
     test('stop routes to stop() with project/runId/mode defaulting to graceful', async () => {
       taskExecutor.stop.mockResolvedValue({ protocolVersion: 1, runId: 'r1', requestAccepted: true, mode: 'graceful' });
       await handleExecutorCommand(['stop', '--project', REPO_ROOT, '--run-id', 'r1']);
