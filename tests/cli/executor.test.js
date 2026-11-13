@@ -147,6 +147,22 @@ describe('executor CLI routing', () => {
       expect(taskExecutor.execute).not.toHaveBeenCalled();
     });
 
+    test('start forwards --phase-review-fail and --review-override, and rejects an invalid --phase-review-fail with exit 2', async () => {
+      taskExecutor.execute.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md',
+        '--phase-review-fail', 'block', '--review-override', 'US-01-TASK-BE-03, US-02-TASK-BE-02']);
+      const callArgs = taskExecutor.execute.mock.calls[0][0];
+      expect(callArgs.phaseReviewFail).toBe('block');
+      expect(callArgs.reviewOverrides).toEqual(['US-01-TASK-BE-03', 'US-02-TASK-BE-02']);
+      expect(process.exitCode).toBe(0);
+
+      taskExecutor.execute.mockClear();
+      process.exitCode = undefined;
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md', '--phase-review-fail', 'ignore']);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.execute).not.toHaveBeenCalled();
+    });
+
     test('start ignores an unrecognized --force flag (never special-cased, never forwarded)', async () => {
       taskExecutor.execute.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
       await handleExecutorCommand([
