@@ -340,6 +340,8 @@ describe('spend cap and attempt feedback helpers', () => {
   });
 });
 
+const SATISFIED_AT = 'abcdef0123456789abcdef0123456789abcdef01';
+
 describe('the diff handed to a phase review shows what really happened in the phase', () => {
   let tmp, repo;
   const git = (args) => gitCmd(repo, args);
@@ -365,7 +367,7 @@ describe('the diff handed to a phase review shows what really happened in the ph
     Object.keys(taskShas).forEach(id => {
       state = state.addTask(id, { dependencies: [] });
       if (taskShas[id]) state = state.addAttempt(id, { stage: 'committed' }).updateAttempt(id, 1, { originalSha: taskShas[id] });
-      state = state.setTaskStatus(id, taskShas[id] ? 'checkpointed' : 'skipped');
+      state = state.setTaskStatus(id, taskShas[id] ? 'checkpointed' : 'skipped', taskShas[id] ? {} : { satisfiedAtSha: SATISFIED_AT });
     });
     return state;
   }
@@ -386,6 +388,7 @@ describe('the diff handed to a phase review shows what really happened in the ph
     expect(diff).toContain('+fixed by hand');
     expect(diff).toContain('=== Task T2: no commit of its own (status skipped) ===');
     expect(diff).toContain('already part of the tree');
+    expect(diff).toContain('with the tree at commit abcdef012345');   // the commit recorded when it was found satisfied
     expect(diff).toContain('=== Task T3 (current attempt, not yet committed) ===');
   });
 

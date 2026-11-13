@@ -219,6 +219,9 @@ describe('checkpoint: no-op completion when changedPaths is empty', () => {
     const state = store.readState(executionRoot, result.runId);
     expect(state.tasks[TASK_ID].attempts[0].originalSha).toBeNull();
     expect(state.tasks[TASK_ID].attempts[0].integratedSha).toBeNull();
+    // the skipped task records the commit the tree was at, so a phase review and an audit can point at it
+    expect(state.tasks[TASK_ID].satisfiedAtSha).toBe(gitCmd(repoDir, ['rev-parse', 'HEAD']).trim());
+    expect(state.tasks[TASK_ID].reason).toBe('no-changes-to-commit');
   });
 
   // Bug 5 (found on the same real run, right after Bug 4's fix shipped):
@@ -262,5 +265,15 @@ describe('checkpoint: no-op completion when changedPaths is empty', () => {
     expect(result.runStatus).toBe('completed');
     expect(result.tasks).toContainEqual({ taskId: TASK_1, status: 'skipped' });
     expect(result.tasks).toContainEqual({ taskId: TASK_2, status: 'skipped' });
+
+    // skipped before any dispatch: the commit it was found satisfied at is recorded on each task
+    const commonDirOut = gitCmd(repoDir, ['rev-parse', '--git-common-dir']).trim();
+    const executionRoot = path.join(path.resolve(repoDir, commonDirOut), 'ai-toolkit', 'execution');
+    const state = store.readState(executionRoot, result.runId);
+    const head = gitCmd(repoDir, ['rev-parse', 'HEAD']).trim();
+    [TASK_1, TASK_2].forEach((id) => {
+      expect(state.tasks[id].reason).toBe('already-satisfied-pre-dispatch');
+      expect(state.tasks[id].satisfiedAtSha).toBe(head);
+    });
   });
 });
