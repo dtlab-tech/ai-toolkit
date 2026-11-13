@@ -444,3 +444,7 @@ process-supervision evidence (tree-kill via `taskkill`, tag-based liveness scann
 depends on is qualified for Windows only (US-08-TASK-BE-05). There is no implicit
 cross-platform guarantee — other platforms require their own dedicated qualification proof
 before `start` will run on them at all.
+
+## A blocked task leaves the worktree clean
+
+When a task ends `blocked` (retry policy exhausted) the executor saves what the task changed under `<git common dir>/ai-toolkit/execution/evidence/<runId>/blocked-<taskId>/` (`blocked-task.patch` for tracked files, `new-files/` for new ones) and restores those paths to `HEAD`, so the next task does not take the leftovers for pre-existing changes. The task's state records `blockedWork` (`saved`, `saveDir`, `discarded`, `kept`). A path that was already modified before the task started is never touched and is listed in `kept`. To keep a blocked task's work, apply the saved patch by hand after the run.
