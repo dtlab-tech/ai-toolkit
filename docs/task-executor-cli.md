@@ -153,9 +153,12 @@ Backs `lib/task-executor/index.js`'s `status()`. Returns:
   "runStatus": "running",
   "taskCounts": { "pending": 0, "active": 0, "checkpointed": 0, "integrated": 0, "skipped": 0, "blocked": 0 },
   "totalTokens": null,
-  "totalCostUsd": null
+  "totalCostUsd": null,
+  "cost": null
 }
 ```
+
+`totalCostUsd` is the cost the Claude CLI **reported for each call** of the run (the per-call evidence the executor keeps under `<git common dir>/ai-toolkit/execution/evidence/<runId>/`), so it is available while the run is going and needs no pricing file. `cost` details it: `{ source, calls, measuredCalls, unmeasuredCalls, implementationUsd, reviewUsd }`, with `source: "evidence"`. A call that returned no usable result counts in `unmeasuredCalls` and adds nothing: it is never turned into a measured zero. With no measured call at all, `totalCostUsd` falls back to the ledger estimate described below (`source: "ledger"`) and is `null` when that is unavailable too; `cost` is `null` while the run has no evidence yet.
 
 `taskCounts` is derived straight from the persisted `state.json` (`store.readState`) — never
 mutates it. `totalTokens` sums every numeric `phase_delta_tokens` entry in the run's own
