@@ -47,6 +47,7 @@ const ERRORS = {
   INVALID_TEXT_FIELD_CHARS:     'invalid_text_field_chars',      // check 22
   EMPTY_PHASE:                  'empty_phase',                   // check 23
   NON_DISCRIMINATING_VERIFICATION: 'non_discriminating_verification', // check 24
+  VERIFICATION_MAY_BE_SATISFIED_EARLIER: 'verification_may_be_satisfied_earlier', // check 25 — non-blocking warning
 }
 
 // ── Check 24: a task must have a verification command that can fail before its deliverable exists ──
@@ -116,6 +117,66 @@ function checkVerificationDiscriminates(phases) {
     }
   }
   return errors
+}
+
+// ── Check 25 (warning): the verification may already pass when the task starts ──────────────────
+//
+// A command that fails on the baseline tree can still pass when the task starts, because an EARLIER
+// task creates the very file it checks (a real case: a test task whose `test -f` target was produced
+// by the task before it, so the executor skipped it). Whether that happens depends on what the earlier
+// tasks really write, which only the run knows; statically the best signal is a path in the command
+// that an earlier task's outcome names. Heuristic and non-blocking: the author may have good reason.
+const _PATH_TOKEN = /[A-Za-z0-9_.\-]+(?:[\\/][A-Za-z0-9_.\-]+)+|[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,5}\b/g
+
+function _pathTokens(text) {
+  const found = new Set()
+  for (const m of String(text || '').matchAll(_PATH_TOKEN)) {
+    const token = m[0].replace(/\\/g, '/').replace(/^\.\//, '').replace(/[.,;:]+$/, '').toLowerCase()
+    if (token.length >= 3) found.add(token)
+  }
+  return found
+}
+
+function _samePath(a, b) {
+  return a === b || a.endsWith('/' + b) || b.endsWith('/' + a)
+}
+
+// Phases in document order, each task's own tasks in order: "earlier" = anything before it in that order.
+function checkVerificationMaySatisfyEarly(phases) {
+  const warnings = []
+  const earlier = []   // { taskId, paths:Set } of the tasks seen so far
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      const commands = task.verification && Array.isArray(task.verification.commands) ? task.verification.commands : []
+      const discriminating = commands.filter(function (c) { return !isNonDiscriminatingCommand(c) })
+      if (discriminating.length > 0 && earlier.length > 0) {
+        const overlaps = discriminating.map(function (command) {
+          const tokens = _pathTokens(command)
+          for (const prior of earlier) {
+            for (const p of prior.paths) {
+              for (const t of tokens) {
+                if (_samePath(t, p)) return { command, path: t, earlierTaskId: prior.taskId }
+              }
+            }
+          }
+          return null
+        })
+        // Every discriminating command points at something an earlier task already produces.
+        if (overlaps.every(Boolean)) {
+          warnings.push({
+            category: ERRORS.VERIFICATION_MAY_BE_SATISFIED_EARLIER,
+            severity: 'warning',
+            taskId: task.id,
+            field: 'verification.commands',
+            message: `Task "${task.id}": every discriminating verification command checks a path that an earlier task's outcome already names (${overlaps.map(function (o) { return `${o.path} by ${o.earlierTaskId}` }).join('; ')}), so it may already pass when this task starts and the executor would skip it. Check the command can only pass once this task's own deliverable exists.`,
+            details: { taskId: task.id, overlaps },
+          })
+        }
+      }
+      earlier.push({ taskId: task.id, paths: _pathTokens([task.title, task.outcome].filter(Boolean).join(' ')) })
+    }
+  }
+  return warnings
 }
 
 function _tasksOf(phase) {
@@ -823,4 +884,5 @@ module.exports = {
   checkAcCoverage,
   isNonDiscriminatingCommand,
   checkVerificationDiscriminates,
+  checkVerificationMaySatisfyEarly,
 }

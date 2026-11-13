@@ -126,5 +126,60 @@ describe('the writer is told the rule', () => {
   test('the task agent must produce a command that fails until the deliverable exists', () => {
     expect(agent).toMatch(/At least one verification command must fail until the task's deliverable exists/);
     expect(agent).toMatch(/non_discriminating_verification/);
+    expect(agent).toMatch(/verification_may_be_satisfied_earlier/);
+  });
+});
+
+describe('check 25 (warning): the verification may already pass when the task starts', () => {
+  const { checkVerificationMaySatisfyEarly, ERRORS: E } = graph;
+  const task = (id, outcome, commands) => ({ id, title: id, outcome, verification: { commands } });
+  const run = (...tasks) => checkVerificationMaySatisfyEarly([{ id: 'US-01', tasks }]);
+
+  const parser = task('A', 'Creates src/parser.js and tests/parser.test.js', ['test -f src/parser.js']);
+
+  test('a command that checks a path an earlier task\'s outcome names is flagged, with both task ids', () => {
+    const warnings = run(parser, task('B', 'Adds the parser unit tests', ['npx jest tests/parser.test.js']));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ category: E.VERIFICATION_MAY_BE_SATISFIED_EARLIER, severity: 'warning', taskId: 'B' });
+    expect(warnings[0].details.overlaps).toEqual([
+      { command: 'npx jest tests/parser.test.js', path: 'tests/parser.test.js', earlierTaskId: 'A' },
+    ]);
+    expect(warnings[0].message).toMatch(/earlier task/);
+  });
+
+  test('one command that points at the task\'s own deliverable is enough: no warning', () => {
+    expect(run(parser, task('C', 'Creates src/other.js', ['test -f src/parser.js', 'test -f src/other.js']))).toEqual([]);
+  });
+
+  test('generic commands do not count as discriminating, so they are never the overlap', () => {
+    expect(run(parser, task('C', 'Creates src/other.js', ['npm test', 'test -f src/other.js']))).toEqual([]);
+  });
+
+  test('a path named only by the task itself, or by a LATER task, is not flagged', () => {
+    expect(run(task('A', 'Creates src/a.js', ['test -f src/a.js']), task('B', 'Creates src/b.js', ['test -f src/b.js']))).toEqual([]);
+    expect(run(task('A', 'Early', ['test -f src/later.js']), task('B', 'Creates src/later.js', ['test -f src/later.js']))).toEqual([]);
+  });
+
+  test('path forms are compared loosely: backslashes, ./ prefix, case and a shorter suffix', () => {
+    const w = run(task('A', 'Creates src\\Parser.js', ['test -f src/Parser.js']), task('B', 'More', ['test -f ./src/parser.js']));
+    expect(w).toHaveLength(1);
+    expect(run(task('A', 'Creates lib/core/util.js', ['test -f lib/core/util.js']), task('B', 'More', ['test -f core/util.js']))).toHaveLength(1);
+  });
+
+  test('wb-validate.js reports it as a warning and the work breakdown stays valid', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-check25-'));
+    try {
+      const wb = JSON.parse(fs.readFileSync(VALID_FIXTURE, 'utf8'));
+      const tasks = wb.phases[0].tasks;
+      tasks[0].outcome = 'Creates scripts/shared.js';
+      tasks[0].verification.commands = ['test -f scripts/shared.js'];
+      tasks[1].verification.commands = ['test -f scripts/shared.js'];
+      const file = path.join(dir, 'wb.json');
+      fs.writeFileSync(file, JSON.stringify(wb));
+      const res = spawnSync(process.execPath, [path.join(SCRIPTS, 'wb-validate.js'), file], { encoding: 'utf8' });
+      const report = JSON.parse(res.stdout);
+      expect(report.errors.map((e) => e.category)).not.toContain('verification_may_be_satisfied_earlier');
+      expect(report.warnings.map((e) => e.category)).toContain('verification_may_be_satisfied_earlier');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 });

@@ -100,6 +100,8 @@ may follow the discriminating command, never replace it. A discriminating comman
 task creates or changes: `test -f <new file>`, a targeted test filter for a test this task writes
 (`npx jest tests/<new>.test.js`), `grep -q <identifier> <file>`, `node --check <new file>`. The work
 breakdown validator rejects a task with no such command (`non_discriminating_verification`).
+The command must also fail until **this** task has run: a path that an earlier task in the sibling list already creates does
+not qualify, because it passes when this task starts (the validator warns: `verification_may_be_satisfied_earlier`).
 
 **Directory-only tasks must never verify with `test -d` alone.** Git does not track empty
 directories — `test -d <path>` only confirms the directory exists in the *current* working tree,

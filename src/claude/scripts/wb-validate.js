@@ -437,6 +437,10 @@ report.errors.push(...graphChecks.checkAcCoverage({ phases }, acMap, seenTaskIds
 
 report.errors.push(...graphChecks.checkVerificationDiscriminates(phases))
 
+// ── Check 25 (warning): a verification command may already pass when its task starts ──
+
+report.warnings.push(...graphChecks.checkVerificationMaySatisfyEarly(phases))
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {
