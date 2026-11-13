@@ -195,3 +195,66 @@ describe('ownership: reclaimLease', () => {
     expect(readLease(executionRoot)).toEqual(reclaimed);
   }, 20000);
 });
+
+describe('ownership: releaseDeadLease (the operator\'s way out of a lease left by a dead run)', () => {
+  const { releaseDeadLease } = require('../../lib/task-executor/ownership');
+  let tmpDir;
+  let executionRoot;
+  const spawnedPids = [];
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ownership-release-dead-test-'));
+    executionRoot = path.join(tmpDir, 'ai-toolkit', 'execution');
+  });
+
+  afterEach(async () => {
+    while (spawnedPids.length) {
+      const pid = spawnedPids.pop();
+      if (isAlive(pid)) await killAndWait(pid);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('no lease: nothing is released and nothing fails', () => {
+    expect(releaseDeadLease(executionRoot)).toEqual({ released: false, lease: null, reason: 'no lease is held' });
+  });
+
+  test('refuses an owner whose liveness cannot be confirmed (host mismatch) and leaves the lease untouched', () => {
+    const original = acquireLease(executionRoot, 'run-remote', { host: 'some-other-host' });
+    let caught;
+    try { releaseDeadLease(executionRoot); } catch (err) { caught = err; }
+    expect(caught.code).toBe('LEASE_LIVENESS_UNKNOWN');
+    expect(readLease(executionRoot)).toEqual(original);
+  });
+
+  itWindowsOnly('refuses a live owner (the current process) and leaves the lease untouched', () => {
+    const original = acquireLease(executionRoot, 'run-live');
+    let caught;
+    try { releaseDeadLease(executionRoot); } catch (err) { caught = err; }
+    expect(caught.code).toBe('LEASE_STILL_LIVE');
+    expect(readLease(executionRoot)).toEqual(original);
+  });
+
+  itWindowsOnly('releases the lease once the recorded process is confirmed terminated, so a new run can acquire it', async () => {
+    const child = spawn(process.execPath, ['-e', 'setTimeout(()=>{}, 120000)'], { stdio: 'ignore' });
+    spawnedPids.push(child.pid);
+    await sleep(300);
+    acquireLease(executionRoot, 'run-dead', { pid: child.pid });
+    await killAndWait(child.pid);
+
+    const res = releaseDeadLease(executionRoot);
+
+    expect(res.released).toBe(true);
+    expect(res.lease.runId).toBe('run-dead');
+    expect(readLease(executionRoot)).toBeNull();
+    expect(acquireLease(executionRoot, 'run-next').runId).toBe('run-next');
+  }, 20000);
+
+  test('a LEASE_HELD error tells the operator how to release a dead run\'s lease', () => {
+    acquireLease(executionRoot, 'run-a');
+    let caught;
+    try { acquireLease(executionRoot, 'run-b'); } catch (err) { caught = err; }
+    expect(caught.code).toBe('LEASE_HELD');
+    expect(caught.message).toMatch(/ai-toolkit executor release-lease --project/);
+  });
+});

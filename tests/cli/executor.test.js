@@ -147,6 +147,22 @@ describe('executor CLI routing', () => {
       expect(taskExecutor.execute).not.toHaveBeenCalled();
     });
 
+    test('start forwards --phase-review-fail and --review-override, and rejects an invalid --phase-review-fail with exit 2', async () => {
+      taskExecutor.execute.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md',
+        '--phase-review-fail', 'block', '--review-override', 'US-01-TASK-BE-03, US-02-TASK-BE-02']);
+      const callArgs = taskExecutor.execute.mock.calls[0][0];
+      expect(callArgs.phaseReviewFail).toBe('block');
+      expect(callArgs.reviewOverrides).toEqual(['US-01-TASK-BE-03', 'US-02-TASK-BE-02']);
+      expect(process.exitCode).toBe(0);
+
+      taskExecutor.execute.mockClear();
+      process.exitCode = undefined;
+      await handleExecutorCommand(['start', '--project', REPO_ROOT, '--feature', 'x/feature.md', '--phase-review-fail', 'ignore']);
+      expect(process.exitCode).toBe(2);
+      expect(taskExecutor.execute).not.toHaveBeenCalled();
+    });
+
     test('start ignores an unrecognized --force flag (never special-cased, never forwarded)', async () => {
       taskExecutor.execute.mockResolvedValue({ protocolVersion: 1, runId: 'r1', runStatus: 'completed', tasks: [] });
       await handleExecutorCommand([
@@ -170,6 +186,20 @@ describe('executor CLI routing', () => {
       await handleExecutorCommand(['diagnose', '--project', REPO_ROOT, '--run-id', 'r1']);
       expect(taskExecutor.diagnose).toHaveBeenCalledWith({ project: REPO_ROOT, runId: 'r1' });
       expect(process.exitCode).toBe(0);
+    });
+
+    test('release-lease routes to releaseLease() with the project; its result never carries runStatus, so it exits 0', async () => {
+      taskExecutor.releaseLease.mockResolvedValue({ released: true, runId: 'r1', runState: 'paused', reason: 'dead' });
+      await handleExecutorCommand(['release-lease', '--project', REPO_ROOT]);
+      expect(taskExecutor.releaseLease).toHaveBeenCalledWith({ project: REPO_ROOT });
+      expect(process.exitCode).toBe(0);
+      expect(stdoutJSON()).toEqual({ released: true, runId: 'r1', runState: 'paused', reason: 'dead' });
+    });
+
+    test('release-lease on a live owner surfaces LEASE_STILL_LIVE as exit 3', async () => {
+      taskExecutor.releaseLease.mockRejectedValue(makeErr('LEASE_STILL_LIVE'));
+      await handleExecutorCommand(['release-lease', '--project', REPO_ROOT]);
+      expect(process.exitCode).toBe(3);
     });
 
     test('stop routes to stop() with project/runId/mode defaulting to graceful', async () => {

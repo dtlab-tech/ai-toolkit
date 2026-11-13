@@ -674,9 +674,25 @@ return c.run(meta.name, featureDir, prefix, async () => {
       const techSpecExcerpt = hasSpec
         ? buildTaskTechSpecExcerpt(components, task, specDir, c.read(specIndexPath))
         : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text
-      const detail = await c.worker('gaia.agent.planner.work-breakdown-task',
-        buildTaskPrompt(index, taskId, techSpecExcerpt, taskTemplate, conventions), { label: `work-breakdown-task:${taskId}` })
+      const taskPrompt = buildTaskPrompt(index, taskId, techSpecExcerpt, taskTemplate, conventions)
+      const detail = await c.worker('gaia.agent.planner.work-breakdown-task', taskPrompt, { label: `work-breakdown-task:${taskId}` })
       c.writeOutput(detailPath, detail)
+      // wb-validate.js check 24, early: a task whose verification commands all pass on the tree as it is
+      // would be skipped by the executor as "already satisfied". Repair it once now, with the reason,
+      // rather than fail the whole structural validation after every task has been generated.
+      const checkTask = () => JSON.parse(c.command(['run-asset', 'scripts/wb-task-check.js', '--project', c.root,
+        '--', detailPath, taskId], [0, 1]).stdout)
+      let taskCheck = checkTask()
+      if (!taskCheck.valid) {
+        const repaired = await c.worker('gaia.agent.planner.work-breakdown-task',
+          taskPrompt + '\n\nYour previous answer was rejected: ' + taskCheck.errors[0].message,
+          { label: `work-breakdown-task:${taskId}:verification-repair` })
+        c.writeOutput(detailPath, repaired)
+        taskCheck = checkTask()
+        if (!taskCheck.valid) {
+          throw new Error(`Task ${taskId} has no verification command that can fail before its deliverable exists, even after one repair: ${taskCheck.commands.join(' ; ')}`)
+        }
+      }
       task.status = 'generated'
       c.writeOutput(indexPath, JSON.stringify(index, null, 2)) // persist status after each task
     }

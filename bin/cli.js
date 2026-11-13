@@ -2938,6 +2938,11 @@ async function handleExecutorCommand(argv) {
       if (agentBudgetUsdRaw !== undefined && !(Number(agentBudgetUsdRaw) > 0)) {
         usageError('executor start --agent-budget-usd must be a positive number'); return;
       }
+      const phaseReviewFailRaw = getFlag('--phase-review-fail');
+      if (phaseReviewFailRaw !== undefined && !['retry', 'block'].includes(phaseReviewFailRaw)) {
+        usageError('executor start --phase-review-fail must be "retry" or "block"'); return;
+      }
+      const reviewOverrideRaw = getFlag('--review-override');
       const result = await taskExecutor.execute({
         project: projectDir,
         feature: feature,
@@ -2946,6 +2951,8 @@ async function handleExecutorCommand(argv) {
         taskTimeoutMs: taskTimeoutMsRaw === undefined ? undefined : Number(taskTimeoutMsRaw),
         agentBudgetUsd: agentBudgetUsdRaw === undefined ? undefined : Number(agentBudgetUsdRaw),
         reviewScope: reviewScopeRaw,
+        phaseReviewFail: phaseReviewFailRaw,
+        reviewOverrides: reviewOverrideRaw === undefined ? undefined : reviewOverrideRaw.split(',').map(function (s) { return s.trim(); }).filter(Boolean),
         fromReplanRunId: getFlag('--from-replan-run-id'),
         carryOver: remaining.includes('--no-carry-over') ? false : undefined,
       });
@@ -2961,6 +2968,11 @@ async function handleExecutorCommand(argv) {
       const runId = getFlag('--run-id');
       if (!runId) { usageError('executor diagnose requires --run-id'); return; }
       const result = await taskExecutor.diagnose({ project: projectDir, runId: runId });
+      emitSuccess(result);
+
+    } else if (subcommand === 'release-lease') {
+      // Releases the lease of a run whose process is confirmed dead; refuses a live or unverifiable owner.
+      const result = await taskExecutor.releaseLease({ project: projectDir });
       emitSuccess(result);
 
     } else if (subcommand === 'report') {

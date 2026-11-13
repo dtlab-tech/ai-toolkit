@@ -191,4 +191,69 @@ describe('status', () => {
       code: 'PRICING_CORRUPTED',
     });
   });
+
+  describe('cost measured from the evidence of the run itself', () => {
+    function writeCall(name, kind, taskId, costUsd) {
+      const dir = path.join(executionRoot, 'evidence', RUN_ID);
+      fs.mkdirSync(dir, { recursive: true });
+      const record = { invocation: { dispatchKind: kind, taskId: taskId, attemptNumber: 1 }, response: { durationMs: 10 } };
+      if (costUsd !== null) record.response.result = { modelUsage: { 'claude-haiku': { costUSD: costUsd, inputTokens: 10, outputTokens: 5 } } };
+      fs.writeFileSync(path.join(dir, name + '.json'), JSON.stringify(record));
+    }
+    function startRun() {
+      store.writeState(executionRoot, RUN_ID, new store.State(baseStateFields()).addTask('T-01', { dependencies: [] }));
+    }
+
+    test('totalCostUsd is the cost the CLI reported, even though every ledger entry has model null and no pricing file exists', async () => {
+      startRun();
+      writeLedger([{ agent: 'a', phase: 'implementation', model: null, phase_delta_tokens: 1000 }]);
+      writeCall('c1', 'implementation', 'T-01', 0.25);
+      writeCall('c2', 'review', 'T-01', 0.1);
+
+      const result = await status({ project: repoDir, runId: RUN_ID });
+
+      expect(result.totalCostUsd).toBeCloseTo(0.35, 6);
+      expect(result.cost).toEqual({
+        source: 'evidence', calls: 2, measuredCalls: 2, unmeasuredCalls: 0, implementationUsd: 0.25, reviewUsd: 0.1,
+      });
+    });
+
+    test('a call without a usable result is counted but adds no cost, never a measured zero', async () => {
+      startRun();
+      writeCall('c1', 'implementation', 'T-01', 0.2);
+      writeCall('c2', 'implementation', 'T-01', null);
+
+      const result = await status({ project: repoDir, runId: RUN_ID });
+
+      expect(result.totalCostUsd).toBeCloseTo(0.2, 6);
+      expect(result.cost.calls).toBe(2);
+      expect(result.cost.unmeasuredCalls).toBe(1);
+    });
+
+    test('only unmeasured calls: the cost stays unavailable (null), reported from the ledger source', async () => {
+      startRun();
+      writeCall('c1', 'implementation', 'T-01', null);
+
+      const result = await status({ project: repoDir, runId: RUN_ID });
+
+      expect(result.totalCostUsd).toBeNull();
+      expect(result.cost.source).toBe('ledger');
+      expect(result.cost.unmeasuredCalls).toBe(1);
+    });
+
+    test('the evidence of another run is never counted', async () => {
+      startRun();
+      const other = path.join(executionRoot, 'evidence', 'some-other-run');
+      fs.mkdirSync(other, { recursive: true });
+      fs.writeFileSync(path.join(other, 'x.json'), JSON.stringify({
+        invocation: { dispatchKind: 'implementation', taskId: 'T-09' },
+        response: { result: { modelUsage: { m: { costUSD: 9 } } } },
+      }));
+
+      const result = await status({ project: repoDir, runId: RUN_ID });
+
+      expect(result.totalCostUsd).toBeNull();
+      expect(result.cost).toBeNull();
+    });
+  });
 });

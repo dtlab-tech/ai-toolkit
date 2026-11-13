@@ -91,6 +91,18 @@ Supply one or more shell commands in `verification.commands` that an agent can r
 - File existence: `test -f <path>`
 - Lint: `npx eslint <file>`
 
+**At least one verification command must fail until the task's deliverable exists.** The executor
+runs a task's verification commands before dispatching it and skips the task as "already satisfied"
+when they all pass, so a task whose commands pass on the tree as it is gets silently skipped and
+nothing is implemented. Generic suites (`npm test`, `npx tsc --noEmit`, `dotnet build`, `pytest`
+with no target) and commands that always pass (`true`, `echo ok`, `... || true`) do **not** count: they
+may follow the discriminating command, never replace it. A discriminating command names what this
+task creates or changes: `test -f <new file>`, a targeted test filter for a test this task writes
+(`npx jest tests/<new>.test.js`), `grep -q <identifier> <file>`, `node --check <new file>`. The work
+breakdown validator rejects a task with no such command (`non_discriminating_verification`).
+The command must also fail until **this** task has run: a path that an earlier task in the sibling list already creates does
+not qualify, because it passes when this task starts (the validator warns: `verification_may_be_satisfied_earlier`).
+
 **Directory-only tasks must never verify with `test -d` alone.** Git does not track empty
 directories — `test -d <path>` only confirms the directory exists in the *current* working tree,
 which is exactly what the agent that just created it will have. It tells you nothing about

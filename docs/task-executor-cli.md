@@ -35,7 +35,7 @@ text-mode output in the current implementation.
 ### `start`
 
 ```bash
-ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N] [--claude-path <path>] [--task-timeout-ms <ms>] [--agent-budget-usd <amount>] [--review-scope task|phase] [--from-replan-run-id <uuid>]
+ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N] [--claude-path <path>] [--task-timeout-ms <ms>] [--agent-budget-usd <amount>] [--review-scope task|phase] [--phase-review-fail retry|block] [--review-override <taskId>[,<taskId>...]] [--from-replan-run-id <uuid>]
 ```
 
 | Flag | Required | Default | Notes |
@@ -43,10 +43,12 @@ ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N
 | `--project` | no | `process.cwd()` | Repo root; also resolves the common Git directory |
 | `--feature` | **yes** | — | Path to the feature's `feature.md`; the CLI usage-errors (exit 2, no JSON) if omitted |
 | `--max-concurrency` | no | `1` | Forwarded to `execute()` as a Number; only `1` is currently supported (see below) |
-| `--claude-path` | no | — | Absolute path to the qualified Claude CLI executable |
+| `--claude-path` | no | — | Absolute path to the qualified Claude CLI executable. Before every task the executor checks it is still a file; if it is gone (e.g. a VS Code extension update deleted its versioned folder) it re-resolves a single working candidate (see `docs/task-executor-bootstrap.md` section 2) and records the new path in the run. With zero or several candidates the run **pauses** (exit 8, result carries `pauseReason`) and no task attempt is consumed; start again with `--claude-path`. |
 | `--task-timeout-ms` | no | — | Forwarded as a Number |
 | `--agent-budget-usd` | no | — | Positive number. Spend cap for **one** Claude invocation (an implementation attempt or a review): passed to the CLI as `--max-budget-usd`, and persisted into the run config. Not a cap on the whole run |
 | `--review-scope` | no | `task` | `task` reviews every task attempt. `phase` reviews once per phase (a user story of the Work Breakdown): see "Review scope" below. Anything else is a usage error (exit 2) |
+| `--phase-review-fail` | no | `retry` | What a FAILED phase review does to the closing task. `retry` (default) re-implements it once with the findings as feedback. `block` blocks it at once: the verdict judges the whole phase, so re-implementing the last task alone on that feedback can be a guess. See "Phase review: false FAIL and operator override" below |
+| `--review-override` | no | — | Comma-separated task ids whose review FAIL the operator accepts (a judged false positive). The task still needs its verification commands to pass; the review receipt keeps the real verdict and findings and records `overridden: { by: "operator" }`. A task id that is not in the plan is a validation error (nothing starts) |
 | `--no-carry-over` | no | off | Disables the automatic carry-over (see "Automatic carry-over" below) |
 | `--from-replan-run-id` | no | — | UUID of a prior run `replan` has already superseded; seeds its carry-over-eligible tasks straight to `checkpointed` instead of `pending` (see "Carrying forward a replan" below) |
 
@@ -153,9 +155,12 @@ Backs `lib/task-executor/index.js`'s `status()`. Returns:
   "runStatus": "running",
   "taskCounts": { "pending": 0, "active": 0, "checkpointed": 0, "integrated": 0, "skipped": 0, "blocked": 0 },
   "totalTokens": null,
-  "totalCostUsd": null
+  "totalCostUsd": null,
+  "cost": null
 }
 ```
+
+`totalCostUsd` is the cost the Claude CLI **reported for each call** of the run (the per-call evidence the executor keeps under `<git common dir>/ai-toolkit/execution/evidence/<runId>/`), so it is available while the run is going and needs no pricing file. `cost` details it: `{ source, calls, measuredCalls, unmeasuredCalls, implementationUsd, reviewUsd }`, with `source: "evidence"`. A call that returned no usable result counts in `unmeasuredCalls` and adds nothing: it is never turned into a measured zero. With no measured call at all, `totalCostUsd` falls back to the ledger estimate described below (`source: "ledger"`) and is `null` when that is unavailable too; `cost` is `null` while the run has no evidence yet.
 
 `taskCounts` is derived straight from the persisted `state.json` (`store.readState`) — never
 mutates it. `totalTokens` sums every numeric `phase_delta_tokens` entry in the run's own
@@ -444,3 +449,31 @@ process-supervision evidence (tree-kill via `taskkill`, tag-based liveness scann
 depends on is qualified for Windows only (US-08-TASK-BE-05). There is no implicit
 cross-platform guarantee — other platforms require their own dedicated qualification proof
 before `start` will run on them at all.
+
+## A blocked task leaves the worktree clean
+
+When a task ends `blocked` (retry policy exhausted) the executor saves what the task changed under `<git common dir>/ai-toolkit/execution/evidence/<runId>/blocked-<taskId>/` (`blocked-task.patch` for tracked files, `new-files/` for new ones) and restores those paths to `HEAD`, so the next task does not take the leftovers for pre-existing changes. The task's state records `blockedWork` (`saved`, `saveDir`, `discarded`, `kept`). A path that was already modified before the task started is never touched and is listed in `kept`. To keep a blocked task's work, apply the saved patch by hand after the run.
+
+### `release-lease`
+
+```
+ai-toolkit executor release-lease --project <path>
+```
+
+Releases the repo-wide lease of a run whose process is **confirmed dead** (crash, closed terminal, killed session), so `executor start` no longer fails with `LEASE_HELD`. Same safety as the executor's own lease reclaim: a live owner is refused (`LEASE_STILL_LIVE`, exit 3) and so is an owner whose liveness cannot be verified (`LEASE_LIVENESS_UNKNOWN`, exit 3: other host, not Windows, no recorded start time). Age alone is never a reason to release.
+
+Result: `{ released, runId, runState, reason }`. `runState` is the dead run's recorded status (`runStatus` is deliberately not used, so the command never exits 8). The run's state is not modified: use `reconcile`/`resume`, or start again and the finished tasks are carried over. When `start` fails with `LEASE_HELD`, its message names this command.
+
+## Phase review: false FAIL and operator override
+
+With `--review-scope phase` the closing task of a phase is reviewed on the diff of the whole phase. That diff now also shows, so the reviewer does not report them as missing:
+
+- a task that was **skipped** (its verification already passed before dispatch) is explained as "already part of the tree" instead of "no commit";
+- commits made **by hand** during the phase (no `AI-Toolkit-Task` trailer), from the parent of the phase's oldest task commit to `HEAD`.
+
+A FAIL can still be a false positive. Two switches on `executor start`:
+
+1. `--phase-review-fail block`: a failed phase review blocks the closing task immediately (no second attempt on feedback that may be wrong). Its uncommitted work is saved under the run's evidence directory (see "A blocked task leaves the worktree clean").
+2. `--review-override <taskId>`: start again (earlier tasks are carried over) naming the task whose FAIL you judged a false positive. If its verification passes and the review fails again, the verdict is accepted: the review receipt (`<taskId>-attemptN-review.json`) keeps `reviewPassed: false` and the findings, and gains `overridden: { by: "operator", originalVerdict, criticalFindings }`, so the override is auditable. An override never rescues a task whose verification failed.
+
+A task skipped as "already satisfied" (before dispatch, or because its attempt left nothing to commit) records `satisfiedAtSha` in the run state: the commit the tree was at when that was established, with `reason` `already-satisfied-pre-dispatch` or `no-changes-to-commit`. The phase review names that commit in the skipped task's section. It is a pointer for the review and for audits, never a gate: it is `null` if `HEAD` cannot be read.
