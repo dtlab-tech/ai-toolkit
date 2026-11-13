@@ -43,7 +43,7 @@ ai-toolkit executor start --project <path> --feature <path> [--max-concurrency N
 | `--project` | no | `process.cwd()` | Repo root; also resolves the common Git directory |
 | `--feature` | **yes** | — | Path to the feature's `feature.md`; the CLI usage-errors (exit 2, no JSON) if omitted |
 | `--max-concurrency` | no | `1` | Forwarded to `execute()` as a Number; only `1` is currently supported (see below) |
-| `--claude-path` | no | — | Absolute path to the qualified Claude CLI executable |
+| `--claude-path` | no | — | Absolute path to the qualified Claude CLI executable. Before every task the executor checks it is still a file; if it is gone (e.g. a VS Code extension update deleted its versioned folder) it re-resolves a single working candidate (see `docs/task-executor-bootstrap.md` section 2) and records the new path in the run. With zero or several candidates the run **pauses** (exit 8, result carries `pauseReason`) and no task attempt is consumed; start again with `--claude-path`. |
 | `--task-timeout-ms` | no | — | Forwarded as a Number |
 | `--agent-budget-usd` | no | — | Positive number. Spend cap for **one** Claude invocation (an implementation attempt or a review): passed to the CLI as `--max-budget-usd`, and persisted into the run config. Not a cap on the whole run |
 | `--review-scope` | no | `task` | `task` reviews every task attempt. `phase` reviews once per phase (a user story of the Work Breakdown): see "Review scope" below. Anything else is a usage error (exit 2) |
