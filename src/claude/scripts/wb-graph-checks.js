@@ -46,6 +46,76 @@ const ERRORS = {
   MUST_AC_UNCOVERED:            'must_ac_uncovered',             // check 21
   INVALID_TEXT_FIELD_CHARS:     'invalid_text_field_chars',      // check 22
   EMPTY_PHASE:                  'empty_phase',                   // check 23
+  NON_DISCRIMINATING_VERIFICATION: 'non_discriminating_verification', // check 24
+}
+
+// ── Check 24: a task must have a verification command that can fail before its deliverable exists ──
+//
+// The executor skips a task as "already satisfied" when ALL its verification commands pass before it
+// is dispatched. A task whose commands are all generic suites (`npm test`, `npx tsc --noEmit`,
+// `dotnet build`) or always-passing (`true`, `echo ok`, `... || true`) passes on the tree as it is, so
+// nothing is implemented and nothing says so (25 of 55 tasks of one real feature). This is the static
+// half of the rule: at least one command must name something the task creates or changes (a path, a
+// test filter, a pattern). Whether that command really fails before the task is a property of the tree
+// at the moment the task starts, which the executor re-checks (see the open point on the tree state).
+const _GENERIC_COMMANDS = [
+  /^(npm|pnpm|yarn)( run)? (test|t|build|lint|typecheck|check|compile)( --?[a-z][a-z-]*)*$/,
+  /^(npx )?tsc( (-p|--project) \S+)?( --noemit)?$/,
+  /^dotnet (build|test)( (-c|--configuration) \S+| --no-restore| --no-build| -nologo)*$/,
+  /^(npx )?jest( --?[a-z][a-z-]*)*$/,
+  /^(npx )?vitest( run)?( --?[a-z][a-z-]*)*$/,
+  /^(python -m )?pytest( -[a-z]+)*$/,
+  /^go (test|build|vet) \.\/\.\.\.$/,
+  /^(mvn|\.\/mvnw) (test|verify|package|compile)( -[a-z]+)*$/,
+  /^(\.\/gradlew|gradle) (test|build|check)$/,
+  /^cargo (test|build|check)$/,
+  /^make( test| build| check)?$/,
+]
+const _ALWAYS_PASSING = [
+  /^(true|:|exit 0)$/,
+  /^echo\b.*$/,
+]
+
+function _normalizeCommand(segment) {
+  return segment.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+// A shell command, one fenced block of a task's verification: true when it can only pass or fail
+// independently of what the task delivers.
+function isNonDiscriminatingCommand(command) {
+  if (typeof command !== 'string') return true
+  const text = command.trim()
+  if (text === '') return true
+  // "... || true", "... || :", "... || exit 0" make the whole command always pass.
+  if (/\|\|\s*(true|:|exit\s+0)\s*$/i.test(text)) return true
+  const segments = text.split(/\r?\n|&&|;/).map(_normalizeCommand).filter(Boolean)
+  if (segments.length === 0) return true
+  return segments.every(function (seg) {
+    return _ALWAYS_PASSING.some(function (re) { return re.test(seg) }) ||
+      _GENERIC_COMMANDS.some(function (re) { return re.test(seg) })
+  })
+}
+
+// Check 24 over a list of phases (assembled work breakdown, or any { id, tasks:[{ id, verification }] }).
+function checkVerificationDiscriminates(phases) {
+  const errors = []
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      const commands = task.verification && Array.isArray(task.verification.commands) ? task.verification.commands : null
+      if (commands === null || commands.length === 0) continue   // missing/empty: checks 4 and 16 already report it
+      if (commands.every(isNonDiscriminatingCommand)) {
+        errors.push({
+          category: ERRORS.NON_DISCRIMINATING_VERIFICATION,
+          severity: 'error',
+          taskId: task.id,
+          field: 'verification.commands',
+          message: `Task "${task.id}" has no verification command that can fail before its deliverable exists: every command is a generic suite or always passes, so the executor would skip the task as already satisfied. Add a command that names what the task creates or changes (for example \`test -f <new file>\`, a targeted test filter, or \`grep -q <identifier> <file>\`).`,
+          details: { taskId: task.id, commands },
+        })
+      }
+    }
+  }
+  return errors
 }
 
 function _tasksOf(phase) {
@@ -751,4 +821,6 @@ module.exports = {
   checkPhaseDependencyAndCycle,
   checkPhaseSchedulability,
   checkAcCoverage,
+  isNonDiscriminatingCommand,
+  checkVerificationDiscriminates,
 }

@@ -53,7 +53,7 @@
           "dependsOn": [],
           "acceptanceCriteria": [],
           "verification": {
-            "commands": ["npm test"]
+            "commands": ["test -f src/deliverable.js"]
           },
           "estimate": {
             "agentMinutes": 8,

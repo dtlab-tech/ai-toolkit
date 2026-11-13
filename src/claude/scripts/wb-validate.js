@@ -433,6 +433,10 @@ report.errors.push(...graphChecks.checkAcCoverage({ phases }, acMap, seenTaskIds
   }
 }
 
+// ── Check 24: every task has a verification command that can fail before its deliverable exists ──
+
+report.errors.push(...graphChecks.checkVerificationDiscriminates(phases))
+
 // ── Exit code routing ────────────────────────────────────────────────────────
 
 if (report.errors.length > 0) {

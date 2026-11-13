@@ -2020,3 +2020,46 @@ describe('FTR-030 — a naturally-triggered skeleton regen only redispatches com
     expect(secondPass.components['c.js'].lastSeenInSkeleton).toBe(cLastSeenBefore); // dropped — stopped advancing
   });
 });
+
+// Check 24, early: a task detail whose verification commands would all pass on the tree as it is gets one
+// repair, with the reason in the prompt, instead of failing the whole structural validation afterwards.
+describe('Work Breakdown task details: a verification command that can fail before the deliverable exists', () => {
+  const weakDetail = taskId => taskDetailDoc(taskId).replace('node --check src/index.js', 'npm test');
+
+  test('a weak detail is regenerated once with the reason, and the repaired one is kept', async () => {
+    const wb = phase2Setup();
+    const taskPrompts = [];
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown-task') {
+        taskPrompts.push(options.prompt);
+        return success(taskPrompts.length === 1 ? weakDetail('INFRA-TASK-BE-01') : taskDetailDoc('INFRA-TASK-BE-01'));
+      }
+      return phase2Dispatch(wb)(options);
+    };
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).resolves.toBeDefined();
+    expect(taskPrompts).toHaveLength(2);
+    expect(taskPrompts[1]).toContain('Your previous answer was rejected');
+    expect(taskPrompts[1]).toContain('already satisfied');
+    expect(fs.readFileSync(path.join(f.dir, 'wbs', 'tasks', 'INFRA-TASK-BE-01.md'), 'utf8')).toContain('node --check src/index.js');
+  });
+
+  test('a detail that is still weak after the repair stops the run, naming the task and its commands', async () => {
+    const wb = phase2Setup();
+    const dispatch = async options => {
+      const name = options.args[options.args.indexOf('--agent') + 1];
+      if (name === 'gaia-generate-work-breakdown-task') return success(weakDetail('INFRA-TASK-BE-01'));
+      return phase2Dispatch(wb)(options);
+    };
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch }))
+      .rejects.toThrow(/INFRA-TASK-BE-01 has no verification command that can fail before its deliverable exists.*npm test/s);
+  });
+
+  test('a good detail is generated once, with no repair call', async () => {
+    const wb = phase2Setup();
+    const dispatch = jest.fn(phase2Dispatch(wb));
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    const taskCalls = dispatch.mock.calls.filter(([o]) => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown-task');
+    expect(taskCalls).toHaveLength(1);
+  });
+});
