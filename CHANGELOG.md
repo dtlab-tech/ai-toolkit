@@ -1,4 +1,20 @@
 ## 0.1.4 (2026-07-21)
+## [0.29.2](https://github.com/dtlab-tech/ai-toolkit/compare/v0.29.1...v0.29.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **executor:** a blocked task no longer leaves its uncommitted work in the worktree ([94a0c6d](https://github.com/dtlab-tech/ai-toolkit/commit/94a0c6d3dcb702ce4f275f8f0f3e825d1f98ea95))
+* **executor:** add executor release-lease to free the lease of a dead run ([0770313](https://github.com/dtlab-tech/ai-toolkit/commit/0770313cd3959389e8f24a22910092f97c84797d))
+* **executor:** environment errors, blocked-task cleanup, release-lease, measured cost, phase review and work breakdown verification ([76c3eb8](https://github.com/dtlab-tech/ai-toolkit/commit/76c3eb81264ed001eb6990da4eb8a0daa483921f))
+* **executor:** environment errors, blocked-task cleanup, release-lease, measured cost, phase review and work breakdown verification ([ddbec92](https://github.com/dtlab-tech/ai-toolkit/commit/ddbec92d9c11d76a747137f9e8d9f9346f4115c4))
+* **executor:** executor status reports the measured cost of the run ([2d8c3e6](https://github.com/dtlab-tech/ai-toolkit/commit/2d8c3e6371f947d0dfe2f8428297815c5f863bf4))
+* **executor:** phase review shows the whole phase and the operator can accept a false FAIL ([d0b9b64](https://github.com/dtlab-tech/ai-toolkit/commit/d0b9b649192bb6c20a34a0fe15fade512fb4a629))
+* **executor:** re-resolve a vanished claude executable and pause without consuming an attempt ([2e0a89b](https://github.com/dtlab-tech/ai-toolkit/commit/2e0a89b2d9d42142a84783d1d1a2b2f28d6cdb4b))
+* **executor:** record the commit a skipped task was found satisfied at ([faf35b2](https://github.com/dtlab-tech/ai-toolkit/commit/faf35b246daaa825641e1509d8b550264e5bafd5))
+* **work-breakdown:** require a verification command that can fail before the deliverable exists ([5526700](https://github.com/dtlab-tech/ai-toolkit/commit/55267006e8150497dcb22e4c3d356d8f3fbf11b5))
+* **work-breakdown:** warn when a task's verification may already pass because an earlier task creates its target ([934015b](https://github.com/dtlab-tech/ai-toolkit/commit/934015b7d146034b4f7e0c4c9fff981ddb059eef))
+
 ## [0.29.1](https://github.com/dtlab-tech/ai-toolkit/compare/v0.29.0...v0.29.1) (2026-11-12)
 
 
