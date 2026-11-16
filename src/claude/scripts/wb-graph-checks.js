@@ -46,6 +46,137 @@ const ERRORS = {
   MUST_AC_UNCOVERED:            'must_ac_uncovered',             // check 21
   INVALID_TEXT_FIELD_CHARS:     'invalid_text_field_chars',      // check 22
   EMPTY_PHASE:                  'empty_phase',                   // check 23
+  NON_DISCRIMINATING_VERIFICATION: 'non_discriminating_verification', // check 24
+  VERIFICATION_MAY_BE_SATISFIED_EARLIER: 'verification_may_be_satisfied_earlier', // check 25 — non-blocking warning
+}
+
+// ── Check 24: a task must have a verification command that can fail before its deliverable exists ──
+//
+// The executor skips a task as "already satisfied" when ALL its verification commands pass before it
+// is dispatched. A task whose commands are all generic suites (`npm test`, `npx tsc --noEmit`,
+// `dotnet build`) or always-passing (`true`, `echo ok`, `... || true`) passes on the tree as it is, so
+// nothing is implemented and nothing says so (25 of 55 tasks of one real feature). This is the static
+// half of the rule: at least one command must name something the task creates or changes (a path, a
+// test filter, a pattern). Whether that command really fails before the task is a property of the tree
+// at the moment the task starts, which the executor re-checks (see the open point on the tree state).
+const _GENERIC_COMMANDS = [
+  /^(npm|pnpm|yarn)( run)? (test|t|build|lint|typecheck|check|compile)( --?[a-z][a-z-]*)*$/,
+  /^(npx )?tsc( (-p|--project) \S+)?( --noemit)?$/,
+  /^dotnet (build|test)( (-c|--configuration) \S+| --no-restore| --no-build| -nologo)*$/,
+  /^(npx )?jest( --?[a-z][a-z-]*)*$/,
+  /^(npx )?vitest( run)?( --?[a-z][a-z-]*)*$/,
+  /^(python -m )?pytest( -[a-z]+)*$/,
+  /^go (test|build|vet) \.\/\.\.\.$/,
+  /^(mvn|\.\/mvnw) (test|verify|package|compile)( -[a-z]+)*$/,
+  /^(\.\/gradlew|gradle) (test|build|check)$/,
+  /^cargo (test|build|check)$/,
+  /^make( test| build| check)?$/,
+]
+const _ALWAYS_PASSING = [
+  /^(true|:|exit 0)$/,
+  /^echo\b.*$/,
+]
+
+function _normalizeCommand(segment) {
+  return segment.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+// A shell command, one fenced block of a task's verification: true when it can only pass or fail
+// independently of what the task delivers.
+function isNonDiscriminatingCommand(command) {
+  if (typeof command !== 'string') return true
+  const text = command.trim()
+  if (text === '') return true
+  // "... || true", "... || :", "... || exit 0" make the whole command always pass.
+  if (/\|\|\s*(true|:|exit\s+0)\s*$/i.test(text)) return true
+  const segments = text.split(/\r?\n|&&|;/).map(_normalizeCommand).filter(Boolean)
+  if (segments.length === 0) return true
+  return segments.every(function (seg) {
+    return _ALWAYS_PASSING.some(function (re) { return re.test(seg) }) ||
+      _GENERIC_COMMANDS.some(function (re) { return re.test(seg) })
+  })
+}
+
+// Check 24 over a list of phases (assembled work breakdown, or any { id, tasks:[{ id, verification }] }).
+function checkVerificationDiscriminates(phases) {
+  const errors = []
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      const commands = task.verification && Array.isArray(task.verification.commands) ? task.verification.commands : null
+      if (commands === null || commands.length === 0) continue   // missing/empty: checks 4 and 16 already report it
+      if (commands.every(isNonDiscriminatingCommand)) {
+        errors.push({
+          category: ERRORS.NON_DISCRIMINATING_VERIFICATION,
+          severity: 'error',
+          taskId: task.id,
+          field: 'verification.commands',
+          message: `Task "${task.id}" has no verification command that can fail before its deliverable exists: every command is a generic suite or always passes, so the executor would skip the task as already satisfied. Add a command that names what the task creates or changes (for example \`test -f <new file>\`, a targeted test filter, or \`grep -q <identifier> <file>\`).`,
+          details: { taskId: task.id, commands },
+        })
+      }
+    }
+  }
+  return errors
+}
+
+// ── Check 25 (warning): the verification may already pass when the task starts ──────────────────
+//
+// A command that fails on the baseline tree can still pass when the task starts, because an EARLIER
+// task creates the very file it checks (a real case: a test task whose `test -f` target was produced
+// by the task before it, so the executor skipped it). Whether that happens depends on what the earlier
+// tasks really write, which only the run knows; statically the best signal is a path in the command
+// that an earlier task's outcome names. Heuristic and non-blocking: the author may have good reason.
+const _PATH_TOKEN = /[A-Za-z0-9_.\-]+(?:[\\/][A-Za-z0-9_.\-]+)+|[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,5}\b/g
+
+function _pathTokens(text) {
+  const found = new Set()
+  for (const m of String(text || '').matchAll(_PATH_TOKEN)) {
+    const token = m[0].replace(/\\/g, '/').replace(/^\.\//, '').replace(/[.,;:]+$/, '').toLowerCase()
+    if (token.length >= 3) found.add(token)
+  }
+  return found
+}
+
+function _samePath(a, b) {
+  return a === b || a.endsWith('/' + b) || b.endsWith('/' + a)
+}
+
+// Phases in document order, each task's own tasks in order: "earlier" = anything before it in that order.
+function checkVerificationMaySatisfyEarly(phases) {
+  const warnings = []
+  const earlier = []   // { taskId, paths:Set } of the tasks seen so far
+  for (const phase of phases) {
+    for (const task of _tasksOf(phase)) {
+      const commands = task.verification && Array.isArray(task.verification.commands) ? task.verification.commands : []
+      const discriminating = commands.filter(function (c) { return !isNonDiscriminatingCommand(c) })
+      if (discriminating.length > 0 && earlier.length > 0) {
+        const overlaps = discriminating.map(function (command) {
+          const tokens = _pathTokens(command)
+          for (const prior of earlier) {
+            for (const p of prior.paths) {
+              for (const t of tokens) {
+                if (_samePath(t, p)) return { command, path: t, earlierTaskId: prior.taskId }
+              }
+            }
+          }
+          return null
+        })
+        // Every discriminating command points at something an earlier task already produces.
+        if (overlaps.every(Boolean)) {
+          warnings.push({
+            category: ERRORS.VERIFICATION_MAY_BE_SATISFIED_EARLIER,
+            severity: 'warning',
+            taskId: task.id,
+            field: 'verification.commands',
+            message: `Task "${task.id}": every discriminating verification command checks a path that an earlier task's outcome already names (${overlaps.map(function (o) { return `${o.path} by ${o.earlierTaskId}` }).join('; ')}), so it may already pass when this task starts and the executor would skip it. Check the command can only pass once this task's own deliverable exists.`,
+            details: { taskId: task.id, overlaps },
+          })
+        }
+      }
+      earlier.push({ taskId: task.id, paths: _pathTokens([task.title, task.outcome].filter(Boolean).join(' ')) })
+    }
+  }
+  return warnings
 }
 
 function _tasksOf(phase) {
@@ -751,4 +882,7 @@ module.exports = {
   checkPhaseDependencyAndCycle,
   checkPhaseSchedulability,
   checkAcCoverage,
+  isNonDiscriminatingCommand,
+  checkVerificationDiscriminates,
+  checkVerificationMaySatisfyEarly,
 }
