@@ -138,7 +138,7 @@ describe('execute(): --review-scope and retry feedback', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  const run = (reviewScope, verdicts) => execute({
+  const run = (reviewScope, verdicts, extra) => execute(Object.assign({
     project: repoDir,
     feature: path.join(featureDir, 'feature.md'),
     claudePath: NODE,
@@ -147,7 +147,7 @@ describe('execute(): --review-scope and retry feedback', () => {
     reviewScope: reviewScope,
     implementationSpawnArgs: [FIXTURE, '--mode=write-file-and-succeed', '--log=' + implLog],
     reviewSpawnArgs: [FIXTURE, '--mode=review-verdict-sequence', '--verdicts=' + verdicts, '--counter=' + counter, '--log=' + revLog],
-  });
+  }, extra || {}));
 
   const executionRoot = () => path.join(repoDir, '.git', 'ai-toolkit', 'execution');
 
@@ -245,6 +245,57 @@ describe('execute(): --review-scope and retry feedback', () => {
     expect(impl[1].stdin).toContain('T1.output.txt: the empty input case is not handled');
   });
 
+  test("--review-override: a phase review FAIL the operator accepts lets the closing task through, and the receipt keeps the real verdict", async () => {
+    const result = await run('phase', 'FAIL', { reviewOverrides: ['US-01-TASK-BE-03', 'US-02-TASK-BE-02'] });
+
+    expect(result.runStatus).toBe('completed');
+    expect(result.tasks.every(t => t.status === 'checkpointed')).toBe(true);
+    expect(readLog(implLog)).toHaveLength(5);              // no retry with feedback: the FAIL did not trigger one
+    expect(readLog(revLog)).toHaveLength(2);
+
+    const closer = store.readReceipt(executionRoot(), result.runId, 'US-01-TASK-BE-03-attempt1-review');
+    expect(closer.reviewPassed).toBe(false);               // the review's own verdict is never rewritten
+    expect(closer.overridden).toMatchObject({ by: 'operator', originalVerdict: false });
+    expect(closer.overridden.criticalFindings).toEqual(['T1.output.txt: the empty input case is not handled']);
+    const outcome = store.readReceipt(executionRoot(), result.runId, 'US-01-TASK-BE-03-attempt1-outcome');
+    expect(outcome.stage).toBe('reviewed');
+    expect(outcome.review.overridden).toMatchObject({ by: 'operator' });
+  });
+
+  test('--review-override only covers the tasks it names', async () => {
+    const result = await run('phase', 'FAIL', { reviewOverrides: ['US-01-TASK-BE-03'] });
+    const byId = Object.fromEntries(result.tasks.map(t => [t.taskId, t.status]));
+    expect(byId['US-01-TASK-BE-03']).toBe('checkpointed');
+    expect(byId['US-02-TASK-BE-02']).toBe('blocked');
+  });
+
+  test('--review-override never rescues a task whose verification failed', async () => {
+    // no review is ever dispatched after a failed verification, so there is nothing to override
+    fs.writeFileSync(path.join(featureDir, 'FTR-902-Work-Breakdown.md'),
+      buildMarkdown('FTR-902', TASKS).split('test -f US-01-TASK-BE-03.output.txt').join('test -f never-created.txt'));
+    const result = await run('phase', 'PASS', { reviewOverrides: ['US-01-TASK-BE-03'] });
+    expect(Object.fromEntries(result.tasks.map(t => [t.taskId, t.status]))['US-01-TASK-BE-03']).toBe('blocked');
+  });
+
+  test("--phase-review-fail block: a failed phase review blocks the closing task at once, with no retry on guessed feedback", async () => {
+    const result = await run('phase', 'FAIL', { phaseReviewFail: 'block' });
+
+    const byId = Object.fromEntries(result.tasks.map(t => [t.taskId, t.status]));
+    expect(byId['US-01-TASK-BE-03']).toBe('blocked');
+    expect(byId['US-02-TASK-BE-02']).toBe('blocked');
+    expect(readLog(implLog)).toHaveLength(5);              // each task implemented once: no second attempt
+    expect(readLog(revLog)).toHaveLength(2);
+    const state = store.readState(executionRoot(), result.runId);
+    expect(state.tasks['US-01-TASK-BE-03'].attempts).toHaveLength(1);
+  });
+
+  test('rejects an unknown --review-override task and an invalid --phase-review-fail before touching anything', async () => {
+    await expect(run('phase', 'PASS', { reviewOverrides: ['US-09-TASK-BE-99'] }))
+      .rejects.toMatchObject({ code: 'DISPATCH_VALIDATION_ERROR', message: expect.stringContaining('US-09-TASK-BE-99') });
+    await expect(run('phase', 'PASS', { phaseReviewFail: 'ignore' })).rejects.toMatchObject({ code: 'DISPATCH_VALIDATION_ERROR' });
+    expect(fs.existsSync(path.join(executionRoot(), 'runs'))).toBe(false);
+  });
+
   test('rejects an unknown review scope and a non-positive budget before touching anything', async () => {
     await expect(execute({ project: repoDir, feature: path.join(featureDir, 'feature.md'), reviewScope: 'story' }))
       .rejects.toMatchObject({ code: 'DISPATCH_VALIDATION_ERROR' });
@@ -286,5 +337,66 @@ describe('spend cap and attempt feedback helpers', () => {
     const task = { id: 'T-1', title: 't', outcome: 'o', domain: 'BE', dependsOn: [], acceptanceCriteria: [], verificationCommands: [] };
     expect(executor._buildTaskPrompt(task)).not.toContain('Feedback from the previous attempt');
     expect(executor._buildTaskPrompt(task, { text: 'fix the thing' })).toContain('fix the thing');
+  });
+});
+
+const SATISFIED_AT = 'abcdef0123456789abcdef0123456789abcdef01';
+
+describe('the diff handed to a phase review shows what really happened in the phase', () => {
+  let tmp, repo;
+  const git = (args) => gitCmd(repo, args);
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-diff-test-'));
+    repo = path.join(tmp, 'repo');
+    fs.mkdirSync(repo);
+    gitCmd(repo, ['init', '-q']);
+    gitCmd(repo, ['config', 'user.name', 'AI Toolkit Test']);
+    gitCmd(repo, ['config', 'user.email', 'ai-toolkit-test@example.invalid']);
+    gitCmd(repo, ['config', 'core.autocrlf', 'false']);
+    writeFile(repo, 'base.txt', 'base\n');
+    git(['add', '-A']); git(['commit', '-q', '-m', 'init']);
+  });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+  function stateWith(taskShas) {
+    let state = new store.State({
+      runId: 'r1', featureId: 'FTR-903', repo: '/r', commonDir: '/r/.git', featureRef: 'refs/heads/x',
+      baseSha: 'a'.repeat(40), planDigest: 'b'.repeat(64), contextHashes: {}, config: {}, runStatus: 'running',
+    });
+    Object.keys(taskShas).forEach(id => {
+      state = state.addTask(id, { dependencies: [] });
+      if (taskShas[id]) state = state.addAttempt(id, { stage: 'committed' }).updateAttempt(id, 1, { originalSha: taskShas[id] });
+      state = state.setTaskStatus(id, taskShas[id] ? 'checkpointed' : 'skipped', taskShas[id] ? {} : { satisfiedAtSha: SATISFIED_AT });
+    });
+    return state;
+  }
+
+  test('a commit made by hand inside the phase is shown, and a skipped task is explained instead of looking missing', () => {
+    writeFile(repo, 'T1.txt', 'task one\n');
+    git(['add', '-A']); git(['commit', '-q', '-m', 'feat: T1', '-m', 'AI-Toolkit-Task: T1']);
+    const t1 = git(['rev-parse', 'HEAD']).trim();
+    writeFile(repo, 'by-hand.txt', 'fixed by hand\n');
+    git(['add', '-A']); git(['commit', '-q', '-m', 'fix: by hand']);
+
+    const phase = { id: 'US-01', taskIds: ['T1', 'T2', 'T3'] };
+    const diff = executor._computePhaseReviewDiff(repo, stateWith({ T1: t1, T2: null, T3: null }), phase, 'T3', '+current\n');
+
+    expect(diff).toContain('=== Task T1 (commit');
+    expect(diff).toContain('+task one');
+    expect(diff).toContain('=== Commit made outside the executor during this phase');
+    expect(diff).toContain('+fixed by hand');
+    expect(diff).toContain('=== Task T2: no commit of its own (status skipped) ===');
+    expect(diff).toContain('already part of the tree');
+    expect(diff).toContain('with the tree at commit abcdef012345');   // the commit recorded when it was found satisfied
+    expect(diff).toContain('=== Task T3 (current attempt, not yet committed) ===');
+  });
+
+  test('a phase with only executor commits adds no outside-commit section', () => {
+    writeFile(repo, 'T1.txt', 'task one\n');
+    git(['add', '-A']); git(['commit', '-q', '-m', 'feat: T1', '-m', 'AI-Toolkit-Task: T1']);
+    const t1 = git(['rev-parse', 'HEAD']).trim();
+    const diff = executor._computePhaseReviewDiff(repo, stateWith({ T1: t1, T3: null }), { id: 'US-01', taskIds: ['T1', 'T3'] }, 'T3', '+x\n');
+    expect(diff).not.toContain('outside the executor');
   });
 });

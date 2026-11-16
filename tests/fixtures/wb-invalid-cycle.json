@@ -20,7 +20,7 @@
           "dependsOn": ["INFRA-TASK-INFRA-02"],
           "acceptanceCriteria": [],
           "verification": {
-            "commands": ["npm test"]
+            "commands": ["test -f src/deliverable.js"]
           },
           "estimate": {
             "agentMinutes": 5,
@@ -42,7 +42,7 @@
           "dependsOn": ["INFRA-TASK-INFRA-01"],
           "acceptanceCriteria": [],
           "verification": {
-            "commands": ["npm test"]
+            "commands": ["test -f src/deliverable.js"]
           },
           "estimate": {
             "agentMinutes": 5,

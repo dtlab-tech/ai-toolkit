@@ -288,3 +288,16 @@ But as that same commit's message states plainly:
 **Operator implication:** these primitives are proven to compose correctly in isolation, but
 `execute()` remains N=1 / sequential only. Do not expect `--max-concurrency` values other than
 `1` to do anything but fail fast with `UNSUPPORTED_CONCURRENCY` today.
+
+---
+
+## 2b. When the path vanishes during a run
+
+A VS Code extension update deletes the versioned folder that holds `claude.exe`, so a path that was valid at `executor start` can disappear mid-run. The executor handles it (`lib/task-executor/claude-locator.js`):
+
+- before every task it checks that the configured path is still a file;
+- if it is gone, it applies the discovery above and uses the candidate only when **exactly one** answers `--version`; the new path is written to the run's `config.claudePath`;
+- with zero or several candidates it does not guess: the run **pauses** (`runStatus: "paused"`, exit code 8, `pauseReason` in the result and in `executor status`), listing the candidates found;
+- an environment error never consumes a task attempt: the attempt is recorded as `environment-error:CLAUDE_EXECUTABLE_NOT_FOUND`, the task goes back to `pending`, and it does not count against the two-attempt limit.
+
+To go on, fix the path and run `executor start` again with `--claude-path`; tasks already checkpointed are carried over.
