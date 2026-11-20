@@ -788,6 +788,16 @@ function checkPhaseSchedulability({ phases }, phaseDepsMap) {
 
 // ── Checks 19, 20 & 21: AC existence, scope validation, Must coverage ────────
 
+// The INFRA phase is shared groundwork, not the realisation of one use case: it has no sourceUC of its
+// own, so the scope rule of check 20 (an AC must belong to a UC the phase realises) can never hold for
+// it. Without this exemption an INFRA task could not carry ANY acceptance criterion, and a Must AC that
+// only groundwork satisfies (an installer path, a manifest entry, an agent definition) ended up
+// must_ac_uncovered with nothing the author could do about it. Existence (check 19) and Must coverage
+// (check 21) still apply to INFRA tasks; only the per-UC scope rule is lifted for them.
+function _isInfraPhase(phase) {
+  return !!phase && (phase.id === 'INFRA' || phase.type === 'infra' || phase.type === 'infrastructure')
+}
+
 function checkAcCoverage({ phases }, acMap, seenTaskIds) {
   const errors = []
   if (acMap === null) return { errors }
@@ -819,6 +829,7 @@ function checkAcCoverage({ phases }, acMap, seenTaskIds) {
         // ── Check 20: AC scope validation ────────────────────────────────────
         if (acEntry.unscoped === true) continue
         const phaseId = seenTaskIds.get(task.id)
+        if (_isInfraPhase(phaseById.get(phaseId) || phase)) continue
         // sourceUC-aware scope check: a phase legitimately realizes a UC whenever that UC is
         // in its own declared sourceUC, regardless of whether the phase ID numerically matches
         // the UC number — one phase can span several UCs, one UC can be realized across several
