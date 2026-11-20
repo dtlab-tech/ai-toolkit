@@ -48,6 +48,7 @@ const ERRORS = {
   EMPTY_PHASE:                  'empty_phase',                   // check 23
   NON_DISCRIMINATING_VERIFICATION: 'non_discriminating_verification', // check 24
   VERIFICATION_MAY_BE_SATISFIED_EARLIER: 'verification_may_be_satisfied_earlier', // check 25 — non-blocking warning
+  TASK_DETAIL_INVALID: 'task_detail_invalid', // shape of one task detail file (pm-phase2, right after it is written)
 }
 
 // ── Check 24: a task must have a verification command that can fail before its deliverable exists ──
@@ -117,6 +118,40 @@ function checkVerificationDiscriminates(phases) {
     }
   }
   return errors
+}
+
+// ── Shape of one task detail file ───────────────────────────────────────────────────────────────
+//
+// The per-task agent answers in chat; the host writes that answer to the task's detail file. An answer
+// that is not the task template (an apology, a question, a summary) used to be saved and marked
+// "generated" without any check, and only surfaced at assembly time, after every task had been paid for.
+// This is the minimum a detail file must have to be the real thing: its own Task ID line, numeric
+// estimate fields and at least one fenced verification command (the same three things a resumed run
+// already requires before it skips regenerating a task).
+function checkTaskDetailShape(text, taskId) {
+  const body = typeof text === 'string' ? text : ''
+  const missing = []
+  const idLine = body.match(/^- \*\*Task ID:\*\*\s*(.*)$/m)
+  if (!idLine) missing.push('the "- **Task ID:** <id>" field line')
+  else if (idLine[1].trim() !== taskId) missing.push(`a Task ID field equal to "${taskId}" (found "${idLine[1].trim()}")`)
+  const minutes = body.match(/^- \*\*Estimate — agent minutes:\*\*\s*(.*)$/m)
+  const tokens = body.match(/^- \*\*Estimate — tokens:\*\*\s*(.*)$/m)
+  if (!minutes || !/^\d+$/.test(minutes[1].trim())) missing.push('"Estimate — agent minutes" as a plain integer')
+  if (!tokens || !/^\d+$/.test(tokens[1].trim())) missing.push('"Estimate — tokens" as a plain integer')
+  const marker = '**Verification commands:**'
+  const at = body.lastIndexOf(marker)
+  if (at === -1 || !/```[^\n]*\n[\s\S]*?```/.test(body.slice(at + marker.length))) {
+    missing.push('a "**Verification commands:**" section with at least one fenced command')
+  }
+  if (missing.length === 0) return []
+  return [{
+    category: ERRORS.TASK_DETAIL_INVALID,
+    severity: 'error',
+    taskId,
+    field: 'detail',
+    message: `The detail of task "${taskId}" is not the task template: it is missing ${missing.join('; ')}. Answer with the filled-in task template only (field lines, implementation notes, verification commands), not a conversational reply.`,
+    details: { taskId, missing },
+  }]
 }
 
 // ── Check 25 (warning): the verification may already pass when the task starts ──────────────────
@@ -896,4 +931,5 @@ module.exports = {
   isNonDiscriminatingCommand,
   checkVerificationDiscriminates,
   checkVerificationMaySatisfyEarly,
+  checkTaskDetailShape,
 }

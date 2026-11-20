@@ -663,6 +663,32 @@ return c.run(meta.name, featureDir, prefix, async () => {
   // readTemplate/withTemplate — this runtime duplicates the primitive, not requires it, for the
   // same "no `require`" reason as every other duplicated helper in this file).
   const taskTemplate = c.command(['print-asset', 'scripts/templates/gaia-task-template.md', '--project', c.root]).stdout
+  const taskPromptFor = taskId => {
+    const techSpecExcerpt = hasSpec
+      ? buildTaskTechSpecExcerpt(components, index.tasks[taskId], specDir, c.read(specIndexPath))
+      : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text
+    return buildTaskPrompt(index, taskId, techSpecExcerpt, taskTemplate, conventions)
+  }
+  // The early per-task checks (wb-task-check.js): the detail is the task template and not a chat reply,
+  // and it has a verification command that can fail before the deliverable exists.
+  const checkTaskDetail = (detailPath, taskId) => JSON.parse(c.command(['run-asset', 'scripts/wb-task-check.js',
+    '--project', c.root, '--', detailPath, taskId], [0, 1]).stdout)
+  // Writes the agent's answer and checks it; a rejected answer is regenerated ONCE with the reason, and a
+  // second rejection stops the run with the task and its commands (nothing past it is paid for).
+  const writeCheckedDetail = async (taskId, detailPath, firstAnswer, taskPrompt, repairLabel) => {
+    c.writeOutput(detailPath, firstAnswer)
+    let result = checkTaskDetail(detailPath, taskId)
+    if (!result.valid) {
+      const repaired = await c.worker('gaia.agent.planner.work-breakdown-task',
+        taskPrompt + '\n\nYour previous answer was rejected: ' + result.errors.map(e => e.message).join(' '),
+        { label: repairLabel })
+      c.writeOutput(detailPath, repaired)
+      result = checkTaskDetail(detailPath, taskId)
+      if (!result.valid) {
+        throw new Error(`Task ${taskId} detail rejected even after one repair: ${result.errors.map(e => e.message).join(' | ')} (commands: ${result.commands.join(' ; ') || 'none'})`)
+      }
+    }
+  }
   for (const phase of index.phases) {
     for (const taskId of phase.taskIds) {
       const task = index.tasks[taskId]
@@ -671,28 +697,12 @@ return c.run(meta.name, featureDir, prefix, async () => {
         const existing = c.read(detailPath)
         if (hasVerificationCommands(existing) && hasValidEstimate(existing)) continue // resume: skip, no dispatch
       }
-      const techSpecExcerpt = hasSpec
-        ? buildTaskTechSpecExcerpt(components, task, specDir, c.read(specIndexPath))
-        : c.read(file('Tech-Spec.md')) // legacy fallback: unchanged, full text
-      const taskPrompt = buildTaskPrompt(index, taskId, techSpecExcerpt, taskTemplate, conventions)
+      const taskPrompt = taskPromptFor(taskId)
       const detail = await c.worker('gaia.agent.planner.work-breakdown-task', taskPrompt, { label: `work-breakdown-task:${taskId}` })
-      c.writeOutput(detailPath, detail)
-      // wb-validate.js check 24, early: a task whose verification commands all pass on the tree as it is
-      // would be skipped by the executor as "already satisfied". Repair it once now, with the reason,
-      // rather than fail the whole structural validation after every task has been generated.
-      const checkTask = () => JSON.parse(c.command(['run-asset', 'scripts/wb-task-check.js', '--project', c.root,
-        '--', detailPath, taskId], [0, 1]).stdout)
-      let taskCheck = checkTask()
-      if (!taskCheck.valid) {
-        const repaired = await c.worker('gaia.agent.planner.work-breakdown-task',
-          taskPrompt + '\n\nYour previous answer was rejected: ' + taskCheck.errors[0].message,
-          { label: `work-breakdown-task:${taskId}:verification-repair` })
-        c.writeOutput(detailPath, repaired)
-        taskCheck = checkTask()
-        if (!taskCheck.valid) {
-          throw new Error(`Task ${taskId} has no verification command that can fail before its deliverable exists, even after one repair: ${taskCheck.commands.join(' ; ')}`)
-        }
-      }
+      // The answer is checked BEFORE the task is marked generated: a chat reply is never saved as a task detail
+      // (task_detail_invalid), and a verification that passes on the tree as it is is repaired once now
+      // rather than failing the whole structural validation after every task has been generated.
+      await writeCheckedDetail(taskId, detailPath, detail, taskPrompt, `work-breakdown-task:${taskId}:repair`)
       task.status = 'generated'
       c.writeOutput(indexPath, JSON.stringify(index, null, 2)) // persist status after each task
     }
@@ -700,7 +710,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
 
   // 4. Assembly (implicit, via the now directory-aware wb-validate.js/wb-render.js) +
   // existing pipeline, unchanged past this point except the path passed in
-  const report = await c.activity('wb-validate', async () => {
+  const validateStructure = label => c.activity(label, async () => {
     const res = c.command(['run-asset', 'scripts/wb-validate.js', '--project', c.root,
       '--', wbsDir, reqIndexPath], [0, 1])
     const parsed = JSON.parse(res.stdout)
@@ -709,6 +719,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
     if (!parsed.valid || parsed.errors.length) throw new Error('Work breakdown structural validation failed: ' + res.stdout)
     return parsed
   })
+  let report = await validateStructure('wb-validate')
   // Every phase is reviewed even after one fails, so a single run surfaces every blocking finding
   // at once instead of making the operator fix them one resume at a time.
   const semanticSchema = {
@@ -717,7 +728,7 @@ return c.run(meta.name, featureDir, prefix, async () => {
   const reqIndexForSemantic = c.read(reqIndexPath)
   const allFindings = []
   let semanticValid = true
-  for (const phase of index.phases) {
+  const reviewPhase = (phase, label) => {
     const phaseTaskIds = phase.taskIds
     const taskDetailsText = phaseTaskIds
       .map(taskId => `### ${taskId}\n\n${c.read(`${wbsDir}/${index.tasks[taskId].detailFile}`)}`).join('\n\n---\n\n')
@@ -727,12 +738,39 @@ return c.run(meta.name, featureDir, prefix, async () => {
     const requirementsExcerpt = hasReq
       ? buildPhaseRequirementsExcerpt(reqIndexForSemantic, phase.sourceUC, reqDir)
       : reqIndexForSemantic
-    const verdict = await c.worker('gaia.agent.planner.validate-work-breakdown',
+    return c.worker('gaia.agent.planner.validate-work-breakdown',
       buildSemanticPhasePrompt(phase, taskDetailsText, otherTasksText, requirementsExcerpt, reqIndexPath),
-      { schema: semanticSchema, label: `validate-work-breakdown:${phase.id}` })
+      { schema: semanticSchema, label })
+  }
+  let repairedAnyTask = false
+  for (const phase of index.phases) {
+    let verdict = await reviewPhase(phase, `validate-work-breakdown:${phase.id}`)
+    // One repair round: each task with a blocking finding is regenerated once with the findings in its
+    // prompt (the same checks as the first generation apply), then the phase is reviewed again. Findings
+    // that name no task of this phase cannot be repaired here and stay blocking.
+    const findingsByTask = new Map()
+    for (const f of verdict.findings) {
+      if (f.blocking && f.taskId && phase.taskIds.includes(f.taskId)) {
+        findingsByTask.set(f.taskId, (findingsByTask.get(f.taskId) || []).concat(f.description))
+      }
+    }
+    if (findingsByTask.size > 0) {
+      for (const [taskId, descriptions] of findingsByTask) {
+        const detailPath = `${wbsDir}/${index.tasks[taskId].detailFile}`
+        const taskPrompt = taskPromptFor(taskId)
+        const feedback = '\n\nThe phase review rejected your previous answer for this task:\n- ' + descriptions.join('\n- ')
+        const regenerated = await c.worker('gaia.agent.planner.work-breakdown-task', taskPrompt + feedback,
+          { label: `work-breakdown-task:${taskId}:semantic-repair` })
+        await writeCheckedDetail(taskId, detailPath, regenerated, taskPrompt + feedback, `work-breakdown-task:${taskId}:semantic-repair-retry`)
+        repairedAnyTask = true
+      }
+      verdict = await reviewPhase(phase, `validate-work-breakdown:${phase.id}:after-repair`)
+    }
     if (!verdict.valid) semanticValid = false
     for (const finding of verdict.findings) allFindings.push({ ...finding, phaseId: phase.id })
   }
+  // A regenerated task detail is new content: the structural validation must hold for it too.
+  if (repairedAnyTask) report = await validateStructure('wb-validate-after-repair')
   const semantic = { valid: semanticValid, findings: allFindings }
   if (!semantic.valid || semantic.findings.some(f => f.blocking)) {
     const blocking = semantic.findings.filter(f => f.blocking).map(f => `[${f.phaseId}] ${f.taskId}: ${f.description}`)

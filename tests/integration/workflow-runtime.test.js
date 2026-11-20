@@ -767,7 +767,11 @@ function phase2Dispatch(wb, semanticVerdict = { valid: true, findings: [] }) {
       return { exitCode: 0, result: { is_error: false, usage: { input_tokens: 10, output_tokens: 5 },
         structured_output: { context: phase.context, tasks } } };
     }
-    if (name === 'gaia-generate-work-breakdown-task') return success(taskDetailDoc('INFRA-TASK-BE-01'));
+    if (name === 'gaia-generate-work-breakdown-task') {
+      // the first "id" in the prompt is the skeleton entry of the task being asked about
+      const asked = options.prompt.match(/"id":\s*"([^"]+)"/);
+      return success(taskDetailDoc(asked ? asked[1] : 'INFRA-TASK-BE-01'));
+    }
     return { exitCode: 0, result: { is_error: false, structured_output: semanticVerdict, usage: { input_tokens: 10, output_tokens: 5 } } };
   };
 }
@@ -2052,7 +2056,7 @@ describe('Work Breakdown task details: a verification command that can fail befo
       return phase2Dispatch(wb)(options);
     };
     await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch }))
-      .rejects.toThrow(/INFRA-TASK-BE-01 has no verification command that can fail before its deliverable exists.*npm test/s);
+      .rejects.toThrow(/Task INFRA-TASK-BE-01 detail rejected even after one repair.*no verification command that can fail before its deliverable exists.*commands: npm test/s);
   });
 
   test('a good detail is generated once, with no repair call', async () => {
@@ -2061,5 +2065,84 @@ describe('Work Breakdown task details: a verification command that can fail befo
     await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
     const taskCalls = dispatch.mock.calls.filter(([o]) => o.args[o.args.indexOf('--agent') + 1] === 'gaia-generate-work-breakdown-task');
     expect(taskCalls).toHaveLength(1);
+  });
+});
+
+// A chat reply is never saved as a task detail, and a blocking semantic finding gets one repair round.
+describe('Work Breakdown task details: shape guard and semantic repair', () => {
+  const TASK = 'INFRA-TASK-BE-01';
+  const agentOf = options => options.args[options.args.indexOf('--agent') + 1];
+  const semanticVerdicts = (...verdicts) => {
+    let i = 0;
+    return () => ({ exitCode: 0, result: { is_error: false, structured_output: verdicts[Math.min(i++, verdicts.length - 1)], usage: { input_tokens: 10, output_tokens: 5 } } });
+  };
+  const blocking = { valid: false, findings: [{ blocking: true, taskId: TASK, description: 'the outcome does not match its verification' }] };
+  const clean = { valid: true, findings: [] };
+
+  test('a chat reply is rejected before the task is marked generated, regenerated once, and the real detail is kept', async () => {
+    const wb = phase2Setup();
+    const prompts = [];
+    const dispatch = async options => {
+      if (agentOf(options) === 'gaia-generate-work-breakdown-task') {
+        prompts.push(options.prompt);
+        return success(prompts.length === 1 ? 'Sorry, I could not read the Tech-Spec excerpt. Could you resend it?' : taskDetailDoc(TASK));
+      }
+      return phase2Dispatch(wb)(options);
+    };
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch })).resolves.toBeDefined();
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain('Your previous answer was rejected');
+    expect(prompts[1]).toContain('not a conversational reply');
+    expect(fs.readFileSync(path.join(f.dir, 'wbs', 'tasks', `${TASK}.md`), 'utf8')).toContain(`- **Task ID:** ${TASK}`);
+  });
+
+  test('a chat reply twice in a row stops the run naming the task, and the task is not marked generated', async () => {
+    const wb = phase2Setup();
+    const dispatch = async options => agentOf(options) === 'gaia-generate-work-breakdown-task'
+      ? success('I need more information before I can write this task.')
+      : phase2Dispatch(wb)(options);
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch }))
+      .rejects.toThrow(new RegExp(`Task ${TASK} detail rejected even after one repair.*task_detail_invalid|not the task template`, 's'));
+    const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'wbs', 'index.json'), 'utf8'));
+    expect(index.tasks[TASK].status).not.toBe('generated');
+  });
+
+  test('a blocking semantic finding regenerates that task once with the finding, then the phase is reviewed again', async () => {
+    const wb = phase2Setup();
+    const nextVerdict = semanticVerdicts(blocking, clean);
+    const taskPrompts = [];
+    const dispatch = async options => {
+      if (agentOf(options) === 'gaia-validate-work-breakdown-semantic') return nextVerdict();
+      if (agentOf(options) === 'gaia-generate-work-breakdown-task') taskPrompts.push(options.prompt);
+      return phase2Dispatch(wb)(options);
+    };
+    const dispatchFn = jest.fn(dispatch);
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch: dispatchFn })).resolves.toBeDefined();
+    expect(taskPrompts).toHaveLength(2);                          // generated once, regenerated once
+    expect(taskPrompts[1]).toContain('The phase review rejected your previous answer for this task');
+    expect(taskPrompts[1]).toContain('the outcome does not match its verification');
+    const reviews = dispatchFn.mock.calls.filter(([o]) => agentOf(o) === 'gaia-validate-work-breakdown-semantic');
+    expect(reviews).toHaveLength(2);                              // reviewed, repaired, reviewed again
+  });
+
+  test('a finding that is still blocking after the repair stops the run with the finding', async () => {
+    const wb = phase2Setup();
+    const nextVerdict = semanticVerdicts(blocking, blocking);
+    const dispatch = async options => agentOf(options) === 'gaia-validate-work-breakdown-semantic'
+      ? nextVerdict()
+      : phase2Dispatch(wb)(options);
+    await expect(runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch }))
+      .rejects.toThrow(/semantic validation failed.*the outcome does not match its verification/s);
+  });
+
+  test('a clean review triggers no repair at all', async () => {
+    const wb = phase2Setup();
+    const taskPrompts = [];
+    const dispatch = async options => {
+      if (agentOf(options) === 'gaia-generate-work-breakdown-task') taskPrompts.push(options.prompt);
+      return phase2Dispatch(wb)(options);
+    };
+    await runWorkflow('pm-phase2', [f.feature], { ...f.options, dispatch });
+    expect(taskPrompts).toHaveLength(1);
   });
 });

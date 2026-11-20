@@ -5,8 +5,9 @@ const path = require('path')
 const graphChecks = require('./wb-graph-checks')
 const { parseTaskDetailBlock } = require('./wbs-assembler')
 
-// Early, per-task form of wb-validate.js's check 24 (a task must have a verification command that can
-// fail before its deliverable exists), run by pm-phase2.js right after each task detail is written so
+// Early, per-task checks run by pm-phase2.js right after each task detail is written: the detail is the
+// task template and not a chat reply (task_detail_invalid), and check 24 of wb-validate.js (a task must
+// have a verification command that can fail before its deliverable exists). Run by pm-phase2.js right after each task detail is written so
 // a weak task is repaired once, immediately, instead of failing the whole structural validation after
 // every task of the feature has been generated.
 //
@@ -32,9 +33,11 @@ try {
 }
 
 const commands = parseTaskDetailBlock(text).verificationCommands
-const errors = graphChecks.checkVerificationDiscriminates([
-  { id: 'task', tasks: [{ id: taskId, verification: { commands } }] },
-])
+const errors = graphChecks.checkTaskDetailShape(text, taskId).concat(
+  graphChecks.checkVerificationDiscriminates([
+    { id: 'task', tasks: [{ id: taskId, verification: { commands } }] },
+  ])
+)
 const valid = errors.length === 0
 process.stdout.write(JSON.stringify({ valid, taskId, commands, errors }, null, 2) + '\n')
 process.exit(valid ? 0 : 1)
