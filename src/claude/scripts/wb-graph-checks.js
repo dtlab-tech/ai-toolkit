@@ -138,9 +138,9 @@ function checkTaskDetailShape(text, taskId) {
   const tokens = body.match(/^- \*\*Estimate — tokens:\*\*\s*(.*)$/m)
   if (!minutes || !/^\d+$/.test(minutes[1].trim())) missing.push('"Estimate — agent minutes" as a plain integer')
   if (!tokens || !/^\d+$/.test(tokens[1].trim())) missing.push('"Estimate — tokens" as a plain integer')
-  const marker = '**Verification commands:**'
-  const at = body.lastIndexOf(marker)
-  if (at === -1 || !/```[^\n]*\n[\s\S]*?```/.test(body.slice(at + marker.length))) {
+  const markers = [...body.matchAll(/\*\*Verification commands:?\*\*:?/g)]
+  const last = markers[markers.length - 1]
+  if (!last || !/```[^\n]*\n[\s\S]*?```/.test(body.slice(last.index + last[0].length))) {
     missing.push('a "**Verification commands:**" section with at least one fenced command')
   }
   if (missing.length === 0) return []

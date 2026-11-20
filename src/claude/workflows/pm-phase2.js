@@ -447,10 +447,11 @@ function buildTaskTechSpecExcerpt(components, task, specDir, specIndexContent) {
 // file that exists and is marked `generated` but has none is regenerated, not skipped forever.
 const FENCE_RE_LOCAL = /```[^\n]*\n([\s\S]*?)```/g
 function hasVerificationCommands(content) {
-  const marker = '**Verification commands:**'
-  const idx = content.lastIndexOf(marker)
-  if (idx === -1) return false
-  const verifPart = content.slice(idx + marker.length)
+  // same markers wbs-assembler.js accepts: "**Verification commands:**" and "**Verification commands**:"
+  const markers = [...content.matchAll(/\*\*Verification commands:?\*\*:?/g)]
+  if (markers.length === 0) return false
+  const last = markers[markers.length - 1]
+  const verifPart = content.slice(last.index + last[0].length)
   FENCE_RE_LOCAL.lastIndex = 0
   return FENCE_RE_LOCAL.test(verifPart)
 }

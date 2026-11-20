@@ -103,6 +103,18 @@ breakdown validator rejects a task with no such command (`non_discriminating_ver
 The command must also fail until **this** task has run: a path that an earlier task in the sibling list already creates does
 not qualify, because it passes when this task starts (the validator warns: `verification_may_be_satisfied_earlier`).
 
+**Two ways a command that looks right is wrong.**
+- `node --check <file>` compiles the file as a plain script, so it fails on a file that is not one:
+  a workflow script with a top-level `return` or `export`, an ES module read as CommonJS. Verify such a
+  file another way (`grep -q` for what it must contain, or compile it the way the project loads it, as
+  the project's conventions say); do not give a command that cannot pass.
+- When this task delivers a stub or placeholder that a **later** task completes, the command must check
+  the observable output the stub is meant to produce (a printed status, a file written), not "exit code
+  0": a stub that deliberately reports "unavailable" exits non-zero, and a command that requires 0 can
+  never pass.
+Write the commands in bare fenced blocks under `**Verification commands:**`. A language tag (```bash)
+is tolerated, but the heading is not optional: without it the task has no verification commands at all.
+
 **Directory-only tasks must never verify with `test -d` alone.** Git does not track empty
 directories — `test -d <path>` only confirms the directory exists in the *current* working tree,
 which is exactly what the agent that just created it will have. It tells you nothing about

@@ -22,7 +22,11 @@ const DASH = '—'
 // mistake that illustrative text for real field values. Found empirically while authoring
 // this feature's own `wbs/` fixture (see `US-03-TASK-INFRA-01.md`).
 const FIELD_LINE_RE = /^- \*\*(.+?):\*\*[ \t]?(.*)$/
-const FENCE_RE = /^(`{3,})\r?\n([\s\S]*?)\r?\n\1[ \t]*$/gm
+// An opening fence may carry a language tag (```bash): the agent often writes one, and a bare-only match
+// silently dropped every command of the task. The rendered output always uses bare fences.
+const FENCE_RE = /^(`{3,})[A-Za-z0-9_+.-]*[ \t]*\r?\n([\s\S]*?)\r?\n\1[ \t]*$/gm
+// The section marker is "**Verification commands:**"; "**Verification commands**:" is accepted too.
+const VERIFICATION_MARKER_RE = /\*\*Verification commands:?\*\*:?/g
 
 function _listOrEmpty(value) {
   if (value === DASH) return []
@@ -142,8 +146,10 @@ function _parseFieldBlock(text) {
 }
 
 function _parseVerificationCommands(text) {
-  const marker = '**Verification commands:**'
-  const idx = text.lastIndexOf(marker) // LAST occurrence — the real section is always the
+  let marker = null, idx = -1
+  VERIFICATION_MARKER_RE.lastIndex = 0
+  for (let found; (found = VERIFICATION_MARKER_RE.exec(text));) { marker = found[0]; idx = found.index }
+  // idx is the LAST occurrence — the real section is always the
   // final one in a well-formed file; an earlier occurrence could be inside an illustrative
   // example in the Implementation notes section (same collision risk as the field lines)
   if (idx === -1) return []
