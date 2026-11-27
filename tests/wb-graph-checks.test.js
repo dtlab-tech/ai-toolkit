@@ -323,6 +323,42 @@ describe('checkAcCoverage()', () => {
     expect(err.details.relatedUCs).toEqual(['UC-05']);
   });
 
+  // The INFRA phase realises no single UC (no sourceUC of its own), so the per-UC scope rule cannot hold
+  // for it. Before, an INFRA task could not carry any AC and a Must AC satisfied only by groundwork was
+  // must_ac_uncovered (or ac_wrong_us) with nothing the author could do.
+  describe('the INFRA phase', () => {
+    const infra = (ac) => [makePhase('INFRA', [makeTask('INFRA-TASK-BE-01', { acceptanceCriteria: ac })], 'infrastructure', [])];
+    const seen = new Map([['INFRA-TASK-BE-01', 'INFRA']]);
+
+    test('may carry an AC scoped to a use case, and it covers a Must AC (no ac_wrong_us, no must_ac_uncovered)', () => {
+      const acMap = parseAcTable(writeReq(makeReqMd({ 'UC-01': 'Must' }, [['AC-01', 'UC-01']])));
+      const { errors } = checkAcCoverage({ phases: infra(['AC-01']) }, acMap, seen);
+      expect(errors).toEqual([]);
+    });
+
+    test('an AC cited by an INFRA task counts as covered for check 21 even when no user-story task cites it', () => {
+      const acMap = parseAcTable(writeReq(makeReqMd({ 'UC-01': 'Must', 'UC-02': 'Must' }, [['AC-01', 'UC-01'], ['AC-02', 'UC-02']])));
+      const phases = infra(['AC-01']).concat([makePhase('US-02', [makeTask('US-02-TASK-BE-01', { acceptanceCriteria: ['AC-02'] })], 'user-story', ['UC-02'])]);
+      const { errors } = checkAcCoverage({ phases }, acMap, new Map([...seen, ['US-02-TASK-BE-01', 'US-02']]));
+      expect(errors).toEqual([]);
+    });
+
+    test('is recognised by id or by type (infra / infrastructure), and a user-story phase keeps the scope rule', () => {
+      const acMap = parseAcTable(writeReq(makeReqMd({ 'UC-01': 'Must', 'UC-02': 'Should' }, [['AC-01', 'UC-01']])));
+      const byType = [makePhase('SETUP', [makeTask('SETUP-TASK-BE-01', { acceptanceCriteria: ['AC-01'] })], 'infra', [])];
+      expect(checkAcCoverage({ phases: byType }, acMap, new Map([['SETUP-TASK-BE-01', 'SETUP']])).errors).toEqual([]);
+      const story = [makePhase('US-02', [makeTask('US-02-TASK-BE-01', { acceptanceCriteria: ['AC-01'] })], 'user-story', ['UC-02'])];
+      const { errors } = checkAcCoverage({ phases: story }, acMap, new Map([['US-02-TASK-BE-01', 'US-02']]));
+      expect(errors.map(e => e.category)).toContain(ERRORS.AC_WRONG_US);
+    });
+
+    test('an AC that does not exist is still flagged when an INFRA task cites it (check 19 is not lifted)', () => {
+      const acMap = parseAcTable(writeReq(makeReqMd({ 'UC-01': 'Must' }, [['AC-01', 'UC-01']])));
+      const { errors } = checkAcCoverage({ phases: infra(['AC-99']) }, acMap, seen);
+      expect(errors.map(e => e.category)).toContain(ERRORS.AC_NOT_FOUND);
+    });
+  });
+
   test('flags a Must-priority AC that no task covers (check 21)', () => {
     const reqPath = writeReq(makeReqMd({ 'UC-01': 'Must' }, [['AC-01', 'UC-01']]));
     const acMap = parseAcTable(reqPath);
@@ -383,5 +419,13 @@ describe('parseAcTable() — Section 2 index-table Priority fallback (FTR-025)',
     const reqPath = writeReq(withRealHeading);
     const acMap = parseAcTable(reqPath);
     expect(acMap.get('AC-01').priority).toBe('Must');
+  });
+});
+
+describe('the phase agent is told INFRA may cite acceptance criteria', () => {
+  const agent = fs.readFileSync(path.join(__dirname, '..', 'src', 'claude', 'agents', 'gaia-generate-work-breakdown-phase.md'), 'utf8');
+  test('the INFRA exception is stated next to the scope rule', () => {
+    expect(agent).toMatch(/The INFRA phase is the exception/);
+    expect(agent).toMatch(/the INFRA phase has no `sourceUC` and may cite any AC/);
   });
 });

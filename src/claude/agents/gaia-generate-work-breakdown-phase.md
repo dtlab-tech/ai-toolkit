@@ -100,7 +100,7 @@ implementation tasks, following the Atomicity Contract.
 FTR-033, MINUS `estimate` (produced later by `gaia-generate-work-breakdown-task`, unchanged since
 FTR-032): `title`, `outcome`, `domain`, `agentType`, `dependsOn` (task IDs from THIS phase or any
 PRIOR phase only — never a later one, and never a dangling reference), `acceptanceCriteria` (AC IDs
-scoped to this phase's own `sourceUC`, never an AC owned by a different phase), `outputCount` (≥1),
+scoped to this phase's own `sourceUC`, never an AC owned by a different phase; the INFRA phase has no `sourceUC` and may cite any AC that its groundwork directly satisfies), `outputCount` (≥1),
 `commit` (`{ "type": "...", "subject": "..." }`, subject with no `|`, CR, or LF).
 
 **Domain → agentType mapping (default):** `DB`/`BE`/`INFRA`/`DevOps` → `developer-backend`;
@@ -148,6 +148,9 @@ in the common case.
   dangling reference.
 - Order tasks by layer dependency within the phase (DB → BE → FE → TEST); independent tasks in the
   same layer may be listed in any order.
-- `acceptanceCriteria` scoped to this phase's own UC(s) — never cite an AC owned by a different
-  phase, even for groundwork/prerequisite work; leave it empty `[]` instead.
+- `acceptanceCriteria` scoped to this phase's own UC(s) — in a user-story phase, never cite an AC
+  owned by a different phase, even for groundwork/prerequisite work; leave it empty `[]` instead.
+  The INFRA phase is the exception: it realises no single UC, so its tasks may cite the AC(s) their
+  groundwork directly satisfies (a Must AC that only INFRA work satisfies must be cited there, or
+  the work breakdown fails `must_ac_uncovered`).
 - No pipes, CR, or LF in `task.title` or `commit.subject`.

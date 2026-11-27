@@ -100,7 +100,7 @@ describe('wb-task-check.js (the early, per-task form)', () => {
       return { code: res.status, out: JSON.parse(res.stdout) };
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
-  const detail = (...commands) => '### T\n\n- **Task ID:** T\n- **Estimate — agent minutes:** 8\n- **Estimate — tokens:** 100\n\n**Verification commands:**\n\n' +
+  const detail = (...commands) => '### US-01-TASK-BE-01\n\n- **Task ID:** US-01-TASK-BE-01\n- **Estimate — agent minutes:** 8\n- **Estimate — tokens:** 100\n\n**Verification commands:**\n\n' +
     commands.map((c) => '```\n' + c + '\n```\n').join('\n');
 
   test('exit 0 and the commands when one of them discriminates', () => {
@@ -116,8 +116,11 @@ describe('wb-task-check.js (the early, per-task form)', () => {
     expect(out.errors[0].category).toBe('non_discriminating_verification');
   });
 
-  test('a detail with no commands is not this check\'s concern (exit 0)', () => {
-    expect(check('### T\n\nno commands here\n').code).toBe(0);
+  test('a chat reply is not a task detail: exit 1, task_detail_invalid, naming what is missing', () => {
+    const { code, out } = check('I could not find the Tech-Spec excerpt. Could you send it again?');
+    expect(code).toBe(1);
+    expect(out.errors[0].category).toBe('task_detail_invalid');
+    expect(out.errors[0].details.missing.length).toBe(4);
   });
 });
 
@@ -181,5 +184,30 @@ describe('check 25 (warning): the verification may already pass when the task st
       expect(report.errors.map((e) => e.category)).not.toContain('verification_may_be_satisfied_earlier');
       expect(report.warnings.map((e) => e.category)).toContain('verification_may_be_satisfied_earlier');
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('checkTaskDetailShape', () => {
+  const { checkTaskDetailShape } = graph;
+  const good = (id) => '### ' + id + '\n\n- **Task ID:** ' + id + '\n- **Estimate — agent minutes:** 12\n- **Estimate — tokens:** 30000\n\n**Verification commands:**\n\n```\ntest -f src/a.js\n```\n';
+
+  test('a complete task detail is valid', () => {
+    expect(checkTaskDetailShape(good('T-1'), 'T-1')).toEqual([]);
+  });
+
+  test.each([
+    ['another task\'s detail (Task ID differs)', good('T-2'), /equal to "T-1" \(found "T-2"\)/],
+    ['no Task ID line', good('T-1').replace(/^- \*\*Task ID:.*\n/m, ''), /Task ID/],
+    ['a non-numeric estimate', good('T-1').replace('12', '—'), /agent minutes/],
+    ['a prose estimate', good('T-1').replace('30000', '(not supplied)'), /tokens/],
+    ['no verification section', good('T-1').split('**Verification')[0], /Verification commands/],
+    ['a verification section with no fenced command', good('T-1').replace(/```[\s\S]*$/, 'run the tests\n'), /Verification commands/],
+    ['not a string', undefined, /Task ID/],
+  ])('rejects %s', (_name, text, expected) => {
+    const errors = checkTaskDetailShape(text, 'T-1');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ category: 'task_detail_invalid', taskId: 'T-1' });
+    expect(errors[0].message).toMatch(expected);
+    expect(errors[0].message).toMatch(/not a conversational reply/);
   });
 });
