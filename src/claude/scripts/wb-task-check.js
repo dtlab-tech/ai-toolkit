@@ -7,9 +7,9 @@ const { parseTaskDetailBlock } = require('./wbs-assembler')
 
 // Early, per-task checks run by pm-phase2.js right after each task detail is written: the detail is the
 // task template and not a chat reply (task_detail_invalid), and check 24 of wb-validate.js (a task must
-// have a verification command that can fail before its deliverable exists). Run by pm-phase2.js right after each task detail is written so
-// a weak task is repaired once, immediately, instead of failing the whole structural validation after
-// every task of the feature has been generated.
+// have a verification command that can fail before its deliverable exists). A rejected task is repaired
+// once, immediately, instead of failing the whole structural validation after every task of the feature
+// has been generated.
 //
 // Usage: node wb-task-check.js <path-to-task-detail.md> [<task-id>]
 // stdout: { valid, taskId, commands, errors }   exit: 0 valid, 1 invalid, 2 usage/read error
